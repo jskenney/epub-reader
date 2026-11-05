@@ -44,6 +44,14 @@ This needs a real web server (for example `npx vite` or
   language, fixed or reflowable layout, reading direction, and package
   details. Fields the book doesn't provide are left out. A collapsible
   Description under the title shows the book's blurb as plain text.
+- Read aloud with the device's voices (the speaker button, or R). Reading
+  starts at your text selection if there is one, otherwise at the first word
+  on the current page; while the read-aloud bar is open, clicking any word
+  jumps there. The current sentence and word are highlighted and pages turn
+  by themselves, continuing into the next chapter. The bar has previous /
+  next sentence, play/pause (Space), speed 0.5×–2× ([ and ]), and a voice
+  list filtered to the book's language. Paging away by hand while listening
+  shows a "Back to reading" button. Speed and voice are remembered.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the

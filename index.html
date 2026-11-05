@@ -126,6 +126,21 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 #themeBtn.dark .i-sun{display:block}
 #themeBtn.dark .i-moon{display:none}
 
+/* read-aloud bar, floating over the bottom margin of the page */
+.tts{position:absolute;z-index:6;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;
+  width:max-content;max-width:calc(100% - 24px);box-sizing:border-box;padding:6px 8px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow)}
+.tts .btn{height:32px}
+.tts .btn.primary{width:40px;justify-content:center;padding:0}
+.tts-speed{display:flex;align-items:center;gap:6px;padding:0 4px}
+.tts-speed input{width:96px;accent-color:var(--ribbon)}
+#ttsRateVal{min-width:3.5ch}
+#ttsVoice{height:32px;max-width:190px;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:0 6px}
+#ttsVoice:focus-visible,.tts-speed input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
+#ttsStatus{font:12px/1.3 var(--font-mono);color:var(--muted);padding:0 4px}
+#ttsPlay .i-pause,#ttsPlay.playing .i-play{display:none}
+#ttsPlay.playing .i-pause{display:block}
+#ttsBtn[aria-pressed="true"]{border-color:var(--ribbon);color:var(--ribbon)}
+
 /* font picker */
 .font-pick{position:relative}
 #fontBtn .aa{font-size:16px;line-height:1;font-weight:500}
@@ -156,6 +171,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   .bar{flex-wrap:wrap;row-gap:8px}
   .book-id{flex-basis:calc(100% - 60px)}
   .tools{width:100%;justify-content:space-between}
+  .tools .btn.ghost{padding:0 5px}
 }
 @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 </style>
@@ -169,6 +185,9 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </button>
     <div class="book-id"><span id="bookTitle">Loading…</span><span id="bookAuthor"></span></div>
     <div class="tools">
+      <button class="btn ghost" id="ttsBtn" aria-pressed="false" title="Read aloud (R starts at your selection or the top of the page)" aria-label="Read aloud">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 6v4h2.5l3.5 3V3L5 6H2.5Z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6.2 6.2 0 0 1 0 9"/></svg>
+      </button>
       <div class="font-pick">
         <button class="btn ghost" id="fontBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="fontMenu" title="Reading font">
           <span class="aa">Aa</span>
@@ -233,6 +252,28 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <button class="btn" id="noticeAction"></button>
       </div>
       <iframe id="page" title="Book page" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+      <div class="tts" id="tts" role="region" aria-label="Read aloud" hidden>
+        <button class="btn ghost" id="ttsPrev" title="Previous sentence" aria-label="Previous sentence">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 3v10M13 3 6.5 8l6.5 5V3Z"/></svg>
+        </button>
+        <button class="btn primary" id="ttsPlay" title="Play (Space)" aria-label="Play">
+          <svg class="i-play" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3v10l8-5-8-5Z"/></svg>
+          <svg class="i-pause" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>
+        </button>
+        <button class="btn ghost" id="ttsNext" title="Next sentence" aria-label="Next sentence">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3v10M3 3l6.5 5L3 13V3Z"/></svg>
+        </button>
+        <label class="tts-speed" title="Speed ([ slower, ] faster)">
+          <span class="readout" id="ttsRateVal">1.0×</span>
+          <input type="range" id="ttsRate" min="0.5" max="2" step="0.1" value="1" aria-label="Reading speed">
+        </label>
+        <select id="ttsVoice" aria-label="Voice"></select>
+        <span id="ttsStatus" hidden></span>
+        <button class="btn" id="ttsBack" hidden title="Go back to the page being read">Back to reading</button>
+        <button class="btn ghost" id="ttsClose" title="Stop reading aloud" aria-label="Stop reading aloud">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+        </button>
+      </div>
       <div class="status" id="status" hidden></div>
     </section>
   </div>
@@ -567,7 +608,7 @@ function isDark(){
 function tokens(){
   const cs = getComputedStyle(document.documentElement);
   const v = n => cs.getPropertyValue(n).trim();
-  return { bg: v('--page-bg'), ink: v('--page-ink'), ribbon: v('--ribbon'), soft: v('--ribbon-soft'), rule: v('--rule') };
+  return { bg: v('--page-bg'), ink: v('--page-ink'), ribbon: v('--ribbon'), onRibbon: v('--on-ribbon'), soft: v('--ribbon-soft'), rule: v('--rule') };
 }
 function baseCss(){
   const t = tokens();
@@ -581,8 +622,8 @@ a{color:${t.ribbon}}`;
 function overrideCss(){
   const t = tokens(), dark = isDark();
   return `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;overflow:hidden !important}
-body{--v:40px;--m:max(20px,3.5vw,calc((100vw - 1240px) / 2));--g:max(32px,4vw);
-  margin:0 !important;padding:var(--v) var(--m) !important;height:100vh !important;width:auto !important;max-width:none !important;min-height:0 !important;
+body{--v:40px;--vb:${40 + tts.barH}px;--m:max(20px,3.5vw,calc((100vw - 1240px) / 2));--g:max(32px,4vw);
+  margin:0 !important;padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;width:auto !important;max-width:none !important;min-height:0 !important;
   box-sizing:border-box !important;overflow:hidden !important;background:transparent !important;${dark ? `color:${t.ink} !important;` : ''}}
 #spine-clip{height:100%;overflow:hidden}
 #spine-flow{height:100%;column-count:2;column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
@@ -590,10 +631,12 @@ body{--v:40px;--m:max(20px,3.5vw,calc((100vw - 1240px) / 2));--g:max(32px,4vw);
 #spine-flow{line-height:${lineH} !important}
 #spine-flow :is(p,li,blockquote,dd,dt,td,th,div,span,a,em,strong,i,b,small,cite,q,sup,sub,section,article,aside){line-height:inherit !important}
 #spine-flow :is(h1,h2,h3,h4,h5,h6){line-height:${Math.max(1.15, lineH * 0.78).toFixed(2)} !important}
-img,svg,video,canvas{max-width:100% !important;max-height:calc(100vh - 2 * var(--v) - 8px) !important;height:auto;object-fit:contain;break-inside:avoid}
+img,svg,video,canvas{max-width:100% !important;max-height:calc(100vh - var(--v) - var(--vb) - 8px) !important;height:auto;object-fit:contain;break-inside:avoid}
 figure,table{break-inside:avoid}
 pre{white-space:pre-wrap !important}
 #spine-end{display:inline}
+::highlight(tts-sentence){background-color:${t.soft}}
+::highlight(tts-word){background-color:${t.ribbon};color:${t.onRibbon}}
 ${faceStack() ? `#spine-flow,#spine-flow :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
@@ -684,6 +727,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   if (!book) return;
   i = Math.max(0, Math.min(book.spine.length - 1, i));
   const token = ++renderToken;
+  ttsBeforeRender();
   const item = book.spine[i];
   cur = { i, page: 0, pages: 1, f: fraction };
   updateChrome();
@@ -701,6 +745,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     if (token !== renderToken) return;
     position(frag, fraction);
     hideStatus();
+    ttsAfterRender();
   } catch (err) {
     if (token !== renderToken) return;
     hideStatus();
@@ -736,7 +781,7 @@ function position(frag, f){
   if (el) showPage(Math.floor((el.getBoundingClientRect().left - g.left + 1) / g.step));
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
-function relayout(){ if (book && cur.f != null) position('', cur.f); }
+function relayout(){ if (book && cur.f != null) { position('', cur.f); ttsRefollow(); } }
 function savePos(){ if (book) store.set(book.key, { i: cur.i, f: Math.round(fraction() * 1000) / 1000 }); }
 
 let wheelAcc = 0, wheelAt = 0;
@@ -794,7 +839,8 @@ function setFs(on){
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isFs()) setFs(false); });
 function onFrameClick(e){
-  const a = e.target.closest?.('a[data-spine-path]'); if (!a) return;
+  const a = e.target.closest?.('a[data-spine-path]');
+  if (!a) { ttsClickStart(e); return; }
   e.preventDefault();
   goTo(a.getAttribute('data-spine-path'), a.getAttribute('data-spine-frag'));
 }
@@ -819,11 +865,13 @@ function restyleFrame(){
 
 function pageNext(){
   if (!book) return;
+  ttsUserNav();
   if (cur.page < cur.pages - 1) showPage(cur.page + 1);
   else if (cur.i < book.spine.length - 1) renderChapter(cur.i + 1);
 }
 function pagePrev(){
   if (!book) return;
+  ttsUserNav();
   if (cur.page > 0) showPage(cur.page - 1);
   else if (cur.i > 0) renderChapter(cur.i - 1, { fraction: 1 });
 }
@@ -832,6 +880,9 @@ function onKey(e){
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
   if (menuOpen() && menuKey(e)) return;
+  if (e.key === ' ' && tts.open && tag !== 'button' && tag !== 'a') { e.preventDefault(); ttsTogglePlay(); return; }
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); ttsReadHere(); return; }
+  if (e.key === '[' || e.key === ']') { if (tts.open) { e.preventDefault(); ttsSetRate(tts.rate + (e.key === ']' ? 0.1 : -0.1)); } return; }
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setTheme(isDark() ? 'light' : 'dark'); }
@@ -1048,7 +1099,7 @@ function menuKey(e){
     opts[n].focus(); return true;
   }
   if (e.key === 'Tab') { setMenu(false); return false; }
-  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T', 'c', 'C'].includes(e.key);
+  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']'].includes(e.key);
 }
 $('#fontBtn').addEventListener('click', () => setMenu(!menuOpen()));
 document.addEventListener('click', e => { if (menuOpen() && !e.target.closest('.font-pick')) setMenu(false); });
@@ -1182,6 +1233,306 @@ ${chapters.map(([id]) => `  <itemref idref="${id}"/>`).join('\n')}
 </package>`);
   return zip.generateAsync({ type: 'arraybuffer', mimeType: 'application/epub+zip' });
 }
+
+/* ---------- read aloud ----------
+   The chapter's text is split into blocks (paragraphs, headings, list items...), each with a map from
+   character offsets back to its DOM text nodes, then into sentence-sized chunks. Speech starts at any
+   (chunk, offset), so it can begin at a clicked word, a selection, or the first word on the page.
+   Highlights use the CSS Custom Highlight API, so the page's DOM and pagination are never touched.
+   The engine here is the browser's Web Speech API. */
+const synth = window.speechSynthesis;
+const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
+  awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
+  barH: 0, utt: null };
+const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],#spine-end,' +
+  ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
+const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
+const hasWords = t => /[\p{L}\p{N}]/u.test(t);
+const isWordChar = c => /[\p{L}\p{N}'’\-]/u.test(c || '');
+const bookLang = () => (frame.contentDocument?.documentElement.getAttribute('lang') || book?.language || navigator.language || 'en');
+
+function ttsBuild(){
+  const doc = frame.contentDocument, flow = doc?.getElementById('spine-flow');
+  tts.doc = doc; tts.chunks = []; tts.nodes = new Map();
+  if (!flow) return tts.chunks;
+  const blocks = []; let b = null;
+  const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: n =>
+    n.nodeType === 1 ? (n.matches(TTS_SKIP) ? NodeFilter.FILTER_REJECT : n.localName === 'br' || n.localName === 'img' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)
+                     : NodeFilter.FILTER_ACCEPT });
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const blockEl = (n.nodeType === 1 ? n.parentElement : n.parentElement).closest(TTS_BLOCKS);
+    if (!b || b.el !== blockEl) { b = { el: blockEl, text: '', segs: [] }; blocks.push(b); }
+    if (n.nodeType === 1) { b.segs.push({ node: null, at: b.text.length, len: 1 }); b.text += ' '; }
+    else { tts.nodes.set(n, { b, at: b.text.length }); b.segs.push({ node: n, at: b.text.length, len: n.nodeValue.length }); b.text += n.nodeValue; }
+  }
+  const lang = bookLang();
+  const seg = window.Intl?.Segmenter ? new Intl.Segmenter(lang, { granularity: 'sentence' }) : null;
+  for (const blk of blocks) {
+    if (!hasWords(blk.text)) continue;
+    const pieces = seg ? [...seg.segment(blk.text)].map(x => [x.index, x.index + x.segment.length])
+      : [...blk.text.matchAll(/[^.!?…]+(?:[.!?…]+["'”’)\]]*|$)\s*/g)].map(m => [m.index, m.index + m[0].length]);
+    for (let [s, e] of pieces) {
+      while (s < e && /\s/.test(blk.text[s])) s++;
+      while (e > s && /\s/.test(blk.text[e - 1])) e--;
+      if (!hasWords(blk.text.slice(s, e))) continue;
+      // Keep chunks short: long utterances get cut off by some speech engines.
+      while (e - s > 220) {
+        const win = blk.text.slice(s, s + 220);
+        let cut = Math.max(win.search(/[,;:—–](?=\s)[^,;:—–]*$/), -1);
+        cut = cut > 80 ? cut + 1 : win.lastIndexOf(' ') > 80 ? win.lastIndexOf(' ') : 220;
+        tts.chunks.push({ b: blk, s, e: s + cut });
+        s += cut; while (s < e && /\s/.test(blk.text[s])) s++;
+      }
+      if (e > s) tts.chunks.push({ b: blk, s, e });
+    }
+  }
+  return tts.chunks;
+}
+function ttsChunks(){ return tts.doc === frame.contentDocument && tts.chunks ? tts.chunks : ttsBuild(); }
+
+function domPoint(b, pos, isEnd){
+  for (const g of b.segs) {
+    if (!g.node) continue;
+    if (isEnd ? (pos > g.at && pos <= g.at + g.len) : (pos >= g.at && pos < g.at + g.len)) return [g.node, pos - g.at];
+    if (g.at >= pos) return [g.node, 0];
+  }
+  const last = [...b.segs].reverse().find(g => g.node);
+  return [last.node, last.len];
+}
+function rangeFor(b, a, z){
+  const r = tts.doc.createRange();
+  const [n1, o1] = domPoint(b, a, false), [n2, o2] = domPoint(b, Math.max(a + 1, z), true);
+  r.setStart(n1, o1); r.setEnd(n2, o2);
+  return r;
+}
+function pageOfRange(r){
+  const g = geom(); if (!g) return cur.page;
+  const rect = r.getClientRects()[0] || r.getBoundingClientRect();
+  return Math.max(0, Math.min(g.pages - 1, Math.floor((rect.left - g.left + 1) / g.step)));
+}
+const pageOfPos = (b, pos) => pageOfRange(rangeFor(b, pos, pos + 1));
+function wordStartAt(b, pos, lo, hi){
+  const t = b.text;
+  if (isWordChar(t[pos])) { while (pos > lo && isWordChar(t[pos - 1])) pos--; return pos; }
+  while (pos < hi && !isWordChar(t[pos])) pos++;
+  return pos < hi ? pos : lo;
+}
+
+function hl(name, range){
+  const win = frame.contentWindow;
+  if (!win?.CSS?.highlights) return;
+  if (range) win.CSS.highlights.set(name, new win.Highlight(range)); else win.CSS.highlights.delete(name);
+}
+function ttsClearHL(){ hl('tts-sentence'); hl('tts-word'); }
+function follow(range){
+  if (!tts.follow) return;
+  const p = pageOfRange(range);
+  if (p !== cur.page) showPage(p);
+}
+
+// Position the reader at (ci, pos) and, when playing, speak from there.
+function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
+  const chunks = ttsChunks();
+  if (ci >= chunks.length) { ttsEndOfChapter(); return; }
+  const c = chunks[Math.max(0, ci)]; ci = Math.max(0, ci);
+  pos = wordStartAt(c.b, Math.max(c.s, Math.min(c.e - 1, pos ?? c.s)), c.s, c.e);
+  tts.ci = ci; tts.pos = pos; if (!keepFollow) tts.follow = true;
+  const token = ++tts.token;
+  synth?.cancel();
+  hl('tts-word');
+  const sentence = rangeFor(c.b, pos, c.e);
+  hl('tts-sentence', sentence);
+  follow(rangeFor(c.b, pos, pos + 1));
+  ttsUpdateBar();
+  if (!speak) return;
+
+  // Speakable text with a map from each spoken character back to the block text.
+  const raw = c.b.text.slice(pos, c.e);
+  let out = '', map = [], space = false;
+  for (let k = 0; k < raw.length; k++) {
+    const ch = raw[k];
+    if (ch === '­' || ch === '​') continue;
+    if (/\s/.test(ch)) { if (!space && out) { out += ' '; map.push(k); } space = true; continue; }
+    space = false; out += ch; map.push(k);
+  }
+  const u = new SpeechSynthesisUtterance(out);
+  u.lang = bookLang(); u.rate = tts.rate;
+  const v = ttsVoice(); if (v) u.voice = v;
+  u.onboundary = e => {
+    if (token !== tts.token || e.name === 'sentence') return;
+    const k = e.charIndex; if (map[k] == null) return;
+    let len = e.charLength || (out.slice(k).match(/^[\p{L}\p{N}'’\-]+/u)?.[0].length || 1);
+    const a = pos + map[k], z = pos + map[Math.min(map.length - 1, k + len - 1)] + 1;
+    tts.pos = a;
+    const r = rangeFor(c.b, a, z);
+    hl('tts-word', r); follow(r);
+  };
+  u.onend = () => { if (token === tts.token && tts.playing) ttsGo(ci + 1, null, { keepFollow: true }); };
+  u.onerror = e => {
+    if (token !== tts.token || e.error === 'interrupted' || e.error === 'canceled') return;
+    tts.playing = false; ttsUpdateBar();
+    showNotice(`Reading aloud stopped: the speech engine reported "${e.error}".`, 'error');
+  };
+  tts.utt = u;   // keep a reference: some browsers drop events for collected utterances
+  setTimeout(() => { if (token === tts.token) synth.speak(u); }, 0);
+}
+function ttsEndOfChapter(){
+  if (book && cur.i < book.spine.length - 1) { tts.awaitChapter = true; renderChapter(cur.i + 1); return; }
+  tts.playing = false; ++tts.token; hl('tts-word'); ttsUpdateBar('End of book');
+}
+
+// The first word that is on the current page.
+function ttsPageStart(){
+  const chunks = ttsChunks();
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const c = chunks[ci];
+    if (pageOfPos(c.b, c.e - 1) < cur.page) continue;
+    if (pageOfPos(c.b, c.s) >= cur.page) return [ci, c.s];
+    for (let p = c.s; p < c.e; ) {
+      const w = wordStartAt(c.b, p, p, c.e);
+      if (w < p) break;
+      if (pageOfPos(c.b, w) >= cur.page) return [ci, w];
+      p = w; while (p < c.e && isWordChar(c.b.text[p])) p++;
+    }
+  }
+  return [chunks.length, 0];
+}
+// The chunk and offset for a DOM point (a click or the start of a selection).
+function ttsPointToPos(node, off){
+  const chunks = ttsChunks();
+  const hit = node.nodeType === 3 && tts.nodes.get(node);
+  if (hit) {
+    const pos = hit.at + off;
+    const ci = chunks.findIndex(c => c.b === hit.b && pos < c.e);
+    if (ci >= 0) return [ci, Math.max(chunks[ci].s, pos)];
+  }
+  const probe = tts.doc.createRange(); probe.setStart(node, off);
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const [n, o] = domPoint(chunks[ci].b, chunks[ci].s, false);
+    if (probe.comparePoint(n, o) >= 0) return [ci, chunks[ci].s];
+  }
+  return [chunks.length, 0];
+}
+
+function ttsOpen(){
+  if (!synth) { showNotice("This browser doesn't support speech, so the book can't be read aloud.", 'error'); return false; }
+  if (tts.open) return true;
+  tts.open = true; $('#tts').hidden = false; $('#ttsBtn').setAttribute('aria-pressed', 'true');
+  ttsFillVoices(); ttsMeasureBar();
+  return true;
+}
+function ttsClose(){
+  tts.open = false; tts.playing = false; ++tts.token; synth?.cancel();
+  ttsClearHL(); tts.chunks = null;
+  $('#tts').hidden = true; $('#ttsBtn').setAttribute('aria-pressed', 'false');
+  ttsUpdateBar(); ttsMeasureBar();
+}
+// R / the Read aloud button: start at the selection, or at the top of the current page.
+function ttsReadHere(){
+  if (!book || !ttsOpen()) return;
+  const sel = frame.contentDocument?.getSelection();
+  let at;
+  if (sel && sel.rangeCount && !sel.isCollapsed) { const r = sel.getRangeAt(0); at = ttsPointToPos(r.startContainer, r.startOffset); sel.removeAllRanges(); }
+  else at = ttsPageStart();
+  tts.playing = true;
+  ttsGo(at[0], at[1]);
+}
+function ttsClickStart(e){
+  if (!tts.open || e.button !== 0) return;
+  const doc = frame.contentDocument, sel = doc.getSelection();
+  if (sel && !sel.isCollapsed) return;   // the reader was selecting text, not picking a start point
+  let node, off;
+  if (doc.caretPositionFromPoint) { const c = doc.caretPositionFromPoint(e.clientX, e.clientY); node = c?.offsetNode; off = c?.offset; }
+  else if (doc.caretRangeFromPoint) { const r = doc.caretRangeFromPoint(e.clientX, e.clientY); node = r?.startContainer; off = r?.startOffset; }
+  if (!node) return;
+  const [ci, pos] = ttsPointToPos(node, off);
+  ttsGo(ci, pos);
+}
+function ttsTogglePlay(){
+  if (!tts.open) return;
+  if (tts.playing) { tts.playing = false; ++tts.token; synth.cancel(); hl('tts-word'); ttsUpdateBar(); return; }
+  tts.playing = true;
+  if (tts.doc !== frame.contentDocument || !tts.chunks) { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
+  else ttsGo(tts.ci, tts.pos);
+}
+function ttsSkip(d){
+  if (!tts.open) return;
+  const chunks = ttsChunks();
+  const ci = tts.doc === frame.contentDocument ? tts.ci + d : 0;
+  if (ci >= chunks.length) { if (tts.playing) ttsEndOfChapter(); return; }
+  ttsGo(Math.max(0, ci), null);
+}
+function ttsSetRate(r){
+  tts.rate = Math.round(Math.min(2, Math.max(0.5, r)) * 10) / 10;
+  $('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
+  store.set('spine:ttsRate', tts.rate);
+  if (tts.playing) ttsGo(tts.ci, tts.pos);   // Web Speech can't change rate mid-sentence: restart at the current word
+}
+
+// Hooks used by the rest of the reader.
+function ttsBeforeRender(){ if (!tts.open) return; ++tts.token; synth?.cancel(); ttsClearHL(); tts.chunks = null; }
+function ttsAfterRender(){
+  if (!tts.open) return;
+  tts.chunks = null; tts.ci = 0; tts.pos = 0;
+  if (!tts.playing) { tts.doc = null; ttsUpdateBar(); return; }
+  if (tts.awaitChapter) { tts.awaitChapter = false; ttsGo(0, null); return; }
+  const [ci, pos] = ttsPageStart(); ttsGo(ci, pos);      // the reader navigated to a new chapter while listening
+}
+function ttsUserNav(){ if (tts.open && tts.playing && tts.follow) { tts.follow = false; ttsUpdateBar(); } }
+function ttsRefollow(){
+  if (!tts.open || !tts.follow || tts.doc !== frame.contentDocument || !tts.chunks?.[tts.ci]) return;
+  const c = tts.chunks[tts.ci];
+  const p = pageOfPos(c.b, Math.min(tts.pos, c.e - 1));
+  if (p !== cur.page) showPage(p);
+}
+function ttsBack(){ tts.follow = true; ttsRefollow(); ttsUpdateBar(); }
+
+function ttsUpdateBar(status){
+  const play = $('#ttsPlay');
+  play.classList.toggle('playing', tts.playing);
+  play.setAttribute('aria-label', tts.playing ? 'Pause' : 'Play');
+  play.title = (tts.playing ? 'Pause' : 'Play') + ' (Space)';
+  $('#ttsBack').hidden = tts.follow;
+  $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
+}
+function ttsMeasureBar(){
+  const h = tts.open ? $('#tts').offsetHeight + 12 : 0;
+  if (h !== tts.barH) { tts.barH = h; restyleFrame(); }
+}
+
+// Voices: the device's voices for the book's language (all voices if none match).
+function ttsVoices(){
+  const all = synth?.getVoices() || [];
+  const lang = bookLang().toLowerCase().split('-')[0];
+  const match = all.filter(v => v.lang.toLowerCase().split(/[-_]/)[0] === lang);
+  return (match.length ? match : all).sort((a, b) => (b.default - a.default) || a.name.localeCompare(b.name));
+}
+function ttsVoice(){
+  const vs = ttsVoices();
+  return vs.find(v => v.voiceURI === tts.voiceURI) || vs.find(v => v.lang.toLowerCase() === bookLang().toLowerCase()) || vs[0] || null;
+}
+function ttsFillVoices(){
+  const sel = $('#ttsVoice'), vs = ttsVoices(), chosen = ttsVoice();
+  if (!vs.length) {
+    sel.replaceChildren(new Option('No voices on this device', '')); sel.disabled = true; return;
+  }
+  sel.disabled = false;
+  sel.replaceChildren(...vs.map(v => { const o = new Option(`${v.name} (${v.lang})`, v.voiceURI); o.selected = v === chosen; return o; }));
+}
+synth?.addEventListener?.('voiceschanged', () => { if (tts.open) ttsFillVoices(); });
+
+$('#ttsBtn').addEventListener('click', () => tts.open ? ttsClose() : ttsReadHere());
+$('#ttsPlay').addEventListener('click', ttsTogglePlay);
+$('#ttsPrev').addEventListener('click', () => ttsSkip(-1));
+$('#ttsNext').addEventListener('click', () => ttsSkip(1));
+$('#ttsBack').addEventListener('click', ttsBack);
+$('#ttsClose').addEventListener('click', ttsClose);
+$('#ttsRate').addEventListener('input', e => { $('#ttsRateVal').textContent = Number(e.target.value).toFixed(1) + '×'; });
+$('#ttsRate').addEventListener('change', e => ttsSetRate(Number(e.target.value)));
+$('#ttsVoice').addEventListener('change', e => { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); if (tts.playing) ttsGo(tts.ci, tts.pos); });
+new ResizeObserver(ttsMeasureBar).observe($('#tts'));
+$('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
+if (!synth) { $('#ttsBtn').disabled = true; $('#ttsBtn').title = "This browser can't read aloud"; }
 
 /* ---------- start ---------- */
 $('#fontPct').textContent = fontPct + '%';
