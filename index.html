@@ -769,6 +769,7 @@ function onKey(e){
 
 /* ---------- chrome ---------- */
 function renderMeta(){
+  document.title = book.title;
   $('#metaTitle').textContent = book.title;
   $('#metaAuthors').textContent = book.authors.join(', ');
   $('#pkgVersion').textContent = book.version;
