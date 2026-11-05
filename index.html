@@ -115,14 +115,20 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .fs-pill .btn{height:30px}
 kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;padding:2px 5px;color:var(--muted)}
 
+/* theme toggle shows the icon of the mode it switches to */
+#themeBtn .i-sun{display:none}
+#themeBtn.dark .i-sun{display:block}
+#themeBtn.dark .i-moon{display:none}
+
 @media (max-width:820px){
   .hide-sm{display:none}
   .toc,.toc.collapsed{display:flex;position:absolute;z-index:5;top:0;bottom:0;left:0;width:min(320px,88%);box-sizing:border-box;
     background:var(--surface);padding:18px 16px;border:1px solid var(--rule);border-radius:6px;box-shadow:var(--shadow);
     transform:translateX(calc(-100% - 24px));visibility:hidden;transition:transform .2s ease-out,visibility 0s .2s}
   .toc.open{transform:none;visibility:visible;transition:transform .2s ease-out}
-  .bar{gap:8px}
-  .tools{gap:4px}
+  .bar{gap:6px}
+  .tools{gap:2px}
+  .btn.ghost{padding:0 7px}
 }
 @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 </style>
@@ -136,12 +142,16 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </button>
     <div class="book-id"><span id="bookTitle">Loading…</span><span id="bookAuthor"></span></div>
     <div class="tools">
+      <button class="btn ghost" id="themeBtn" title="Switch to dark mode" aria-label="Switch to dark mode">
+        <svg class="i-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.75 5.75 0 0 1 6.4 2.5a5.75 5.75 0 1 0 7.1 7.1Z"/></svg>
+        <svg class="i-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+      </button>
       <button class="btn ghost" id="fsBtn" title="Full screen (F)" aria-label="Full screen">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
       </button>
       <div class="size" role="group" aria-label="Text size">
         <button class="btn ghost" id="smaller" title="Smaller text" aria-label="Smaller text">A−</button>
-        <span id="fontPct" aria-live="polite">100%</span>
+        <span id="fontPct" class="hide-sm" aria-live="polite">100%</span>
         <button class="btn ghost" id="larger" title="Larger text" aria-label="Larger text">A+</button>
       </div>
       <div class="size" role="group" aria-label="Line spacing">
@@ -700,6 +710,7 @@ function onKey(e){
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
+  else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setTheme(isDark() ? 'light' : 'dark'); }
   else if (['ArrowRight', 'ArrowDown', 'PageDown'].includes(e.key)) { e.preventDefault(); pageNext(); }
   else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); pagePrev(); }
 }
@@ -844,7 +855,22 @@ $('#smaller').addEventListener('click', () => setFont(fontPct - 10));
 $('#larger').addEventListener('click', () => setFont(fontPct + 10));
 document.addEventListener('keydown', onKey);
 
-darkMq.addEventListener('change', restyleFrame);
+darkMq.addEventListener('change', () => { restyleFrame(); syncThemeBtn(); });
+
+/* Light/dark toggle: sets data-theme on the root, which the CSS tokens already honour.
+   Until the reader picks one, the page follows the system setting. */
+function syncThemeBtn(){
+  const dark = isDark(), b = $('#themeBtn');
+  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  b.classList.toggle('dark', dark);
+  b.title = label + ' (T)'; b.setAttribute('aria-label', label);
+}
+function setTheme(mode){
+  document.documentElement.setAttribute('data-theme', mode);
+  store.set('spine:theme', mode);
+  syncThemeBtn();
+}
+$('#themeBtn').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
 new MutationObserver(restyleFrame).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
@@ -963,6 +989,8 @@ ${chapters.map(([id]) => `  <itemref idref="${id}"/>`).join('\n')}
 /* ---------- start ---------- */
 $('#fontPct').textContent = fontPct + '%';
 setLine(lineH);
+{ const t = store.get('spine:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
+syncThemeBtn();
 setToc(!narrow.matches);
 if (!window.JSZip) {
   $('#bookTitle').textContent = 'Spine Reader';

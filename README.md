@@ -44,7 +44,9 @@ This needs a real web server (for example `npx vite` or
   Exit button that appears when you move the mouse brings them back.
 - Text size (A− / A+) and line spacing (the tighter / looser line buttons,
   1.00–2.60) can be adjusted from the top bar
-- Remembers your position, text size and line spacing, and follows light/dark mode
+- Light/dark toggle in the top bar (or press T). Until you pick one, it
+  follows your system setting.
+- Remembers your position, text size, line spacing and theme
 
 ## Requirements
 
