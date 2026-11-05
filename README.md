@@ -44,9 +44,13 @@ This needs a real web server (for example `npx vite` or
   Exit button that appears when you move the mouse brings them back.
 - Text size (A− / A+) and line spacing (the tighter / looser line buttons,
   1.00–2.60) can be adjusted from the top bar
+- Reading font picker (the Aa button): keep the book's own font, or override
+  it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Atkinson
+  Hyperlegible, Georgia or your system sans-serif. Code keeps its monospace.
+  Add more in the `FONTS` list in `index.html`.
 - Light/dark toggle in the top bar (or press T). Until you pick one, it
   follows your system setting.
-- Remembers your position, text size, line spacing and theme
+- Remembers your position, text size, line spacing, font and theme
 
 ## Requirements
 

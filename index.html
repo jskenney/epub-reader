@@ -120,6 +120,20 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 #themeBtn.dark .i-sun{display:block}
 #themeBtn.dark .i-moon{display:none}
 
+/* font picker */
+.font-pick{position:relative}
+#fontBtn .aa{font-size:16px;line-height:1;font-weight:500}
+#fontBtn svg{width:10px;height:10px}
+.menu{position:absolute;z-index:30;right:0;top:calc(100% + 6px);width:270px;max-width:calc(100vw - 32px);box-sizing:border-box;
+  display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--surface);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow)}
+.menu .label{margin:4px 8px 8px}
+.opt{display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;padding:8px 10px;border:0;border-radius:5px;
+  background:transparent;color:var(--ink);cursor:pointer;text-align:left;font-size:17px;line-height:1.25}
+.opt:hover,.opt:focus-visible{background:var(--paper);outline:none}
+.opt small{font:400 11px/1.2 var(--font-mono);color:var(--muted);white-space:nowrap}
+.opt[aria-checked="true"]{color:var(--ribbon)}
+.opt[aria-checked="true"] small::before{content:"✓ ";color:var(--ribbon)}
+
 @media (max-width:820px){
   .hide-sm{display:none}
   .toc,.toc.collapsed{display:flex;position:absolute;z-index:5;top:0;bottom:0;left:0;width:min(320px,88%);box-sizing:border-box;
@@ -129,6 +143,13 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   .bar{gap:6px}
   .tools{gap:2px}
   .btn.ghost{padding:0 7px}
+  .menu{position:fixed;top:auto;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));
+    bottom:calc(16px + env(safe-area-inset-bottom,0px));width:auto;max-width:none}
+}
+@media (max-width:520px){
+  .bar{flex-wrap:wrap;row-gap:8px}
+  .book-id{flex-basis:calc(100% - 60px)}
+  .tools{width:100%;justify-content:space-between}
 }
 @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 </style>
@@ -142,6 +163,15 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </button>
     <div class="book-id"><span id="bookTitle">Loading…</span><span id="bookAuthor"></span></div>
     <div class="tools">
+      <div class="font-pick">
+        <button class="btn ghost" id="fontBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="fontMenu" title="Reading font">
+          <span class="aa">Aa</span>
+          <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m2 3.5 3 3 3-3"/></svg>
+        </button>
+        <div class="menu" id="fontMenu" role="menu" aria-label="Reading font" hidden>
+          <p class="label">Reading font</p>
+        </div>
+      </div>
       <button class="btn ghost" id="themeBtn" title="Switch to dark mode" aria-label="Switch to dark mode">
         <svg class="i-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.75 5.75 0 0 1 6.4 2.5a5.75 5.75 0 1 0 7.1 7.1Z"/></svg>
         <svg class="i-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
@@ -235,6 +265,19 @@ const narrow = matchMedia('(max-width: 820px)');
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 const darkMq = matchMedia('(prefers-color-scheme: dark)');
 const FONT_URL = 'https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap';
+const GF = family => `https://fonts.googleapis.com/css2?family=${family}&display=swap`;
+/* Reading fonts. "book" keeps the publisher's CSS (Literata where the book names no font);
+   every other choice overrides the book's fonts except for code. */
+const FONTS = [
+  { id: 'book', name: "Book's own font", note: 'publisher', stack: null, preview: '"Literata", Georgia, serif' },
+  { id: 'literata', name: 'Literata', note: 'serif', css: 'Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400', stack: '"Literata", Georgia, serif' },
+  { id: 'source-serif', name: 'Source Serif 4', note: 'serif', css: 'Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400', stack: '"Source Serif 4", Georgia, serif' },
+  { id: 'eb-garamond', name: 'EB Garamond', note: 'old-style', css: 'EB+Garamond:ital,wght@0,400;0,600;1,400', stack: '"EB Garamond", Garamond, Georgia, serif' },
+  { id: 'crimson', name: 'Crimson Pro', note: 'serif', css: 'Crimson+Pro:ital,wght@0,400;0,600;1,400', stack: '"Crimson Pro", Georgia, serif' },
+  { id: 'atkinson', name: 'Atkinson Hyperlegible', note: 'sans', css: 'Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400', stack: '"Atkinson Hyperlegible", system-ui, sans-serif' },
+  { id: 'georgia', name: 'Georgia', note: 'device', stack: 'Georgia, "Times New Roman", serif' },
+  { id: 'system-sans', name: 'System sans-serif', note: 'device', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' }
+];
 const OPS = 'http://www.idpf.org/2007/ops';
 const BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
@@ -478,6 +521,7 @@ img,svg,video,canvas{max-width:100% !important;max-height:calc(100vh - 2 * var(-
 figure,table{break-inside:avoid}
 pre{white-space:pre-wrap !important}
 #spine-end{display:inline}
+${faceStack() ? `#spine-flow,#spine-flow :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
 a,a *{color:${t.ribbon} !important}` : ''}`;
@@ -525,7 +569,7 @@ async function buildPage(src, path){
     const v = sHtml.getAttribute(a); if (v) out.documentElement.setAttribute(a === 'xml:lang' ? 'lang' : a, v);
   }
   const head = out.head;
-  head.innerHTML = `<meta charset="utf-8"><link rel="stylesheet" href="${FONT_URL}"><style id="spine-base"></style>`;
+  head.innerHTML = `<meta charset="utf-8"><link id="spine-font" rel="stylesheet" href="${fontHref()}"><style id="spine-base"></style>`;
   head.querySelector('#spine-base').textContent = baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
     if (n.localName === 'link') {
@@ -650,6 +694,7 @@ function wireFrame(){
   }, { passive: true });
   doc.fonts?.addEventListener?.('loadingdone', relayout);
   doc.addEventListener('mousemove', wake);
+  doc.addEventListener('pointerdown', () => setMenu(false));
   doc.addEventListener('touchstart', wake, { passive: true });
 }
 
@@ -691,6 +736,11 @@ function restyleFrame(){
   const b = doc.getElementById('spine-base'), o = doc.getElementById('spine-override');
   if (b) b.textContent = baseCss();
   if (o) o.textContent = overrideCss();
+  const l = doc.getElementById('spine-font'), h = fontHref();
+  if (l && l.getAttribute('href') !== h) {
+    l.addEventListener('load', () => (doc.fonts?.ready || Promise.resolve()).then(relayout), { once: true });
+    l.setAttribute('href', h);
+  }
   relayout();
 }
 
@@ -708,6 +758,7 @@ function onKey(e){
   if (e.altKey || e.ctrlKey || e.metaKey) return;
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (menuOpen() && menuKey(e)) return;
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setTheme(isDark() ? 'light' : 'dark'); }
@@ -856,6 +907,67 @@ $('#larger').addEventListener('click', () => setFont(fontPct + 10));
 document.addEventListener('keydown', onKey);
 
 darkMq.addEventListener('change', () => { restyleFrame(); syncThemeBtn(); });
+
+/* Font picker */
+let fontFace = FONTS.some(f => f.id === store.get('spine:face')) ? store.get('spine:face') : 'book';
+const face = () => FONTS.find(f => f.id === fontFace) || FONTS[0];
+const faceStack = () => face().stack;
+const fontHref = () => face().css ? GF(face().css) : FONT_URL;
+const menuOpen = () => !$('#fontMenu').hidden;
+let previewsLoaded = false;
+function loadPreviews(){
+  if (previewsLoaded) return; previewsLoaded = true;
+  const fams = FONTS.filter(f => f.css).map(f => 'family=' + f.css.split(':')[0]).join('&');
+  const chars = [...new Set(FONTS.map(f => f.name).join('') + 'Aa')].join('');
+  const l = document.createElement('link'); l.rel = 'stylesheet';
+  l.href = `https://fonts.googleapis.com/css2?${fams}&display=swap&text=${encodeURIComponent(chars)}`;
+  document.head.append(l);
+}
+function buildFontMenu(){
+  const menu = $('#fontMenu');
+  for (const f of FONTS) {
+    const b = document.createElement('button');
+    b.className = 'opt'; b.type = 'button'; b.setAttribute('role', 'menuitemradio'); b.dataset.face = f.id;
+    const name = document.createElement('span'); name.textContent = f.name; name.style.fontFamily = f.stack || f.preview;
+    const note = document.createElement('small'); note.textContent = f.note;
+    b.append(name, note);
+    b.addEventListener('click', () => { setFace(f.id); setMenu(false); $('#fontBtn').focus(); });
+    menu.append(b);
+  }
+  syncFontMenu();
+}
+function syncFontMenu(){
+  for (const b of $('#fontMenu').querySelectorAll('.opt')) b.setAttribute('aria-checked', String(b.dataset.face === fontFace));
+  $('#fontBtn .aa').style.fontFamily = face().stack || face().preview;
+  $('#fontBtn').title = `Reading font: ${face().name}`;
+}
+function setFace(id){
+  fontFace = id;
+  store.set('spine:face', id);
+  syncFontMenu();
+  restyleFrame();
+}
+function setMenu(open){
+  if (open === menuOpen()) return;
+  $('#fontMenu').hidden = !open;
+  $('#fontBtn').setAttribute('aria-expanded', String(open));
+  if (open) { loadPreviews(); ($('#fontMenu .opt[aria-checked="true"]') || $('#fontMenu .opt')).focus(); }
+}
+function menuKey(e){
+  const opts = [...$('#fontMenu').querySelectorAll('.opt')];
+  const i = opts.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); setMenu(false); $('#fontBtn').focus(); return true; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const n = e.key === 'ArrowDown' ? (i + 1) % opts.length : (i - 1 + opts.length) % opts.length;
+    opts[n].focus(); return true;
+  }
+  if (e.key === 'Tab') { setMenu(false); return false; }
+  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T'].includes(e.key);
+}
+$('#fontBtn').addEventListener('click', () => setMenu(!menuOpen()));
+document.addEventListener('click', e => { if (menuOpen() && !e.target.closest('.font-pick')) setMenu(false); });
+buildFontMenu();
 
 /* Light/dark toggle: sets data-theme on the root, which the CSS tokens already honour.
    Until the reader picks one, the page follows the system setting. */
