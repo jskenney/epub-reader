@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Download everything the natural voice (Kokoro) needs into ./kokoro/ next to index.html, so the
+# reader loads it from this site instead of cdn.jsdelivr.net and huggingface.co.
+#
+#   ./fetch-kokoro.sh            run from anywhere; files go next to this script
+#
+# Safe to re-run: finished files are skipped and interrupted downloads resume. Total is about 450 MB.
+# The reader uses whichever of these files exist and falls back to the CDNs for the rest.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+KOKORO_JS=1.2.1      # must match KOKORO.lib in index.html
+TRANSFORMERS=3.5.1   # transformers.js version bundled in kokoro-js 1.2.1; its dist/ holds the ONNX Runtime files it loads
+PHONEMIZER=1.2.1     # bundled in kokoro-js 1.2.1 (licence only)
+MODEL=onnx-community/Kokoro-82M-v1.0-ONNX
+DEST=kokoro
+
+JSD=https://cdn.jsdelivr.net/npm
+HF=https://huggingface.co/$MODEL/resolve/main
+
+command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
+
+get() {   # get URL PATH-UNDER-kokoro/
+  local url=$1 out=$DEST/$2
+  if [ -s "$out" ]; then echo "  have   $2"; return; fi
+  mkdir -p "$(dirname "$out")"
+  echo "  fetch  $2"
+  curl -fL --retry 3 --retry-delay 2 -C - --progress-bar -o "$out.part" "$url"
+  mv "$out.part" "$out"
+}
+
+echo "Library"
+get "$JSD/kokoro-js@$KOKORO_JS/dist/kokoro.web.js"                                   kokoro.web.js
+
+echo "ONNX Runtime (WebAssembly + WebGPU)"
+get "$JSD/@huggingface/transformers@$TRANSFORMERS/dist/ort-wasm-simd-threaded.jsep.mjs"  ort/ort-wasm-simd-threaded.jsep.mjs
+get "$JSD/@huggingface/transformers@$TRANSFORMERS/dist/ort-wasm-simd-threaded.jsep.wasm" ort/ort-wasm-simd-threaded.jsep.wasm
+
+echo "Model ($MODEL)"
+for f in config.json tokenizer.json tokenizer_config.json \
+         onnx/model.onnx onnx/model_quantized.onnx; do   # fp32 for WebGPU, q8 for the CPU
+  get "$HF/$f" "model/$f"
+done
+
+echo "Voices"
+# The voice ids the reader offers, read from KOKORO_VOICES in index.html so the two stay in sync.
+voices=$(grep -o "\['[ab][fm]_[a-z]*'" index.html | tr -d "['" | sort -u)
+[ -n "$voices" ] || { echo "Couldn't find the voice list in index.html" >&2; exit 1; }
+for v in $voices; do get "$HF/voices/$v.bin" "model/voices/$v.bin"; done
+
+echo "Licences"
+get "$JSD/kokoro-js@$KOKORO_JS/LICENSE"                 LICENSES/kokoro-js.txt
+get "$JSD/@huggingface/transformers@$TRANSFORMERS/LICENSE" LICENSES/transformers.js.txt
+get "$JSD/phonemizer@$PHONEMIZER/LICENSE"               LICENSES/phonemizer.txt
+get "$HF/README.md"                                      LICENSES/Kokoro-82M-v1.0-ONNX-model-card.md
+cat > "$DEST/LICENSES/NOTICE.txt" <<NOTICE
+Self-hosted copies of the files the reader's natural voice uses, fetched by fetch-kokoro.sh.
+
+kokoro-js $KOKORO_JS (kokoro.web.js)  Apache-2.0        https://www.npmjs.com/package/kokoro-js
+  bundles transformers.js $TRANSFORMERS     Apache-2.0  https://github.com/huggingface/transformers.js
+  bundles phonemizer $PHONEMIZER            Apache-2.0 as published; built from eSpeak NG, which is GPL-3.0
+ONNX Runtime Web (ort/)              MIT               https://github.com/microsoft/onnxruntime
+Kokoro-82M v1.0 ONNX (model/)        Apache-2.0        https://huggingface.co/$MODEL
+NOTICE
+
+echo
+du -sh "$DEST" | awk '{print "Done: " $1 " in " $2 "/"}'

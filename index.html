@@ -1770,7 +1770,10 @@ if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narratio
    is downloaded until the reader asks; the library caches the model in the browser afterwards.
    Sentences are generated one or two ahead and played through Web Audio. Kokoro reports no word
    timings, so the highlighted word is estimated from how far through the sentence's audio playback is. */
-const KOKORO = { lib: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js', model: 'onnx-community/Kokoro-82M-v1.0-ONNX' };
+const KOKORO = { lib: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js', model: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+  // Self-hosted copies (fetched by fetch-kokoro.sh) in ./kokoro/ next to this page are used first when present:
+  //   kokoro/kokoro.web.js, kokoro/ort/ (ONNX Runtime), kokoro/model/ (a mirror of the Hugging Face repo files)
+  local: new URL('kokoro/', location.href).href };
 const KOKORO_VOICES = [   // [id, name, accent, gender] in kokoro-js's quality order
   ['af_heart', 'Heart', 'American', 'female'], ['af_bella', 'Bella', 'American', 'female'], ['af_nicole', 'Nicole', 'American', 'female'],
   ['af_aoede', 'Aoede', 'American', 'female'], ['af_kore', 'Kore', 'American', 'female'], ['af_sarah', 'Sarah', 'American', 'female'],
@@ -1786,10 +1789,24 @@ const KOKORO_VOICES = [   // [id, name, accent, gender] in kokoro-js's quality o
 const KOKORO_WORKER = `
 let tts = null, queue = Promise.resolve();
 self.onmessage = e => { const m = e.data; queue = queue.then(() => handle(m)); };
+// Requests for the model repo (config, tokenizer, ONNX weights, voices) try the self-hosted mirror
+// first and fall back to Hugging Face for anything it doesn't have.
+function preferLocal(remote, local) {
+  const net = self.fetch.bind(self);
+  self.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.startsWith(remote)) {
+      try { const r = await net(local + url.slice(remote.length), init); if (r.ok) return r; } catch (e) {}
+    }
+    return net(input, init);
+  };
+}
 async function handle(m) {
   try {
     if (m.type === 'load') {
-      const { KokoroTTS } = await import(m.lib);
+      if (m.modelBase) preferLocal('https://huggingface.co/' + m.model + '/resolve/main/', m.modelBase);
+      const { KokoroTTS, env } = await import(m.lib);
+      if (m.ort) env.wasmPaths = m.ort;
       tts = await KokoroTTS.from_pretrained(m.model, { dtype: m.dtype, device: m.device,
         progress_callback: p => self.postMessage({ type: 'progress', p: { status: p.status, file: p.file, loaded: p.loaded, total: p.total } }) });
       self.postMessage({ type: 'ready' });
@@ -1828,16 +1845,25 @@ function kProgress(p){
   if (p.status === 'done' && k.files[p.file]) k.files[p.file].loaded = k.files[p.file].total;
   const fs = Object.values(k.files), total = fs.reduce((a, f) => a + f.total, 0), loaded = fs.reduce((a, f) => a + f.loaded, 0);
   const mb = n => Math.round(n / 1048576);
-  k.progressText = total > 2e6 ? `Downloading natural voice… ${Math.floor(loaded / total * 100)}% of ${mb(total)} MB` : 'Loading natural voice…';
+  k.progressText = total > 2e6 ? `Downloading natural voice${k.local ? ' from this site' : ''}… ${Math.floor(loaded / total * 100)}% of ${mb(total)} MB` : 'Loading natural voice…';
   if (tts.open) ttsUpdateBar();
+}
+// Which self-hosted pieces exist (each falls back to its CDN independently).
+async function kLocalFiles(){
+  const base = KOKORO.local;
+  const has = async f => { try { return (await fetch(base + f, { method: 'HEAD', cache: 'no-store' })).ok; } catch { return false; } };
+  const [lib, ort, model] = await Promise.all([has('kokoro.web.js'), has('ort/ort-wasm-simd-threaded.jsep.mjs'), has('model/config.json')]);
+  k.local = lib || ort || model;
+  return { lib: lib ? base + 'kokoro.web.js' : KOKORO.lib, ort: ort ? base + 'ort/' : null, modelBase: model ? base + 'model/' : null };
 }
 async function kLoad(){
   if (k.state === 'loading' || k.state === 'ready') return;
   k.state = 'loading'; k.files = {}; k.progressText = ''; ttsUpdateBar();
+  const files = await kLocalFiles();
   const attempt = (device, dtype) => new Promise((res, rej) => {
     k.worker?.terminate(); k.worker = kWorker();
     k.onLoad = { res, rej };
-    k.worker.postMessage({ type: 'load', lib: KOKORO.lib, model: KOKORO.model, device, dtype });
+    k.worker.postMessage({ type: 'load', model: KOKORO.model, device, dtype, ...files });
   });
   try {
     try { await attempt(k.gpu ? 'webgpu' : 'wasm', k.gpu ? 'fp32' : 'q8'); k.device = k.gpu ? 'webgpu' : 'wasm'; }

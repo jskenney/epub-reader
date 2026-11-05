@@ -72,8 +72,8 @@ This needs a real web server (for example `npx vite` or
   from playback position, since Kokoro doesn't report word timings. It is
   English-only, so books in other languages use the device voice. On the
   CPU, generation can be slower than real time, which causes pauses between
-  sentences. The model and library load from cdn.jsdelivr.net and
-  huggingface.co.
+  sentences. Files load from `./kokoro/` when you self-host them (see below),
+  otherwise from cdn.jsdelivr.net and huggingface.co.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
@@ -87,6 +87,31 @@ This needs a real web server (for example `npx vite` or
 - Light/dark toggle in the top bar (or press T). Until you pick one, it
   follows your system setting.
 - Remembers your position, text size, line spacing, font and theme
+
+## Self-hosting the natural voice
+
+Run the download script once, next to `index.html` on your web server:
+
+```bash
+./fetch-kokoro.sh
+```
+
+It fetches about 435 MB into `./kokoro/`:
+
+| Path | What |
+|---|---|
+| `kokoro/kokoro.web.js` | kokoro-js 1.2.1 |
+| `kokoro/ort/` | ONNX Runtime WebAssembly/WebGPU files (from transformers.js 3.5.1) |
+| `kokoro/model/` | Kokoro-82M-v1.0-ONNX: config, tokenizer, `onnx/model.onnx` (fp32, WebGPU) and `onnx/model_quantized.onnx` (q8, CPU) |
+| `kokoro/model/voices/` | the 27 voices the reader offers (read from `index.html`) |
+| `kokoro/LICENSES/` | licences and a NOTICE listing each component |
+
+The reader checks for these files when you press Download and uses each
+local piece it finds, falling back to the CDN for anything missing. The
+script is safe to re-run: finished files are skipped and interrupted
+downloads resume. `kokoro/` is in `.gitignore` because the fp32 model alone
+is larger than GitHub's 100 MB file limit. Serve `.wasm` files as
+`application/wasm`.
 
 ## Requirements
 

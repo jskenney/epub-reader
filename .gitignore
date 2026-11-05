@@ -1,0 +1,5 @@
+# Self-hosted natural-voice files, fetched by fetch-kokoro.sh (about 450 MB; too big for git)
+/kokoro/
+
+# Interrupted or in-progress downloads
+*.part
