@@ -74,6 +74,14 @@ This needs a real web server (for example `npx vite` or
   CPU, generation can be slower than real time, which causes pauses between
   sentences. Files load from `./kokoro/` when you self-host them (see below),
   otherwise from cdn.jsdelivr.net and huggingface.co.
+- Natural voice (Pocket TTS): Kyutai's Pocket TTS through
+  [pocket-tts-js](https://www.npmjs.com/package/pocket-tts-js), running on
+  the CPU (WebAssembly) in a Web Worker. Unlike Kokoro it reads English,
+  French, German, Italian, Portuguese and Spanish books, with 8 built-in
+  voices per language. Each language is a one-time download (about 170 MB;
+  French about 340 MB) after pressing Download. It has no speed control of
+  its own, so the speed setting changes playback instantly with pitch
+  preserved. The model is CC BY 4.0 (Kyutai).
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
@@ -87,6 +95,22 @@ This needs a real web server (for example `npx vite` or
 - Light/dark toggle in the top bar (or press T). Until you pick one, it
   follows your system setting.
 - Remembers your position, text size, line spacing, font and theme
+
+## Self-hosting Pocket TTS
+
+```bash
+./fetch-pocket.sh            # English (about 180 MB)
+./fetch-pocket.sh en fr de   # several languages
+./fetch-pocket.sh all        # en fr de it pt es
+```
+
+This fills `./pocket/` with pocket-tts-js 0.1.0 (`lib/`), ONNX Runtime Web
+1.20.0 (`ort/`), the int8 model bundle and voices for each language
+(`model/<bundle>/`, pinned to a fixed revision of
+`vlapky/pocket-tts-onnx`), and `LICENSES/` with a NOTICE that includes the
+CC BY 4.0 attribution for Kyutai's model. As with Kokoro, each piece falls
+back to the CDN if it's missing, re-runs skip finished files, and `pocket/`
+is git-ignored.
 
 ## Self-hosting the natural voice
 

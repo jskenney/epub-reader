@@ -1,5 +1,6 @@
-# Self-hosted natural-voice files, fetched by fetch-kokoro.sh (about 450 MB; too big for git)
+# Self-hosted natural-voice files, fetched by fetch-kokoro.sh and fetch-pocket.sh (hundreds of MB; too big for git)
 /kokoro/
+/pocket/
 
 # Interrupted or in-progress downloads
 *.part

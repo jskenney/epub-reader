@@ -271,6 +271,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <option value="narration">Publisher narration</option>
           <option value="device">Device voice</option>
           <option value="kokoro">Natural voice (Kokoro)</option>
+          <option value="pocket">Natural voice (Pocket TTS)</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
         <span id="ttsStatus" hidden></span>
@@ -1268,7 +1269,7 @@ ${chapters.map(([id]) => `  <itemref idref="${id}"/>`).join('\n')}
 const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
-  barH: 0, utt: null, engine: ['device', 'kokoro'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
+  barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
 const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],#spine-end,' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
@@ -1375,16 +1376,17 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
   pos = wordStartAt(c.b, Math.max(c.s, Math.min(c.e - 1, pos ?? c.s)), c.s, c.e);
   tts.ci = ci; tts.pos = pos; if (!keepFollow) tts.follow = true;
   const token = ++tts.token;
-  synth?.cancel(); kStop();
+  synth?.cancel(); nStop();
   hl('tts-word');
   const sentence = rangeFor(c.b, pos, c.e);
   hl('tts-sentence', sentence);
   follow(rangeFor(c.b, pos, pos + 1));
   ttsUpdateBar();
   if (!speak) return;
-  if (tts.engine === 'kokoro' && kokoroFits()) {
-    if (k.state === 'ready') { kSpeak(c, ci, pos, token); return; }
-    tts.playing = false; k.wantPlay = true; ttsUpdateBar(); return;   // the bar offers the download
+  const neural = neuralEngine();
+  if (neural) {
+    if (neural.ready()) { nSpeak(c, ci, pos, token); return; }
+    tts.playing = false; neural.st.wantPlay = true; ttsUpdateBar(); return;   // the bar offers the download
   }
   if (!synth) { tts.playing = false; ttsUpdateBar(); showNotice("This browser doesn't have speech voices; choose Publisher narration instead.", 'error'); return; }
 
@@ -1581,7 +1583,7 @@ function ttsOpen(){
   ttsFillVoices(); ttsMeasureBar();
   return true;
 }
-function ttsStopAudio(){ ++tts.token; synth?.cancel(); kStop(); moAudio.pause(); moClearClasses(); }
+function ttsStopAudio(){ ++tts.token; synth?.cancel(); nStop(); moAudio.pause(); moClearClasses(); }
 function ttsClose(){
   tts.open = false; tts.playing = false; ttsStopAudio();
   ttsClearHL(); tts.chunks = null; tts.mo = null;
@@ -1619,14 +1621,14 @@ function ttsClickStart(e){
 }
 async function ttsTogglePlay(){
   if (!tts.open) return;
-  if (tts.playing && k.source && !tts.mo) {        // Kokoro: suspend the audio so resuming is instant
-    tts.playing = false; k.paused = true; k.ctx.suspend(); ttsUpdateBar(); return;
+  if (tts.playing && n.active && !tts.mo) {        // natural voices: pause the clip so resuming is instant
+    tts.playing = false; n.paused = true; nAudio.pause(); ttsUpdateBar(); return;
   }
-  if (!tts.playing && k.paused && k.source && k.token === tts.token && tts.doc === frame.contentDocument) {
-    tts.playing = true; k.paused = false; await k.ctx.resume(); kLoop(tts.token); ttsUpdateBar(); return;
+  if (!tts.playing && n.paused && n.active && n.token === tts.token && tts.doc === frame.contentDocument) {
+    tts.playing = true; n.paused = false; await nAudio.play(); nLoop(tts.token); ttsUpdateBar(); return;
   }
   if (tts.playing) {
-    tts.playing = false; ++tts.token; synth?.cancel(); kStop(); moAudio.pause(); hl('tts-word');
+    tts.playing = false; ++tts.token; synth?.cancel(); nStop(); moAudio.pause(); hl('tts-word');
     if (book?.info.playbackClass) frame.contentDocument?.documentElement.classList.remove(book.info.playbackClass);
     ttsUpdateBar(); return;
   }
@@ -1650,7 +1652,9 @@ function ttsSetRate(r){
   $('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
   store.set('spine:ttsRate', tts.rate);
   moAudio.playbackRate = tts.rate;                       // narration: instant, pitch preserved
-  if (tts.playing && !tts.mo) ttsGo(tts.ci, tts.pos);    // Web Speech can't change rate mid-sentence: restart at the current word
+  if (neuralEngine() === NEURAL.pocket) { nAudio.playbackRate = tts.rate; return; }   // Pocket TTS: instant too
+  // Web Speech can't change rate mid-sentence and Kokoro bakes speed into the audio: restart at the current word
+  if (tts.playing && !tts.mo) ttsGo(tts.ci, tts.pos);
 }
 async function ttsSetEngine(engine){
   tts.engine = engine; store.set('spine:ttsEngine', engine);
@@ -1694,18 +1698,22 @@ function ttsUpdateBar(status){
   $('#ttsBack').hidden = tts.follow;
   const eng = $('#ttsEngine'), narr = eng.querySelector('[value="narration"]'), ko = eng.querySelector('[value="kokoro"]');
   narr.hidden = narr.disabled = !book?.hasOverlays;
-  ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Natural voice (Kokoro)' : 'Natural voice (English only)';
-  eng.value = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ? 'device' : tts.engine;
+  ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Natural voice (Kokoro)' : 'Natural voice (Kokoro, English only)';
+  const po = eng.querySelector('[value="pocket"]');
+  po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Natural voice (Pocket TTS)' : 'Natural voice (Pocket TTS: en, fr, de, it, pt, es)';
+  eng.value = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) || (tts.engine === 'pocket' && !pocketLang()) ? 'device' : tts.engine;
   let dl = '';
-  if (!status && !tts.mo && tts.engine === 'kokoro' && kokoroFits()) {
-    if (k.state === 'idle') { status = `Natural voice: one-time ${k.gpu ? '~330 MB' : '~92 MB'} download`; dl = 'Download'; }
-    else if (k.state === 'loading') status = k.progressText || 'Loading natural voice…';
-    else if (k.state === 'error') { status = `Natural voice failed: ${k.error}`; dl = 'Try again'; }
+  const neural = !tts.mo && neuralEngine();
+  if (!status && neural && !neural.ready()) {
+    const st = neural.st;
+    if (st.state === 'loading') status = st.progressText || 'Loading natural voice…';
+    else if (st.state === 'error') { status = `Natural voice failed: ${st.error}`; dl = 'Try again'; }
+    else { status = `${neural.name}: one-time ${neural.size()} download`; dl = 'Download'; }
   }
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
   $('#ttsDownload').hidden = !dl; $('#ttsDownload').textContent = dl;
   $('#ttsVoice').hidden = !!tts.mo;
-  const want = tts.engine === 'kokoro' && kokoroFits() && !tts.mo ? 'kokoro' : 'device';
+  const want = tts.mo ? 'device' : neuralEngine() === NEURAL.kokoro ? 'kokoro' : neuralEngine() === NEURAL.pocket ? 'pocket:' + (pkReady() ? pk.lang : '') : 'device';
   if ($('#ttsVoice').dataset.kind !== want) ttsFillVoices();
 }
 function ttsMeasureBar(){
@@ -1726,6 +1734,13 @@ function ttsVoice(){
 }
 function ttsFillVoices(){
   const sel = $('#ttsVoice');
+  if (!tts.mo && neuralEngine() === NEURAL.pocket) {
+    sel.dataset.kind = 'pocket:' + (pkReady() ? pk.lang : '');
+    if (!pkReady()) { sel.replaceChildren(new Option('Voices load with the model', '')); sel.disabled = true; return; }
+    sel.disabled = false;
+    sel.replaceChildren(...pk.voices.map(v => { const o = new Option(v[0].toUpperCase() + v.slice(1), v); o.selected = v === pkVoice(); return o; }));
+    return;
+  }
   if (tts.engine === 'kokoro' && kokoroFits() && !tts.mo) {
     sel.dataset.kind = 'kokoro'; sel.disabled = false;
     sel.replaceChildren(...['American', 'British'].map(accent => {
@@ -1756,10 +1771,11 @@ $('#ttsRate').addEventListener('change', e => ttsSetRate(Number(e.target.value))
 $('#ttsEngine').addEventListener('change', e => ttsSetEngine(e.target.value));
 $('#ttsVoice').addEventListener('change', e => {
   if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
+  else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
   if (tts.playing) ttsGo(tts.ci, tts.pos);
 });
-$('#ttsDownload').addEventListener('click', () => { k.wantPlay = true; kLoad(); });
+$('#ttsDownload').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = true; ne.load(); } });
 new ResizeObserver(ttsMeasureBar).observe($('#tts'));
 $('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
 if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narration can be read aloud in this browser)";
@@ -1876,90 +1892,214 @@ async function kLoad(){
     k.state = 'error'; k.error = e.message; k.worker?.terminate(); k.worker = null;
   }
   ttsUpdateBar();
-  if (k.state === 'ready' && k.wantPlay && tts.open) { k.wantPlay = false; tts.playing = true; ttsGo(tts.ci, tts.pos); }
+  nLoaded(k);
 }
 // If generation can't keep up with playback, say why there are pauses (once).
-function kSpeedCheck(ratio){
-  if (k.slowWarned || !(ratio > 0)) return;
-  (k.ratios ??= []).push(ratio);
-  if (k.ratios.length < 3) return;
-  const med = [...k.ratios].sort((a, b) => a - b)[Math.floor(k.ratios.length / 2)];
+function kSpeedCheck(ratio, ne){
+  const st = ne.st;
+  if (st.slowWarned || !(ratio > 0)) return;
+  (st.ratios ??= []).push(ratio);
+  if (st.ratios.length < 3) return;
+  const med = [...st.ratios].sort((a, b) => a - b)[Math.floor(st.ratios.length / 2)];
   if (med > 1.15) {
-    k.slowWarned = true;
-    showNotice(k.device === 'wasm'
+    st.slowWarned = true;
+    if (ne === NEURAL.pocket) showNotice('Pocket TTS runs on this device\'s CPU and is generating speech slower than it speaks, so there will be pauses between sentences. Device voice has no pauses.', 'error');
+    else showNotice(k.device === 'wasm'
       ? 'The natural voice is running on this device\'s CPU and generates speech slower than it speaks, so there will be pauses between sentences. A browser with WebGPU (recent Chrome or Edge) runs it much faster; Device voice has no pauses.'
       : 'The natural voice is generating speech slower than it speaks on this device, so there will be pauses between sentences. Device voice has no pauses.', 'error');
   }
 }
-function kEnsureCtx(){ k.ctx ??= new AudioContext(); return k.ctx; }
-// Generate (or reuse) the audio for one piece of text at the current voice and speed.
-function kSynth(text){
-  const key = `${k.voice}|${tts.rate}|${text}`;
-  if (k.cache.has(key)) { const v = k.cache.get(key); k.cache.delete(key); k.cache.set(key, v); return v; }
+// Kokoro: generate one piece of text at the current voice and speed (serialized in its worker).
+function kGenerate(text){
   const id = k.nextId++;
-  const job = new Promise((res, rej) => k.pending.set(id, { res, rej })).then(m => {
-    const ctx = kEnsureCtx(), buf = ctx.createBuffer(1, m.data.length, m.rate);
-    buf.copyToChannel(m.data, 0);
-    kSpeedCheck(m.ms / 1000 / buf.duration);
-    return buf;
-  });
-  job.catch(() => k.cache.delete(key));
-  k.cache.set(key, job);
-  while (k.cache.size > 40) k.cache.delete(k.cache.keys().next().value);
+  const job = new Promise((res, rej) => k.pending.set(id, { res, rej }));
   k.worker.postMessage({ type: 'generate', id, text, voice: k.voice, speed: tts.rate });
+  return job.then(m => ({ data: m.data, rate: m.rate, genSec: m.ms / 1000 }));
+}
+
+/* ---------- Pocket TTS ----------
+   Kyutai's Pocket TTS through pocket-tts-js 0.1.0: its own worker (imported into a small module worker
+   from ./pocket/lib/ or the CDN) runs the int8 ONNX models on onnxruntime-web 1.20 (WebAssembly; threads
+   only when the page is cross-origin isolated). One model bundle per language, each with 8 built-in
+   voices. It has no speed control, so speed is applied at playback with pitch preserved. */
+const POCKET = {
+  lib: 'https://cdn.jsdelivr.net/npm/pocket-tts-js@0.1.0/src/',
+  ort: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist/',
+  model: 'https://huggingface.co/vlapky/pocket-tts-onnx/resolve/c469236dbc5f68287fa2fbf175b66de3b80123af/onnx',
+  // Self-hosted copies (fetched by fetch-pocket.sh): pocket/lib/, pocket/ort/, pocket/model/<bundle>/
+  local: new URL('pocket/', location.href).href
+};
+const POCKET_LANGS = {   // book language -> model bundle (size in MB, int8 models + voices)
+  en: ['english_2026-04', 170, 'English'], fr: ['french_24l', 338, 'French'], de: ['german', 170, 'German'],
+  it: ['italian', 170, 'Italian'], pt: ['portuguese', 170, 'Portuguese'], es: ['spanish', 170, 'Spanish']
+};
+const pocketLang = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[0] || null;
+const pk = { state: 'idle', worker: null, lang: '', voices: [], refs: new Map(), pending: new Map(), nextId: 1, queue: Promise.resolve(),
+  collect: null, files: {}, progressText: '', error: '', wantPlay: false, voice: store.get('spine:pocketVoice') || '' };
+const pkReady = () => pk.state === 'ready' && pk.lang === pocketLang();
+const pkVoice = () => pk.voices.includes(pk.voice) ? pk.voice : pk.voices[0];
+function pkWorker(lib){
+  const w = new Worker(URL.createObjectURL(new Blob([`import ${JSON.stringify(lib + 'worker.js')};`], { type: 'text/javascript' })), { type: 'module' });
+  w.onmessage = ({ data: m }) => {
+    if (m.type === 'progress') { if (m.label && m.total) pk.files[m.label] = { loaded: m.loaded || 0, total: m.total }; pkProgress(); }
+    else if (m.type === 'ready') pk.bundle = m.bundle;
+    else if (m.type === 'chunk') pk.collect?.push(m.audio);
+    else if (m.type === 'result' || m.type === 'error') {
+      const job = pk.pending.get(m.id); pk.pending.delete(m.id);
+      if (m.type === 'result') job?.res(m.result); else job?.rej(new Error(m.error));
+    }
+  };
+  w.onerror = e => { for (const j of pk.pending.values()) j.rej(new Error(e.message || 'the worker failed to start')); pk.pending.clear(); };
+  return w;
+}
+function pkRequest(type, payload){
+  const id = pk.nextId++;
+  return new Promise((res, rej) => { pk.pending.set(id, { res, rej }); pk.worker.postMessage({ id, type, payload }); });
+}
+function pkProgress(){
+  const fs = Object.values(pk.files), total = fs.reduce((a, f) => a + f.total, 0), loaded = fs.reduce((a, f) => a + Math.min(f.loaded, f.total), 0);
+  const expect = POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1] || 170;
+  pk.progressText = total > 2e6 ? `Downloading Pocket TTS${pk.local ? ' from this site' : ''}… ${Math.round(loaded / 1048576)} of ~${expect} MB` : 'Loading Pocket TTS…';
+  if (tts.open) ttsUpdateBar();
+}
+async function pkLoad(){
+  const lang = pocketLang();
+  if (!lang || pk.state === 'loading' || pkReady()) return;
+  pk.state = 'loading'; pk.files = {}; pk.progressText = ''; ttsUpdateBar();
+  const has = async f => { try { return (await fetch(POCKET.local + f, { method: 'HEAD', cache: 'no-store' })).ok; } catch { return false; } };
+  const [lib, ort, model] = await Promise.all([has('lib/worker.js'), has('ort/ort.min.mjs'), has(`model/${lang}/bundle.json`)]);
+  pk.local = lib || ort || model;
+  try {
+    pk.worker?.terminate(); pk.pending.clear(); pk.refs.clear(); pk.queue = Promise.resolve();
+    pk.worker = pkWorker(lib ? POCKET.local + 'lib/' : POCKET.lib);
+    await pkRequest('init', { language: lang, quantized: true, voiceCloning: false,
+      modelBaseUrl: model ? POCKET.local + 'model' : POCKET.model, ortBaseUrl: ort ? POCKET.local + 'ort/' : POCKET.ort,
+      voicesUrl: null, maxThreads: 8, cache: true, cacheName: 'pocket-tts-js-v1' });
+    pk.voices = pk.bundle?.predefinedVoices || [];
+    pk.state = 'ready'; pk.lang = lang;
+  } catch (e) {
+    pk.state = 'error'; pk.error = e.message; pk.worker?.terminate(); pk.worker = null;
+  }
+  ttsFillVoices(); nLoaded(pk);
+}
+// Pocket TTS: generate one piece of text with the chosen built-in voice (one request at a time).
+function pkGenerate(text){
+  const run = async () => {
+    const v = pkVoice();
+    if (!pk.refs.has(v)) pk.refs.set(v, (await pkRequest('loadBuiltinVoice', { name: v })).ref);
+    pk.collect = [];
+    const t0 = performance.now();
+    try { await pkRequest('generate', { text, voiceRef: pk.refs.get(v) }); }
+    finally { var parts = pk.collect; pk.collect = null; }
+    const data = new Float32Array(parts.reduce((a, p) => a + p.length, 0));
+    let at = 0; for (const p of parts) { data.set(p, at); at += p.length; }
+    return { data, rate: pk.bundle.sampleRate, genSec: (performance.now() - t0) / 1000 };
+  };
+  const job = pk.queue.then(run, run);
+  pk.queue = job.catch(() => {});
   return job;
 }
-async function kSpeak(c, ci, pos, token){
+
+/* ---------- natural voices: shared generation cache and playback ----------
+   Each engine turns text into raw samples; this caches them as WAV clips, plays them through one
+   <audio> element (pitch-preserving speed for Pocket TTS, instant pause/resume), prepares the next
+   sentences ahead, and estimates the spoken word from playback position (neither engine reports
+   word timings). */
+const NEURAL = {
+  kokoro: { name: 'Natural voice', st: k, ready: () => k.state === 'ready', load: () => kLoad(), size: () => k.gpu ? '~330 MB' : '~92 MB',
+    generate: kGenerate, key: () => `kokoro|${k.voice}|${tts.rate}` },
+  pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1] || 170} MB`,
+    generate: pkGenerate, key: () => `pocket|${pk.lang}|${pkVoice()}` }
+};
+function neuralEngine(){
+  if (tts.engine === 'kokoro' && kokoroFits()) return NEURAL.kokoro;
+  if (tts.engine === 'pocket' && pocketLang()) return NEURAL.pocket;
+  return null;
+}
+// After an engine finishes loading: update the bar and start reading if the reader was waiting.
+function nLoaded(st){
+  ttsUpdateBar();
+  const ne = neuralEngine();
+  if (ne?.st === st && ne.ready() && st.wantPlay && tts.open) { st.wantPlay = false; tts.playing = true; ttsGo(tts.ci, tts.pos); }
+}
+const nAudio = new Audio();
+nAudio.preservesPitch = true;
+const n = { cache: new Map(), active: false, paused: false, token: 0, raf: 0 };
+function wavUrl(data, rate){
+  const buf = new ArrayBuffer(44 + data.length * 2), v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + data.length * 2, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, data.length * 2, true);
+  for (let i = 0; i < data.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, data[i])) * 0x7fff, true);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function nSynth(ne, text){
+  const key = `${ne.key()}|${text}`;
+  if (n.cache.has(key)) { const v = n.cache.get(key); n.cache.delete(key); n.cache.set(key, v); return v; }
+  const job = ne.generate(text).then(r => {
+    const dur = r.data.length / r.rate;
+    kSpeedCheck(r.genSec / dur, ne);
+    return { url: wavUrl(r.data, r.rate), dur };
+  });
+  job.catch(() => n.cache.delete(key));
+  n.cache.set(key, job);
+  while (n.cache.size > 40) {
+    const [oldKey, old] = n.cache.entries().next().value;
+    n.cache.delete(oldKey); old.then(c => URL.revokeObjectURL(c.url), () => {});
+  }
+  return job;
+}
+async function nSpeak(c, ci, pos, token){
+  const ne = neuralEngine();
   const { out, map } = speakable(c.b.text.slice(pos, c.e));
-  const ctx = kEnsureCtx();
   const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
-  let buf;
-  try { buf = await kSynth(out); }
+  let clip;
+  try { clip = await nSynth(ne, out); }
   catch (e) {
-    if (token === tts.token) { tts.playing = false; ttsUpdateBar(); showNotice(`The natural voice couldn't read this sentence: ${e.message}`, 'error'); }
+    if (token === tts.token) { tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this sentence: ${e.message}`, 'error'); }
     return;
   } finally { clearTimeout(slow); }
   if (token !== tts.token || !tts.playing) return;
   ttsUpdateBar();
   const chunks = ttsChunks();
-  for (const n of [chunks[ci + 1], chunks[ci + 2]]) if (n) kSynth(speakable(n.b.text.slice(n.s, n.e)).out).catch(() => {});
-  if (ctx.state === 'suspended') await ctx.resume();
-  if (token !== tts.token) return;
-  const src = ctx.createBufferSource();
-  src.buffer = buf; src.connect(ctx.destination);
-  Object.assign(k, { source: src, token, t0: ctx.currentTime, dur: buf.duration, text: out, map, c, pos, paused: false });
-  src.onended = () => {
-    if (k.source === src) k.source = null;
-    if (token === tts.token && tts.playing) ttsGo(ci + 1, null, { keepFollow: true });
-  };
-  src.start();
-  kLoop(token);
+  for (const nx of [chunks[ci + 1], chunks[ci + 2]]) if (nx) nSynth(ne, speakable(nx.b.text.slice(nx.s, nx.e)).out).catch(() => {});
+  Object.assign(n, { active: true, paused: false, token, text: out, map, c, pos, dur: clip.dur });
+  nAudio.onended = () => { n.active = false; if (token === tts.token && tts.playing) ttsGo(ci + 1, null, { keepFollow: true }); };
+  nAudio.src = clip.url;
+  nAudio.playbackRate = ne === NEURAL.pocket ? tts.rate : 1;
+  try { await nAudio.play(); }
+  catch (e) {
+    if (token === tts.token) { tts.playing = false; n.active = false; ttsUpdateBar(); showNotice(`The voice couldn't play: ${e.message}`, 'error'); }
+    return;
+  }
+  nLoop(token);
 }
 // Estimate the spoken word from playback position (weighted by characters) and highlight it.
-function kLoop(token){
-  cancelAnimationFrame(k.raf);
-  const words = [...k.text.matchAll(/[\p{L}\p{N}'’\-]+/gu)];
+function nLoop(token){
+  cancelAnimationFrame(n.raf);
+  const words = [...n.text.matchAll(/[\p{L}\p{N}'’\-]+/gu)];
   let last = -1;
   const step = () => {
-    if (token !== tts.token || !tts.playing || !k.source) return;
-    const at = Math.min(1, (k.ctx.currentTime - k.t0) / k.dur) * k.text.length;
+    if (token !== tts.token || !tts.playing || !n.active) return;
+    const dur = isFinite(nAudio.duration) ? nAudio.duration : n.dur;
+    const at = Math.min(1, nAudio.currentTime / dur) * n.text.length;
     let w = words.findIndex(m => m.index + m[0].length > at); if (w < 0) w = words.length - 1;
     if (w !== last && words[w]) {
       last = w;
-      const m = words[w], a = k.pos + k.map[m.index], z = k.pos + k.map[m.index + m[0].length - 1] + 1;
+      const m = words[w], a = n.pos + n.map[m.index], z = n.pos + n.map[m.index + m[0].length - 1] + 1;
       tts.pos = a;
-      const r = rangeFor(k.c.b, a, z);
+      const r = rangeFor(n.c.b, a, z);
       hl('tts-word', r); follow(r);
     }
-    k.raf = requestAnimationFrame(step);
+    n.raf = requestAnimationFrame(step);
   };
   step();
 }
-function kStop(){
-  cancelAnimationFrame(k.raf);
-  if (k.source) { const s = k.source; k.source = null; s.onended = null; try { s.stop(); } catch {} }
-  k.paused = false;
-  if (k.ctx?.state === 'suspended') k.ctx.resume();
+function nStop(){
+  cancelAnimationFrame(n.raf);
+  nAudio.onended = null; nAudio.pause();
+  n.active = false; n.paused = false;
 }
 
 /* ---------- start ---------- */
