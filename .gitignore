@@ -2,5 +2,9 @@
 /kokoro/
 /pocket/
 
+# Server voice: model weights and generated voice clips (non-commercial model output)
+/server/models/
+/tts-voices/
+
 # Interrupted or in-progress downloads
 *.part

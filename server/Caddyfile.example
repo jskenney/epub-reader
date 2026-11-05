@@ -1,0 +1,19 @@
+# Reader at https://example.com/reader/ with the voice API at /reader/tts/ (next to index.html).
+example.com {
+	# Ask for a password for the reader and its voice server, so others can't use your GPU.
+	# Make the hash with:  caddy hash-password
+	basic_auth /reader/* {
+		yourname $2a$14$REPLACE_WITH_THE_HASH
+	}
+
+	handle_path /reader/tts/* {
+		reverse_proxy 127.0.0.1:7860 {
+			flush_interval -1   # stream audio as it is generated
+		}
+	}
+
+	handle /reader/* {
+		root * /srv/www
+		file_server
+	}
+}
