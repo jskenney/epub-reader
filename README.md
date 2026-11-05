@@ -61,6 +61,19 @@ This needs a real web server (for example `npx vite` or
   pitch preserved). Switch between "Publisher narration" and "Device voice"
   in the read-aloud bar. Narrator and narration length appear under
   Information.
+- Natural voice (Kokoro): choose "Natural voice (Kokoro)" in the read-aloud
+  bar to use the Kokoro-82M model, running entirely in the browser through
+  [kokoro-js](https://www.npmjs.com/package/kokoro-js) in a Web Worker.
+  Nothing downloads until you press Download: about 330 MB with WebGPU
+  (fast; recent Chrome or Edge), otherwise about 90 MB for the CPU version,
+  cached by the browser after the first time. It has 27 English voices
+  (American and British) and uses the speed setting when generating.
+  Sentences are prepared ahead of time; the highlighted word is estimated
+  from playback position, since Kokoro doesn't report word timings. It is
+  English-only, so books in other languages use the device voice. On the
+  CPU, generation can be slower than real time, which causes pauses between
+  sentences. The model and library load from cdn.jsdelivr.net and
+  huggingface.co.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the

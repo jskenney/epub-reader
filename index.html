@@ -267,12 +267,14 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <span class="readout" id="ttsRateVal">1.0×</span>
           <input type="range" id="ttsRate" min="0.5" max="2" step="0.1" value="1" aria-label="Reading speed">
         </label>
-        <select id="ttsEngine" aria-label="What reads aloud" hidden>
+        <select id="ttsEngine" aria-label="What reads aloud">
           <option value="narration">Publisher narration</option>
           <option value="device">Device voice</option>
+          <option value="kokoro">Natural voice (Kokoro)</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
         <span id="ttsStatus" hidden></span>
+        <button class="btn" id="ttsDownload" hidden>Download</button>
         <button class="btn" id="ttsBack" hidden title="Go back to the page being read">Back to reading</button>
         <button class="btn ghost" id="ttsClose" title="Stop reading aloud" aria-label="Stop reading aloud">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>
@@ -1266,7 +1268,7 @@ ${chapters.map(([id]) => `  <itemref idref="${id}"/>`).join('\n')}
 const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
-  barH: 0, utt: null, engine: store.get('spine:ttsEngine') === 'device' ? 'device' : 'narration', mo: null };
+  barH: 0, utt: null, engine: ['device', 'kokoro'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
 const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],#spine-end,' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
@@ -1355,6 +1357,17 @@ function follow(range){
 }
 
 // Position the reader at (ci, pos) and, when playing, speak from there.
+// Text to speak, with a map from each spoken character back to the block text.
+function speakable(raw){
+  let out = '', map = [], space = false;
+  for (let k = 0; k < raw.length; k++) {
+    const ch = raw[k];
+    if (ch === '\u00AD' || ch === '\u200B') continue;
+    if (/\s/.test(ch)) { if (!space && out) { out += ' '; map.push(k); } space = true; continue; }
+    space = false; out += ch; map.push(k);
+  }
+  return { out, map };
+}
 function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
   const chunks = ttsChunks();
   if (ci >= chunks.length) { ttsEndOfChapter(); return; }
@@ -1362,24 +1375,20 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
   pos = wordStartAt(c.b, Math.max(c.s, Math.min(c.e - 1, pos ?? c.s)), c.s, c.e);
   tts.ci = ci; tts.pos = pos; if (!keepFollow) tts.follow = true;
   const token = ++tts.token;
-  synth?.cancel();
+  synth?.cancel(); kStop();
   hl('tts-word');
   const sentence = rangeFor(c.b, pos, c.e);
   hl('tts-sentence', sentence);
   follow(rangeFor(c.b, pos, pos + 1));
   ttsUpdateBar();
   if (!speak) return;
+  if (tts.engine === 'kokoro' && kokoroFits()) {
+    if (k.state === 'ready') { kSpeak(c, ci, pos, token); return; }
+    tts.playing = false; k.wantPlay = true; ttsUpdateBar(); return;   // the bar offers the download
+  }
   if (!synth) { tts.playing = false; ttsUpdateBar(); showNotice("This browser doesn't have speech voices; choose Publisher narration instead.", 'error'); return; }
 
-  // Speakable text with a map from each spoken character back to the block text.
-  const raw = c.b.text.slice(pos, c.e);
-  let out = '', map = [], space = false;
-  for (let k = 0; k < raw.length; k++) {
-    const ch = raw[k];
-    if (ch === '­' || ch === '​') continue;
-    if (/\s/.test(ch)) { if (!space && out) { out += ' '; map.push(k); } space = true; continue; }
-    space = false; out += ch; map.push(k);
-  }
+  const { out, map } = speakable(c.b.text.slice(pos, c.e));
   const u = new SpeechSynthesisUtterance(out);
   u.lang = bookLang(); u.rate = tts.rate;
   const v = ttsVoice(); if (v) u.voice = v;
@@ -1572,7 +1581,7 @@ function ttsOpen(){
   ttsFillVoices(); ttsMeasureBar();
   return true;
 }
-function ttsStopAudio(){ ++tts.token; synth?.cancel(); moAudio.pause(); moClearClasses(); }
+function ttsStopAudio(){ ++tts.token; synth?.cancel(); kStop(); moAudio.pause(); moClearClasses(); }
 function ttsClose(){
   tts.open = false; tts.playing = false; ttsStopAudio();
   ttsClearHL(); tts.chunks = null; tts.mo = null;
@@ -1610,8 +1619,14 @@ function ttsClickStart(e){
 }
 async function ttsTogglePlay(){
   if (!tts.open) return;
+  if (tts.playing && k.source && !tts.mo) {        // Kokoro: suspend the audio so resuming is instant
+    tts.playing = false; k.paused = true; k.ctx.suspend(); ttsUpdateBar(); return;
+  }
+  if (!tts.playing && k.paused && k.source && k.token === tts.token && tts.doc === frame.contentDocument) {
+    tts.playing = true; k.paused = false; await k.ctx.resume(); kLoop(tts.token); ttsUpdateBar(); return;
+  }
   if (tts.playing) {
-    tts.playing = false; ++tts.token; synth?.cancel(); moAudio.pause(); hl('tts-word');
+    tts.playing = false; ++tts.token; synth?.cancel(); kStop(); moAudio.pause(); hl('tts-word');
     if (book?.info.playbackClass) frame.contentDocument?.documentElement.classList.remove(book.info.playbackClass);
     ttsUpdateBar(); return;
   }
@@ -1677,10 +1692,21 @@ function ttsUpdateBar(status){
   play.setAttribute('aria-label', tts.playing ? 'Pause' : 'Play');
   play.title = (tts.playing ? 'Pause' : 'Play') + ' (Space)';
   $('#ttsBack').hidden = tts.follow;
+  const eng = $('#ttsEngine'), narr = eng.querySelector('[value="narration"]'), ko = eng.querySelector('[value="kokoro"]');
+  narr.hidden = narr.disabled = !book?.hasOverlays;
+  ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Natural voice (Kokoro)' : 'Natural voice (English only)';
+  eng.value = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ? 'device' : tts.engine;
+  let dl = '';
+  if (!status && !tts.mo && tts.engine === 'kokoro' && kokoroFits()) {
+    if (k.state === 'idle') { status = `Natural voice: one-time ${k.gpu ? '~330 MB' : '~92 MB'} download`; dl = 'Download'; }
+    else if (k.state === 'loading') status = k.progressText || 'Loading natural voice…';
+    else if (k.state === 'error') { status = `Natural voice failed: ${k.error}`; dl = 'Try again'; }
+  }
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
-  $('#ttsEngine').hidden = !book?.hasOverlays;
-  $('#ttsEngine').value = tts.engine;
+  $('#ttsDownload').hidden = !dl; $('#ttsDownload').textContent = dl;
   $('#ttsVoice').hidden = !!tts.mo;
+  const want = tts.engine === 'kokoro' && kokoroFits() && !tts.mo ? 'kokoro' : 'device';
+  if ($('#ttsVoice').dataset.kind !== want) ttsFillVoices();
 }
 function ttsMeasureBar(){
   const h = tts.open ? $('#tts').offsetHeight + 12 : 0;
@@ -1699,7 +1725,18 @@ function ttsVoice(){
   return vs.find(v => v.voiceURI === tts.voiceURI) || vs.find(v => v.lang.toLowerCase() === bookLang().toLowerCase()) || vs[0] || null;
 }
 function ttsFillVoices(){
-  const sel = $('#ttsVoice'), vs = ttsVoices(), chosen = ttsVoice();
+  const sel = $('#ttsVoice');
+  if (tts.engine === 'kokoro' && kokoroFits() && !tts.mo) {
+    sel.dataset.kind = 'kokoro'; sel.disabled = false;
+    sel.replaceChildren(...['American', 'British'].map(accent => {
+      const g = document.createElement('optgroup'); g.label = accent;
+      g.append(...KOKORO_VOICES.filter(v => v[2] === accent).map(([id, name, , gender]) => { const o = new Option(`${name} (${gender})`, id); o.selected = id === k.voice; return o; }));
+      return g;
+    }));
+    return;
+  }
+  sel.dataset.kind = 'device';
+  const vs = ttsVoices(), chosen = ttsVoice();
   if (!vs.length) {
     sel.replaceChildren(new Option('No voices on this device', '')); sel.disabled = true; return;
   }
@@ -1717,10 +1754,187 @@ $('#ttsClose').addEventListener('click', ttsClose);
 $('#ttsRate').addEventListener('input', e => { $('#ttsRateVal').textContent = Number(e.target.value).toFixed(1) + '×'; });
 $('#ttsRate').addEventListener('change', e => ttsSetRate(Number(e.target.value)));
 $('#ttsEngine').addEventListener('change', e => ttsSetEngine(e.target.value));
-$('#ttsVoice').addEventListener('change', e => { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); if (tts.playing) ttsGo(tts.ci, tts.pos); });
+$('#ttsVoice').addEventListener('change', e => {
+  if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
+  else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
+  if (tts.playing) ttsGo(tts.ci, tts.pos);
+});
+$('#ttsDownload').addEventListener('click', () => { k.wantPlay = true; kLoad(); });
 new ResizeObserver(ttsMeasureBar).observe($('#tts'));
 $('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
 if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narration can be read aloud in this browser)";
+
+/* ---------- Kokoro natural voice ----------
+   kokoro-js runs the Kokoro-82M model in a module Web Worker (built from a blob, so the reader stays one
+   file): WebGPU with the fp32 model where available, otherwise WebAssembly with the 8-bit model. Nothing
+   is downloaded until the reader asks; the library caches the model in the browser afterwards.
+   Sentences are generated one or two ahead and played through Web Audio. Kokoro reports no word
+   timings, so the highlighted word is estimated from how far through the sentence's audio playback is. */
+const KOKORO = { lib: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js', model: 'onnx-community/Kokoro-82M-v1.0-ONNX' };
+const KOKORO_VOICES = [   // [id, name, accent, gender] in kokoro-js's quality order
+  ['af_heart', 'Heart', 'American', 'female'], ['af_bella', 'Bella', 'American', 'female'], ['af_nicole', 'Nicole', 'American', 'female'],
+  ['af_aoede', 'Aoede', 'American', 'female'], ['af_kore', 'Kore', 'American', 'female'], ['af_sarah', 'Sarah', 'American', 'female'],
+  ['af_nova', 'Nova', 'American', 'female'], ['af_sky', 'Sky', 'American', 'female'], ['af_alloy', 'Alloy', 'American', 'female'],
+  ['af_jessica', 'Jessica', 'American', 'female'], ['af_river', 'River', 'American', 'female'],
+  ['am_michael', 'Michael', 'American', 'male'], ['am_fenrir', 'Fenrir', 'American', 'male'], ['am_puck', 'Puck', 'American', 'male'],
+  ['am_echo', 'Echo', 'American', 'male'], ['am_eric', 'Eric', 'American', 'male'], ['am_liam', 'Liam', 'American', 'male'],
+  ['am_onyx', 'Onyx', 'American', 'male'], ['am_adam', 'Adam', 'American', 'male'],
+  ['bf_emma', 'Emma', 'British', 'female'], ['bf_isabella', 'Isabella', 'British', 'female'], ['bf_alice', 'Alice', 'British', 'female'],
+  ['bf_lily', 'Lily', 'British', 'female'], ['bm_george', 'George', 'British', 'male'], ['bm_fable', 'Fable', 'British', 'male'],
+  ['bm_lewis', 'Lewis', 'British', 'male'], ['bm_daniel', 'Daniel', 'British', 'male']
+];
+const KOKORO_WORKER = `
+let tts = null, queue = Promise.resolve();
+self.onmessage = e => { const m = e.data; queue = queue.then(() => handle(m)); };
+async function handle(m) {
+  try {
+    if (m.type === 'load') {
+      const { KokoroTTS } = await import(m.lib);
+      tts = await KokoroTTS.from_pretrained(m.model, { dtype: m.dtype, device: m.device,
+        progress_callback: p => self.postMessage({ type: 'progress', p: { status: p.status, file: p.file, loaded: p.loaded, total: p.total } }) });
+      self.postMessage({ type: 'ready' });
+    } else if (m.type === 'generate') {
+      const t0 = performance.now();
+      const out = await tts.generate(m.text, { voice: m.voice, speed: m.speed });
+      const data = new Float32Array(out.audio);
+      self.postMessage({ type: 'audio', id: m.id, data, rate: out.sampling_rate, ms: performance.now() - t0 }, [data.buffer]);
+    }
+  } catch (err) {
+    self.postMessage({ type: 'error', id: m.id, load: m.type === 'load', message: String((err && err.message) || err) });
+  }
+}`;
+const k = { state: 'idle', worker: null, gpu: false, device: '', error: '', progressText: '', files: {}, pending: new Map(), nextId: 1,
+  cache: new Map(), ctx: null, source: null, token: 0, paused: false, raf: 0, wantPlay: false,
+  voice: KOKORO_VOICES.some(v => v[0] === store.get('spine:kokoroVoice')) ? store.get('spine:kokoroVoice') : 'af_heart' };
+const kokoroFits = () => /^en\b/i.test(bookLang());
+(async () => { try { k.gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch { k.gpu = false; } if (tts.open) ttsUpdateBar(); })();
+
+function kWorker(){
+  const w = new Worker(URL.createObjectURL(new Blob([KOKORO_WORKER], { type: 'text/javascript' })), { type: 'module' });
+  w.onmessage = ({ data: m }) => {
+    if (m.type === 'progress') kProgress(m.p);
+    else if (m.type === 'ready') k.onLoad?.res();
+    else if (m.type === 'audio') { const job = k.pending.get(m.id); k.pending.delete(m.id); job?.res(m); }
+    else if (m.type === 'error') {
+      if (m.load) k.onLoad?.rej(new Error(m.message));
+      else { const job = k.pending.get(m.id); k.pending.delete(m.id); job?.rej(new Error(m.message)); }
+    }
+  };
+  w.onerror = e => { k.onLoad?.rej(new Error(e.message || 'the worker failed to start')); };
+  return w;
+}
+function kProgress(p){
+  if (p.file && p.total) k.files[p.file] = { loaded: p.loaded || 0, total: p.total };
+  if (p.status === 'done' && k.files[p.file]) k.files[p.file].loaded = k.files[p.file].total;
+  const fs = Object.values(k.files), total = fs.reduce((a, f) => a + f.total, 0), loaded = fs.reduce((a, f) => a + f.loaded, 0);
+  const mb = n => Math.round(n / 1048576);
+  k.progressText = total > 2e6 ? `Downloading natural voice… ${Math.floor(loaded / total * 100)}% of ${mb(total)} MB` : 'Loading natural voice…';
+  if (tts.open) ttsUpdateBar();
+}
+async function kLoad(){
+  if (k.state === 'loading' || k.state === 'ready') return;
+  k.state = 'loading'; k.files = {}; k.progressText = ''; ttsUpdateBar();
+  const attempt = (device, dtype) => new Promise((res, rej) => {
+    k.worker?.terminate(); k.worker = kWorker();
+    k.onLoad = { res, rej };
+    k.worker.postMessage({ type: 'load', lib: KOKORO.lib, model: KOKORO.model, device, dtype });
+  });
+  try {
+    try { await attempt(k.gpu ? 'webgpu' : 'wasm', k.gpu ? 'fp32' : 'q8'); k.device = k.gpu ? 'webgpu' : 'wasm'; }
+    catch (e) {
+      if (!k.gpu) throw e;
+      k.files = {}; await attempt('wasm', 'q8'); k.device = 'wasm';   // WebGPU failed: fall back to the CPU model
+    }
+    k.state = 'ready';
+  } catch (e) {
+    k.state = 'error'; k.error = e.message; k.worker?.terminate(); k.worker = null;
+  }
+  ttsUpdateBar();
+  if (k.state === 'ready' && k.wantPlay && tts.open) { k.wantPlay = false; tts.playing = true; ttsGo(tts.ci, tts.pos); }
+}
+// If generation can't keep up with playback, say why there are pauses (once).
+function kSpeedCheck(ratio){
+  if (k.slowWarned || !(ratio > 0)) return;
+  (k.ratios ??= []).push(ratio);
+  if (k.ratios.length < 3) return;
+  const med = [...k.ratios].sort((a, b) => a - b)[Math.floor(k.ratios.length / 2)];
+  if (med > 1.15) {
+    k.slowWarned = true;
+    showNotice(k.device === 'wasm'
+      ? 'The natural voice is running on this device\'s CPU and generates speech slower than it speaks, so there will be pauses between sentences. A browser with WebGPU (recent Chrome or Edge) runs it much faster; Device voice has no pauses.'
+      : 'The natural voice is generating speech slower than it speaks on this device, so there will be pauses between sentences. Device voice has no pauses.', 'error');
+  }
+}
+function kEnsureCtx(){ k.ctx ??= new AudioContext(); return k.ctx; }
+// Generate (or reuse) the audio for one piece of text at the current voice and speed.
+function kSynth(text){
+  const key = `${k.voice}|${tts.rate}|${text}`;
+  if (k.cache.has(key)) { const v = k.cache.get(key); k.cache.delete(key); k.cache.set(key, v); return v; }
+  const id = k.nextId++;
+  const job = new Promise((res, rej) => k.pending.set(id, { res, rej })).then(m => {
+    const ctx = kEnsureCtx(), buf = ctx.createBuffer(1, m.data.length, m.rate);
+    buf.copyToChannel(m.data, 0);
+    kSpeedCheck(m.ms / 1000 / buf.duration);
+    return buf;
+  });
+  job.catch(() => k.cache.delete(key));
+  k.cache.set(key, job);
+  while (k.cache.size > 40) k.cache.delete(k.cache.keys().next().value);
+  k.worker.postMessage({ type: 'generate', id, text, voice: k.voice, speed: tts.rate });
+  return job;
+}
+async function kSpeak(c, ci, pos, token){
+  const { out, map } = speakable(c.b.text.slice(pos, c.e));
+  const ctx = kEnsureCtx();
+  const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
+  let buf;
+  try { buf = await kSynth(out); }
+  catch (e) {
+    if (token === tts.token) { tts.playing = false; ttsUpdateBar(); showNotice(`The natural voice couldn't read this sentence: ${e.message}`, 'error'); }
+    return;
+  } finally { clearTimeout(slow); }
+  if (token !== tts.token || !tts.playing) return;
+  ttsUpdateBar();
+  const chunks = ttsChunks();
+  for (const n of [chunks[ci + 1], chunks[ci + 2]]) if (n) kSynth(speakable(n.b.text.slice(n.s, n.e)).out).catch(() => {});
+  if (ctx.state === 'suspended') await ctx.resume();
+  if (token !== tts.token) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.connect(ctx.destination);
+  Object.assign(k, { source: src, token, t0: ctx.currentTime, dur: buf.duration, text: out, map, c, pos, paused: false });
+  src.onended = () => {
+    if (k.source === src) k.source = null;
+    if (token === tts.token && tts.playing) ttsGo(ci + 1, null, { keepFollow: true });
+  };
+  src.start();
+  kLoop(token);
+}
+// Estimate the spoken word from playback position (weighted by characters) and highlight it.
+function kLoop(token){
+  cancelAnimationFrame(k.raf);
+  const words = [...k.text.matchAll(/[\p{L}\p{N}'’\-]+/gu)];
+  let last = -1;
+  const step = () => {
+    if (token !== tts.token || !tts.playing || !k.source) return;
+    const at = Math.min(1, (k.ctx.currentTime - k.t0) / k.dur) * k.text.length;
+    let w = words.findIndex(m => m.index + m[0].length > at); if (w < 0) w = words.length - 1;
+    if (w !== last && words[w]) {
+      last = w;
+      const m = words[w], a = k.pos + k.map[m.index], z = k.pos + k.map[m.index + m[0].length - 1] + 1;
+      tts.pos = a;
+      const r = rangeFor(k.c.b, a, z);
+      hl('tts-word', r); follow(r);
+    }
+    k.raf = requestAnimationFrame(step);
+  };
+  step();
+}
+function kStop(){
+  cancelAnimationFrame(k.raf);
+  if (k.source) { const s = k.source; k.source = null; s.onended = null; try { s.stop(); } catch {} }
+  k.paused = false;
+  if (k.ctx?.state === 'suspended') k.ctx.resume();
+}
 
 /* ---------- start ---------- */
 $('#fontPct').textContent = fontPct + '%';
