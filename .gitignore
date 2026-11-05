@@ -2,8 +2,7 @@
 /kokoro/
 /pocket/
 
-# Server voice: model weights and generated voice clips (non-commercial model output)
-/server/models/
+# Server voice clips (non-commercial model output; see epub-reader-tts-server)
 /tts-voices/
 
 # Interrupted or in-progress downloads

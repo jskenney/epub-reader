@@ -2030,7 +2030,7 @@ function pkGenerate(text){
 }
 
 /* ---------- Server voice ----------
-   A text-to-speech API on this same site (see server/ in the repository): Breeze TTS 2 behind a reverse
+   A text-to-speech API on this same site (https://github.com/jskenney/epub-reader-tts-server): Breeze TTS 2 behind a reverse
    proxy at /tts/ on the site root, with voices listed in ./tts-voices/ next to this page. Each voice is a reference clip plus
    its transcript, sent with every request so the voice stays the same from paragraph to paragraph.
    The API runs one request at a time and answers 409 while busy, so requests are queued here and
@@ -2053,10 +2053,10 @@ async function svLoad(){
   sv.state = 'loading'; sv.progressText = 'Connecting to the voice server…';
   try {
     const r = await fetch(TTS_SERVER.voices + 'voices.json', { cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status === 404 ? 'no voices yet (create one with server/make-voice.sh)' : `the voice list answered ${r.status}`);
+    if (!r.ok) throw new Error(r.status === 404 ? 'no voices yet (create one with make-voice.sh from epub-reader-tts-server)' : `the voice list answered ${r.status}`);
     const list = (await r.json()).voices || [];
     sv.voices = list.filter(v => v.id && (v.ref_audio ? v.ref_text : v.instruction));
-    if (!sv.voices.length) throw new Error('no voices yet (create one with server/make-voice.sh)');
+    if (!sv.voices.length) throw new Error('no voices yet (create one with make-voice.sh from epub-reader-tts-server)');
     sv.state = 'ready';
   } catch (e) { sv.state = 'error'; sv.error = e.message; }
   ttsFillVoices(); nLoaded(sv);

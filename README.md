@@ -88,9 +88,10 @@ This needs a real web server (for example `npx vite` or
 - Server voice: Breeze TTS 2 running on your own NVIDIA GPU behind the same
   website (English and Chinese). It appears in the read-aloud bar when
   `/tts/health` on the site root answers; voices are reference clips listed
-  in `tts-voices/voices.json` next to `index.html`. Setup, Docker Compose, reverse-proxy examples
-  and the voice script are in [`server/`](server/README.md). The model and
-  its output are for non-commercial use.
+  in `tts-voices/voices.json` next to `index.html`. Setup, Docker Compose,
+  reverse-proxy examples and the voice script are in
+  [jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server).
+  The model and its output are for non-commercial use.
 - Natural voices read a whole paragraph at a time where they can (up to
   about 350 characters for Kokoro and 600 for Pocket TTS), which phrases
   better than sentence by sentence; the sentence and word highlights move
