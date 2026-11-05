@@ -2031,11 +2031,11 @@ function pkGenerate(text){
 
 /* ---------- Server voice ----------
    A text-to-speech API on this same site (see server/ in the repository): Breeze TTS 2 behind a reverse
-   proxy at ./tts/, with voices listed in ./tts-voices/voices.json. Each voice is a reference clip plus
+   proxy at /tts/ on the site root, with voices listed in ./tts-voices/ next to this page. Each voice is a reference clip plus
    its transcript, sent with every request so the voice stays the same from paragraph to paragraph.
    The API runs one request at a time and answers 409 while busy, so requests are queued here and
    retried. It has no speed control: speed is applied at playback with pitch preserved. */
-const TTS_SERVER = { api: new URL('tts/', location.href).href, voices: new URL('tts-voices/', location.href).href };
+const TTS_SERVER = { api: new URL('/tts/', location.href).href, voices: new URL('tts-voices/', location.href).href };
 const sv = { state: 'idle', available: null, voices: [], refs: new Map(), queue: Promise.resolve(), error: '', progressText: '',
   wantPlay: false, voice: store.get('spine:serverVoice') || '' };
 const serverFits = () => /^(en|zh)\b/i.test(bookLang());

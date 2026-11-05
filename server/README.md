@@ -1,9 +1,9 @@
 # Server voice: Breeze TTS 2 on your own GPU
 
 The reader's **Server voice** reads books with [Breeze TTS 2](https://huggingface.co/BreezeBlue/Breeze-TTS-2)
-running on the same machine as the website. The reader talks to it at `tts/` next to `index.html` and
-finds voices in `tts-voices/voices.json`. The option appears in the read-aloud bar only when `tts/health`
-answers. It reads English and Chinese.
+running on the same machine as the website. The reader talks to it at `/tts/` on the site root and
+finds voices in `tts-voices/voices.json` next to `index.html`. The option appears in the read-aloud bar
+only when `/tts/health` answers. It reads English and Chinese.
 
 **Licence:** the Breeze TTS code is Apache-2.0, but the model weights *and the audio they generate* are
 under the BreezeBlue Research and Non-Commercial License. Fine for personal reading; not for a public or
@@ -27,7 +27,7 @@ docker compose logs -f              # wait for the API to report it is running
 curl http://127.0.0.1:7860/health
 ```
 
-Then expose it at `<reader folder>/tts/` with your web server, behind a password so nobody else can use
+Then expose it at `/tts/` on the site root with your web server, behind a password so nobody else can use
 your GPU: see `nginx.conf.example` or `Caddyfile.example`. Response buffering must be off so audio
 streams back as it is generated.
 

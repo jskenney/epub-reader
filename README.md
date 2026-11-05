@@ -87,8 +87,8 @@ This needs a real web server (for example `npx vite` or
   preserved. The model is CC BY 4.0 (Kyutai).
 - Server voice: Breeze TTS 2 running on your own NVIDIA GPU behind the same
   website (English and Chinese). It appears in the read-aloud bar when
-  `tts/` next to `index.html` answers; voices are reference clips listed in
-  `tts-voices/voices.json`. Setup, Docker Compose, reverse-proxy examples
+  `/tts/health` on the site root answers; voices are reference clips listed
+  in `tts-voices/voices.json` next to `index.html`. Setup, Docker Compose, reverse-proxy examples
   and the voice script are in [`server/`](server/README.md). The model and
   its output are for non-commercial use.
 - Natural voices read a whole paragraph at a time where they can (up to
