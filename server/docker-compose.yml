@@ -4,10 +4,10 @@
 #        hf download BreezeBlue/Breeze-TTS-2 --local-dir models/Breeze-TTS-2
 #   2. Build and start (the first build compiles FlashAttention and takes a while):
 #        docker compose up -d --build
-#   3. Put the API behind your web server at <reader folder>/tts/ (see nginx.conf.example / Caddyfile.example)
-#      and create a voice with ./make-voice.sh.
+#   3. Point your web server's /tts/ at http://<this host>:7860/ (see nginx.conf.example / Caddyfile.example)
+#      and create a voice with ./make-voice.sh on the web server.
 #
-# Needs the NVIDIA Container Toolkit. The API only listens on localhost; the reverse proxy exposes it.
+# Needs the NVIDIA Container Toolkit. The API listens on port 7860 on all interfaces (0.0.0.0).
 services:
   breeze-tts:
     build:
@@ -24,13 +24,13 @@ services:
               # Remove this line to run eagerly (about 7.7 GiB).
               "--fast-all"]
     ports:
-      - "127.0.0.1:7860:7860"
+      - "7860:7860"
     volumes:
       - ${BREEZE_MODEL_DIR:-./models/Breeze-TTS-2}:/models/breeze:ro
     ipc: host
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7860/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:7860/health"]   # inside the container
       interval: 30s
       timeout: 5s
       start_period: 10m

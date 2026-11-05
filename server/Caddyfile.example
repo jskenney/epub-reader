@@ -10,7 +10,7 @@ example.com {
 	}
 
 	handle_path /tts/* {
-		reverse_proxy 127.0.0.1:7860 {
+		reverse_proxy breeze-host:7860 {   # your Breeze server
 			flush_interval -1   # stream audio as it is generated
 		}
 	}

@@ -7,12 +7,13 @@
 # Or use your own recording (clean speech, 5-15 s) with its exact transcript:
 #   ./make-voice.sh clip me "My voice" recording.wav "The exact words spoken in the recording."
 #
-# Voices are saved in ../tts-voices/ (next to index.html): <id>.wav plus an entry in voices.json.
+# Run it on the web server: voices are saved in ../tts-voices/ (next to index.html), <id>.wav plus an
+# entry in voices.json.
 # Every request then sends that clip and transcript, which keeps the voice the same across paragraphs.
-# Environment: BREEZE_URL (default http://127.0.0.1:7860), VOICE_SEED (default 42).
+# Environment: BREEZE_URL, the Breeze API (for example http://breeze-host:7860); VOICE_SEED (default 42).
 set -euo pipefail
 cd "$(dirname "$0")"
-API=${BREEZE_URL:-http://127.0.0.1:7860}
+API=${BREEZE_URL:-}
 SEED=${VOICE_SEED:-42}
 DEST=../tts-voices
 SAMPLE_TEXT="The old house stood at the end of the lane, its windows catching the last of the evening light. Inside, someone had left a book open on the table, as if they meant to come back to it."
@@ -27,6 +28,7 @@ mkdir -p "$DEST"
 case "$mode" in
   design)
     description=$4; text=${5:-$SAMPLE_TEXT}
+    [ -n "$API" ] || { echo "Set BREEZE_URL to the Breeze API, for example: BREEZE_URL=http://breeze-host:7860 $0 ..." >&2; exit 2; }
     command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
     tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
     echo "Designing '$name' ..."

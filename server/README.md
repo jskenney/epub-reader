@@ -24,19 +24,23 @@ cd server
 hf download BreezeBlue/Breeze-TTS-2 --local-dir models/Breeze-TTS-2   # about 7.3 GB
 docker compose up -d --build        # first build compiles FlashAttention: allow 20-60 minutes
 docker compose logs -f              # wait for the API to report it is running
-curl http://127.0.0.1:7860/health
+curl http://localhost:7860/health   # on the Breeze server
 ```
 
-Then expose it at `/tts/` on the site root with your web server, behind a password so nobody else can use
-your GPU: see `nginx.conf.example` or `Caddyfile.example`. Response buffering must be off so audio
-streams back as it is generated.
+The API listens on port 7860 on all interfaces. On your web server, proxy `/tts/` on the site root to
+`http://<breeze-host>:7860/`: see `nginx.conf.example` or `Caddyfile.example`. Response buffering must
+be off so audio streams back as it is generated.
 
 ## Voices
 
 Each voice is a short reference clip plus its exact transcript. The reader sends them with every request,
 which keeps the voice the same from paragraph to paragraph.
 
+Run it on the web server, from the `server/` folder next to `index.html`, pointing it at the Breeze API:
+
 ```bash
+export BREEZE_URL=http://breeze-host:7860
+
 # Design a voice from a description (generated once, then reused):
 ./make-voice.sh design narrator "Warm narrator" "A warm, calm middle-aged woman with a clear, steady storytelling voice."
 
@@ -56,7 +60,7 @@ and if generation falls behind playback the reader pauses between paragraphs and
 server is up, time one paragraph:
 
 ```bash
-time curl -s -X POST http://127.0.0.1:7860/v1/audio/speech \
+time curl -s -X POST http://breeze-host:7860/v1/audio/speech \
   -F "text=The old house stood at the end of the lane, its windows catching the last of the evening light. Inside, someone had left a book open on the table, as if they meant to come back to it." \
   -F "instruction=A calm narrator." -o /tmp/test.pcm
 python3 -c "import os; print(os.path.getsize('/tmp/test.pcm') / 2 / 24000, 'seconds of audio')"
