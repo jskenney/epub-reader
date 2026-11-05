@@ -52,6 +52,15 @@ This needs a real web server (for example `npx vite` or
   next sentence, play/pause (Space), speed 0.5×–2× ([ and ]), and a voice
   list filtered to the book's language. Paging away by hand while listening
   shows a "Back to reading" button. Speed and voice are remembered.
+- Publisher narration (EPUB 3 Media Overlays): when a book includes recorded
+  audio synced to its text, Read aloud plays that instead of a synthetic
+  voice. The narrated passage is highlighted (and gets the book's own
+  active-class styling), pages turn with the audio, reading continues into
+  the next chapter, and the same controls apply: click or select to start
+  anywhere, Space to pause, previous / next clip, and speed (instant, with
+  pitch preserved). Switch between "Publisher narration" and "Device voice"
+  in the read-aloud bar. Narrator and narration length appear under
+  Information.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
