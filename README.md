@@ -17,8 +17,15 @@ a book from the same site on page load:
   (the folder that contains `META-INF/` and `mimetype`); files are fetched
   one at a time as they're needed. The trailing slash is optional.
 
-Paths are relative to `index.html`; absolute paths on the same site
-(`/library/x.epub`) work too. Books on other sites are refused. If the book
+A relative path is looked up in two places, in this order:
+
+1. relative to `index.html` (`?book=books/moby-dick/` → `books/moby-dick/`)
+2. under `/bookshelf/` at the root of the site
+   (`?book=books/moby-dick/` → `/bookshelf/books/moby-dick/`)
+
+The first location that has the book wins. A path that starts with `/`
+(`?book=/library/x.epub`) is used as-is. To change the root folder, edit the
+`BOOKSHELF` constant near the top of the script in `index.html`. Books on other sites are refused. If the book
 can't be loaded, the reader shows why and falls back to the sample book.
 This needs a real web server (for example `npx vite` or
 `python3 -m http.server`); browsers block these requests on `file://` pages.

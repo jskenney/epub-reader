@@ -226,6 +226,7 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 const darkMq = matchMedia('(prefers-color-scheme: dark)');
 const FONT_URL = 'https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap';
 const OPS = 'http://www.idpf.org/2007/ops';
+const BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
   gif:'image/gif',svg:'image/svg+xml',webp:'image/webp',ttf:'font/ttf',otf:'font/otf',woff:'font/woff',woff2:'font/woff2',
   mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'video/mp4',ogg:'audio/ogg',webm:'video/webm'};
@@ -975,22 +976,36 @@ async function openSample(){
   catch (err) { hideStatus(); showNotice("Couldn't build the sample book: " + err.message, 'error'); }
 }
 /* ?book=dir/ opens an extracted EPUB folder; ?book=dir/a.epub fetches and unzips the archive.
-   Only books on this same site are accepted. */
+   A relative path is tried first relative to this page, then under BOOKSHELF at the site root
+   (?book=books/x/ -> books/x/, then /bookshelf/books/x/). Only books on this same site are accepted. */
+function bookCandidates(ref){
+  const urls = [new URL(ref, location.href)];
+  if (!ref.startsWith('/') && !isExternal(ref)) urls.push(new URL(BOOKSHELF + ref.replace(/^(\.\/)+/, ''), location.origin));
+  for (const u of urls) { u.search = ''; u.hash = ''; }
+  return urls.filter((u, i) => urls.findIndex(v => v.href === u.href) === i);
+}
 async function openFromUrl(ref){
   showStatus(`Loading ${ref}…`);
   const name = decodeURIComponent(ref.replace(/\/+$/, '').split('/').pop() || ref).replace(/\.epub$/i, '');
   try {
-    const u = new URL(ref, location.href);
-    if (u.origin !== location.origin) throw new Error('Only books hosted on this same site can be opened from the address.');
-    if (/\.epub$/i.test(u.pathname)) {
-      const r = await fetch(u.href);
-      if (!r.ok) throw new Error(`The server answered ${r.status} ${r.statusText} for ${u.pathname}.`);
-      await openBook(zipSource(await JSZip.loadAsync(await r.arrayBuffer())), { name });
-    } else {
+    const candidates = bookCandidates(ref);
+    if (candidates.some(u => u.origin !== location.origin)) throw new Error('Only books hosted on this same site can be opened from the address.');
+    const misses = [];
+    for (const u of candidates) {
+      if (/\.epub$/i.test(u.pathname)) {
+        let r = null;
+        try { r = await fetch(u.href); } catch {}
+        if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
+        await openBook(zipSource(await JSZip.loadAsync(await r.arrayBuffer())), { name });
+        return;
+      }
       if (!u.pathname.endsWith('/')) u.pathname += '/';
-      u.search = ''; u.hash = '';
-      await openBook(dirSource(u.href), { name });
+      const src = dirSource(u.href);
+      if (!(await src.text('META-INF/container.xml'))) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
+      await openBook(src, { name });
+      return;
     }
+    throw new Error(`Nothing was found at ${misses.join(' or ')}.`);
   } catch (err) {
     await openSample();
     showNotice(friendly(err, ref), 'error');
