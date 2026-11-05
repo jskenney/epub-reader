@@ -64,10 +64,12 @@ This needs a real web server (for example `npx vite` or
 - Natural voice (Kokoro): choose "Natural voice (Kokoro)" in the read-aloud
   bar to use the Kokoro-82M model, running entirely in the browser through
   [kokoro-js](https://www.npmjs.com/package/kokoro-js) in a Web Worker.
-  Nothing downloads until you press Download: about 330 MB with WebGPU
-  (fast; recent Chrome or Edge), otherwise about 90 MB for the CPU version,
-  cached by the browser after the first time. It has 27 English voices
-  (American and British) and uses the speed setting when generating.
+  Nothing downloads until you press Download: the full-precision model
+  (about 330 MB), cached by the browser after the first time. It runs on
+  WebGPU where available (fast; recent Chrome or Edge) and otherwise on the
+  CPU. It has 28 English voices (American and British), listed best first
+  with kokoro-js's quality grade (A for Heart down to F+ for Adam), and
+  uses the speed setting when generating.
   Sentences are prepared ahead of time; the highlighted word is estimated
   from playback position, since Kokoro doesn't report word timings. It is
   English-only, so books in other languages use the device voice. On the
@@ -78,10 +80,18 @@ This needs a real web server (for example `npx vite` or
   [pocket-tts-js](https://www.npmjs.com/package/pocket-tts-js), running on
   the CPU (WebAssembly) in a Web Worker. Unlike Kokoro it reads English,
   French, German, Italian, Portuguese and Spanish books, with 8 built-in
-  voices per language. Each language is a one-time download (about 170 MB;
-  French about 340 MB) after pressing Download. It has no speed control of
+  voices per language. Each language is a one-time download of the
+  full-precision models (about 430 MB; French about 1.25 GB) after pressing
+  Download. It has no speed control of
   its own, so the speed setting changes playback instantly with pitch
   preserved. The model is CC BY 4.0 (Kyutai).
+- Natural voices read a whole paragraph at a time where they can (up to
+  about 350 characters for Kokoro and 600 for Pocket TTS), which phrases
+  better than sentence by sentence; the sentence and word highlights move
+  through the paragraph as it plays. Device voices are listed with the
+  vendors' higher tiers (Natural, Neural, Premium, Enhanced, Online) first.
+  The natural voices use full-precision models by default; set
+  `FULL_PRECISION = false` in `index.html` for the smaller 8-bit models.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
@@ -99,13 +109,14 @@ This needs a real web server (for example `npx vite` or
 ## Self-hosting Pocket TTS
 
 ```bash
-./fetch-pocket.sh            # English (about 180 MB)
-./fetch-pocket.sh en fr de   # several languages
+./fetch-pocket.sh            # English (about 430 MB)
+./fetch-pocket.sh en fr de   # several languages (French is about 1.25 GB)
 ./fetch-pocket.sh all        # en fr de it pt es
+./fetch-pocket.sh --int8 en  # 8-bit models instead (for FULL_PRECISION = false)
 ```
 
 This fills `./pocket/` with pocket-tts-js 0.1.0 (`lib/`), ONNX Runtime Web
-1.20.0 (`ort/`), the int8 model bundle and voices for each language
+1.20.0 (`ort/`), the full-precision model bundle and voices for each language
 (`model/<bundle>/`, pinned to a fixed revision of
 `vlapky/pocket-tts-onnx`), and `LICENSES/` with a NOTICE that includes the
 CC BY 4.0 attribution for Kyutai's model. As with Kokoro, each piece falls

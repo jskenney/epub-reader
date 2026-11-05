@@ -1726,7 +1726,10 @@ function ttsVoices(){
   const all = synth?.getVoices() || [];
   const lang = bookLang().toLowerCase().split('-')[0];
   const match = all.filter(v => v.lang.toLowerCase().split(/[-_]/)[0] === lang);
-  return (match.length ? match : all).sort((a, b) => (b.default - a.default) || a.name.localeCompare(b.name));
+  // No quality ratings exist for device voices; voices the vendor marks as a higher tier
+  // (Natural, Neural, Premium, Enhanced, Online) come first, then the default, then by name.
+  const tier = v => /natural|neural|premium|enhanced|online/i.test(v.name) ? 1 : 0;
+  return (match.length ? match : all).sort((a, b) => (tier(b) - tier(a)) || (b.default - a.default) || a.name.localeCompare(b.name));
 }
 function ttsVoice(){
   const vs = ttsVoices();
@@ -1743,10 +1746,9 @@ function ttsFillVoices(){
   }
   if (tts.engine === 'kokoro' && kokoroFits() && !tts.mo) {
     sel.dataset.kind = 'kokoro'; sel.disabled = false;
-    sel.replaceChildren(...['American', 'British'].map(accent => {
-      const g = document.createElement('optgroup'); g.label = accent;
-      g.append(...KOKORO_VOICES.filter(v => v[2] === accent).map(([id, name, , gender]) => { const o = new Option(`${name} (${gender})`, id); o.selected = id === k.voice; return o; }));
-      return g;
+    // Best-rated first (the table is kept in grade order), with the grade in each label.
+    sel.replaceChildren(...KOKORO_VOICES.map(([id, name, accent, gender, grade]) => {
+      const o = new Option(`${grade} · ${name} (${accent} ${gender})`, id); o.selected = id === k.voice; return o;
     }));
     return;
   }
@@ -1786,21 +1788,28 @@ if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narratio
    is downloaded until the reader asks; the library caches the model in the browser afterwards.
    Sentences are generated one or two ahead and played through Web Audio. Kokoro reports no word
    timings, so the highlighted word is estimated from how far through the sentence's audio playback is. */
+// Natural voices use the full-precision models (best quality; larger downloads, slower on the CPU).
+// Set to false to use the 8-bit models instead (fetch-pocket.sh --int8 for self-hosting those).
+const FULL_PRECISION = true;
 const KOKORO = { lib: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js', model: 'onnx-community/Kokoro-82M-v1.0-ONNX',
   // Self-hosted copies (fetched by fetch-kokoro.sh) in ./kokoro/ next to this page are used first when present:
   //   kokoro/kokoro.web.js, kokoro/ort/ (ONNX Runtime), kokoro/model/ (a mirror of the Hugging Face repo files)
   local: new URL('kokoro/', location.href).href };
-const KOKORO_VOICES = [   // [id, name, accent, gender] in kokoro-js's quality order
-  ['af_heart', 'Heart', 'American', 'female'], ['af_bella', 'Bella', 'American', 'female'], ['af_nicole', 'Nicole', 'American', 'female'],
-  ['af_aoede', 'Aoede', 'American', 'female'], ['af_kore', 'Kore', 'American', 'female'], ['af_sarah', 'Sarah', 'American', 'female'],
-  ['af_nova', 'Nova', 'American', 'female'], ['af_sky', 'Sky', 'American', 'female'], ['af_alloy', 'Alloy', 'American', 'female'],
-  ['af_jessica', 'Jessica', 'American', 'female'], ['af_river', 'River', 'American', 'female'],
-  ['am_michael', 'Michael', 'American', 'male'], ['am_fenrir', 'Fenrir', 'American', 'male'], ['am_puck', 'Puck', 'American', 'male'],
-  ['am_echo', 'Echo', 'American', 'male'], ['am_eric', 'Eric', 'American', 'male'], ['am_liam', 'Liam', 'American', 'male'],
-  ['am_onyx', 'Onyx', 'American', 'male'], ['am_adam', 'Adam', 'American', 'male'],
-  ['bf_emma', 'Emma', 'British', 'female'], ['bf_isabella', 'Isabella', 'British', 'female'], ['bf_alice', 'Alice', 'British', 'female'],
-  ['bf_lily', 'Lily', 'British', 'female'], ['bm_george', 'George', 'British', 'male'], ['bm_fable', 'Fable', 'British', 'male'],
-  ['bm_lewis', 'Lewis', 'British', 'male'], ['bm_daniel', 'Daniel', 'British', 'male']
+const KOKORO_VOICES = [   // [id, name, accent, gender, grade]: kokoro-js's overall quality grades
+  ['af_heart', 'Heart', 'American', 'female', 'A'], ['af_bella', 'Bella', 'American', 'female', 'A-'],
+  ['af_nicole', 'Nicole', 'American', 'female', 'B-'], ['bf_emma', 'Emma', 'British', 'female', 'B-'],
+  ['af_aoede', 'Aoede', 'American', 'female', 'C+'], ['af_kore', 'Kore', 'American', 'female', 'C+'],
+  ['af_sarah', 'Sarah', 'American', 'female', 'C+'], ['am_fenrir', 'Fenrir', 'American', 'male', 'C+'],
+  ['am_michael', 'Michael', 'American', 'male', 'C+'], ['am_puck', 'Puck', 'American', 'male', 'C+'],
+  ['af_alloy', 'Alloy', 'American', 'female', 'C'], ['af_nova', 'Nova', 'American', 'female', 'C'],
+  ['bf_isabella', 'Isabella', 'British', 'female', 'C'], ['bm_fable', 'Fable', 'British', 'male', 'C'],
+  ['bm_george', 'George', 'British', 'male', 'C'], ['af_sky', 'Sky', 'American', 'female', 'C-'],
+  ['bm_lewis', 'Lewis', 'British', 'male', 'D+'], ['af_jessica', 'Jessica', 'American', 'female', 'D'],
+  ['af_river', 'River', 'American', 'female', 'D'], ['am_echo', 'Echo', 'American', 'male', 'D'],
+  ['am_eric', 'Eric', 'American', 'male', 'D'], ['am_liam', 'Liam', 'American', 'male', 'D'],
+  ['am_onyx', 'Onyx', 'American', 'male', 'D'], ['bf_alice', 'Alice', 'British', 'female', 'D'],
+  ['bf_lily', 'Lily', 'British', 'female', 'D'], ['bm_daniel', 'Daniel', 'British', 'male', 'D'],
+  ['am_santa', 'Santa', 'American', 'male', 'D-'], ['am_adam', 'Adam', 'American', 'male', 'F+']
 ];
 const KOKORO_WORKER = `
 let tts = null, queue = Promise.resolve();
@@ -1882,10 +1891,10 @@ async function kLoad(){
     k.worker.postMessage({ type: 'load', model: KOKORO.model, device, dtype, ...files });
   });
   try {
-    try { await attempt(k.gpu ? 'webgpu' : 'wasm', k.gpu ? 'fp32' : 'q8'); k.device = k.gpu ? 'webgpu' : 'wasm'; }
+    try { await attempt(k.gpu ? 'webgpu' : 'wasm', FULL_PRECISION ? 'fp32' : k.gpu ? 'fp32' : 'q8'); k.device = k.gpu ? 'webgpu' : 'wasm'; }
     catch (e) {
       if (!k.gpu) throw e;
-      k.files = {}; await attempt('wasm', 'q8'); k.device = 'wasm';   // WebGPU failed: fall back to the CPU model
+      k.files = {}; await attempt('wasm', FULL_PRECISION ? 'fp32' : 'q8'); k.device = 'wasm';   // WebGPU failed: fall back to the CPU
     }
     k.state = 'ready';
   } catch (e) {
@@ -1929,10 +1938,11 @@ const POCKET = {
   // Self-hosted copies (fetched by fetch-pocket.sh): pocket/lib/, pocket/ort/, pocket/model/<bundle>/
   local: new URL('pocket/', location.href).href
 };
-const POCKET_LANGS = {   // book language -> model bundle (size in MB, int8 models + voices)
-  en: ['english_2026-04', 170, 'English'], fr: ['french_24l', 338, 'French'], de: ['german', 170, 'German'],
-  it: ['italian', 170, 'Italian'], pt: ['portuguese', 170, 'Portuguese'], es: ['spanish', 170, 'Spanish']
+const POCKET_LANGS = {   // book language -> [model bundle, MB to download (full precision, int8), name]
+  en: ['english_2026-04', [431, 170], 'English'], fr: ['french_24l', [1247, 338], 'French'], de: ['german', [431, 170], 'German'],
+  it: ['italian', [431, 170], 'Italian'], pt: ['portuguese', [431, 170], 'Portuguese'], es: ['spanish', [431, 170], 'Spanish']
 };
+const pocketMB = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1][FULL_PRECISION ? 0 : 1] || 431;
 const pocketLang = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[0] || null;
 const pk = { state: 'idle', worker: null, lang: '', voices: [], refs: new Map(), pending: new Map(), nextId: 1, queue: Promise.resolve(),
   collect: null, files: {}, progressText: '', error: '', wantPlay: false, voice: store.get('spine:pocketVoice') || '' };
@@ -1958,7 +1968,7 @@ function pkRequest(type, payload){
 }
 function pkProgress(){
   const fs = Object.values(pk.files), total = fs.reduce((a, f) => a + f.total, 0), loaded = fs.reduce((a, f) => a + Math.min(f.loaded, f.total), 0);
-  const expect = POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1] || 170;
+  const expect = pocketMB();
   pk.progressText = total > 2e6 ? `Downloading Pocket TTS${pk.local ? ' from this site' : ''}… ${Math.round(loaded / 1048576)} of ~${expect} MB` : 'Loading Pocket TTS…';
   if (tts.open) ttsUpdateBar();
 }
@@ -1972,7 +1982,7 @@ async function pkLoad(){
   try {
     pk.worker?.terminate(); pk.pending.clear(); pk.refs.clear(); pk.queue = Promise.resolve();
     pk.worker = pkWorker(lib ? POCKET.local + 'lib/' : POCKET.lib);
-    await pkRequest('init', { language: lang, quantized: true, voiceCloning: false,
+    await pkRequest('init', { language: lang, quantized: !FULL_PRECISION, voiceCloning: false,
       modelBaseUrl: model ? POCKET.local + 'model' : POCKET.model, ortBaseUrl: ort ? POCKET.local + 'ort/' : POCKET.ort,
       voicesUrl: null, maxThreads: 8, cache: true, cacheName: 'pocket-tts-js-v1' });
     pk.voices = pk.bundle?.predefinedVoices || [];
@@ -2006,9 +2016,9 @@ function pkGenerate(text){
    sentences ahead, and estimates the spoken word from playback position (neither engine reports
    word timings). */
 const NEURAL = {
-  kokoro: { name: 'Natural voice', st: k, ready: () => k.state === 'ready', load: () => kLoad(), size: () => k.gpu ? '~330 MB' : '~92 MB',
+  kokoro: { name: 'Natural voice', st: k, ready: () => k.state === 'ready', load: () => kLoad(), size: () => FULL_PRECISION || k.gpu ? '~330 MB' : '~92 MB',
     generate: kGenerate, key: () => `kokoro|${k.voice}|${tts.rate}` },
-  pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1] || 170} MB`,
+  pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`,
     generate: pkGenerate, key: () => `pocket|${pk.lang}|${pkVoice()}` }
 };
 function neuralEngine(){
@@ -2050,22 +2060,34 @@ function nSynth(ne, text){
   }
   return job;
 }
+// Natural voices read whole paragraphs where possible (better phrasing than sentence by sentence):
+// a span runs from (ci, pos) through the following sentences of the same block, up to a length the
+// model handles in one go. Sentences stay the unit for highlighting, skipping and resuming.
+const SPAN_MAX = { kokoro: 350, pocket: 600 };
+function nSpan(ne, ci, pos){
+  const chunks = ttsChunks(), c = chunks[ci], max = ne === NEURAL.pocket ? SPAN_MAX.pocket : SPAN_MAX.kokoro;
+  let cj = ci;
+  while (chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
+  return { ci, cj, pos, b: c.b, e: chunks[cj].e, ...speakable(c.b.text.slice(pos, chunks[cj].e)) };
+}
 async function nSpeak(c, ci, pos, token){
   const ne = neuralEngine();
-  const { out, map } = speakable(c.b.text.slice(pos, c.e));
+  const span = nSpan(ne, ci, pos);
   const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
   let clip;
-  try { clip = await nSynth(ne, out); }
+  try { clip = await nSynth(ne, span.out); }
   catch (e) {
-    if (token === tts.token) { tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this sentence: ${e.message}`, 'error'); }
+    if (token === tts.token) { tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this passage: ${e.message}`, 'error'); }
     return;
   } finally { clearTimeout(slow); }
   if (token !== tts.token || !tts.playing) return;
   ttsUpdateBar();
+  // Prepare the next two spans while this one plays.
   const chunks = ttsChunks();
-  for (const nx of [chunks[ci + 1], chunks[ci + 2]]) if (nx) nSynth(ne, speakable(nx.b.text.slice(nx.s, nx.e)).out).catch(() => {});
-  Object.assign(n, { active: true, paused: false, token, text: out, map, c, pos, dur: clip.dur });
-  nAudio.onended = () => { n.active = false; if (token === tts.token && tts.playing) ttsGo(ci + 1, null, { keepFollow: true }); };
+  let next = span.cj + 1;
+  for (let i = 0; i < 2 && chunks[next]; i++) { const nx = nSpan(ne, next, chunks[next].s); nSynth(ne, nx.out).catch(() => {}); next = nx.cj + 1; }
+  Object.assign(n, { active: true, paused: false, token, span, dur: clip.dur });
+  nAudio.onended = () => { n.active = false; if (token === tts.token && tts.playing) ttsGo(span.cj + 1, null, { keepFollow: true }); };
   nAudio.src = clip.url;
   nAudio.playbackRate = ne === NEURAL.pocket ? tts.rate : 1;
   try { await nAudio.play(); }
@@ -2075,21 +2097,29 @@ async function nSpeak(c, ci, pos, token){
   }
   nLoop(token);
 }
-// Estimate the spoken word from playback position (weighted by characters) and highlight it.
+// Estimate the spoken position from playback time. Characters are weighted, with extra weight after
+// punctuation where speakers pause, and the estimate moves both the sentence and the word highlight.
 function nLoop(token){
   cancelAnimationFrame(n.raf);
-  const words = [...n.text.matchAll(/[\p{L}\p{N}'’\-]+/gu)];
-  let last = -1;
+  const { span } = n, text = span.out, chunks = ttsChunks();
+  const cum = new Float32Array(text.length + 1);
+  for (let i = 0; i < text.length; i++) cum[i + 1] = cum[i] + 1 + (/[.!?…]/.test(text[i]) ? 10 : /[,;:—–]/.test(text[i]) ? 4 : 0);
+  const words = [...text.matchAll(/[\p{L}\p{N}'’\-]+/gu)];
+  let lastWord = -1, lastSentence = -1;
   const step = () => {
     if (token !== tts.token || !tts.playing || !n.active) return;
     const dur = isFinite(nAudio.duration) ? nAudio.duration : n.dur;
-    const at = Math.min(1, nAudio.currentTime / dur) * n.text.length;
-    let w = words.findIndex(m => m.index + m[0].length > at); if (w < 0) w = words.length - 1;
-    if (w !== last && words[w]) {
-      last = w;
-      const m = words[w], a = n.pos + n.map[m.index], z = n.pos + n.map[m.index + m[0].length - 1] + 1;
-      tts.pos = a;
-      const r = rangeFor(n.c.b, a, z);
+    const target = Math.min(1, nAudio.currentTime / dur) * cum[text.length];
+    let lo = 0, hi = text.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid + 1] <= target) lo = mid + 1; else hi = mid; }
+    let w = words.findIndex(m => m.index + m[0].length > lo); if (w < 0) w = words.length - 1;
+    if (w !== lastWord && words[w]) {
+      lastWord = w;
+      const m = words[w], a = span.pos + span.map[m.index], z = span.pos + span.map[m.index + m[0].length - 1] + 1;
+      let si = span.ci; while (si < span.cj && a >= chunks[si].e) si++;
+      tts.pos = a; tts.ci = si;
+      if (si !== lastSentence) { lastSentence = si; hl('tts-sentence', rangeFor(span.b, Math.max(span.pos, chunks[si].s), chunks[si].e)); }
+      const r = rangeFor(span.b, a, z);
       hl('tts-word', r); follow(r);
     }
     n.raf = requestAnimationFrame(step);

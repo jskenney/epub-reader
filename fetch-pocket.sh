@@ -2,9 +2,11 @@
 # Download what the Pocket TTS natural voice needs into ./pocket/ next to index.html, so the reader
 # loads it from this site instead of cdn.jsdelivr.net and huggingface.co.
 #
-#   ./fetch-pocket.sh                  English only (about 180 MB)
-#   ./fetch-pocket.sh en fr de         the listed languages
+#   ./fetch-pocket.sh                  English only (about 430 MB)
+#   ./fetch-pocket.sh en fr de         the listed languages (French is about 1.25 GB)
 #   ./fetch-pocket.sh all              English, French, German, Italian, Portuguese and Spanish
+#   ./fetch-pocket.sh --int8 en        the 8-bit models instead (about 170 MB per language), for a
+#                                      reader with FULL_PRECISION set to false in index.html
 #
 # Safe to re-run: finished files are skipped and interrupted downloads resume.
 # The reader uses whichever of these files exist and falls back to the CDNs for the rest.
@@ -29,6 +31,8 @@ bundle_for() {   # language code -> model bundle (keep in sync with POCKET_LANGS
     *) echo "Unknown language '$1' (use en, fr, de, it, pt, es or all)" >&2; exit 1 ;;
   esac
 }
+suffix=""   # full precision (the reader's default)
+if [ "${1:-}" = --int8 ]; then suffix=_int8; shift; fi
 langs=("$@"); [ ${#langs[@]} -gt 0 ] || langs=(en)
 [ "${langs[0]}" = all ] && langs=(en fr de it pt es)
 
@@ -50,9 +54,10 @@ for f in ort.min.mjs ort-wasm-simd-threaded.mjs ort-wasm-simd-threaded.wasm; do 
 for lang in "${langs[@]}"; do
   b=$(bundle_for "$lang")
   echo "Model: $b"
-  # int8 models (the reader's default) plus the built-in voices; the voice-cloning encoder isn't used
-  for f in bundle.json tokenizer.model text_conditioner_int8.onnx flow_lm_main_int8.onnx \
-           flow_lm_flow_int8.onnx mimi_decoder_int8.onnx voices.bin; do
+  # the four models (full precision, or 8-bit with --int8) plus the built-in voices;
+  # the voice-cloning encoder isn't used
+  for f in bundle.json tokenizer.model voices.bin text_conditioner$suffix.onnx flow_lm_main$suffix.onnx \
+           flow_lm_flow$suffix.onnx mimi_decoder$suffix.onnx; do
     get "$HF/$b/$f" "model/$b/$f"
   done
 done
