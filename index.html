@@ -157,7 +157,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 <body>
 <div class="app">
   <header class="bar">
-    <button class="btn ghost" id="tocBtn" aria-controls="toc" aria-expanded="true" title="Show or hide contents">
+    <button class="btn ghost" id="tocBtn" aria-controls="toc" aria-expanded="true" title="Show or hide contents (C)">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
       <span class="hide-sm">Contents</span>
     </button>
@@ -762,6 +762,7 @@ function onKey(e){
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setTheme(isDark() ? 'light' : 'dark'); }
+  else if ((e.key === 'c' || e.key === 'C') && !isFs()) { e.preventDefault(); setToc(!tocIsOpen()); }
   else if (['ArrowRight', 'ArrowDown', 'PageDown'].includes(e.key)) { e.preventDefault(); pageNext(); }
   else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); pagePrev(); }
 }
@@ -963,7 +964,7 @@ function menuKey(e){
     opts[n].focus(); return true;
   }
   if (e.key === 'Tab') { setMenu(false); return false; }
-  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T'].includes(e.key);
+  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T', 'c', 'C'].includes(e.key);
 }
 $('#fontBtn').addEventListener('click', () => setMenu(!menuOpen()));
 document.addEventListener('click', e => { if (menuOpen() && !e.target.closest('.font-pick')) setMenu(false); });
