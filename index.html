@@ -74,6 +74,12 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 #tocList a:hover{background:var(--surface)}
 #tocList a[aria-current]{background:var(--ribbon-soft);color:var(--ribbon);font-weight:500}
 #tocList span{color:var(--muted)}
+.desc{margin-top:12px;font-size:13px}
+.desc summary{cursor:pointer;color:var(--muted);font:500 11px/1 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;padding:4px 0;width:max-content}
+.desc summary:hover{color:var(--ink)}
+.desc summary:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
+#metaDescBody{display:flex;flex-direction:column;gap:8px;margin-top:8px;font-family:var(--font-read);font-size:13.5px;line-height:1.55;max-height:40vh;overflow:auto}
+#metaDescBody p{margin:0}
 .pkg{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font:12px/1.4 var(--font-mono);margin:0}
 .pkg dt{color:var(--muted)}
 .pkg dd{margin:0;overflow-wrap:anywhere;min-width:0}
@@ -206,22 +212,18 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <div>
         <h1 class="meta-title" id="metaTitle"></h1>
         <p class="meta-authors" id="metaAuthors"></p>
+        <details class="desc" id="metaDesc" hidden>
+          <summary>Description</summary>
+          <div id="metaDescBody"></div>
+        </details>
       </div>
       <nav aria-labelledby="tocHead">
         <h2 class="label" id="tocHead">Contents</h2>
         <div id="tocList"></div>
       </nav>
-      <section aria-labelledby="pkgHead">
-        <h2 class="label" id="pkgHead">Package</h2>
-        <dl class="pkg">
-          <dt>EPUB</dt><dd id="pkgVersion">–</dd>
-          <dt>Language</dt><dd id="pkgLang">–</dd>
-          <dt>Spine</dt><dd id="pkgSpine">–</dd>
-          <dt>Manifest</dt><dd id="pkgManifest">–</dd>
-          <dt>Package</dt><dd id="pkgOpf">–</dd>
-          <dt>Showing</dt><dd id="curFile">–</dd>
-          <dt>ID</dt><dd id="pkgId">–</dd>
-        </dl>
+      <section aria-labelledby="infoHead">
+        <h2 class="label" id="infoHead">Information</h2>
+        <dl class="pkg" id="infoList"></dl>
       </section>
     </aside>
 
@@ -360,6 +362,76 @@ function parseDoc(text, type){
   return d;
 }
 
+/* ---------- descriptive metadata ---------- */
+const OPF_NS = 'http://www.idpf.org/2007/opf';
+function readInfo(md, ids, spineEl){
+  const all = n => md ? [...md.getElementsByTagNameNS('*', n)] : [];
+  const metas = all('meta');
+  const prop = (p, refines) => metas.filter(m => m.getAttribute('property') === p && (refines === undefined || m.getAttribute('refines') === refines));
+  const named = n => metas.find(m => m.getAttribute('name') === n)?.getAttribute('content')?.trim() || '';
+  const opfAttr = (el, a) => el.getAttributeNS(OPF_NS, a) || el.getAttribute('opf:' + a) || '';
+
+  // Publication date: EPUB 2 may list several dates with opf:event; prefer "publication".
+  const dates = all('date');
+  const date = textOf(dates.find(d => /publication/i.test(opfAttr(d, 'event'))) || dates.find(d => !opfAttr(d, 'event')) || dates[0]);
+
+  // ISBN: urn:isbn: prefix, opf:scheme="ISBN", EPUB 3 identifier-type refinement, or a bare 10/13-digit ISBN.
+  let isbn = '';
+  for (const el of ids) {
+    const v = textOf(el), id = el.getAttribute('id');
+    const typed = id && prop('identifier-type', '#' + id).some(m => /isbn/i.test(textOf(m)) || (m.getAttribute('scheme') === 'onix:codelist5' && textOf(m) === '15'));
+    const bare = v.replace(/^urn:isbn:/i, '').replace(/^isbn:?\s*/i, '');
+    if (/^urn:isbn:|^isbn/i.test(v) || /isbn/i.test(opfAttr(el, 'scheme')) || typed || /^(97[89]\d{10}|\d{9}[\dXx])$/.test(bare.replace(/[\s-]/g, ''))) { isbn = bare; break; }
+  }
+
+  // Series: EPUB 3 collections, then Calibre's metadata.
+  let series = '';
+  const coll = prop('belongs-to-collection', undefined).find(m => !m.getAttribute('refines'));
+  if (coll) {
+    const id = coll.getAttribute('id');
+    const pos = id ? textOf(prop('group-position', '#' + id)[0]) : '';
+    series = textOf(coll) + (pos ? `, book ${pos.replace(/\.0+$/, '')}` : '');
+  } else if (named('calibre:series')) {
+    const pos = named('calibre:series_index');
+    series = named('calibre:series') + (pos ? `, book ${pos.replace(/\.0+$/, '')}` : '');
+  }
+
+  const layout = textOf(prop('rendition:layout', undefined).find(m => !m.getAttribute('refines'))) === 'pre-paginated' ? 'Fixed layout' : 'Reflowable';
+  const dir = (spineEl?.getAttribute('page-progression-direction') || '').toLowerCase();
+
+  return {
+    publisher: textOf(all('publisher')[0]),
+    published: formatDate(date),
+    isbn,
+    series,
+    subjects: all('subject').map(textOf).filter(Boolean).join(', '),
+    layout,
+    direction: dir === 'rtl' ? 'Right to left' : 'Left to right',
+    description: all('description')[0]?.textContent || ''
+  };
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+function formatDate(v){
+  const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?/.exec(v || '');
+  if (!m) return v || '';
+  if (+m[1] < 1000) return '';                        // placeholder dates such as 0101-01-01
+  if (!m[2]) return m[1];
+  const d = new Date(+m[1], +m[2] - 1, +(m[3] || 1));
+  return d.toLocaleDateString(undefined, m[3] ? { year: 'numeric', month: 'long', day: 'numeric' } : { year: 'numeric', month: 'long' });
+}
+/* Descriptions are often HTML (sometimes escaped). Keep only the text, split into paragraphs. */
+function descriptionParagraphs(raw){
+  let t = raw.trim(); if (!t) return [];
+  if (/<[a-z!/]/i.test(t) || /&lt;[a-z/]/i.test(t)) {
+    if (!/<[a-z!/]/i.test(t)) t = new DOMParser().parseFromString(t, 'text/html').body.textContent;
+    t = t.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6])>/gi, '\n\n');
+    const d = new DOMParser().parseFromString(t, 'text/html');
+    d.querySelectorAll('script,style,template,noscript').forEach(e => e.remove());
+    t = d.body.textContent;
+  }
+  return t.split(/\n\s*\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
 /* ---------- opening a book ---------- */
 async function openBook(zip, { sample = false, name = '' } = {}){
   showStatus('Opening book…');
@@ -381,6 +453,7 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   const ids = md ? [...md.getElementsByTagNameNS('*', 'identifier')] : [];
   const uidAttr = pkg.getAttribute('unique-identifier');
   const uid = textOf(ids.find(e => e.getAttribute('id') === uidAttr) || ids[0]);
+  const info = readInfo(md, ids, opf.getElementsByTagNameNS('*', 'spine')[0]);
 
   const manifest = new Map(), byPath = new Map();
   for (const it of opf.getElementsByTagNameNS('*', 'item')) {
@@ -398,7 +471,7 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   if (!spine.length) throw new Error('The package lists no readable files in its spine, so there is nothing to show.');
 
   const next = { zip, src: zip, opfPath, version: pkg.getAttribute('version') || '?', title: dc('title')[0] || name || 'Untitled',
-    authors: dc('creator'), language: dc('language')[0] || '', uid, manifest, byPath, spine, urls: new Map(), sample };
+    authors: dc('creator'), language: dc('language')[0] || '', uid, info, manifest, byPath, spine, urls: new Map(), sample };
   next.toc = await loadToc(next, spineEl);
   next.key = 'spine:pos:' + (uid || next.title);
 
@@ -772,12 +845,22 @@ function renderMeta(){
   document.title = book.title;
   $('#metaTitle').textContent = book.title;
   $('#metaAuthors').textContent = book.authors.join(', ');
-  $('#pkgVersion').textContent = book.version;
-  $('#pkgLang').textContent = book.language || '–';
-  $('#pkgSpine').textContent = `${book.spine.length} items`;
-  $('#pkgManifest').textContent = `${book.manifest.size} items`;
-  $('#pkgOpf').textContent = book.opfPath;
-  $('#pkgId').textContent = book.uid || '–';
+  const i = book.info;
+  const paras = descriptionParagraphs(i.description);
+  $('#metaDescBody').replaceChildren(...paras.map(t => { const p = document.createElement('p'); p.textContent = t; return p; }));
+  $('#metaDesc').hidden = !paras.length;
+  $('#metaDesc').open = false;
+  const rows = [
+    ['Publisher', i.publisher], ['Published', i.published], ['ISBN', i.isbn], ['Series', i.series],
+    ['Subjects', i.subjects], ['Language', book.language], ['Layout', i.layout], ['Direction', i.direction],
+    ['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
+    ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid]
+  ].filter(([, v, id]) => v || id);
+  $('#infoList').replaceChildren(...rows.flatMap(([k, v, id]) => {
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k; dd.textContent = v; if (id) dd.id = id;
+    return [dt, dd];
+  }));
   const r = $('#ribbon');
   r.style.setProperty('--n', book.spine.length);
   r.classList.toggle('dense', book.spine.length > 80);
