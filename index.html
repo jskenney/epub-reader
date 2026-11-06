@@ -590,7 +590,9 @@ async function markdownToHtml(md){
 
 // Split a document's body into sections at its main headings (h1, and h2 when there are several), then
 // at a size limit, and build the contents list from h1-h3.
-function splitDocument(doc){
+// Text and HTML documents are split at their chapter headings; Markdown notes and READMEs read as one
+// continuous page (their headings are usually sections, not chapters), split only when very long.
+function splitDocument(doc, { headings = true, maxLen = 40000 } = {}){
   let root = doc.body;
   while (root.children.length === 1 && /^(div|main|article|section)$/i.test(root.firstElementChild.localName)
          && ![...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) root = root.firstElementChild;
@@ -599,19 +601,19 @@ function splitDocument(doc){
   const nodes = [...root.childNodes];
   const heads = nodes.map(headOf);
   const count = lv => heads.filter(h => h?.localName === lv).length;
-  const levels = count('h2') >= 2 ? ['h1', 'h2'] : count('h1') >= 2 ? ['h1'] : [];
+  const levels = !headings ? [] : count('h2') >= 2 ? ['h1', 'h2'] : count('h1') >= 2 ? ['h1'] : [];
   const chunks = [[]];
   nodes.forEach((nd, i) => {
     if (heads[i] && levels.includes(heads[i].localName) && chunks.at(-1).some(x => x.nodeType === 1 || x.textContent.trim())) chunks.push([]);
     chunks.at(-1).push(nd);
   });
-  // Very long sections (or documents without headings) are split at about 40,000 characters.
+  // Very long sections (or documents without headings) are split at about maxLen characters.
   const parts = [];
   for (const ch of chunks) {
     let cur = [], len = 0;
     for (const nd of ch) {
       const l = nd.textContent.length;
-      if (len > 40000 && cur.length) { parts.push(cur); cur = []; len = 0; }
+      if (len > maxLen && cur.length) { parts.push(cur); cur = []; len = 0; }
       cur.push(nd); len += l;
     }
     if (cur.some(x => x.nodeType === 1 || x.textContent.trim())) parts.push(cur);
@@ -634,7 +636,7 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
   const language = langCode(meta.language);
   const title = meta.title || doc.querySelector('h1, h2')?.textContent.replace(/\s+/g, ' ').trim() || name.replace(DOC_EXT, '') || 'Untitled';
 
-  const parts = splitDocument(doc);
+  const parts = splitDocument(doc, kind === 'markdown' ? { headings: false, maxLen: 200000 } : {});
   const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
   // Give headings ids for the contents (GitHub-style, so Markdown links like [x](#some-heading) work), and
   // send in-document links to the section holding their target.
@@ -1320,20 +1322,43 @@ function tocLinkFor(path){
   hits.sort((x, y) => (!!x.dataset.frag - !!y.dataset.frag) || (depth(y) - depth(x)));
   return hits[0] || null;
 }
+// When a file holds several contents entries (a Markdown document, an EPUB chapter file with sections),
+// the entry for the section on screen: the last heading at or before the current page (scroll layout:
+// above the upper third of the view). Null before the first heading, or while the page isn't laid out.
+function sectionLink(){
+  const doc = frame.contentDocument, path = book.spine[cur.i].path;
+  if (!doc?.getElementById('spine-flow')) return null;
+  const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
+  if (hits.length < 2) return null;
+  let best = null, bestEl = null;
+  for (const a of hits) {
+    const el = doc.getElementById(a.dataset.frag);
+    if (!el || (bestEl && !(bestEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))) continue;
+    let seen;
+    if (scrolling()) seen = el.getBoundingClientRect().top <= frame.contentWindow.innerHeight / 3;
+    else { const r = doc.createRange(); r.selectNode(el); seen = pageOfRange(r) <= cur.page; }
+    if (seen) { best = a; bestEl = el; }
+  }
+  return best;
+}
+function updateSection(){
+  let link = sectionLink();
+  for (let j = cur.i; j >= 0 && !link; j--) link = tocLinkFor(book.spine[j].path);
+  $('#chapLabel').textContent = link ? link.textContent : book.spine[cur.i].href.split('/').pop();
+  const was = $('#tocList').querySelector('a[aria-current]');
+  if (was === link) return;
+  was?.removeAttribute('aria-current');
+  if (link) { link.setAttribute('aria-current', 'true'); link.scrollIntoView({ block: 'nearest' }); }
+}
 function updateChrome(){
-  const n = book.spine.length, item = book.spine[cur.i];
   $('#bookTitle').textContent = book.title;
   $('#bookAuthor').textContent = book.authors.join(', ');
-  let link = null;
-  for (let j = cur.i; j >= 0 && !link; j--) link = tocLinkFor(book.spine[j].path);
-  $('#chapLabel').textContent = link ? link.textContent : item.href.split('/').pop();
-  $('#curFile').textContent = item.path;
-  $('#tocList').querySelectorAll('a[aria-current]').forEach(a => a.removeAttribute('aria-current'));
-  if (link) { link.setAttribute('aria-current', 'true'); link.scrollIntoView({ block: 'nearest' }); }
+  $('#curFile').textContent = book.spine[cur.i].path;
   updateProgress();
 }
 function updateProgress(){
   if (!book) return;
+  updateSection();
   const overall = (cur.i + fraction()) / book.spine.length;
   const pct = Math.round(overall * 100);
   $('#ribbonFill').style.width = (overall * 100).toFixed(2) + '%';
