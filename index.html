@@ -2388,25 +2388,54 @@ function pkGenerate(text){
    The API runs one request at a time and answers 409 while busy, so requests are queued here and
    retried. It has no speed control: speed is applied at playback with pitch preserved. */
 const TTS_SERVER = { api: new URL('/tts/', location.href).href, voices: new URL('/tts-voices/', location.href).href };
-const sv = { state: 'idle', available: null, voices: [], refs: new Map(), queue: Promise.resolve(), error: '', progressText: '',
+const sv = { state: 'idle', available: null, checkedAt: 0, voices: [], refs: new Map(), queue: Promise.resolve(), error: '', progressText: '',
   wantPlay: false, voice: store.get('spine:serverVoice') || '' };
 const serverFits = () => /^(en|zh)\b/i.test(bookLang());
 const svVoice = () => sv.voices.find(v => v.id === sv.voice) || sv.voices[0];
 // Is there a voice server? Checked once, when the read-aloud bar first opens.
-function svProbe(){
-  sv.probe ??= (async () => {
-    try { sv.available = (await fetch(TTS_SERVER.api + 'health', { cache: 'no-store' })).ok; } catch { sv.available = false; }
+// Only a real answer counts: Breeze replies {"status":"ok"} (503 "loading" while starting). A proxy whose
+// upstream is down may answer with an HTML error page, even with status 200.
+async function svFetchJson(url, ms = 5000){
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { cache: 'no-store', signal: ctl.signal });
+    if (!/json/i.test(r.headers.get('content-type') || '')) return { r, json: null };
+    return { r, json: await r.json().catch(() => null) };
+  } finally { clearTimeout(timer); }
+}
+// Checked when the read-aloud bar opens and before playing, at most every 15 seconds, so the option
+// disappears when the server goes away and comes back when it returns.
+function svProbe(maxAge = 15000){
+  if (sv.probe && Date.now() - sv.checkedAt < maxAge) return sv.probe;
+  sv.checkedAt = Date.now();
+  sv.probe = (async () => {
+    let ok = false;
+    try { const { r, json } = await svFetchJson(TTS_SERVER.api + 'health'); ok = r.ok && json?.status === 'ok'; } catch { ok = false; }
+    if (!ok && sv.available) svLost(false);
+    else if (ok && !sv.available && sv.state !== 'loading') sv.state = 'idle';   // back: load the voices again
+    sv.available = ok;
     if (tts.open) ttsUpdateBar();
   })();
   return sv.probe;
+}
+// The server stopped answering: hide Server voice (the bar falls back to another engine) until it returns.
+function svLost(tell = true){
+  const wasReading = tts.playing && tts.engine === 'server', wasAvailable = sv.available;
+  sv.available = false; sv.state = 'idle'; sv.voices = []; sv.refs.clear(); sv.checkedAt = 0;
+  if (wasReading) { tts.playing = false; ++tts.token; nStop(); }
+  if (tts.open) { ttsFillVoices(); ttsUpdateBar(); }
+  if (tell && wasAvailable) showNotice("The voice server isn't responding, so Server voice is unavailable for now. Choose another voice, or try again once the server is back.", 'error');
 }
 async function svLoad(){
   if (sv.state === 'loading') return;
   sv.state = 'loading'; sv.progressText = 'Connecting to the voice server…';
   try {
-    const r = await fetch(TTS_SERVER.voices + 'voices.json', { cache: 'no-store' });
+    let res;
+    try { res = await svFetchJson(TTS_SERVER.voices + 'voices.json'); } catch { res = null; }
+    if (!res || [502, 503, 504].includes(res.r.status) || (res.r.ok && !res.json)) { sv.state = 'idle'; svLost(); return; }
+    const { r, json } = res;
     if (!r.ok) throw new Error(r.status === 404 ? 'no voices yet (create one in the voice studio at /tts-studio/)' : `the voice list answered ${r.status}`);
-    const list = (await r.json()).voices || [];
+    const list = json.voices || [];
     sv.voices = list.filter(v => v.id && (v.ref_audio ? v.ref_text : v.instruction));
     if (!sv.voices.length) throw new Error('no voices yet (create one in the voice studio at /tts-studio/)');
     sv.state = 'ready';
@@ -2433,7 +2462,13 @@ function svGenerate(text){
     form.append('seed', String(v.seed ?? 42));
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now();
-      const r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form });
+      let r;
+      try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form }); }
+      catch { svLost(); throw new Error('the voice server isn\'t responding'); }
+      // Gateway errors or an HTML page instead of audio: the server behind the proxy is gone.
+      if ([502, 503, 504].includes(r.status) || (r.ok && /html/i.test(r.headers.get('content-type') || ''))) {
+        svLost(); throw new Error('the voice server isn\'t responding');
+      }
       if (r.status === 409 && attempt < 40) { await new Promise(res => setTimeout(res, 1500)); continue; }   // busy with another request
       if (!r.ok) {
         let detail = ''; try { detail = (await r.json()).detail; } catch {}
@@ -2532,6 +2567,7 @@ async function nSpeak(c, ci, pos, token, single = false){
     if (token !== tts.token) return;
     // A paragraph can fail where a sentence would not (for example a prompt longer than the server
     // prepared for): retry this paragraph one sentence at a time before giving up.
+    if (ne === NEURAL.server && !sv.available) return;   // server gone: svLost() already stopped and explained
     if (span.cj > span.ci) { clearTimeout(slow); return nSpeak(c, ci, pos, token, true); }
     tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this passage: ${e.message}`, 'error');
     return;
