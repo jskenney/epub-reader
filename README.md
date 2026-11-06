@@ -71,6 +71,12 @@ This needs a real web server (for example `npx vite` or
     normally. Next / Previous and PageUp / PageDown move a screen at a time
     and continue into the next or previous chapter at the ends.
   Images are scaled to fit the page. Switching layouts keeps your place.
+- Text width (the narrower / wider buttons): Narrow, Medium (default), Wide
+  or Full. It caps how wide the text gets, about 32 / 38 / 50 rem for one
+  column and scrolling and 1000 / 1240 / 1600 px for both columns together,
+  with anything beyond that becoming side margin; Full uses the whole page
+  with minimal margins. Hidden on phones, where the screen is narrower than
+  every cap.
   When reading aloud in scrolling mode, the page scrolls to keep the spoken
   text in view; scrolling away yourself shows "Back to reading".
 - Information panel in the sidebar: publisher, publication date, ISBN,

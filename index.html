@@ -48,6 +48,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 #bookAuthor{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tools{display:flex;align-items:center;gap:8px}
 .size{display:flex;align-items:center;gap:2px}
+#widthVal{min-width:6ch}
 #fontPct,.readout{font:500 12px/1 var(--font-mono);color:var(--muted);min-width:4ch;text-align:center;font-variant-numeric:tabular-nums}
 .btn{font:500 13px/1 var(--font-ui);color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:6px;
   height:34px;padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
@@ -228,6 +229,15 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 2.5h12M2 8h12M2 13.5h12"/></svg>
         </button>
       </div>
+      <div class="size hide-sm" role="group" aria-label="Text width">
+        <button class="btn ghost" id="narrower" title="Narrower text" aria-label="Narrower text">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8h4.5M4 5.5 6.5 8 4 10.5M14.5 8H10M12 5.5 9.5 8l2.5 2.5"/></svg>
+        </button>
+        <span id="widthVal" class="readout" aria-live="polite">Medium</span>
+        <button class="btn ghost" id="wider" title="Wider text" aria-label="Wider text">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 8H1.5M3.5 5.5 1 8l2.5 2.5M10 8h4.5M12.5 5.5 15 8l-2.5 2.5"/></svg>
+        </button>
+      </div>
       <label class="btn primary" for="fileInput" tabindex="0" id="openBtn">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 10V2M4.5 5.5 8 2l3.5 3.5M2.5 10v3.5h11V10"/></svg>
         <span>Open<span class="hide-sm"> book</span></span>
@@ -355,6 +365,9 @@ let cur = { i: 0 };
 let fontPct = Number(store.get('spine:font')) || 100;
 let lineH = Number(store.get('spine:line')) || 1.65;
 const LAYOUTS = { two: 'Two columns', one: 'One column', scroll: 'Scrolling' };
+// Text width: the widest the text may get; anything beyond becomes side margin. [name, one column/scroll, two columns]
+const WIDTHS = [['Narrow', '32rem', '1000px'], ['Medium', '38rem', '1240px'], ['Wide', '50rem', '1600px'], ['Full', null, null]];
+let widthStep = Number.isInteger(store.get('spine:width')) && WIDTHS[store.get('spine:width')] ? store.get('spine:width') : 1;
 let layout = LAYOUTS[store.get('spine:layout')] ? store.get('spine:layout') : 'two';
 let renderToken = 0;
 
@@ -874,8 +887,9 @@ a{color:${t.ribbon}}`;
    column flow; the scroll layout lets the page scroll normally. */
 function overrideCss(){
   const t = tokens(), dark = isDark();
-  const narrow = 'calc((100vw - 38rem) / 2)';   // side margin that keeps a single column to a readable line length
-  const m = layout === 'two' ? 'max(20px,3.5vw,calc((100vw - 1240px) / 2))' : `max(20px,3.5vw,${narrow})`;
+  // Side margin: at least a little, and whatever is left once the text reaches its width limit.
+  const cap = WIDTHS[widthStep][layout === 'two' ? 2 : 1];
+  const m = cap ? `max(20px,3.5vw,calc((100vw - ${cap}) / 2))` : 'max(20px,2vw)';
   const common = `body{--v:40px;--vb:${40 + tts.barH}px;--m:${m};--g:max(32px,4vw);
   margin:0 !important;width:auto !important;max-width:none !important;min-height:0 !important;box-sizing:border-box !important;
   background:transparent !important;${dark ? `color:${t.ink} !important;` : ''}}`;
@@ -1359,6 +1373,16 @@ function setLayout(next){
   updateProgress();
 }
 $('#layoutBtn').addEventListener('click', () => setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]));
+function setWidth(step){
+  widthStep = Math.max(0, Math.min(WIDTHS.length - 1, step));
+  $('#widthVal').textContent = WIDTHS[widthStep][0];
+  $('#narrower').disabled = widthStep === 0;
+  $('#wider').disabled = widthStep === WIDTHS.length - 1;
+  store.set('spine:width', widthStep);
+  restyleFrame();
+}
+$('#narrower').addEventListener('click', () => setWidth(widthStep - 1));
+$('#wider').addEventListener('click', () => setWidth(widthStep + 1));
 function setFont(p){
   fontPct = Math.max(70, Math.min(200, p));
   $('#fontPct').textContent = fontPct + '%';
@@ -2570,6 +2594,7 @@ function nStop(){
 /* ---------- start ---------- */
 $('#fontPct').textContent = fontPct + '%';
 setLine(lineH);
+setWidth(widthStep);
 setLayout(layout);
 { const t = store.get('spine:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
 syncThemeBtn();
