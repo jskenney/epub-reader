@@ -436,6 +436,55 @@ function parseDoc(text, type){
   return d;
 }
 
+/* ---------- the browser-tab icon from the book's cover ----------
+   The cover is the manifest item marked cover-image (EPUB 3), the one named by <meta name="cover">
+   (EPUB 2), or an image called "cover"; when that is a page rather than an image, its first image.
+   It's drawn into a small square, whole and centred. Books without a cover get the site's favicon back. */
+const pageIcons = [...document.querySelectorAll('link[rel~="icon"]')].map(l => ({ href: l.href, type: l.type, sizes: l.getAttribute('sizes') }));
+let iconToken = 0;
+async function coverUrl(b){
+  if (!b?.manifest?.size) return null;
+  const all = [...b.manifest.values()];
+  const item = all.find(i => i.props.includes('cover-image')) || (b.coverId && b.manifest.get(b.coverId))
+    || all.find(i => /^image\//.test(i.type) && /cover/i.test(`${i.id} ${i.href}`));
+  if (!item) return null;
+  if (/^image\//.test(item.type)) return b.src.url(item.path, item.type);
+  if (/html|xml/.test(item.type)) {   // a cover page: use its first image
+    const t = await readText(b.src, item.path);
+    const doc = t && (parseDoc(t, 'application/xhtml+xml') || parseDoc(t, 'text/html'));
+    const el = doc && [...doc.getElementsByTagNameNS('*', 'img'), ...doc.getElementsByTagNameNS('*', 'image')][0];
+    const src = el && (el.getAttribute('src') || el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href'));
+    if (src && !isExternal(src)) { const path = resolve(item.path, src); return b.src.url(path, b.byPath.get(path)?.type || MIME[ext(path)] || 'image/png'); }
+  }
+  return null;
+}
+function setIcons(list){
+  document.querySelectorAll('link[rel~="icon"]').forEach(l => l.remove());
+  for (const { href, type, sizes } of list) {
+    const l = document.createElement('link'); l.rel = 'icon'; l.href = href;
+    if (type) l.type = type; if (sizes) l.setAttribute('sizes', sizes);
+    document.head.append(l);
+  }
+}
+async function setBookIcon(){
+  const token = ++iconToken, b = book;
+  try {
+    const url = await coverUrl(b);
+    if (!url) throw new Error('no cover');
+    const img = new Image(); img.src = url; await img.decode();
+    if (token !== iconToken) return;
+    const N = 64, c = document.createElement('canvas'); c.width = c.height = N;
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    const iw = img.naturalWidth || 2, ih = img.naturalHeight || 3;   // an SVG without a size: assume a 2:3 cover
+    const k = Math.min(N / iw, N / ih), w = iw * k, h = ih * k;
+    g.drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
+    setIcons([{ href: c.toDataURL('image/png'), type: 'image/png', sizes: `${N}x${N}` }]);
+  } catch {
+    if (token !== iconToken) return;
+    setIcons(pageIcons.length ? pageIcons : [{ href: new URL('/favicon.ico', location.href).href }]);
+  }
+}
+
 /* ---------- plain text, Markdown and HTML books ----------
    These are turned into the same kind of book an EPUB becomes: the document is converted to HTML, split
    into sections at its main headings (and at a size limit), and served from memory, with a contents list
@@ -773,6 +822,7 @@ async function openBook(zip, { sample = false, name = '' } = {}){
     authors: dc('creator'), language: dc('language')[0] || '', uid, info, manifest, byPath, spine, urls: new Map(), sample };
   next.toc = await loadToc(next, spineEl);
   next.hasOverlays = spine.some(s => s.overlay);
+  next.coverId = md ? [...md.getElementsByTagNameNS('*', 'meta')].find(m => m.getAttribute('name') === 'cover')?.getAttribute('content') || '' : '';
   next.key = 'spine:pos:' + (uid || next.title);
   await startBook(next);
 }
@@ -781,7 +831,7 @@ async function startBook(next){
   if (book) book.src.dispose();
   book = next;
   const spine = book.spine;
-  renderMeta(); renderToc();
+  renderMeta(); renderToc(); setBookIcon();
   if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
   else hideNotice();
 

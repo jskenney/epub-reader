@@ -150,6 +150,9 @@ This needs a real web server (for example `npx vite` or
   it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Atkinson
   Hyperlegible, Georgia or your system sans-serif. Code keeps its monospace.
   Add more in the `FONTS` list in `index.html`.
+- The browser tab shows the book's cover as its icon (EPUB 3 `cover-image`,
+  EPUB 2 `<meta name="cover">`, an image named "cover", or the first image on
+  a cover page), and the site's favicon for books without one.
 - Light/dark toggle in the top bar (or press T). Until you pick one, it
   follows your system setting.
 - Remembers your position, text size, line spacing, font and theme
