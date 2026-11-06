@@ -2,7 +2,7 @@
 /kokoro/
 /pocket/
 
-# Server voice clips (non-commercial model output; see epub-reader-tts-server)
+# Server voice clips from older setups (they now live on the TTS server; see epub-reader-tts-server)
 /tts-voices/
 
 # Interrupted or in-progress downloads
