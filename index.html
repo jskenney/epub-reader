@@ -1784,7 +1784,7 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
   if (!speak) return;
   const neural = neuralEngine();
   if (neural) {
-    if (neural.ready()) { nSpeak(c, ci, pos, token); return; }
+    if (neural.ready()) { nSpeak(c, ci, pos, token, { jump: !keepFollow }); return; }
     tts.playing = false; neural.st.wantPlay = true; ttsUpdateBar(); return;   // the bar offers the download
   }
   if (!synth) { tts.playing = false; ttsUpdateBar(); showNotice("This browser doesn't have speech voices; choose Publisher narration instead.", 'error'); return; }
@@ -2021,11 +2021,13 @@ function ttsClickStart(e){
 }
 async function ttsTogglePlay(){
   if (!tts.open) return;
-  if (tts.playing && n.active && !tts.mo) {        // natural voices: pause the clip so resuming is instant
-    tts.playing = false; n.paused = true; nAudio.pause(); ttsUpdateBar(); return;
+  if (tts.playing && n.active && !tts.mo) {        // natural voices: pause so resuming is instant
+    tts.playing = false; nPause(); ttsUpdateBar(); return;
   }
   if (!tts.playing && n.paused && n.active && n.token === tts.token && tts.doc === frame.contentDocument) {
-    tts.playing = true; n.paused = false; await nAudio.play(); nLoop(tts.token); ttsUpdateBar(); return;
+    tts.playing = true; await nResume(); nLoop(tts.token); ttsUpdateBar();
+    if (n.mode === 'stream' && n.play?.done && n.ctx.currentTime >= n.play.end - 0.02) ttsGo(n.span.cj + 1, null, { keepFollow: true });
+    return;
   }
   if (tts.playing) {
     tts.playing = false; ++tts.token; synth?.cancel(); nStop(); moAudio.pause(); hl('tts-word');
@@ -2053,7 +2055,9 @@ function ttsSetRate(r){
   $('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
   store.set('spine:ttsRate', tts.rate);
   moAudio.playbackRate = tts.rate;                       // narration: instant, pitch preserved
-  if (neuralEngine()?.playbackSpeed) { nAudio.playbackRate = tts.rate; return; }   // Pocket TTS / server: instant too
+  // Pocket TTS / server: instant for a whole clip; a streamed passage restarts at the current word (streaming
+  // plays at normal speed only).
+  if (neuralEngine()?.playbackSpeed && !(n.active && n.mode === 'stream')) { nAudio.playbackRate = tts.rate; return; }
   // Web Speech can't change rate mid-sentence and Kokoro bakes speed into the audio: restart at the current word
   if (tts.playing && !tts.mo) ttsGo(tts.ci, tts.pos);
 }
@@ -2338,11 +2342,20 @@ function kSpeedCheck(ratio, ne){
   }
 }
 // Kokoro: generate one piece of text at the current voice and speed (serialized in its worker).
-function kGenerate(text){
-  const id = k.nextId++;
-  const job = new Promise((res, rej) => k.pending.set(id, { res, rej }));
-  k.worker.postMessage({ type: 'generate', id, text, voice: k.voice, speed: tts.rate });
-  return job.then(m => ({ data: m.data, rate: m.rate, genSec: m.ms / 1000 }));
+// A request that was overtaken by a jump: not an error, nothing to report.
+const staleError = () => Object.assign(new Error('superseded'), { stale: true });
+// Kokoro: one request at a time, queued here so work for passages nobody needs any more is skipped.
+// (A generation already running in the worker can't be interrupted.)
+function kGenerate(text, opts = {}){
+  const run = async () => {
+    if (opts.signal?.aborted) throw staleError();
+    const id = k.nextId++;
+    const m = await new Promise((res, rej) => { k.pending.set(id, { res, rej }); k.worker.postMessage({ type: 'generate', id, text, voice: k.voice, speed: tts.rate }); });
+    return { data: m.data, rate: m.rate, genSec: m.ms / 1000 };
+  };
+  const job = (k.queue || Promise.resolve()).then(run, run);
+  k.queue = job.catch(() => {});
+  return job;
 }
 
 /* ---------- Pocket TTS ----------
@@ -2372,7 +2385,7 @@ function pkWorker(lib){
   w.onmessage = ({ data: m }) => {
     if (m.type === 'progress') { if (m.label && m.total) pk.files[m.label] = { loaded: m.loaded || 0, total: m.total }; pkProgress(); }
     else if (m.type === 'ready') pk.bundle = m.bundle;
-    else if (m.type === 'chunk') pk.collect?.push(m.audio);
+    else if (m.type === 'chunk' && pk.collect) { pk.collect.push(m.audio); pk.onChunk?.(m.audio, pk.bundle?.sampleRate || 24000); }
     else if (m.type === 'result' || m.type === 'error') {
       const job = pk.pending.get(m.id); pk.pending.delete(m.id);
       if (m.type === 'result') job?.res(m.result); else job?.rej(new Error(m.error));
@@ -2413,14 +2426,18 @@ async function pkLoad(){
   ttsFillVoices(); nLoaded(pk);
 }
 // Pocket TTS: generate one piece of text with the chosen built-in voice (one request at a time).
-function pkGenerate(text){
+function pkGenerate(text, opts = {}){
   const run = async () => {
+    if (opts.signal?.aborted) throw staleError();
     const v = pkVoice();
     if (!pk.refs.has(v)) pk.refs.set(v, (await pkRequest('loadBuiltinVoice', { name: v })).ref);
-    pk.collect = [];
+    pk.collect = []; pk.onChunk = opts.onChunk || null;
+    const stop = () => pkRequest('stop', {}).catch(() => {});   // overtaken by a jump: stop generating
+    opts.signal?.addEventListener('abort', stop);
     const t0 = performance.now();
     try { await pkRequest('generate', { text, voiceRef: pk.refs.get(v) }); }
-    finally { var parts = pk.collect; pk.collect = null; }
+    finally { var parts = pk.collect; pk.collect = null; pk.onChunk = null; opts.signal?.removeEventListener('abort', stop); }
+    if (opts.signal?.aborted) throw staleError();
     const data = new Float32Array(parts.reduce((a, p) => a + p.length, 0));
     let at = 0; for (const p of parts) { data.set(p, at); at += p.length; }
     return { data, rate: pk.bundle.sampleRate, genSec: (performance.now() - t0) / 1000 };
@@ -2501,8 +2518,9 @@ async function svRef(v){
   }));
   return sv.refs.get(v.ref_audio).catch(e => { sv.refs.delete(v.ref_audio); throw e; });
 }
-function svGenerate(text){
+function svGenerate(text, opts = {}){
   const run = async () => {
+    if (opts.signal?.aborted) throw staleError();
     const v = svVoice();
     const form = new FormData();
     form.append('text', svText(text));
@@ -2513,26 +2531,47 @@ function svGenerate(text){
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now();
       let r;
-      try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form }); }
-      catch { svLost(); throw new Error('the voice server isn\'t responding'); }
+      try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form, signal: opts.signal }); }
+      catch (e) { if (opts.signal?.aborted) throw staleError(); svLost(); throw new Error('the voice server isn\'t responding'); }
       // Gateway errors or an HTML page instead of audio: the server behind the proxy is gone.
       if ([502, 503, 504].includes(r.status) || (r.ok && /html/i.test(r.headers.get('content-type') || ''))) {
         svLost(); throw new Error('the voice server isn\'t responding');
       }
-      if (r.status === 409 && attempt < 40) { await new Promise(res => setTimeout(res, 1500)); continue; }   // busy with another request
+      // Busy with another request, often one just cancelled that the server hasn't let go of yet: retry
+      // soon, then less often.
+      if (r.status === 409 && attempt < 40) { await new Promise(res => setTimeout(res, Math.min(1500, 150 * 2 ** attempt))); if (opts.signal?.aborted) throw staleError(); continue; }
       if (!r.ok) {
         let detail = ''; try { detail = (await r.json()).detail; } catch {}
         throw new Error(`the voice server answered ${r.status}${detail ? ': ' + detail : ''}`);
       }
       const rate = Number(r.headers.get('X-Sample-Rate')) || 24000;
-      const bytes = await r.arrayBuffer();
+      // Read the audio as it streams in (16-bit samples, which can be split across network chunks).
+      const parts = [];
+      let carry = null, total = 0;
+      try {
+        const reader = r.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          let bytes = value;
+          if (carry) { bytes = new Uint8Array(carry.length + value.length); bytes.set(carry); bytes.set(value, carry.length); }
+          const even = bytes.length & ~1;
+          carry = even < bytes.length ? bytes.slice(even) : null;
+          if (!even) continue;
+          const pcm = new Int16Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + even));
+          const f = new Float32Array(pcm.length);
+          for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 32768;
+          parts.push(f); total += f.length;
+          opts.onChunk?.(f, rate);
+        }
+      } catch (e) { if (opts.signal?.aborted) throw staleError(); throw new Error('the voice server stopped partway through'); }
       // The audio streams without a length, so a server error partway through can look like a short,
       // complete answer. Speech is never faster than about 4 words a second: much less audio than the
       // text needs means the stream was cut off.
       const words = text.split(/\s+/).filter(Boolean).length;
-      if (bytes.byteLength / 2 / rate < words * 0.12) throw new Error('the voice server stopped partway through');
-      const pcm = new Int16Array(bytes, 0, bytes.byteLength >> 1), data = new Float32Array(pcm.length);
-      for (let i = 0; i < pcm.length; i++) data[i] = pcm[i] / 32768;
+      if (total / rate < words * 0.12) throw new Error('the voice server stopped partway through');
+      const data = new Float32Array(total);
+      let at = 0; for (const f of parts) { data.set(f, at); at += f.length; }
       return { data, rate, genSec: (performance.now() - t0) / 1000 };
     }
   };
@@ -2550,10 +2589,10 @@ const NEURAL = {
   kokoro: { name: 'Natural voice', st: k, ready: () => k.state === 'ready', load: () => kLoad(), size: () => FULL_PRECISION || k.gpu ? '~330 MB' : '~92 MB',
     agreed: () => !!store.get(`spine:agreed:kokoro:${FULL_PRECISION ? 'fp32' : 'q8'}`),
     generate: kGenerate, key: () => `kokoro|${k.voice}|${tts.rate}` },
-  pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`, playbackSpeed: true,
+  pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`, playbackSpeed: true, stream: true,
     agreed: () => !!store.get(`spine:agreed:pocket:${pocketLang()}:${FULL_PRECISION ? 'fp32' : 'int8'}`),
     generate: pkGenerate, key: () => `pocket|${pk.lang}|${pkVoice()}` },
-  server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, agreed: () => true,
+  server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
     generate: svGenerate, key: () => `server|${svVoice()?.id}` }
 };
 function neuralEngine(){
@@ -2570,7 +2609,7 @@ function nLoaded(st){
 }
 const nAudio = new Audio();
 nAudio.preservesPitch = true;
-const n = { cache: new Map(), failed: new Set(), active: false, paused: false, token: 0, raf: 0 };
+const n = { cache: new Map(), failed: new Set(), active: false, paused: false, token: 0, raf: 0, mode: 'clip', secPerWeight: 0.065, ctx: null };
 function wavUrl(data, rate){
   const buf = new ArrayBuffer(44 + data.length * 2), v = new DataView(buf);
   const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
@@ -2580,21 +2619,48 @@ function wavUrl(data, rate){
   for (let i = 0; i < data.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, data[i])) * 0x7fff, true);
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
+// How long text takes to say, in "weights": characters, plus the pauses speakers make at punctuation.
+function textWeights(text){
+  const cum = new Float32Array(text.length + 1);
+  for (let i = 0; i < text.length; i++) cum[i + 1] = cum[i] + 1 + (/[.!?…]/.test(text[i]) ? 10 : /[,;:—–]/.test(text[i]) ? 4 : 0);
+  return cum;
+}
+/* A generation: kept in the cache by voice and text. It records its audio as it arrives (for engines that
+   stream), so playback can start before it finishes; listeners hear about new audio, the end, or failure;
+   and an unfinished one can be cancelled when a jump makes it unnecessary. */
 function nSynth(ne, text){
   const key = `${ne.key()}|${text}`;
-  if (n.cache.has(key)) { const v = n.cache.get(key); n.cache.delete(key); n.cache.set(key, v); return v; }
-  const job = ne.generate(text).then(r => {
+  let e = n.cache.get(key);
+  if (e) { n.cache.delete(key); n.cache.set(key, e); return e; }
+  const ctl = new AbortController();
+  e = { key, text, chunks: [], rate: 24000, done: false, listeners: new Set(), url: null, dur: 0, cancel: () => ctl.abort() };
+  e.job = ne.generate(text, {
+    signal: ctl.signal,
+    onChunk: (data, rate) => { e.rate = rate; e.chunks.push(data); for (const l of e.listeners) l.chunk?.(data, rate); }
+  }).then(r => {
     const dur = r.data.length / r.rate;
     kSpeedCheck(r.genSec / dur, ne);
-    return { url: wavUrl(r.data, r.rate), dur };
+    n.secPerWeight = n.secPerWeight * 0.6 + (dur / textWeights(text)[text.length]) * 0.4;   // learn the speaking rate
+    Object.assign(e, { done: true, url: wavUrl(r.data, r.rate), dur, rate: r.rate, chunks: null });
+    for (const l of e.listeners) l.done?.();
+    return e;
   });
-  job.catch(() => { n.cache.delete(key); n.failed.add(key); });   // don't ask for a failed passage again
-  n.cache.set(key, job);
+  e.job.catch(err => {
+    n.cache.delete(key);
+    if (!err?.stale) n.failed.add(key);   // don't ask for a failed passage again
+    for (const l of e.listeners) l.fail?.(err);
+  });
+  n.cache.set(key, e);
   while (n.cache.size > 40) {
     const [oldKey, old] = n.cache.entries().next().value;
-    n.cache.delete(oldKey); old.then(c => URL.revokeObjectURL(c.url), () => {});
+    n.cache.delete(oldKey); if (!old.done) old.cancel(); else URL.revokeObjectURL(old.url);
   }
-  return job;
+  return e;
+}
+// A jump (click, skip, new voice or speed) makes unfinished work for other passages useless: cancel it so
+// the passage now needed goes first.
+function nCancelStale(keepKey){
+  for (const [key, e] of [...n.cache]) if (!e.done && key !== keepKey) { e.cancel(); n.cache.delete(key); }
 }
 // Natural voices read whole paragraphs where possible (better phrasing than sentence by sentence):
 // a span runs from (ci, pos) through the following sentences of the same block, up to a length the
@@ -2606,67 +2672,128 @@ function nSpan(ne, ci, pos, single = false){
   while (!single && chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
   return { ci, cj, pos, b: c.b, e: chunks[cj].e, ...speakable(c.b.text.slice(pos, chunks[cj].e)) };
 }
-async function nSpeak(c, ci, pos, token, single = false){
-  const ne = neuralEngine();
-  let span = nSpan(ne, ci, pos, single);
-  if (span.cj > span.ci && n.failed.has(`${ne.key()}|${span.out}`)) span = nSpan(ne, ci, pos, true);   // failed before: sentence by sentence
-  const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
-  let clip;
-  try { clip = await nSynth(ne, span.out); }
-  catch (e) {
-    if (token !== tts.token) return;
-    // A paragraph can fail where a sentence would not (for example a prompt longer than the server
-    // prepared for): retry this paragraph one sentence at a time before giving up.
-    if (ne === NEURAL.server && !sv.available) return;   // server gone: svLost() already stopped and explained
-    if (span.cj > span.ci) { clearTimeout(slow); return nSpeak(c, ci, pos, token, true); }
-    tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this passage: ${e.message}`, 'error');
-    return;
-  } finally { clearTimeout(slow); }
-  if (token !== tts.token || !tts.playing) return;
-  ttsUpdateBar();
-  // Prepare the next two spans while this one plays.
+function nPrefetch(ne, span){
   const chunks = ttsChunks();
   let next = span.cj + 1;
   for (let i = 0; i < 2 && chunks[next]; i++) {
     let nx = nSpan(ne, next, chunks[next].s);
     if (nx.cj > nx.ci && n.failed.has(`${ne.key()}|${nx.out}`)) nx = nSpan(ne, next, chunks[next].s, true);
-    nSynth(ne, nx.out).catch(() => {}); next = nx.cj + 1;
+    nSynth(ne, nx.out); next = nx.cj + 1;
   }
-  Object.assign(n, { active: true, paused: false, token, span, dur: clip.dur });
+}
+async function nSpeak(c, ci, pos, token, { single = false, jump = false } = {}){
+  const ne = neuralEngine();
+  let span;
+  if (jump) {
+    // Start quickly: just the current sentence, unless the whole paragraph is already made or being made.
+    const full = nSpan(ne, ci, pos);
+    span = n.cache.has(`${ne.key()}|${full.out}`) ? full : nSpan(ne, ci, pos, true);
+    nCancelStale(`${ne.key()}|${span.out}`);
+  } else {
+    span = nSpan(ne, ci, pos, single);
+    if (span.cj > span.ci && n.failed.has(`${ne.key()}|${span.out}`)) span = nSpan(ne, ci, pos, true);   // failed before: sentence by sentence
+  }
+  const e = nSynth(ne, span.out);
+  nPrefetch(ne, span);   // queued behind this passage
+  const fail = err => {
+    if (token !== tts.token || err?.stale) return;
+    if (ne === NEURAL.server && !sv.available) return;   // server gone: svLost() already stopped and explained
+    // A paragraph can fail where a sentence would not (for example a prompt longer than the server
+    // prepared for): retry this paragraph one sentence at a time before giving up.
+    if (span.cj > span.ci) { nStop(); return nSpeak(c, ci, pos, token, { single: true }); }
+    nStop(); tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this passage: ${e?.message || err.message}`, 'error');
+  };
+  // Engines that stream play as the audio arrives (Web Audio), at normal speed. Other speeds need the
+  // <audio> element's pitch-preserving playback, which needs the whole clip.
+  if (ne.stream && tts.rate === 1 && !e.done && await nStream(e, span, token, fail)) return;
+  const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
+  try { await e.job; } catch (err) { clearTimeout(slow); return fail(err); }
+  clearTimeout(slow);
+  if (token !== tts.token || !tts.playing) return;
+  ttsUpdateBar();
+  Object.assign(n, { active: true, paused: false, token, span, mode: 'clip', dur: e.dur });
   nAudio.onended = () => { n.active = false; if (token === tts.token && tts.playing) ttsGo(span.cj + 1, null, { keepFollow: true }); };
-  nAudio.src = clip.url;
+  nAudio.src = e.url;
   nAudio.playbackRate = ne.playbackSpeed ? tts.rate : 1;
   try { await nAudio.play(); }
-  catch (e) {
-    if (token === tts.token) { tts.playing = false; n.active = false; ttsUpdateBar(); showNotice(`The voice couldn't play: ${e.message}`, 'error'); }
+  catch (err) {
+    if (token === tts.token) { tts.playing = false; n.active = false; ttsUpdateBar(); showNotice(`The voice couldn't play: ${err.message}`, 'error'); }
     return;
   }
   nLoop(token);
 }
+function nCtx(){ return n.ctx ??= new AudioContext(); }
+// Play a passage while it is still being generated: schedule each piece of audio right after the last.
+// Returns false when the passage finished generating meanwhile, so the caller plays the finished clip.
+async function nStream(e, span, token, fail){
+  const ctx = nCtx();
+  if (ctx.state === 'suspended') await ctx.resume();
+  if (token !== tts.token || !tts.playing) return true;
+  if (e.done) return false;
+  const play = { pieces: [], end: 0, done: false, total: 0 };
+  const finish = () => {
+    if (token !== tts.token || !tts.playing || n.paused) return;
+    if (play.done && ctx.currentTime >= play.end - 0.02) { n.active = false; nUnlisten(); ttsGo(span.cj + 1, null, { keepFollow: true }); }
+  };
+  const schedule = (data, rate) => {
+    if (token !== tts.token) return;
+    const buf = ctx.createBuffer(1, data.length, rate); buf.copyToChannel(data, 0);
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+    const at = Math.max(play.end, ctx.currentTime + 0.03);
+    src.start(at); src.onended = finish;
+    play.pieces.push({ src, at, dur: buf.duration }); play.end = at + buf.duration; play.total += buf.duration;
+    if (play.pieces.length === 1) ttsUpdateBar();
+  };
+  const listener = {
+    chunk: schedule,
+    done: () => { play.done = true; finish(); },
+    fail: err => { nUnlisten(); fail(err); }
+  };
+  const nUnlisten = () => e.listeners.delete(listener);
+  Object.assign(n, { active: true, paused: false, token, span, mode: 'stream', play, unlisten: nUnlisten });
+  for (const d of e.chunks) schedule(d, e.rate);
+  e.listeners.add(listener);
+  if (!play.pieces.length) setTimeout(() => { if (token === tts.token && n.play === play && !play.pieces.length) ttsUpdateBar('Preparing voice…'); }, 300);
+  nLoop(token);
+  return true;
+}
+// Where playback is in the passage, in seconds, and how long the passage is (estimated while streaming).
+function nProgress(){
+  if (n.mode === 'stream') {
+    const now = n.ctx.currentTime, p = n.play;
+    const played = p.pieces.reduce((t, x) => t + Math.min(Math.max(0, now - x.at), x.dur), 0);
+    const estimate = n.weights[n.span.out.length] * n.secPerWeight;
+    return { played, total: p.done ? p.total : Math.max(estimate, played + 0.25) };
+  }
+  return { played: nAudio.currentTime, total: isFinite(nAudio.duration) ? nAudio.duration : n.dur };
+}
+function nPause(){ n.paused = true; if (n.mode === 'stream') n.ctx.suspend(); else nAudio.pause(); }
+async function nResume(){ n.paused = false; if (n.mode === 'stream') { await n.ctx.resume(); } else await nAudio.play(); }
 // Estimate the spoken position from playback time. Characters are weighted, with extra weight after
 // punctuation where speakers pause, and the estimate moves both the sentence and the word highlight.
 function nLoop(token){
   cancelAnimationFrame(n.raf);
   const { span } = n, text = span.out, chunks = ttsChunks();
-  const cum = new Float32Array(text.length + 1);
-  for (let i = 0; i < text.length; i++) cum[i + 1] = cum[i] + 1 + (/[.!?…]/.test(text[i]) ? 10 : /[,;:—–]/.test(text[i]) ? 4 : 0);
+  const cum = n.weights = textWeights(text);
   const words = [...text.matchAll(/[\p{L}\p{N}'’\-]+/gu)];
   let lastWord = -1, lastSentence = -1;
   const step = () => {
     if (token !== tts.token || !tts.playing || !n.active) return;
-    const dur = isFinite(nAudio.duration) ? nAudio.duration : n.dur;
-    const target = Math.min(1, nAudio.currentTime / dur) * cum[text.length];
-    let lo = 0, hi = text.length;
-    while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid + 1] <= target) lo = mid + 1; else hi = mid; }
-    let w = words.findIndex(m => m.index + m[0].length > lo); if (w < 0) w = words.length - 1;
-    if (w !== lastWord && words[w]) {
-      lastWord = w;
-      const m = words[w], a = span.pos + span.map[m.index], z = span.pos + span.map[m.index + m[0].length - 1] + 1;
-      let si = span.ci; while (si < span.cj && a >= chunks[si].e) si++;
-      tts.pos = a; tts.ci = si;
-      if (si !== lastSentence) { lastSentence = si; hl('tts-sentence', rangeFor(span.b, Math.max(span.pos, chunks[si].s), chunks[si].e)); }
-      const r = rangeFor(span.b, a, z);
-      hl('tts-word', r); follow(r);
+    const { played, total } = nProgress();
+    if (total > 0 && played > 0) {
+      const target = Math.min(1, played / total) * cum[text.length];
+      let lo = 0, hi = text.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid + 1] <= target) lo = mid + 1; else hi = mid; }
+      let w = words.findIndex(m => m.index + m[0].length > lo); if (w < 0) w = words.length - 1;
+      if (w !== lastWord && words[w]) {
+        lastWord = w;
+        const m = words[w], a = span.pos + span.map[m.index], z = span.pos + span.map[m.index + m[0].length - 1] + 1;
+        let si = span.ci; while (si < span.cj && a >= chunks[si].e) si++;
+        tts.pos = a; tts.ci = si;
+        if (si !== lastSentence) { lastSentence = si; hl('tts-sentence', rangeFor(span.b, Math.max(span.pos, chunks[si].s), chunks[si].e)); }
+        const r = rangeFor(span.b, a, z);
+        hl('tts-word', r); follow(r);
+      }
     }
     n.raf = requestAnimationFrame(step);
   };
@@ -2675,6 +2802,11 @@ function nLoop(token){
 function nStop(){
   cancelAnimationFrame(n.raf);
   nAudio.onended = null; nAudio.pause();
+  if (n.mode === 'stream' && n.play) {
+    for (const x of n.play.pieces) { x.src.onended = null; try { x.src.stop(); } catch {} }
+    n.unlisten?.(); n.play = null;
+    if (n.ctx?.state === 'suspended') n.ctx.resume();
+  }
   n.active = false; n.paused = false;
 }
 
