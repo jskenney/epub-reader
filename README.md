@@ -3,13 +3,14 @@
 A browser-based EPUB reader.
 
 Everything is in one file, `index.html`. Open it, then
-click **Open EPUB** or drop an `.epub` file onto the page. It opens on a
+click the folder button (Open a book) at the right of the top bar, or drop a
+file onto the page. It opens on a
 built-in sample book.
 
 ## Other formats
 
 Besides EPUB, the reader opens **plain text** (`.txt`), **Markdown** (`.md`,
-`.markdown`) and **HTML** (`.html`, `.htm`) files, by Open book, drag and
+`.markdown`) and **HTML** (`.html`, `.htm`) files, by the folder button, drag and
 drop, or a `?book=` link. Each is converted to HTML and given a contents
 list built from its headings. It reads as one continuous document (split
 only past about 200,000 characters), and the contents entries jump within
