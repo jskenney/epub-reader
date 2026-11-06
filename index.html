@@ -2089,6 +2089,11 @@ function svGenerate(text){
       }
       const rate = Number(r.headers.get('X-Sample-Rate')) || 24000;
       const bytes = await r.arrayBuffer();
+      // The audio streams without a length, so a server error partway through can look like a short,
+      // complete answer. Speech is never faster than about 4 words a second: much less audio than the
+      // text needs means the stream was cut off.
+      const words = text.split(/\s+/).filter(Boolean).length;
+      if (bytes.byteLength / 2 / rate < words * 0.12) throw new Error('the voice server stopped partway through');
       const pcm = new Int16Array(bytes, 0, bytes.byteLength >> 1), data = new Float32Array(pcm.length);
       for (let i = 0; i < pcm.length; i++) data[i] = pcm[i] / 32768;
       return { data, rate, genSec: (performance.now() - t0) / 1000 };
@@ -2126,7 +2131,7 @@ function nLoaded(st){
 }
 const nAudio = new Audio();
 nAudio.preservesPitch = true;
-const n = { cache: new Map(), active: false, paused: false, token: 0, raf: 0 };
+const n = { cache: new Map(), failed: new Set(), active: false, paused: false, token: 0, raf: 0 };
 function wavUrl(data, rate){
   const buf = new ArrayBuffer(44 + data.length * 2), v = new DataView(buf);
   const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
@@ -2144,7 +2149,7 @@ function nSynth(ne, text){
     kSpeedCheck(r.genSec / dur, ne);
     return { url: wavUrl(r.data, r.rate), dur };
   });
-  job.catch(() => n.cache.delete(key));
+  job.catch(() => { n.cache.delete(key); n.failed.add(key); });   // don't ask for a failed passage again
   n.cache.set(key, job);
   while (n.cache.size > 40) {
     const [oldKey, old] = n.cache.entries().next().value;
@@ -2156,20 +2161,25 @@ function nSynth(ne, text){
 // a span runs from (ci, pos) through the following sentences of the same block, up to a length the
 // model handles in one go. Sentences stay the unit for highlighting, skipping and resuming.
 const SPAN_MAX = { kokoro: 350, pocket: 600, server: 600 };
-function nSpan(ne, ci, pos){
+function nSpan(ne, ci, pos, single = false){
   const chunks = ttsChunks(), c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket : SPAN_MAX.server;
   let cj = ci;
-  while (chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
+  while (!single && chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
   return { ci, cj, pos, b: c.b, e: chunks[cj].e, ...speakable(c.b.text.slice(pos, chunks[cj].e)) };
 }
-async function nSpeak(c, ci, pos, token){
+async function nSpeak(c, ci, pos, token, single = false){
   const ne = neuralEngine();
-  const span = nSpan(ne, ci, pos);
+  let span = nSpan(ne, ci, pos, single);
+  if (span.cj > span.ci && n.failed.has(`${ne.key()}|${span.out}`)) span = nSpan(ne, ci, pos, true);   // failed before: sentence by sentence
   const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
   let clip;
   try { clip = await nSynth(ne, span.out); }
   catch (e) {
-    if (token === tts.token) { tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this passage: ${e.message}`, 'error'); }
+    if (token !== tts.token) return;
+    // A paragraph can fail where a sentence would not (for example a prompt longer than the server
+    // prepared for): retry this paragraph one sentence at a time before giving up.
+    if (span.cj > span.ci) { clearTimeout(slow); return nSpeak(c, ci, pos, token, true); }
+    tts.playing = false; ttsUpdateBar(); showNotice(`${ne.name} couldn't read this passage: ${e.message}`, 'error');
     return;
   } finally { clearTimeout(slow); }
   if (token !== tts.token || !tts.playing) return;
@@ -2177,7 +2187,11 @@ async function nSpeak(c, ci, pos, token){
   // Prepare the next two spans while this one plays.
   const chunks = ttsChunks();
   let next = span.cj + 1;
-  for (let i = 0; i < 2 && chunks[next]; i++) { const nx = nSpan(ne, next, chunks[next].s); nSynth(ne, nx.out).catch(() => {}); next = nx.cj + 1; }
+  for (let i = 0; i < 2 && chunks[next]; i++) {
+    let nx = nSpan(ne, next, chunks[next].s);
+    if (nx.cj > nx.ci && n.failed.has(`${ne.key()}|${nx.out}`)) nx = nSpan(ne, next, chunks[next].s, true);
+    nSynth(ne, nx.out).catch(() => {}); next = nx.cj + 1;
+  }
   Object.assign(n, { active: true, paused: false, token, span, dur: clip.dur });
   nAudio.onended = () => { n.active = false; if (token === tts.token && tts.playing) ttsGo(span.cj + 1, null, { keepFollow: true }); };
   nAudio.src = clip.url;
