@@ -200,7 +200,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 <body>
 <div class="app">
   <header class="bar">
-    <button class="btn ghost" id="tocBtn" aria-controls="toc" aria-expanded="true" title="Show or hide contents (C)">
+    <button class="btn ghost" id="tocBtn" aria-controls="toc" aria-expanded="true" title="Show or hide contents (C); I shows the book information">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
       <span class="hide-sm">Contents</span>
     </button>
@@ -288,7 +288,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <h2 class="label" id="tocHead">Contents</h2>
         <div id="tocList"></div>
       </nav>
-      <section aria-labelledby="infoHead">
+      <section aria-labelledby="infoHead" id="infoSection" hidden>
         <h2 class="label" id="infoHead">Information</h2>
         <dl class="pkg" id="infoList"></dl>
       </section>
@@ -1399,6 +1399,7 @@ function onKey(e){
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setTheme(isDark() ? 'light' : 'dark'); }
   else if ((e.key === 'c' || e.key === 'C') && !isFs()) { e.preventDefault(); setToc(!tocIsOpen()); }
+  else if ((e.key === 'i' || e.key === 'I') && !isFs()) { e.preventDefault(); toggleInfo(); }
   else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]); }
   else if (scrolling() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {   // scroll a little, like a normal page
     e.preventDefault(); ttsUserNav(); const se = scroller(); if (se) scrollTo(se.scrollTop + (e.key === 'ArrowDown' ? 60 : -60));
@@ -1570,6 +1571,12 @@ function setToc(open){
   if (narrow.matches) { t.classList.toggle('open', open); t.classList.remove('collapsed'); }
   else { t.classList.toggle('collapsed', !open); t.classList.remove('open'); }
   $('#tocBtn').setAttribute('aria-expanded', String(open));
+}
+// The book's information (publisher, language, format…) sits below the contents, hidden until I shows it.
+function toggleInfo(){
+  const sec = $('#infoSection'), show = sec.hidden || !tocIsOpen();
+  sec.hidden = !show;
+  if (show) { if (!tocIsOpen()) setToc(true); sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
 }
 const tocIsOpen = () => narrow.matches ? $('#toc').classList.contains('open') : !$('#toc').classList.contains('collapsed');
 $('#tocBtn').addEventListener('click', () => setToc(!tocIsOpen()));

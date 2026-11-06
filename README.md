@@ -172,6 +172,8 @@ This needs a real web server (for example `npx vite` or
   The natural voices use full-precision models by default; set
   `FULL_PRECISION = false` in `index.html` for the smaller 8-bit models.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
+- Press I to show or hide the book's information (publisher, language,
+  format, file…) below the contents; it is hidden when the page opens
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
   Exit button that appears when you move the mouse brings them back.
