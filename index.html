@@ -590,9 +590,9 @@ async function markdownToHtml(md){
 
 // Split a document's body into sections at its main headings (h1, and h2 when there are several), then
 // at a size limit, and build the contents list from h1-h3.
-// Text and HTML documents are split at their chapter headings; Markdown notes and READMEs read as one
-// continuous page (their headings are usually sections, not chapters), split only when very long.
-function splitDocument(doc, { headings = true, maxLen = 40000 } = {}){
+// Text, Markdown and HTML documents read as one continuous page (headings become contents entries that
+// jump within it), split only when very long. headings: true would split at the main headings instead.
+function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   let root = doc.body;
   while (root.children.length === 1 && /^(div|main|article|section)$/i.test(root.firstElementChild.localName)
          && ![...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) root = root.firstElementChild;
@@ -636,7 +636,7 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
   const language = langCode(meta.language);
   const title = meta.title || doc.querySelector('h1, h2')?.textContent.replace(/\s+/g, ' ').trim() || name.replace(DOC_EXT, '') || 'Untitled';
 
-  const parts = splitDocument(doc, kind === 'markdown' ? { headings: false, maxLen: 200000 } : {});
+  const parts = splitDocument(doc);
   const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
   // Give headings ids for the contents (GitHub-style, so Markdown links like [x](#some-heading) work), and
   // send in-document links to the section holding their target.

@@ -11,10 +11,9 @@ built-in sample book.
 Besides EPUB, the reader opens **plain text** (`.txt`), **Markdown** (`.md`,
 `.markdown`) and **HTML** (`.html`, `.htm`) files, by Open book, drag and
 drop, or a `?book=` link. Each is converted to HTML and given a contents
-list built from its headings. Text and HTML files are split into sections
-at their main headings (and at about 40,000 characters); Markdown reads as
-one continuous document (split only past about 200,000 characters), and its
-contents entries jump within it; everything else (pages, fonts, read-aloud,
+list built from its headings. It reads as one continuous document (split
+only past about 200,000 characters), and the contents entries jump within
+it; everything else (pages, fonts, read-aloud,
 saved position) works as for EPUBs.
 
 - **Plain text:** hard-wrapped lines are joined into paragraphs, while
