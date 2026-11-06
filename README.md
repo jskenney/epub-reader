@@ -138,6 +138,11 @@ This needs a real web server (for example `npx vite` or
   better than sentence by sentence; the sentence and word highlights move
   through the paragraph as it plays. Device voices are listed with the
   vendors' higher tiers (Natural, Neural, Premium, Enhanced, Online) first.
+  When you start reading or jump to a new spot, the first piece is a single
+  sentence so speech begins quickly, and work for the old position is
+  cancelled. The server voice and Pocket TTS play audio as it arrives at
+  1x speed; at other speeds the whole piece is made first so the pitch
+  stays natural.
   The natural voices use full-precision models by default; set
   `FULL_PRECISION = false` in `index.html` for the smaller 8-bit models.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
