@@ -61,10 +61,18 @@ This needs a real web server (for example `npx vite` or
 - Handles EPUB 3 contents pages (`nav.xhtml`) and EPUB 2 `toc.ncx`
 - Shows chapters in a sandboxed iframe, with the book's images, CSS and fonts
   loaded from inside the archive. The book's scripts are removed.
-- Paged, not scrolled: text flows into two columns per screen (one on narrow
-  screens), and images are scaled to fit the page height. Next / Previous,
-  the arrow keys, PageUp / PageDown, the mouse wheel or a swipe turn the page.
-  Next on a chapter's last page opens the next chapter.
+- Three layouts, switched with the layout button or L and remembered:
+  - **Two columns** (the default): text flows into two columns per page (one
+    on narrow screens). Next / Previous, the arrow keys, PageUp / PageDown,
+    the mouse wheel or a swipe turn the page; Next on a chapter's last page
+    opens the next chapter.
+  - **One column**: one column per page, kept to a comfortable line length.
+  - **Scrolling**: the chapter is one continuous column that scrolls
+    normally. Next / Previous and PageUp / PageDown move a screen at a time
+    and continue into the next or previous chapter at the ends.
+  Images are scaled to fit the page. Switching layouts keeps your place.
+  When reading aloud in scrolling mode, the page scrolls to keep the spoken
+  text in view; scrolling away yourself shows "Back to reading".
 - Information panel in the sidebar: publisher, publication date, ISBN,
   series and number (EPUB 3 collections or Calibre metadata), subjects,
   language, fixed or reflowable layout, reading direction, and package

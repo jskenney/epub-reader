@@ -121,6 +121,10 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .fs-pill .btn{height:30px}
 kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;padding:2px 5px;color:var(--muted)}
 
+/* layout button shows the current layout */
+#layoutBtn svg{display:none}
+#layoutBtn[data-layout="two"] .i-two,#layoutBtn[data-layout="one"] .i-one,#layoutBtn[data-layout="scroll"] .i-scroll{display:block}
+
 /* theme toggle shows the icon of the mode it switches to */
 #themeBtn .i-sun{display:none}
 #themeBtn.dark .i-sun{display:block}
@@ -171,7 +175,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   .bar{flex-wrap:wrap;row-gap:8px}
   .book-id{flex-basis:calc(100% - 60px)}
   .tools{width:100%;justify-content:space-between}
-  .tools .btn.ghost{padding:0 5px}
+  .tools .btn.ghost{padding:0 4px}
+  .tools .btn.primary{padding:0 10px}
 }
 @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 </style>
@@ -200,6 +205,11 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <button class="btn ghost" id="themeBtn" title="Switch to dark mode" aria-label="Switch to dark mode">
         <svg class="i-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.75 5.75 0 0 1 6.4 2.5a5.75 5.75 0 1 0 7.1 7.1Z"/></svg>
         <svg class="i-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+      </button>
+      <button class="btn ghost" id="layoutBtn" title="Layout (L)" aria-label="Layout">
+        <svg class="i-two" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1"/><path d="M8 2.75v10.5M3.75 5.5h2.5M3.75 8h2.5M9.75 5.5h2.5M9.75 8h2.5"/></svg>
+        <svg class="i-one" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3.25" y="2.75" width="9.5" height="10.5" rx="1"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>
+        <svg class="i-scroll" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 1.75v12.5M7 4.5h5M7 7.5h5M7 10.5h3"/><path d="m2.5 11.75 1.5 2.5 1.5-2.5"/></svg>
       </button>
       <button class="btn ghost" id="fsBtn" title="Full screen (F)" aria-label="Full screen">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
@@ -344,6 +354,8 @@ let book = null;
 let cur = { i: 0 };
 let fontPct = Number(store.get('spine:font')) || 100;
 let lineH = Number(store.get('spine:line')) || 1.65;
+const LAYOUTS = { two: 'Two columns', one: 'One column', scroll: 'Scrolling' };
+let layout = LAYOUTS[store.get('spine:layout')] ? store.get('spine:layout') : 'two';
 let renderToken = 0;
 
 /* ---------- paths & parsing ---------- */
@@ -857,15 +869,29 @@ a{color:${t.ribbon}}`;
 /* Paged layout: body is a fixed-size viewport; #spine-clip hides everything outside the text area;
    #spine-flow lays the chapter out in columns that overflow sideways, and a page turn translates it
    by exactly one screen (flow width + one column gap). */
+/* Layouts: "two" (two columns per page, the default), "one" (one column per page, at a readable width)
+   and "scroll" (one continuous column that scrolls). Page layouts move between pages by translating the
+   column flow; the scroll layout lets the page scroll normally. */
 function overrideCss(){
   const t = tokens(), dark = isDark();
-  return `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;overflow:hidden !important}
-body{--v:40px;--vb:${40 + tts.barH}px;--m:max(20px,3.5vw,calc((100vw - 1240px) / 2));--g:max(32px,4vw);
-  margin:0 !important;padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;width:auto !important;max-width:none !important;min-height:0 !important;
-  box-sizing:border-box !important;overflow:hidden !important;background:transparent !important;${dark ? `color:${t.ink} !important;` : ''}}
+  const narrow = 'calc((100vw - 38rem) / 2)';   // side margin that keeps a single column to a readable line length
+  const m = layout === 'two' ? 'max(20px,3.5vw,calc((100vw - 1240px) / 2))' : `max(20px,3.5vw,${narrow})`;
+  const common = `body{--v:40px;--vb:${40 + tts.barH}px;--m:${m};--g:max(32px,4vw);
+  margin:0 !important;width:auto !important;max-width:none !important;min-height:0 !important;box-sizing:border-box !important;
+  background:transparent !important;${dark ? `color:${t.ink} !important;` : ''}}`;
+  const frameCss = layout === 'scroll'
+    ? `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:auto !important;overflow:auto !important}
+${common}
+body{padding:var(--v) var(--m) calc(var(--vb) + 30vh) !important;height:auto !important;overflow:visible !important}
+#spine-clip{height:auto;overflow:visible}
+#spine-flow{height:auto;column-count:auto;transform:none !important;overflow-wrap:break-word}`
+    : `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;overflow:hidden !important}
+${common}
+body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;overflow:hidden !important}
 #spine-clip{height:100%;overflow:hidden}
-#spine-flow{height:100%;column-count:2;column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
-@media (max-width:640px){#spine-flow{column-count:1}}
+#spine-flow{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
+@media (max-width:640px){#spine-flow{column-count:1}}`;
+  return `${frameCss}
 #spine-flow{line-height:${lineH} !important}
 #spine-flow :is(p,li,blockquote,dd,dt,td,th,div,span,a,em,strong,i,b,small,cite,q,sup,sub,section,article,aside){line-height:inherit !important}
 #spine-flow :is(h1,h2,h3,h4,h5,h6){line-height:${Math.max(1.15, lineH * 0.78).toFixed(2)} !important}
@@ -1004,7 +1030,17 @@ function geom(){
   const pages = Math.max(1, Math.floor((end.getBoundingClientRect().left - left + 1) / step) + 1);
   return { doc, flow, step, pages, left };
 }
-function fraction(){ return cur.pages > 1 ? cur.page / (cur.pages - 1) : 0; }
+const scrolling = () => layout === 'scroll';
+const scroller = () => frame.contentDocument?.scrollingElement || null;
+function fraction(){
+  if (scrolling()) { const se = scroller(); if (!se) return 0; const max = se.scrollHeight - se.clientHeight; return max > 0 ? Math.min(1, se.scrollTop / max) : 0; }
+  return cur.pages > 1 ? cur.page / (cur.pages - 1) : 0;
+}
+function scrollTo(y){
+  const se = scroller(); if (!se) return;
+  se.scrollTop = Math.max(0, y);
+  cur.f = fraction(); updateProgress(); savePos();
+}
 function showPage(n){
   const g = geom(); if (!g) return;
   cur.pages = g.pages;
@@ -1014,6 +1050,12 @@ function showPage(n){
   updateProgress(); savePos();
 }
 function position(frag, f){
+  if (scrolling()) {
+    const doc = frame.contentDocument, se = scroller(); if (!se) return;
+    const el = frag && (doc.getElementById(frag) || doc.getElementsByName(frag)[0]);
+    scrollTo(el ? el.getBoundingClientRect().top + se.scrollTop - 24 : (f || 0) * (se.scrollHeight - se.clientHeight));
+    return;
+  }
   const g = geom(); if (!g) return;
   const el = frag && (g.doc.getElementById(frag) || g.doc.getElementsByName(frag)[0]);
   if (el) showPage(Math.floor((el.getBoundingClientRect().left - g.left + 1) / g.step));
@@ -1024,6 +1066,7 @@ function savePos(){ if (book) store.set(book.key, { i: cur.i, f: Math.round(frac
 
 let wheelAcc = 0, wheelAt = 0;
 function onWheel(e){
+  if (scrolling()) { ttsUserNav(); return; }   // native scrolling; looking away while listening detaches the view
   e.preventDefault();
   const now = performance.now();
   if (now - wheelAt < 450) return;
@@ -1037,14 +1080,24 @@ function wireFrame(){
   doc.addEventListener('wheel', onWheel, { passive: false });
   doc.addEventListener('dragenter', onDragEnter);
   doc.addEventListener('dragover', onDragOver);
-  // Focus or text selection can scroll the clipped area; pages move only by transform, so undo it.
+  let scrollSave = 0;
   doc.addEventListener('scroll', e => {
     const t = e.target.nodeType === 9 ? e.target.scrollingElement : e.target;
+    if (scrolling()) {
+      // Track the position as the reader scrolls.
+      if (t !== doc.scrollingElement) return;
+      cur.f = fraction(); updateProgress();
+      clearTimeout(scrollSave); scrollSave = setTimeout(savePos, 300);
+      return;
+    }
+    // Page layouts: focus or text selection can scroll the clipped area; pages move only by transform, so undo it.
     if (t && (t.scrollLeft || t.scrollTop)) { t.scrollLeft = 0; t.scrollTop = 0; }
   }, true);
   let tx = 0, ty = 0;
   doc.addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+  doc.addEventListener('touchmove', () => { if (scrolling()) ttsUserNav(); }, { passive: true });
   doc.addEventListener('touchend', e => {
+    if (scrolling()) return;
     const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) dx < 0 ? pageNext() : pagePrev();
   }, { passive: true });
@@ -1101,15 +1154,29 @@ function restyleFrame(){
   relayout();
 }
 
+// Scroll layout: how far the text area reaches (the read-aloud bar covers the bottom of the frame).
+const viewBottom = () => frame.contentWindow.innerHeight - (tts.open ? tts.barH : 0) - 16;
+const atTop = () => (scroller()?.scrollTop ?? 0) <= 4;
+const atBottom = () => { const se = scroller(); return !se || se.scrollTop + se.clientHeight >= se.scrollHeight - 4; };
 function pageNext(){
   if (!book) return;
   ttsUserNav();
+  if (scrolling()) {
+    if (!atBottom()) { const se = scroller(); scrollTo(se.scrollTop + viewBottom() - 60); }
+    else if (cur.i < book.spine.length - 1) renderChapter(cur.i + 1);
+    return;
+  }
   if (cur.page < cur.pages - 1) showPage(cur.page + 1);
   else if (cur.i < book.spine.length - 1) renderChapter(cur.i + 1);
 }
 function pagePrev(){
   if (!book) return;
   ttsUserNav();
+  if (scrolling()) {
+    if (!atTop()) { const se = scroller(); scrollTo(se.scrollTop - (viewBottom() - 60)); }
+    else if (cur.i > 0) renderChapter(cur.i - 1, { fraction: 1 });
+    return;
+  }
   if (cur.page > 0) showPage(cur.page - 1);
   else if (cur.i > 0) renderChapter(cur.i - 1, { fraction: 1 });
 }
@@ -1125,6 +1192,10 @@ function onKey(e){
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setTheme(isDark() ? 'light' : 'dark'); }
   else if ((e.key === 'c' || e.key === 'C') && !isFs()) { e.preventDefault(); setToc(!tocIsOpen()); }
+  else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]); }
+  else if (scrolling() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {   // scroll a little, like a normal page
+    e.preventDefault(); ttsUserNav(); const se = scroller(); if (se) scrollTo(se.scrollTop + (e.key === 'ArrowDown' ? 60 : -60));
+  }
   else if (['ArrowRight', 'ArrowDown', 'PageDown'].includes(e.key)) { e.preventDefault(); pageNext(); }
   else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); pagePrev(); }
 }
@@ -1199,10 +1270,18 @@ function updateProgress(){
   $('#ribbon').setAttribute('aria-valuenow', pct);
   $('#pct').textContent = pct + '%';
   const n = book.spine.length;
-  $('#spinePos').textContent = `page ${cur.page + 1}/${cur.pages} · spine ${cur.i + 1}/${n}`;
-  $('#fsPos').textContent = `page ${cur.page + 1}/${cur.pages} · ${pct}%`;
-  $('#prevBtn').disabled = cur.i === 0 && cur.page === 0;
-  $('#nextBtn').disabled = cur.i === n - 1 && cur.page >= cur.pages - 1;
+  if (scrolling()) {
+    const within = Math.round(fraction() * 100);
+    $('#spinePos').textContent = `${within}% of section · spine ${cur.i + 1}/${n}`;
+    $('#fsPos').textContent = `${pct}%`;
+    $('#prevBtn').disabled = cur.i === 0 && atTop();
+    $('#nextBtn').disabled = cur.i === n - 1 && atBottom();
+  } else {
+    $('#spinePos').textContent = `page ${cur.page + 1}/${cur.pages} · spine ${cur.i + 1}/${n}`;
+    $('#fsPos').textContent = `page ${cur.page + 1}/${cur.pages} · ${pct}%`;
+    $('#prevBtn').disabled = cur.i === 0 && cur.page === 0;
+    $('#nextBtn').disabled = cur.i === n - 1 && cur.page >= cur.pages - 1;
+  }
 }
 function showStatus(msg){ const s = $('#status'); s.textContent = msg; s.hidden = false; }
 function hideStatus(){ $('#status').hidden = true; }
@@ -1266,6 +1345,20 @@ const tocIsOpen = () => narrow.matches ? $('#toc').classList.contains('open') : 
 $('#tocBtn').addEventListener('click', () => setToc(!tocIsOpen()));
 narrow.addEventListener('change', () => setToc(!narrow.matches));
 
+// Cycle the layout, keeping the reader's place (as a fraction of the section) across the change.
+function setLayout(next){
+  if (book && frame.contentDocument) cur.f = fraction();
+  layout = next;
+  store.set('spine:layout', layout);
+  const b = $('#layoutBtn');
+  b.dataset.layout = layout;
+  const following = { two: 'one', one: 'scroll', scroll: 'two' }[layout];
+  b.title = `Layout: ${LAYOUTS[layout]} (L switches to ${LAYOUTS[following].toLowerCase()})`;
+  b.setAttribute('aria-label', `Layout: ${LAYOUTS[layout]}`);
+  restyleFrame();
+  updateProgress();
+}
+$('#layoutBtn').addEventListener('click', () => setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]));
 function setFont(p){
   fontPct = Math.max(70, Math.min(200, p));
   $('#fontPct').textContent = fontPct + '%';
@@ -1343,7 +1436,7 @@ function menuKey(e){
     opts[n].focus(); return true;
   }
   if (e.key === 'Tab') { setMenu(false); return false; }
-  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']'].includes(e.key);
+  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']', 'l', 'L'].includes(e.key);
 }
 $('#fontBtn').addEventListener('click', () => setMenu(!menuOpen()));
 document.addEventListener('click', e => { if (menuOpen() && !e.target.closest('.font-pick')) setMenu(false); });
@@ -1569,8 +1662,22 @@ function hl(name, range){
   if (range) win.CSS.highlights.set(name, new win.Highlight(range)); else win.CSS.highlights.delete(name);
 }
 function ttsClearHL(){ hl('tts-sentence'); hl('tts-word'); }
+// Is this text before what's on screen? (Page layouts: on an earlier page; scroll: above the top edge.)
+function beforeView(range, atEnd = false){
+  if (!scrolling()) return pageOfRange(range, atEnd) < cur.page;
+  const rects = range.getClientRects(), rect = (atEnd ? rects[rects.length - 1] : rects[0]) || range.getBoundingClientRect();
+  return rect.bottom <= 4;
+}
+// Bring the text being read into view. Scroll layout: only when it leaves the visible area, then place it
+// about a third of the way down.
 function follow(range){
   if (!tts.follow) return;
+  if (scrolling()) {
+    const rect = range.getClientRects()[0] || range.getBoundingClientRect(), se = scroller();
+    if (!se || (rect.top >= 30 && rect.bottom <= viewBottom())) return;
+    scrollTo(se.scrollTop + rect.top - frame.contentWindow.innerHeight * 0.3);
+    return;
+  }
   const p = pageOfRange(range);
   if (p !== cur.page) showPage(p);
 }
@@ -1757,21 +1864,21 @@ function moPointToIndex(node, off){
 }
 function moPageStart(){
   const pars = tts.mo.pars;
-  for (let i = 0; i < pars.length; i++) { const el = moEl(pars[i]); if (el && pageOfRange(moElRange(el), true) >= cur.page) return i; }
+  for (let i = 0; i < pars.length; i++) { const el = moEl(pars[i]); if (el && !beforeView(moElRange(el), true)) return i; }
   return pars.length;
 }
 
-// The first word that is on the current page.
+// The first word on screen (page layouts: on the current page; scroll: the first one not above the top).
 function ttsPageStart(){
   const chunks = ttsChunks();
   for (let ci = 0; ci < chunks.length; ci++) {
     const c = chunks[ci];
-    if (pageOfPos(c.b, c.e - 1) < cur.page) continue;
-    if (pageOfPos(c.b, c.s) >= cur.page) return [ci, c.s];
+    if (beforeView(rangeFor(c.b, c.e - 1, c.e))) continue;
+    if (!beforeView(rangeFor(c.b, c.s, c.s + 1))) return [ci, c.s];
     for (let p = c.s; p < c.e; ) {
       const w = wordStartAt(c.b, p, p, c.e);
       if (w < p) break;
-      if (pageOfPos(c.b, w) >= cur.page) return [ci, w];
+      if (!beforeView(rangeFor(c.b, w, w + 1))) return [ci, w];
       p = w; while (p < c.e && isWordChar(c.b.text[p])) p++;
     }
   }
@@ -1905,8 +2012,8 @@ function ttsRefollow(){
   if (tts.mo?.doc === frame.contentDocument) { const el = moEl(tts.mo.pars[tts.mo.i]); if (el) follow(moElRange(el)); return; }
   if (tts.doc !== frame.contentDocument || !tts.chunks?.[tts.ci]) return;
   const c = tts.chunks[tts.ci];
-  const p = pageOfPos(c.b, Math.min(tts.pos, c.e - 1));
-  if (p !== cur.page) showPage(p);
+  const pos = Math.min(tts.pos, c.e - 1);
+  follow(rangeFor(c.b, pos, pos + 1));
 }
 function ttsBack(){ tts.follow = true; ttsRefollow(); ttsUpdateBar(); }
 
@@ -2463,6 +2570,7 @@ function nStop(){
 /* ---------- start ---------- */
 $('#fontPct').textContent = fontPct + '%';
 setLine(lineH);
+setLayout(layout);
 { const t = store.get('spine:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
 syncThemeBtn();
 setToc(!narrow.matches);
