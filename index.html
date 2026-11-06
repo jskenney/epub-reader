@@ -1715,6 +1715,7 @@ function ttsUpdateBar(status){
   if (!status && neural && !neural.ready()) {
     const st = neural.st;
     if (neural.auto && st.state === 'idle') { neural.load(); status = 'Connecting to the voice server…'; }   // nothing to download
+    else if (st.state === 'idle' && neural.agreed()) { neural.load(); status = 'Loading natural voice…'; }   // downloaded before: don't ask again
     else if (st.state === 'loading') status = st.progressText || 'Loading natural voice…';
     else if (st.state === 'error') { status = `Natural voice failed: ${st.error}`; dl = 'Try again'; }
     else { status = `${neural.name}: one-time ${neural.size()} download`; dl = 'Download'; }
@@ -1915,6 +1916,7 @@ async function kLoad(){
       k.files = {}; await attempt('wasm', FULL_PRECISION ? 'fp32' : 'q8'); k.device = 'wasm';   // WebGPU failed: fall back to the CPU
     }
     k.state = 'ready';
+    store.set(`spine:agreed:kokoro:${FULL_PRECISION ? 'fp32' : 'q8'}`, true);   // the reader agreed to this download once
   } catch (e) {
     k.state = 'error'; k.error = e.message; k.worker?.terminate(); k.worker = null;
   }
@@ -2006,6 +2008,7 @@ async function pkLoad(){
       voicesUrl: null, maxThreads: 8, cache: true, cacheName: 'pocket-tts-js-v1' });
     pk.voices = pk.bundle?.predefinedVoices || [];
     pk.state = 'ready'; pk.lang = lang;
+    store.set(`spine:agreed:pocket:${lang}:${FULL_PRECISION ? 'fp32' : 'int8'}`, true);   // the reader agreed to this download once
   } catch (e) {
     pk.state = 'error'; pk.error = e.message; pk.worker?.terminate(); pk.worker = null;
   }
@@ -2111,10 +2114,12 @@ function svGenerate(text){
    word timings). */
 const NEURAL = {
   kokoro: { name: 'Natural voice', st: k, ready: () => k.state === 'ready', load: () => kLoad(), size: () => FULL_PRECISION || k.gpu ? '~330 MB' : '~92 MB',
+    agreed: () => !!store.get(`spine:agreed:kokoro:${FULL_PRECISION ? 'fp32' : 'q8'}`),
     generate: kGenerate, key: () => `kokoro|${k.voice}|${tts.rate}` },
   pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`, playbackSpeed: true,
+    agreed: () => !!store.get(`spine:agreed:pocket:${pocketLang()}:${FULL_PRECISION ? 'fp32' : 'int8'}`),
     generate: pkGenerate, key: () => `pocket|${pk.lang}|${pkVoice()}` },
-  server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true,
+  server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, agreed: () => true,
     generate: svGenerate, key: () => `server|${svVoice()?.id}` }
 };
 function neuralEngine(){
