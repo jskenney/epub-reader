@@ -295,6 +295,9 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <option value="server" hidden>Server voice</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
+        <button class="btn ghost" id="ttsSaved" hidden title="Saved voice audio" aria-label="Saved voice audio">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>
+        </button>
         <span id="ttsStatus" hidden></span>
         <button class="btn" id="ttsDownload" hidden>Download</button>
         <button class="btn" id="ttsBack" hidden title="Go back to the page being read">Back to reading</button>
@@ -1051,6 +1054,11 @@ function loadFrame(html){
   });
 }
 
+async function chapterSource(item){
+  const raw = await readText(book.zip, item.path) || '';
+  const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
+  return (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
+}
 async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   if (!book) return;
   i = Math.max(0, Math.min(book.spine.length - 1, i));
@@ -1060,9 +1068,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   cur = { i, page: 0, pages: 1, f: fraction };
   updateChrome();
   try {
-    const raw = await readText(book.zip, item.path) || '';
-    const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
-    const src = (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
+    const src = await chapterSource(item);
     const html = await buildPage(src, item.path);
     if (token !== renderToken) return;
     await loadFrame(html);
@@ -1663,9 +1669,15 @@ const isWordChar = c => /[\p{L}\p{N}'’\-]/u.test(c || '');
 const bookLang = () => (frame.contentDocument?.documentElement.getAttribute('lang') || book?.language || navigator.language || 'en');
 
 function ttsBuild(){
-  const doc = frame.contentDocument, flow = doc?.getElementById('spine-flow');
-  tts.doc = doc; tts.chunks = []; tts.nodes = new Map();
-  if (!flow) return tts.chunks;
+  const doc = frame.contentDocument;
+  Object.assign(tts, { doc }, chunksOf(doc));
+  return tts.chunks;
+}
+// Split a chapter into sentences ("chunks") within blocks. Works on the page shown in the frame, and on
+// a detached copy of a later chapter (natural voices prepare audio ahead, into the next chapter).
+function chunksOf(doc){
+  const flow = doc?.getElementById('spine-flow'), out = { chunks: [], nodes: new Map() };
+  if (!flow) return out;
   const blocks = []; let b = null;
   const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: n =>
     n.nodeType === 1 ? (n.matches(TTS_SKIP) ? NodeFilter.FILTER_REJECT : n.localName === 'br' || n.localName === 'img' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)
@@ -1674,7 +1686,7 @@ function ttsBuild(){
     const blockEl = (n.nodeType === 1 ? n.parentElement : n.parentElement).closest(TTS_BLOCKS);
     if (!b || b.el !== blockEl) { b = { el: blockEl, text: '', segs: [] }; blocks.push(b); }
     if (n.nodeType === 1) { b.segs.push({ node: null, at: b.text.length, len: 1 }); b.text += ' '; }
-    else { tts.nodes.set(n, { b, at: b.text.length }); b.segs.push({ node: n, at: b.text.length, len: n.nodeValue.length }); b.text += n.nodeValue; }
+    else { out.nodes.set(n, { b, at: b.text.length }); b.segs.push({ node: n, at: b.text.length, len: n.nodeValue.length }); b.text += n.nodeValue; }
   }
   const lang = bookLang();
   const seg = window.Intl?.Segmenter ? new Intl.Segmenter(lang, { granularity: 'sentence' }) : null;
@@ -1691,13 +1703,13 @@ function ttsBuild(){
         const win = blk.text.slice(s, s + 220);
         let cut = Math.max(win.search(/[,;:—–](?=\s)[^,;:—–]*$/), -1);
         cut = cut > 80 ? cut + 1 : win.lastIndexOf(' ') > 80 ? win.lastIndexOf(' ') : 220;
-        tts.chunks.push({ b: blk, s, e: s + cut });
+        out.chunks.push({ b: blk, s, e: s + cut });
         s += cut; while (s < e && /\s/.test(blk.text[s])) s++;
       }
-      if (e > s) tts.chunks.push({ b: blk, s, e });
+      if (e > s) out.chunks.push({ b: blk, s, e });
     }
   }
-  return tts.chunks;
+  return out;
 }
 function ttsChunks(){ return tts.doc === frame.contentDocument && tts.chunks ? tts.chunks : ttsBuild(); }
 
@@ -1768,7 +1780,7 @@ function speakable(raw){
   }
   return { out, map };
 }
-function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
+function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepFollow } = {}){
   const chunks = ttsChunks();
   if (ci >= chunks.length) { ttsEndOfChapter(); return; }
   const c = chunks[Math.max(0, ci)]; ci = Math.max(0, ci);
@@ -1784,7 +1796,7 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false } = {}){
   if (!speak) return;
   const neural = neuralEngine();
   if (neural) {
-    if (neural.ready()) { nSpeak(c, ci, pos, token, { jump: !keepFollow }); return; }
+    if (neural.ready()) { nSpeak(c, ci, pos, token, { jump }); return; }
     tts.playing = false; neural.st.wantPlay = true; ttsUpdateBar(); return;   // the bar offers the download
   }
   if (!synth) { tts.playing = false; ttsUpdateBar(); showNotice("This browser doesn't have speech voices; choose Publisher narration instead.", 'error'); return; }
@@ -2080,7 +2092,7 @@ async function ttsAfterRender(){
   if (doc !== frame.contentDocument) return;
   ttsUpdateBar();
   if (!tts.playing) { tts.doc = null; return; }
-  if (tts.awaitChapter) { tts.awaitChapter = false; tts.mo ? moGo(0) : ttsGo(0, null); return; }
+  if (tts.awaitChapter) { tts.awaitChapter = false; tts.mo ? moGo(0) : ttsGo(0, null, { jump: false }); return; }
   if (tts.mo) moGo(moPageStart());                       // the reader navigated to a new chapter while listening
   else { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
 }
@@ -2125,6 +2137,7 @@ function ttsUpdateBar(status){
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
   $('#ttsDownload').hidden = !dl; $('#ttsDownload').textContent = dl;
   $('#ttsVoice').hidden = !!tts.mo;
+  $('#ttsSaved').hidden = !(!tts.mo && neuralEngine());
   const ne = !tts.mo && neuralEngine();
   const want = !ne ? 'device' : ne === NEURAL.kokoro ? 'kokoro' : ne === NEURAL.pocket ? 'pocket:' + (pkReady() ? pk.lang : '') : 'server:' + sv.voices.length;
   if ($('#ttsVoice').dataset.kind !== want) ttsFillVoices();
@@ -2197,6 +2210,13 @@ $('#ttsVoice').addEventListener('change', e => {
   else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
   if (tts.playing) ttsGo(tts.ci, tts.pos);
+});
+$('#ttsSaved').addEventListener('click', async () => {
+  const mb = ((await clipStore.size()) || 0) / 1048576;
+  if (!confirm(`Natural voices keep finished audio in this browser so rereading plays at once.\n\n` +
+    `Saved now: ${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB (the oldest is dropped past ${SAVED_AUDIO_MB} MB).\n\nClear it?`)) return;
+  await clipStore.clear();
+  for (const [key, e] of [...n.cache]) if (e.done && !(n.active && n.span && key.endsWith('|' + n.span.out))) { n.cache.delete(key); URL.revokeObjectURL(e.url); }
 });
 $('#ttsDownload').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = true; ne.load(); } });
 new ResizeObserver(ttsMeasureBar).observe($('#tts'));
@@ -2588,12 +2608,12 @@ function svGenerate(text, opts = {}){
 const NEURAL = {
   kokoro: { name: 'Natural voice', st: k, ready: () => k.state === 'ready', load: () => kLoad(), size: () => FULL_PRECISION || k.gpu ? '~330 MB' : '~92 MB',
     agreed: () => !!store.get(`spine:agreed:kokoro:${FULL_PRECISION ? 'fp32' : 'q8'}`),
-    generate: kGenerate, key: () => `kokoro|${k.voice}|${tts.rate}` },
+    generate: kGenerate, key: () => `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|${tts.rate}` },
   pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`, playbackSpeed: true, stream: true,
     agreed: () => !!store.get(`spine:agreed:pocket:${pocketLang()}:${FULL_PRECISION ? 'fp32' : 'int8'}`),
-    generate: pkGenerate, key: () => `pocket|${pk.lang}|${pkVoice()}` },
+    generate: pkGenerate, key: () => `pocket|${FULL_PRECISION ? 'fp32' : 'int8'}|${pk.lang}|${pkVoice()}` },
   server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
-    generate: svGenerate, key: () => `server|${svVoice()?.id}` }
+    generate: svGenerate, key: () => `server|${svVoice()?.id}|${hashText(JSON.stringify(svVoice() || {}))}` }
 };
 function neuralEngine(){
   if (tts.engine === 'kokoro' && kokoroFits()) return NEURAL.kokoro;
@@ -2609,16 +2629,74 @@ function nLoaded(st){
 }
 const nAudio = new Audio();
 nAudio.preservesPitch = true;
-const n = { cache: new Map(), failed: new Set(), active: false, paused: false, token: 0, raf: 0, mode: 'clip', secPerWeight: 0.065, ctx: null };
-function wavUrl(data, rate){
+const n = { cache: new Map(), failed: new Set(), active: false, paused: false, token: 0, raf: 0, mode: 'clip', secPerWeight: 0.065, ctx: null, ahead: 0, chap: new Map(), chapBook: null };
+// Short fingerprint of a string (FNV-1a), for cache keys.
+function hashText(t){
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+function wavBlob(data, rate){
   const buf = new ArrayBuffer(44 + data.length * 2), v = new DataView(buf);
   const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
   str(0, 'RIFF'); v.setUint32(4, 36 + data.length * 2, true); str(8, 'WAVEfmt ');
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
   v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, data.length * 2, true);
   for (let i = 0; i < data.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, data[i])) * 0x7fff, true);
-  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  return new Blob([buf], { type: 'audio/wav' });
 }
+
+/* Saved voice audio: finished passages are kept in the browser (IndexedDB) by voice and text, so a reload,
+   a reread or reopening a book plays them at once instead of making them again. Least recently used
+   passages are dropped beyond SAVED_AUDIO_MB. Everything here fails quietly: without storage the voices
+   just make the audio again. */
+const SAVED_AUDIO_MB = 500;
+const clipStore = (() => {
+  let dbp = null, saves = 0;
+  const open = () => dbp ??= new Promise(res => {
+    try {
+      const rq = indexedDB.open('spine-voice-audio', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('clips', { keyPath: 'key' }).createIndex('used', 'used');
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = rq.onblocked = () => res(null);
+    } catch { res(null); }
+  });
+  // Run fn(store) in a transaction; resolves with what fn's last request returned (null on any failure).
+  const run = async (mode, fn) => {
+    const db = await open(); if (!db) return null;
+    return new Promise(res => {
+      try {
+        const t = db.transaction('clips', mode); let out = null;
+        fn(t.objectStore('clips'), v => { out = v; });
+        t.oncomplete = () => res(out); t.onerror = t.onabort = e => { e?.preventDefault?.(); res(null); };
+      } catch { res(null); }
+    });
+  };
+  // Walk passages newest first, adding up their sizes; drop those past the limit (or all, for clear).
+  const sweep = (limit) => run('readwrite', (st, done) => {
+    let total = 0;
+    const rq = st.index('used').openCursor(null, 'prev');
+    rq.onsuccess = () => {
+      const c = rq.result; if (!c) return done(total);
+      if (total + c.value.size > limit) c.delete(); else total += c.value.size;
+      c.continue();
+    };
+  });
+  return {
+    async get(key){
+      const rec = await run('readonly', (st, done) => { const rq = st.get(key); rq.onsuccess = () => done(rq.result || null); });
+      if (rec && Date.now() - rec.used > 3600e3) run('readwrite', st => st.put({ ...rec, used: Date.now() }));   // keep it recent
+      return rec;
+    },
+    async has(key){ return !!(await run('readonly', (st, done) => { const rq = st.count(key); rq.onsuccess = () => done(rq.result); })); },
+    async put(key, blob, dur){
+      await run('readwrite', st => st.put({ key, blob, dur, size: blob.size, used: Date.now() }));
+      if (++saves % 10 === 1) sweep(SAVED_AUDIO_MB * 1048576);
+    },
+    size: () => sweep(SAVED_AUDIO_MB * 1048576),
+    clear: () => run('readwrite', st => st.clear())
+  };
+})();
 // How long text takes to say, in "weights": characters, plus the pauses speakers make at punctuation.
 function textWeights(text){
   const cum = new Float32Array(text.length + 1);
@@ -2627,35 +2705,54 @@ function textWeights(text){
 }
 /* A generation: kept in the cache by voice and text. It records its audio as it arrives (for engines that
    stream), so playback can start before it finishes; listeners hear about new audio, the end, or failure;
-   and an unfinished one can be cancelled when a jump makes it unnecessary. */
+   and an unfinished one can be cancelled when a jump makes it unnecessary. Saved audio is checked first
+   (e.checked resolves true when the passage comes from there instead of the engine). */
 function nSynth(ne, text){
   const key = `${ne.key()}|${text}`;
   let e = n.cache.get(key);
   if (e) { n.cache.delete(key); n.cache.set(key, e); return e; }
   const ctl = new AbortController();
   e = { key, text, chunks: [], rate: 24000, done: false, listeners: new Set(), url: null, dur: 0, cancel: () => ctl.abort() };
-  e.job = ne.generate(text, {
-    signal: ctl.signal,
-    onChunk: (data, rate) => { e.rate = rate; e.chunks.push(data); for (const l of e.listeners) l.chunk?.(data, rate); }
-  }).then(r => {
-    const dur = r.data.length / r.rate;
+  let saved = null;
+  e.checked = clipStore.get(key).then(rec => !!(saved = rec?.blob instanceof Blob ? rec : null));
+  e.job = e.checked.then(async () => {
+    if (ctl.signal.aborted) throw staleError();
+    if (saved) {
+      Object.assign(e, { done: true, url: URL.createObjectURL(saved.blob), dur: saved.dur, chunks: null });
+      for (const l of e.listeners) l.done?.();
+      return e;
+    }
+    const r = await ne.generate(text, {
+      signal: ctl.signal,
+      onChunk: (data, rate) => { e.rate = rate; e.chunks.push(data); for (const l of e.listeners) l.chunk?.(data, rate); }
+    });
+    const dur = r.data.length / r.rate, blob = wavBlob(r.data, r.rate);
     kSpeedCheck(r.genSec / dur, ne);
     n.secPerWeight = n.secPerWeight * 0.6 + (dur / textWeights(text)[text.length]) * 0.4;   // learn the speaking rate
-    Object.assign(e, { done: true, url: wavUrl(r.data, r.rate), dur, rate: r.rate, chunks: null });
+    Object.assign(e, { done: true, url: URL.createObjectURL(blob), dur, rate: r.rate, chunks: null });
+    clipStore.put(key, blob, dur);
     for (const l of e.listeners) l.done?.();
     return e;
   });
   e.job.catch(err => {
-    n.cache.delete(key);
+    if (n.cache.get(key) === e) n.cache.delete(key);
     if (!err?.stale) n.failed.add(key);   // don't ask for a failed passage again
     for (const l of e.listeners) l.fail?.(err);
   });
   n.cache.set(key, e);
-  while (n.cache.size > 40) {
-    const [oldKey, old] = n.cache.entries().next().value;
-    n.cache.delete(oldKey); if (!old.done) old.cancel(); else URL.revokeObjectURL(old.url);
-  }
+  nTrim();
   return e;
+}
+// Keep about NCACHE_SEC of finished audio in memory, most recently used first (saved audio backs the rest).
+// Unfinished passages are never dropped here: jumps cancel those.
+const NCACHE_SEC = 900;
+function nTrim(){
+  let total = 0;
+  for (const [key, e] of [...n.cache].reverse()) {
+    if (!e.done) continue;
+    total += e.dur;
+    if (total > NCACHE_SEC) { n.cache.delete(key); URL.revokeObjectURL(e.url); }
+  }
 }
 // A jump (click, skip, new voice or speed) makes unfinished work for other passages useless: cancel it so
 // the passage now needed goes first.
@@ -2666,19 +2763,55 @@ function nCancelStale(keepKey){
 // a span runs from (ci, pos) through the following sentences of the same block, up to a length the
 // model handles in one go. Sentences stay the unit for highlighting, skipping and resuming.
 const SPAN_MAX = { kokoro: 350, pocket: 600, server: 600 };
-function nSpan(ne, ci, pos, single = false){
-  const chunks = ttsChunks(), c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket : SPAN_MAX.server;
+function nSpan(ne, ci, pos, single = false, chunks = ttsChunks()){
+  const c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket : SPAN_MAX.server;
   let cj = ci;
   while (!single && chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
   return { ci, cj, pos, b: c.b, e: chunks[cj].e, ...speakable(c.b.text.slice(pos, chunks[cj].e)) };
 }
-function nPrefetch(ne, span){
-  const chunks = ttsChunks();
-  let next = span.cj + 1;
-  for (let i = 0; i < 2 && chunks[next]; i++) {
-    let nx = nSpan(ne, next, chunks[next].s);
-    if (nx.cj > nx.ci && n.failed.has(`${ne.key()}|${nx.out}`)) nx = nSpan(ne, next, chunks[next].s, true);
-    nSynth(ne, nx.out); next = nx.cj + 1;
+// Where speaking a sentence starts (as ttsGo works it out), so passages prepared ahead match exactly.
+const chunkStart = c => wordStartAt(c.b, c.s, c.s, c.e);
+// The sentences of a later chapter, from a detached copy built like the page shown in the frame.
+async function chapterChunks(i){
+  if (n.chapBook !== book) { n.chap = new Map(); n.chapBook = book; }
+  if (!n.chap.has(i)) n.chap.set(i, (async () => {
+    const src = await chapterSource(book.spine[i]);
+    const out = document.implementation.createHTMLDocument('');
+    const flow = out.createElement('div'); flow.id = 'spine-flow';
+    const body = src.getElementsByTagNameNS('*', 'body')[0];
+    if (body) for (const c of [...body.childNodes]) flow.append(out.importNode(c, true));
+    const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
+    out.body.append(flow);
+    sanitize(out);
+    // Serialize and parse again, as the frame's srcdoc does, so the text splits the same way.
+    return chunksOf(new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html')).chunks;
+  })().catch(() => []));
+  return n.chap.get(i);
+}
+/* Look-ahead: after the passage being spoken, keep making the following passages one at a time (behind
+   it, so it is never slowed down) until about LOOKAHEAD_SEC of audio is ready, carrying on into the next
+   chapters so chapter breaks don't pause. Started again with every passage; finished passages are found in
+   the cache at once, so it quickly picks up where it left off. nStop() ends it. */
+const LOOKAHEAD_SEC = 120;
+async function nLookAhead(ne, span, current){
+  const id = ++n.ahead;
+  const live = () => id === n.ahead && tts.open && neuralEngine() === ne;
+  try { await current.job; } catch { return; }
+  let at = { chunks: ttsChunks(), ci: span.cj + 1, chap: cur.i }, ready = 0, hops = 0;
+  while (live() && ready < LOOKAHEAD_SEC) {
+    if (at.ci >= at.chunks.length) {
+      const i = at.chap + 1;
+      if (!book || i >= book.spine.length || book.spine[i].overlay || ++hops > 5) return;
+      const chunks = await chapterChunks(i);
+      at = { chunks, ci: 0, chap: i };
+      continue;
+    }
+    const c = at.chunks[at.ci];
+    let nx = nSpan(ne, at.ci, chunkStart(c), false, at.chunks);
+    if (nx.cj > nx.ci && n.failed.has(`${ne.key()}|${nx.out}`)) nx = nSpan(ne, at.ci, chunkStart(c), true, at.chunks);
+    const e = nSynth(ne, nx.out);
+    try { await e.job; } catch { return; }   // a failure (or the server going away) stops preparing ahead
+    ready += e.dur; at.ci = nx.cj + 1;
   }
 }
 async function nSpeak(c, ci, pos, token, { single = false, jump = false } = {}){
@@ -2686,15 +2819,17 @@ async function nSpeak(c, ci, pos, token, { single = false, jump = false } = {}){
   let span;
   if (jump) {
     // Start quickly: just the current sentence, unless the whole paragraph is already made or being made.
-    const full = nSpan(ne, ci, pos);
-    span = n.cache.has(`${ne.key()}|${full.out}`) ? full : nSpan(ne, ci, pos, true);
+    const full = nSpan(ne, ci, pos), fullKey = `${ne.key()}|${full.out}`;
+    const have = n.cache.has(fullKey) || await clipStore.has(fullKey);
+    if (token !== tts.token) return;
+    span = have ? full : nSpan(ne, ci, pos, true);
     nCancelStale(`${ne.key()}|${span.out}`);
   } else {
     span = nSpan(ne, ci, pos, single);
     if (span.cj > span.ci && n.failed.has(`${ne.key()}|${span.out}`)) span = nSpan(ne, ci, pos, true);   // failed before: sentence by sentence
   }
   const e = nSynth(ne, span.out);
-  nPrefetch(ne, span);   // queued behind this passage
+  nLookAhead(ne, span, e);   // prepares what follows, behind this passage
   const fail = err => {
     if (token !== tts.token || err?.stale) return;
     if (ne === NEURAL.server && !sv.available) return;   // server gone: svLost() already stopped and explained
@@ -2705,6 +2840,8 @@ async function nSpeak(c, ci, pos, token, { single = false, jump = false } = {}){
   };
   // Engines that stream play as the audio arrives (Web Audio), at normal speed. Other speeds need the
   // <audio> element's pitch-preserving playback, which needs the whole clip.
+  if (await e.checked) { try { await e.job; } catch {} }   // saved audio: just read it back
+  if (token !== tts.token) return;
   if (ne.stream && tts.rate === 1 && !e.done && await nStream(e, span, token, fail)) return;
   const slow = setTimeout(() => { if (token === tts.token) ttsUpdateBar('Preparing voice…'); }, 300);
   try { await e.job; } catch (err) { clearTimeout(slow); return fail(err); }
@@ -2801,6 +2938,7 @@ function nLoop(token){
 }
 function nStop(){
   cancelAnimationFrame(n.raf);
+  n.ahead++;   // stop preparing ahead (the next passage, if any, starts it again)
   nAudio.onended = null; nAudio.pause();
   if (n.mode === 'stream' && n.play) {
     for (const x of n.play.pieces) { x.src.onended = null; try { x.src.stop(); } catch {} }

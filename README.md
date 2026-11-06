@@ -143,6 +143,14 @@ This needs a real web server (for example `npx vite` or
   cancelled. The server voice and Pocket TTS play audio as it arrives at
   1x speed; at other speeds the whole piece is made first so the pitch
   stays natural.
+  While one passage plays, the next ones are made in the background until
+  about two minutes of audio is ready (`LOOKAHEAD_SEC`), carrying on into
+  the next chapter so chapter breaks don't pause.
+- Finished natural-voice audio is saved in the browser (IndexedDB), so
+  rereading, reloading or reopening a book plays at once without making it
+  again. The oldest passages are dropped past 500 MB (`SAVED_AUDIO_MB`);
+  the stack button in the read-aloud bar shows how much is saved and clears
+  it.
   The natural voices use full-precision models by default; set
   `FULL_PRECISION = false` in `index.html` for the smaller 8-bit models.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
