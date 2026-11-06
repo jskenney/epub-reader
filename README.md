@@ -32,6 +32,16 @@ saved position) works as for EPUBs.
   stylesheets and relative links load from its folder on the server; an
   uploaded single file can't bring those along.
 
+**Comic books** (`.cbz`, a ZIP of page images) open too. Pages are shown in
+name order (page2 before page10), each as large as fits: a two-page spread
+in the two-column layout, one page in the single-column layout, and a
+continuous strip in the scroll layout. A `ComicInfo.xml` supplies the
+title, series and number, writer and artist, summary, year and language;
+the first page is the cover. Archives that keep chapters in folders get a
+contents entry per folder. A ZIP with images and no EPUB container is
+opened as a comic whatever its name. Right-to-left manga is shown in name
+order, left to right.
+
 ## Opening a book from the address
 
 When `index.html` is served from a web server, a `book` query parameter opens
@@ -40,6 +50,7 @@ a book from the same site on page load:
 - `index.html?book=books/moby-dick.epub`: fetches the `.epub` and unzips it
   in the browser
 - `index.html?book=books/notes.md` (or `.txt`, `.html`): opens that document
+- `index.html?book=books/issue-3.cbz`: opens a comic book
 - `index.html?book=books/moby-dick/`: reads an already-extracted EPUB folder
   (the folder that contains `META-INF/` and `mimetype`); files are fetched
   one at a time as they're needed. The trailing slash is optional.
@@ -59,6 +70,12 @@ This needs a real web server (for example `npx vite` or
 
 ## Features
 
+- Search the whole book from the box above the contents (/ or Ctrl+F / ⌘F).
+  Matches ignore case, accents and curly versus straight quotes, and are
+  listed under their chapter or heading with some context; click one, or
+  press Enter / Shift+Enter (or the arrows) to step through them. The
+  current match is highlighted strongly, other matches on the page lightly.
+  Esc clears the search and brings the contents back.
 - Handles EPUB 3 contents pages (`nav.xhtml`) and EPUB 2 `toc.ncx`
 - Shows chapters in a sandboxed iframe, with the book's images, CSS and fonts
   loaded from inside the archive. The book's scripts are removed.

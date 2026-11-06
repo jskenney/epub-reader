@@ -75,6 +75,21 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 #tocList a:hover{background:var(--surface)}
 #tocList a[aria-current]{background:var(--ribbon-soft);color:var(--ribbon);font-weight:500}
 #tocList span{color:var(--muted)}
+.search{position:relative;margin-bottom:-12px}
+.search svg{position:absolute;left:9px;top:50%;width:14px;height:14px;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+#searchBox{width:100%;box-sizing:border-box;height:32px;padding:0 9px 0 29px;border:1px solid var(--rule);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:13.5px}
+#searchBox:focus{outline:2px solid var(--ribbon);outline-offset:-1px}
+.search-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.search-head .label{margin:0}
+.search-nav{display:flex;gap:2px}
+.search-nav .btn{height:26px;padding:0 6px}
+#searchResults h3{font:500 11px/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px}
+#searchResults button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);font:inherit;font-size:13px;line-height:1.4;padding:6px 9px;border-radius:5px;cursor:pointer}
+#searchResults button:hover{background:var(--surface)}
+#searchResults button[aria-current]{background:var(--ribbon-soft)}
+#searchResults button:focus-visible{outline:2px solid var(--ribbon);outline-offset:1px}
+#searchResults mark{background:none;color:var(--ribbon);font-weight:600}
+#searchResults .more{color:var(--muted);font-size:12.5px;margin:12px 9px 0}
 .desc{margin-top:12px;font-size:13px}
 .desc summary{cursor:pointer;color:var(--muted);font:500 11px/1 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;padding:4px 0;width:max-content}
 .desc summary:hover{color:var(--ink)}
@@ -242,7 +257,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 10V2M4.5 5.5 8 2l3.5 3.5M2.5 10v3.5h11V10"/></svg>
         <span>Open<span class="hide-sm"> book</span></span>
       </label>
-      <input type="file" id="fileInput" accept=".epub,application/epub+zip,.txt,.text,text/plain,.md,.markdown,.mdown,.mkd,text/markdown,.html,.htm,.xhtml,text/html">
+      <input type="file" id="fileInput" accept=".epub,application/epub+zip,.cbz,application/vnd.comicbook+zip,.txt,.text,text/plain,.md,.markdown,.mdown,.mkd,text/markdown,.html,.htm,.xhtml,text/html">
     </div>
   </header>
 
@@ -256,7 +271,20 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <div id="metaDescBody"></div>
         </details>
       </div>
-      <nav aria-labelledby="tocHead">
+      <div class="search" role="search">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/></svg>
+        <input type="search" id="searchBox" placeholder="Search in book" aria-label="Search in book" title="Search in book (/ or Ctrl+F); Enter for the next match" autocomplete="off" spellcheck="false">
+      </div>
+      <section id="searchPanel" aria-label="Search results" hidden>
+        <div class="search-head"><p class="label" id="searchStatus" aria-live="polite"></p>
+          <div class="search-nav">
+            <button class="btn ghost" id="searchPrev" title="Previous match (Shift+Enter)" aria-label="Previous match"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg></button>
+            <button class="btn ghost" id="searchNext" title="Next match (Enter)" aria-label="Next match"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+          </div>
+        </div>
+        <div id="searchResults"></div>
+      </section>
+      <nav aria-labelledby="tocHead" id="tocNav">
         <h2 class="label" id="tocHead">Contents</h2>
         <div id="tocList"></div>
       </nav>
@@ -697,6 +725,79 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
     urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}` });
 }
 
+/* ---------- comic books (.cbz) ----------
+   A CBZ is a ZIP of page images, in name order, optionally with a ComicInfo.xml describing it. Pages become
+   sections of about COMIC_PART images (a new section at each folder, for archives that hold chapters in
+   folders), each image filling one column: so the two-column layout shows a two-page spread, the
+   single-column layout one page, and the scroll layout a continuous strip. */
+const COMIC_IMG = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
+const COMIC_PART = 40;
+const comicPages = zip => Object.values(zip.files).filter(f => !f.dir && COMIC_IMG.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name));
+async function openComic(zip, name, { key } = {}){
+  showStatus('Opening comic…');
+  const pages = comicPages(zip);
+  if (!pages.length) throw new Error('This archive has no page images in it.');
+  const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  pages.sort((a, b) => coll.compare(a.name, b.name));
+  let ci = {};
+  const ciFile = Object.values(zip.files).find(f => !f.dir && /(^|\/)comicinfo\.xml$/i.test(f.name));
+  if (ciFile) {
+    const d = parseDoc(clean(await ciFile.async('string')), 'application/xml');
+    const g = t => d?.getElementsByTagName(t)[0]?.textContent.trim() || '';
+    ci = { title: g('Title'), series: g('Series'), number: g('Number'), volume: g('Volume'), writer: g('Writer'), penciller: g('Penciller'),
+      summary: g('Summary'), lang: g('LanguageISO'), manga: g('Manga'), publisher: g('Publisher'), year: g('Year'), genre: g('Genre') };
+  }
+  const series = ci.series ? `${ci.series}${ci.volume ? ` vol. ${ci.volume}` : ''}${ci.number ? ` #${ci.number}` : ''}` : '';
+  const title = ci.title || series || name || 'Comic';
+  const authors = [...new Set([ci.writer, ci.penciller].join(',').split(',').map(x => x.trim()).filter(Boolean))];
+  const language = langCode(ci.lang);
+  // Sections: a new one at each folder, and every COMIC_PART pages (an even number keeps spreads paired).
+  const folder = f => f.name.includes('/') ? f.name.slice(0, f.name.lastIndexOf('/')) : '';
+  const folders = new Set(pages.map(folder));
+  const parts = [];
+  for (const f of pages) {
+    const last = parts.at(-1);
+    if (!last || last.folder !== folder(f) || last.pages.length >= COMIC_PART) parts.push({ folder: folder(f), pages: [], first: parts.reduce((t, p) => t + p.pages.length, 0) + 1 });
+    parts.at(-1).pages.push(f);
+  }
+  const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
+  const files = new Map();
+  parts.forEach((part, i) => {
+    const body = part.pages.map((f, j) => `<div class="cbz-page"><img src="${escHtml(f.name.split('/').map(encodeURIComponent).join('/'))}" alt="Page ${part.first + j}"></div>`).join('');
+    files.set(path(i), `<!DOCTYPE html><html${language ? ` lang="${escHtml(language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(title)}</title></head><body>${body}</body></html>`);
+  });
+  const toc = [];
+  parts.forEach((part, i) => {
+    const pagesLabel = `Pages ${part.first}–${part.first + part.pages.length - 1}`;
+    if (folders.size > 1) {
+      if (i && parts[i - 1].folder === part.folder) return;   // one entry per folder
+      toc.push({ label: part.folder.split('/').pop() || title, path: path(i), frag: '', children: [] });
+    } else toc.push({ label: parts.length > 1 ? pagesLabel : title, path: path(i), frag: '', children: [] });
+  });
+  const zsrc = zipSource(zip);
+  const src = {
+    kind: 'mem',
+    async text(p){ return files.has(p) ? files.get(p) : zsrc.text(p); },
+    async exists(p){ return files.has(p) || zsrc.exists(p); },
+    url: (p, type) => zsrc.url(p, type),
+    dispose(){ zsrc.dispose(); }
+  };
+  const spine = parts.map((_, i) => ({ id: `part${i + 1}`, href: path(i), path: path(i), type: 'text/html', props: [], overlay: '', linear: true }));
+  const cover = { id: 'cover', href: pages[0].name, path: pages[0].name, type: MIME[ext(pages[0].name)] || 'image/jpeg', props: ['cover-image'], overlay: '', linear: false };
+  const info = { publisher: ci.publisher || '', published: ci.year || '', isbn: '', series, subjects: ci.genre || '', layout: 'Comic',
+    direction: /righttoleft/i.test(ci.manga) ? 'Right to left' : 'Left to right', description: ci.summary || '', narrator: '', duration: '',
+    activeClass: '-epub-media-overlay-active', playbackClass: '' };
+  const items = [...spine, cover];
+  await startBook({ zip: src, src, opfPath: name + '.cbz', version: '', format: 'Comic book (CBZ)', comic: true, pageCount: pages.length,
+    title, authors, language, uid: '', info, manifest: new Map(items.map(s => [s.id, s])), byPath: new Map(items.map(s => [s.path, s])),
+    spine, toc, urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:cbz:${name}` });
+}
+// A ZIP is opened as a comic when it is named .cbz, or has page images and no EPUB container.
+async function openZip(zip, name, opts = {}){
+  if (/\.cbz$/i.test(name) || (!getFile(zip, 'META-INF/container.xml') && comicPages(zip).length)) return openComic(zip, name.replace(/\.(cbz|zip)$/i, ''), opts);
+  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, '') });
+}
+
 /* ---------- descriptive metadata ---------- */
 const OPF_NS = 'http://www.idpf.org/2007/opf';
 function readInfo(md, ids, spineEl){
@@ -836,8 +937,10 @@ async function startBook(next){
   if (book) book.src.dispose();
   book = next;
   const spine = book.spine;
+  search.token++; Object.assign(search, { q: '', hits: [], cur: -1, shown: false });
+  $('#searchBox').value = ''; $('#searchPanel').hidden = true; $('#tocNav').hidden = false; $('#searchResults').replaceChildren();
   renderMeta(); renderToc(); setBookIcon();
-  if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
+  if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, comic (.cbz), text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
   else hideNotice();
 
   const saved = store.get(book.key);
@@ -940,6 +1043,18 @@ a{color:${t.ribbon}}`;
 /* Layouts: "two" (two columns per page, the default), "one" (one column per page, at a readable width)
    and "scroll" (one continuous column that scrolls). Page layouts move between pages by translating the
    column flow; the scroll layout lets the page scroll normally. */
+/* Comic pages: one image per column, as large as fits, with narrow margins; two pages side by side in the
+   two-column layout, one in the single-column layout, and a continuous strip in the scroll layout. */
+function comicCss(){
+  return `body{--v:12px;--vb:${12 + tts.barH}px;--m:12px;--g:12px}
+#spine-flow{column-rule:none !important}
+.cbz-page{margin:0;display:flex;align-items:center;justify-content:center;break-inside:avoid;break-after:column;height:calc(100vh - var(--v) - var(--vb))}
+.cbz-page:last-of-type{break-after:auto}
+.cbz-page img{max-width:100% !important;max-height:100% !important;width:auto;height:auto;object-fit:contain}
+${layout === 'two' ? `@media (min-width:641px){.cbz-page:nth-of-type(odd){justify-content:flex-end}.cbz-page:nth-of-type(even){justify-content:flex-start}}` : ''}
+${layout === 'scroll' ? `.cbz-page{height:auto;break-after:auto;margin:0 auto 8px}
+.cbz-page img{max-height:none !important;max-width:min(100%,1100px) !important}` : ''}`;
+}
 function overrideCss(){
   const t = tokens(), dark = isDark();
   // Side margin: at least a little, and whatever is left once the text reaches its width limit.
@@ -970,6 +1085,9 @@ pre{white-space:pre-wrap !important}
 #spine-end{display:inline}
 ::highlight(tts-sentence){background-color:${t.soft}}
 ::highlight(tts-word){background-color:${t.ribbon};color:${t.onRibbon}}
+::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
+::highlight(search-current){background-color:${dark ? '#E0B040' : '#F2B630'};color:#1a1408}
+${book?.comic ? comicCss() : ''}
 ${faceStack() ? `#spine-flow,#spine-flow :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
@@ -1061,6 +1179,20 @@ async function chapterSource(item){
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
   return (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
 }
+// A detached copy of a chapter, built like the page shown in the frame (without its styles and resources),
+// so its text splits into the same blocks and sentences: for preparing speech ahead and for search.
+async function chapterDoc(i){
+  const src = await chapterSource(book.spine[i]);
+  const out = document.implementation.createHTMLDocument('');
+  const flow = out.createElement('div'); flow.id = 'spine-flow';
+  const body = src.getElementsByTagNameNS('*', 'body')[0];
+  if (body) for (const c of [...body.childNodes]) flow.append(out.importNode(c, true));
+  const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
+  out.body.append(flow);
+  sanitize(out);
+  // Serialize and parse again, as the frame's srcdoc does, so the text splits the same way.
+  return new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
+}
 async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   if (!book) return;
   i = Math.max(0, Math.min(book.spine.length - 1, i));
@@ -1082,6 +1214,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     position(frag, fraction);
     hideStatus();
     ttsAfterRender();
+    searchAfterRender();
   } catch (err) {
     if (token !== renderToken) return;
     hideStatus();
@@ -1253,9 +1386,11 @@ function pagePrev(){
   else if (cur.i > 0) renderChapter(cur.i - 1, { fraction: 1 });
 }
 function onKey(e){
-  if (e.altKey || e.ctrlKey || e.metaKey) return;
   const tag = (e.target.tagName || '').toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox') { e.preventDefault(); searchOpen(); return; }
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (e.key === '/') { e.preventDefault(); searchOpen(); return; }
   if (menuOpen() && menuKey(e)) return;
   if (e.key === ' ' && tts.open && tag !== 'button' && tag !== 'a') { e.preventDefault(); ttsTogglePlay(); return; }
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); ttsReadHere(); return; }
@@ -1286,7 +1421,7 @@ function renderMeta(){
     ['Publisher', i.publisher], ['Published', i.published], ['ISBN', i.isbn], ['Series', i.series],
     ['Subjects', i.subjects], ['Narrator', i.narrator], ['Narration', i.duration], ['Language', book.language], ['Layout', i.layout], ['Direction', i.direction],
     ...(book.format
-      ? [['Format', book.format], ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
+      ? [['Format', book.format], ...(book.comic ? [['Pages', plural(book.pageCount, 'page')]] : []), ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
       : [['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
          ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid]])
   ].filter(([, v, id]) => v || id);
@@ -1400,7 +1535,7 @@ async function openFile(file){
   try {
     const kind = docKind(file.name, file.type);
     if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}` });
-    else await openBook(zipSource(await JSZip.loadAsync(await file.arrayBuffer())), { name: file.name.replace(/\.epub$/i, '') });
+    else await openZip(await JSZip.loadAsync(await file.arrayBuffer()), file.name, { key: `spine:pos:cbz:${file.name}:${file.size}` });
   }
   catch (err) { hideStatus(); showNotice(friendly(err, file.name), 'error'); }
 }
@@ -1700,19 +1835,26 @@ function ttsBuild(){
 }
 // Split a chapter into sentences ("chunks") within blocks. Works on the page shown in the frame, and on
 // a detached copy of a later chapter (natural voices prepare audio ahead, into the next chapter).
-function chunksOf(doc){
-  const flow = doc?.getElementById('spine-flow'), out = { chunks: [], nodes: new Map() };
-  if (!flow) return out;
-  const blocks = []; let b = null;
+// The text of a page, block by block (paragraphs, headings, list items…), with where each text node sits,
+// leaving out elements matching skip. Line breaks and images count as one space.
+function textBlocks(doc, skip, nodes = null){
+  const flow = doc?.getElementById('spine-flow'), blocks = [];
+  if (!flow) return blocks;
+  let b = null;
   const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: n =>
-    n.nodeType === 1 ? (n.matches(TTS_SKIP) ? NodeFilter.FILTER_REJECT : n.localName === 'br' || n.localName === 'img' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)
+    n.nodeType === 1 ? (n.matches(skip) ? NodeFilter.FILTER_REJECT : n.localName === 'br' || n.localName === 'img' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)
                      : NodeFilter.FILTER_ACCEPT });
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    const blockEl = (n.nodeType === 1 ? n.parentElement : n.parentElement).closest(TTS_BLOCKS);
+    const blockEl = n.parentElement.closest(TTS_BLOCKS);
     if (!b || b.el !== blockEl) { b = { el: blockEl, text: '', segs: [] }; blocks.push(b); }
     if (n.nodeType === 1) { b.segs.push({ node: null, at: b.text.length, len: 1 }); b.text += ' '; }
-    else { out.nodes.set(n, { b, at: b.text.length }); b.segs.push({ node: n, at: b.text.length, len: n.nodeValue.length }); b.text += n.nodeValue; }
+    else { nodes?.set(n, { b, at: b.text.length }); b.segs.push({ node: n, at: b.text.length, len: n.nodeValue.length }); b.text += n.nodeValue; }
   }
+  return blocks;
+}
+function chunksOf(doc){
+  const out = { chunks: [], nodes: new Map() };
+  const blocks = textBlocks(doc, TTS_SKIP, out.nodes);
   const lang = bookLang();
   const seg = window.Intl?.Segmenter ? new Intl.Segmenter(lang, { granularity: 'sentence' }) : null;
   for (const blk of blocks) {
@@ -2799,18 +2941,7 @@ const chunkStart = c => wordStartAt(c.b, c.s, c.s, c.e);
 // The sentences of a later chapter, from a detached copy built like the page shown in the frame.
 async function chapterChunks(i){
   if (n.chapBook !== book) { n.chap = new Map(); n.chapBook = book; }
-  if (!n.chap.has(i)) n.chap.set(i, (async () => {
-    const src = await chapterSource(book.spine[i]);
-    const out = document.implementation.createHTMLDocument('');
-    const flow = out.createElement('div'); flow.id = 'spine-flow';
-    const body = src.getElementsByTagNameNS('*', 'body')[0];
-    if (body) for (const c of [...body.childNodes]) flow.append(out.importNode(c, true));
-    const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
-    out.body.append(flow);
-    sanitize(out);
-    // Serialize and parse again, as the frame's srcdoc does, so the text splits the same way.
-    return chunksOf(new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html')).chunks;
-  })().catch(() => []));
+  if (!n.chap.has(i)) n.chap.set(i, chapterDoc(i).then(d => chunksOf(d).chunks).catch(() => []));
   return n.chap.get(i);
 }
 /* Look-ahead: after the passage being spoken, keep making the following passages one at a time (behind
@@ -2973,6 +3104,166 @@ function nStop(){
   n.active = false; n.paused = false;
 }
 
+/* ---------- search ----------
+   Every chapter's text is gathered once per book (from detached copies, block by block, as textBlocks
+   splits the page in the frame) and searched ignoring case, accents and curly-vs-straight quotes. A match
+   is kept as (chapter, block, offset), so after the chapter renders the same block in the frame gives its
+   DOM range: matches in the chapter are highlighted, the chosen one more strongly, and the page turns to it. */
+const SEARCH_SKIP = 'script,style,noscript,template,[hidden],#spine-end';
+const SEARCH_MAX = 500;
+const search = { q: '', hits: [], cur: -1, token: 0, timer: 0, shown: false };
+const foldMap = new Map();
+// Fold text one UTF-16 unit at a time (so offsets stay the same): lower case, no accents, plain quotes, plain spaces.
+function fold(t){
+  let o = '';
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (c < '\x80') { o += c === '\n' || c === '\t' || c === '\r' ? ' ' : c.toLowerCase(); continue; }
+    let f = foldMap.get(c);
+    if (f === undefined) {
+      f = /[‘’‛′]/.test(c) ? "'" : /[“”‟″]/.test(c) ? '"' : /\s/.test(c) ? ' ' : c.normalize('NFD')[0].toLowerCase();
+      if (f.length !== 1) f = c;
+      foldMap.set(c, f);
+    }
+    o += f;
+  }
+  return o;
+}
+function searchIndex(){
+  if (book.search) return book.search;
+  const b = book;
+  b.search = (async () => {
+    const chapters = [];
+    for (let i = 0; i < b.spine.length; i++) {
+      if (book !== b) return chapters;
+      if (i % 4 === 0) searchStatus(`Gathering text… ${Math.round(i / b.spine.length * 100)}%`);
+      let blocks = [];
+      try { blocks = textBlocks(await chapterDoc(i), SEARCH_SKIP); } catch {}
+      let link = null;
+      for (let j = i; j >= 0 && !link; j--) link = tocLinkFor(b.spine[j].path);
+      const fallback = link && !link.dataset.frag ? link.textContent : b.spine.length > 1 ? `Section ${i + 1}` : '';
+      let heading = fallback;
+      chapters.push(blocks.map(x => {
+        const text = x.text, entry = { text, folded: fold(text), heading };
+        if (/^h[1-3]$/i.test(x.el?.localName || '') && text.trim()) heading = entry.heading = text.replace(/\s+/g, ' ').trim();
+        return entry;
+      }));
+      if (i % 8 === 7) await new Promise(r => setTimeout(r));   // keep the page responsive
+    }
+    return chapters;
+  })();
+  return b.search;
+}
+function searchStatus(t){ $('#searchStatus').textContent = t; }
+function searchOpen(){
+  if (!book) return;
+  if (isFs()) setFs(false);
+  if (!tocIsOpen()) setToc(true);
+  $('#searchBox').focus(); $('#searchBox').select();
+}
+async function searchRun(q){
+  const token = ++search.token;
+  search.q = q; search.hits = []; search.cur = -1; search.shown = false;
+  const active = q.trim().length >= 2;
+  $('#searchPanel').hidden = !active; $('#tocNav').hidden = active;
+  if (!active) { $('#searchResults').replaceChildren(); searchHighlight(); return; }
+  const chapters = await searchIndex();
+  if (token !== search.token || !book) return;
+  if (!chapters.some(c => c.some(x => x.text.trim()))) { searchStatus('No text to search in this book'); $('#searchResults').replaceChildren(); return; }
+  const words = fold(q.trim()).split(/ +/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(words.join('\\s+'), 'g');
+  let more = false;
+  outer: for (let i = 0; i < chapters.length; i++) {
+    chapters[i].forEach((x, k) => {
+      if (more) return;
+      for (const m of x.folded.matchAll(re)) {
+        if (search.hits.length >= SEARCH_MAX) { more = true; return; }
+        search.hits.push({ i, k, a: m.index, z: m.index + m[0].length, heading: x.heading, text: x.text });
+      }
+    });
+    if (more) break outer;
+  }
+  // Start from the first match at or after the reading position.
+  search.cur = Math.max(0, search.hits.findIndex(h => h.i >= cur.i));
+  if (!search.hits.length) search.cur = -1;
+  searchRender(more);
+  searchHighlight();
+}
+function searchRender(more){
+  const list = $('#searchResults'), out = [];
+  let group = null;
+  search.hits.forEach((h, n) => {
+    const g = `${h.i}|${h.heading}`;
+    if (g !== group) { group = g; const h3 = document.createElement('h3'); h3.textContent = h.heading || book.title; out.push(h3); }
+    const btn = document.createElement('button');
+    btn.dataset.n = n;
+    const before = h.text.slice(Math.max(0, h.a - 45), h.a).replace(/\s+/g, ' '), after = h.text.slice(h.z, h.z + 70).replace(/\s+/g, ' ');
+    const mark = document.createElement('mark'); mark.textContent = h.text.slice(h.a, h.z);
+    btn.append((h.a > 45 ? '…' : '') + before.trimStart(), mark, after.trimEnd() + (h.z + 70 < h.text.length ? '…' : ''));
+    out.push(btn);
+  });
+  if (more) { const p = document.createElement('p'); p.className = 'more'; p.textContent = `Showing the first ${SEARCH_MAX} matches. Add words to narrow the search.`; out.push(p); }
+  list.replaceChildren(...out);
+  searchCount();
+}
+function searchCount(){
+  const n = search.hits.length;
+  searchStatus(!n ? 'No matches' : `${search.cur + 1} of ${n}${n >= SEARCH_MAX ? '+' : ''} matches`);
+  $('#searchPrev').disabled = $('#searchNext').disabled = n < 2;
+  $('#searchResults').querySelectorAll('button[aria-current]').forEach(b => b.removeAttribute('aria-current'));
+  const btn = $('#searchResults').querySelector(`button[data-n="${search.cur}"]`);
+  if (btn) { btn.setAttribute('aria-current', 'true'); btn.scrollIntoView({ block: 'nearest' }); }
+}
+// Go to match number n: open its chapter if needed, then highlight it and turn to its page.
+async function searchGo(n){
+  if (!search.hits.length) return;
+  search.cur = (n + search.hits.length) % search.hits.length;
+  search.shown = true;
+  searchCount();
+  const h = search.hits[search.cur];
+  ttsUserNav();
+  if (cur.i !== h.i) { await renderChapter(h.i); return; }   // searchAfterRender shows it
+  searchHighlight(true);
+}
+function searchAfterRender(){ if (search.hits.length) searchHighlight(search.hits[search.cur]?.i === cur.i); }
+// Highlight this chapter's matches; with show, bring the current one into view.
+function searchHighlight(show = false){
+  const win = frame.contentWindow, doc = frame.contentDocument;
+  if (!win?.CSS?.highlights) return;
+  win.CSS.highlights.delete('search-hit'); win.CSS.highlights.delete('search-current');
+  const here = search.hits.filter(h => h.i === cur.i);
+  if (!here.length) return;
+  const blocks = textBlocks(doc, SEARCH_SKIP);
+  const range = h => {
+    const b = blocks[h.k]; if (!b || b.text !== h.text) return null;   // page differs from the index: skip
+    const r = doc.createRange(), [n1, o1] = domPoint(b, h.a, false), [n2, o2] = domPoint(b, h.z, true);
+    r.setStart(n1, o1); r.setEnd(n2, o2); return r;
+  };
+  const all = here.map(range).filter(Boolean);
+  if (all.length) win.CSS.highlights.set('search-hit', new win.Highlight(...all));
+  const h = search.hits[search.cur], r = h?.i === cur.i && range(h);
+  if (!r) return;
+  win.CSS.highlights.set('search-current', new win.Highlight(r));
+  if (!show) return;
+  if (scrolling()) { const se = scroller(), rect = r.getBoundingClientRect(); if (se) scrollTo(se.scrollTop + rect.top - frame.contentWindow.innerHeight * 0.3); }
+  else showPage(pageOfRange(r));
+}
+$('#searchBox').addEventListener('input', e => { clearTimeout(search.timer); const q = e.target.value; search.timer = setTimeout(() => searchRun(q), 220); });
+$('#searchBox').addEventListener('keydown', async e => {
+  if (e.key === 'Escape') { e.preventDefault(); if (e.target.value) { e.target.value = ''; searchRun(''); } else e.target.blur(); return; }
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (e.target.value !== search.q) { clearTimeout(search.timer); await searchRun(e.target.value); searchGo(search.cur); return; }
+  searchGo(search.cur + (e.shiftKey ? -1 : search.shown ? 1 : 0));   // the first Enter shows the nearest match
+});
+$('#searchPrev').addEventListener('click', () => searchGo(search.cur - 1));
+$('#searchNext').addEventListener('click', () => searchGo(search.cur + 1));
+$('#searchResults').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-n]'); if (!btn) return;
+  searchGo(+btn.dataset.n);
+  if (narrow.matches) setToc(false);
+});
+
 /* ---------- start ---------- */
 $('#fontPct').textContent = fontPct + '%';
 setLine(lineH);
@@ -3020,11 +3311,11 @@ async function openFromUrl(ref){
           { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}` });
         return;
       }
-      if (/\.epub$/i.test(u.pathname)) {
+      if (/\.(epub|cbz)$/i.test(u.pathname)) {
         let r = null;
         try { r = await fetch(u.href); } catch {}
         if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
-        await openBook(zipSource(await JSZip.loadAsync(await r.arrayBuffer())), { name });
+        await openZip(await JSZip.loadAsync(await r.arrayBuffer()), decodeURIComponent(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
         return;
       }
       if (!u.pathname.endsWith('/')) u.pathname += '/';
