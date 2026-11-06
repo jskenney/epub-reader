@@ -6,6 +6,31 @@ Everything is in one file, `index.html`. Open it, then
 click **Open EPUB** or drop an `.epub` file onto the page. It opens on a
 built-in sample book.
 
+## Other formats
+
+Besides EPUB, the reader opens **plain text** (`.txt`), **Markdown** (`.md`,
+`.markdown`) and **HTML** (`.html`, `.htm`) files, by Open book, drag and
+drop, or a `?book=` link. Each is converted to HTML, split into sections at
+its main headings (and at about 40,000 characters), and given a contents
+list built from its headings; everything else (pages, fonts, read-aloud,
+saved position) works as for EPUBs.
+
+- **Plain text:** hard-wrapped lines are joined into paragraphs, while
+  short-line passages such as verse keep their line breaks. Lines like
+  "CHAPTER IV", "Book One" or short all-caps titles become chapter headings;
+  a run of them is treated as a contents list. Project Gutenberg's licence
+  header and footer are removed and its title, author and language are
+  used. `_word_` becomes italic. Files that aren't UTF-8 are read as
+  Windows-1252.
+- **Markdown:** rendered with [marked](https://marked.js.org/) (GitHub
+  flavour), loaded from cdnjs only when a Markdown file is opened. YAML front
+  matter `title`, `author` and `lang` are used. Links to headings
+  (`[see](#a-heading)`) work.
+- **HTML:** the page's title, `meta name="author"` and `lang` are used, and
+  its scripts are removed. Opened by a `?book=` link, its images,
+  stylesheets and relative links load from its folder on the server; an
+  uploaded single file can't bring those along.
+
 ## Opening a book from the address
 
 When `index.html` is served from a web server, a `book` query parameter opens
@@ -13,6 +38,7 @@ a book from the same site on page load:
 
 - `index.html?book=books/moby-dick.epub`: fetches the `.epub` and unzips it
   in the browser
+- `index.html?book=books/notes.md` (or `.txt`, `.html`): opens that document
 - `index.html?book=books/moby-dick/`: reads an already-extracted EPUB folder
   (the folder that contains `META-INF/` and `mimetype`); files are fetched
   one at a time as they're needed. The trailing slash is optional.

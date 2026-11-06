@@ -220,9 +220,9 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       </div>
       <label class="btn primary" for="fileInput" tabindex="0" id="openBtn">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 10V2M4.5 5.5 8 2l3.5 3.5M2.5 10v3.5h11V10"/></svg>
-        <span>Open<span class="hide-sm"> EPUB</span></span>
+        <span>Open<span class="hide-sm"> book</span></span>
       </label>
-      <input type="file" id="fileInput" accept=".epub,application/epub+zip">
+      <input type="file" id="fileInput" accept=".epub,application/epub+zip,.txt,.text,text/plain,.md,.markdown,.mdown,.mkd,text/markdown,.html,.htm,.xhtml,text/html">
     </div>
   </header>
 
@@ -304,7 +304,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     <button class="btn" id="fsExit" title="Exit full screen (Esc)">Exit full screen <kbd>Esc</kbd></button>
   </div>
 
-  <div class="drop" id="drop" hidden><div>Drop the .epub to open it</div></div>
+  <div class="drop" id="drop" hidden><div>Drop the book to open it</div></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -409,6 +409,213 @@ function parseDoc(text, type){
   const d = new DOMParser().parseFromString(text, type);
   if (type !== 'text/html' && d.getElementsByTagName('parsererror').length) return null;
   return d;
+}
+
+/* ---------- plain text, Markdown and HTML books ----------
+   These are turned into the same kind of book an EPUB becomes: the document is converted to HTML, split
+   into sections at its main headings (and at a size limit), and served from memory, with a contents list
+   built from the headings. Pagination, fonts, read-aloud and saved positions then work unchanged. */
+const MARKED_URL = 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js';
+const DOC_EXT = /\.(txt|text|md|markdown|mdown|mkd|html?|xhtml)$/i;
+function docKind(name, type = ''){
+  const e = (name.match(/\.([a-z]+)$/i)?.[1] || '').toLowerCase();
+  if (['md', 'markdown', 'mdown', 'mkd'].includes(e) || /markdown/i.test(type)) return 'markdown';
+  if (['html', 'htm', 'xhtml'].includes(e) || /html/i.test(type)) return 'html';
+  if (['txt', 'text'].includes(e) || /^text\/plain/i.test(type)) return 'text';
+  return null;
+}
+// UTF-8, falling back to Windows-1252 for older files.
+function decodeText(bytes){
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
+}
+const escHtml = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const el = document.createElement('script'); el.src = src;
+    el.onload = res; el.onerror = () => rej(new Error(`the Markdown library couldn't be loaded from ${new URL(src).host}`));
+    document.head.append(el);
+  });
+}
+const LANG_NAMES = { english: 'en', french: 'fr', german: 'de', spanish: 'es', italian: 'it', portuguese: 'pt', dutch: 'nl', chinese: 'zh',
+  japanese: 'ja', russian: 'ru', latin: 'la', swedish: 'sv', danish: 'da', norwegian: 'no', finnish: 'fi', polish: 'pl', greek: 'el' };
+const langCode = v => { v = (v || '').trim(); return LANG_NAMES[v.toLowerCase()] || (/^[a-z]{2,3}(-[a-z0-9]+)*$/i.test(v) ? v : ''); };
+
+// Plain text: join hard-wrapped lines into paragraphs, keep line breaks in verse-like passages, find
+// chapter headings, and drop Project Gutenberg's licence header and footer.
+const TXT_HEAD = /^(chapter|book|part|volume|act|scene|canto|section)\s+([0-9]+|[ivxlcdm]+|the\s+\w+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\w+teen|twenty[\w-]*|thirty[\w-]*|forty[\w-]*|fifty[\w-]*|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last)\b/i;
+const TXT_SOLO = /^(prologue|epilogue|preface|foreword|introduction|afterword|appendix|contents|table of contents)\.?$/i;
+function textToHtml(raw){
+  let t = raw.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const meta = {};
+  const start = t.match(/^\*{3}\s*START OF (?:THE|THIS) PROJECT GUTENBERG E-?BOOK[^\n]*$/im);
+  if (start) {
+    const head = t.slice(0, start.index);
+    for (const [k, re] of [['title', /^Title:\s*(.+)$/m], ['author', /^Author:\s*(.+)$/m], ['language', /^Language:\s*(.+)$/m]]) {
+      const m = head.match(re); if (m) meta[k] = m[1].trim();
+    }
+    t = t.slice(start.index + start[0].length);
+    const end = t.match(/^\*{3}\s*END OF (?:THE|THIS) PROJECT GUTENBERG E-?BOOK[^\n]*$/im);
+    if (end) t = t.slice(0, end.index);
+  }
+  const lens = t.split('\n').map(l => l.trimEnd().length).filter(n => n > 0).sort((a, b) => a - b);
+  const wrap = lens[Math.floor(lens.length * 0.9)] || 70;          // the width the text was wrapped at
+  const isHeading = lines => {
+    if (lines.length > 2) return false;
+    const first = lines[0].trim();
+    if (first.length > 60) return false;
+    if (TXT_HEAD.test(first) || TXT_SOLO.test(first) || (lines.length === 1 && /^[IVXLCDM]+\.?$/.test(first))) return true;
+    return lines.length === 1 && /[A-Z]/.test(first) && !/[a-z]/.test(first) && first.length <= 50 && first.split(/\s+/).length <= 8 && !/[,;!?]$/.test(first);
+  };
+  const inline = s => escHtml(s).replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
+  const blocks = t.split(/\n[ \t]*\n+/).map(b => b.replace(/\s+$/, '')).filter(b => b.trim());
+  const items = blocks.map(b => {
+    const lines = b.split('\n').filter(l => l.trim());
+    if (isHeading(lines)) {
+      const level = /^(book|part|volume)\b/i.test(lines[0].trim()) ? 'h1' : 'h2';
+      return { heading: true, level, html: lines.map(l => inline(l.trim())).join('<br> ') };
+    }
+    const longish = lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;
+    if (lines.length === 1 || longish >= (lines.length - 1) * 0.6)
+      return { html: `<p>${inline(lines.map(l => l.trim()).join(' ').replace(/(\w)- (?=[a-z])/g, '$1-'))}</p>` };
+    // Short lines: verse, letters, addresses. Keep the line breaks and indentation.
+    return { html: `<p class="txt-lines">${lines.map(l => '&emsp;'.repeat(Math.floor((l.match(/^ */)[0].length) / 2)) + inline(l.trim())).join('<br>')}</p>` };
+  });
+  // Three or more headings in a row are a contents list, not chapters. When the list runs straight into
+  // the first real chapter, that heading repeats an entry of the list: keep it.
+  const first = it => it.html.split('<br>')[0].replace(/<[^>]+>/g, '').trim().toLowerCase();
+  for (let i = 0; i < items.length; ) {
+    let j = i; while (j < items.length && items[j].heading) j++;
+    if (j - i >= 3) {
+      const keepLast = items.slice(i, j - 1).some(it => first(it) === first(items[j - 1]));
+      for (let k = i; k < (keepLast ? j - 1 : j); k++) items[k] = { html: `<p class="txt-lines">${items[k].html}</p>` };
+    }
+    i = Math.max(j, i + 1);
+  }
+  const html = items.map(it => it.heading ? `<${it.level}>${it.html}</${it.level}>` : it.html).join('\n');
+  return { html, ...meta };
+}
+const TXT_CSS = '<style>.txt-lines{text-indent:0;margin:0 0 1em}</style>';
+
+async function markdownToHtml(md){
+  md = md.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const meta = {};
+  const fm = md.match(/^---\n([\s\S]*?)\n(?:---|\.\.\.)\n/);   // YAML front matter
+  if (fm) {
+    for (const l of fm[1].split('\n')) {
+      const m = l.match(/^(title|author|lang|language):\s*["']?(.*?)["']?\s*$/i);
+      if (m) meta[/^lang/i.test(m[1]) ? 'language' : m[1].toLowerCase()] = m[2];
+    }
+    md = md.slice(fm[0].length);
+  }
+  if (!window.marked) await loadScript(MARKED_URL);
+  return { html: window.marked.parse(md, { gfm: true }), ...meta };
+}
+
+// Split a document's body into sections at its main headings (h1, and h2 when there are several), then
+// at a size limit, and build the contents list from h1-h3.
+function splitDocument(doc){
+  let root = doc.body;
+  while (root.children.length === 1 && /^(div|main|article|section)$/i.test(root.firstElementChild.localName)
+         && ![...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) root = root.firstElementChild;
+  const headOf = el => el?.nodeType !== 1 ? null : /^h[12]$/i.test(el.localName) ? el
+    : (/^(section|div|header|article)$/i.test(el.localName) && /^h[12]$/i.test(el.firstElementChild?.localName || '') ? el.firstElementChild : null);
+  const nodes = [...root.childNodes];
+  const heads = nodes.map(headOf);
+  const count = lv => heads.filter(h => h?.localName === lv).length;
+  const levels = count('h2') >= 2 ? ['h1', 'h2'] : count('h1') >= 2 ? ['h1'] : [];
+  const chunks = [[]];
+  nodes.forEach((nd, i) => {
+    if (heads[i] && levels.includes(heads[i].localName) && chunks.at(-1).some(x => x.nodeType === 1 || x.textContent.trim())) chunks.push([]);
+    chunks.at(-1).push(nd);
+  });
+  // Very long sections (or documents without headings) are split at about 40,000 characters.
+  const parts = [];
+  for (const ch of chunks) {
+    let cur = [], len = 0;
+    for (const nd of ch) {
+      const l = nd.textContent.length;
+      if (len > 40000 && cur.length) { parts.push(cur); cur = []; len = 0; }
+      cur.push(nd); len += l;
+    }
+    if (cur.some(x => x.nodeType === 1 || x.textContent.trim())) parts.push(cur);
+  }
+  return parts.length ? parts : [[]];
+}
+async function openDocument(buffer, name, kind, { base = null, key } = {}){
+  showStatus('Opening book…');
+  const text = decodeText(new Uint8Array(buffer));
+  let doc, meta = {}, headExtra = '';
+  if (kind === 'html') {
+    doc = new DOMParser().parseFromString(text, 'text/html');
+    meta = { title: doc.title.trim(), author: doc.querySelector('meta[name="author" i]')?.content?.trim(), language: doc.documentElement.lang };
+    headExtra = [...doc.head.querySelectorAll('style, link[rel~="stylesheet" i]')].map(e => e.outerHTML).join('');
+  } else {
+    meta = kind === 'markdown' ? await markdownToHtml(text) : textToHtml(text);
+    doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body>${meta.html}</body></html>`, 'text/html');
+    if (kind === 'text') headExtra = TXT_CSS;
+  }
+  const language = langCode(meta.language);
+  const title = meta.title || doc.querySelector('h1, h2')?.textContent.replace(/\s+/g, ' ').trim() || name.replace(DOC_EXT, '') || 'Untitled';
+
+  const parts = splitDocument(doc);
+  const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
+  // Give headings ids for the contents (GitHub-style, so Markdown links like [x](#some-heading) work), and
+  // send in-document links to the section holding their target.
+  const used = new Set([...doc.querySelectorAll('[id]')].map(e => e.id));
+  const slug = text => {
+    const b = text.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s/g, '-') || 'section';
+    let id = b, k = 1; while (used.has(id)) id = `${b}-${k++}`;
+    used.add(id); return id;
+  };
+  const where = new Map();
+  parts.forEach((part, i) => part.forEach(nd => {
+    if (nd.nodeType !== 1) return;
+    for (const h of [nd, ...nd.querySelectorAll('*')]) {
+      if (/^h[1-6]$/i.test(h.localName) && !h.id) h.id = slug(h.textContent);
+      if (h.id) where.set(h.id, i);
+    }
+  }));
+  parts.forEach(part => part.forEach(nd => {
+    if (nd.nodeType !== 1) return;
+    for (const a of [nd, ...nd.querySelectorAll('a[href^="#"]')]) {
+      if (a.localName !== 'a' || !a.getAttribute('href')?.startsWith('#')) continue;
+      const id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (where.has(id)) a.setAttribute('href', `${path(where.get(id))}#${encodeURIComponent(id)}`);
+    }
+  }));
+  const files = new Map(), toc = [], stack = [];
+  parts.forEach((part, i) => {
+    const body = part.map(nd => nd.nodeType === 1 ? nd.outerHTML : nd.nodeType === 3 ? escHtml(nd.textContent) : '').join('');
+    files.set(path(i), `<!DOCTYPE html><html${language ? ` lang="${escHtml(language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(title)}</title>${headExtra}</head><body>${body}</body></html>`);
+    for (const nd of part) {
+      if (nd.nodeType !== 1) continue;
+      for (const h of [nd, ...nd.querySelectorAll('h1, h2, h3')].filter(h => /^h[1-3]$/i.test(h.localName))) {
+        const level = +h.localName[1], label = h.textContent.replace(/\s+/g, ' ').trim();
+        if (!label) continue;
+        const entry = { label, path: path(i), frag: h.id, children: [], level };
+        while (stack.length && stack.at(-1).level >= level) stack.pop();
+        (stack.length ? stack.at(-1).children : toc).push(entry);
+        stack.push(entry);
+      }
+    }
+  });
+  if (!toc.length) parts.forEach((_, i) => toc.push({ label: parts.length > 1 ? `Part ${i + 1}` : title, path: path(i), frag: '', children: [] }));
+
+  const fallback = base ? dirSource(base) : null;
+  const src = {
+    kind: 'mem',
+    async text(p){ return files.has(p) ? files.get(p) : fallback ? fallback.text(p) : null; },
+    async exists(p){ return files.has(p); },
+    async url(p, type){ return fallback ? fallback.url(p, type) : null; },
+    dispose(){}
+  };
+  const spine = parts.map((_, i) => ({ id: `part${i + 1}`, href: path(i), path: path(i), type: 'text/html', props: [], overlay: '', linear: true }));
+  const info = { publisher: '', published: '', isbn: '', series: '', subjects: '', layout: 'Reflowable', direction: 'Left to right',
+    description: '', narrator: '', duration: '', activeClass: '-epub-media-overlay-active', playbackClass: '' };
+  await startBook({ zip: src, src, opfPath: name, version: '', format: { text: 'Plain text', markdown: 'Markdown', html: 'HTML' }[kind],
+    title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
+    manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
+    urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}` });
 }
 
 /* ---------- descriptive metadata ---------- */
@@ -542,11 +749,15 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   next.toc = await loadToc(next, spineEl);
   next.hasOverlays = spine.some(s => s.overlay);
   next.key = 'spine:pos:' + (uid || next.title);
-
+  await startBook(next);
+}
+// Make a prepared book the current one: show its metadata and contents and open it where the reader left off.
+async function startBook(next){
   if (book) book.src.dispose();
   book = next;
+  const spine = book.spine;
   renderMeta(); renderToc();
-  if (sample) showNotice('This is a built-in sample book. Open an .epub file, or drop one anywhere on the page, to read your own.', 'info');
+  if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
   else hideNotice();
 
   const saved = store.get(book.key);
@@ -931,8 +1142,10 @@ function renderMeta(){
   const rows = [
     ['Publisher', i.publisher], ['Published', i.published], ['ISBN', i.isbn], ['Series', i.series],
     ['Subjects', i.subjects], ['Narrator', i.narrator], ['Narration', i.duration], ['Language', book.language], ['Layout', i.layout], ['Direction', i.direction],
-    ['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
-    ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid]
+    ...(book.format
+      ? [['Format', book.format], ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
+      : [['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
+         ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid]])
   ].filter(([, v, id]) => v || id);
   $('#infoList').replaceChildren(...rows.flatMap(([k, v, id]) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
@@ -1010,7 +1223,11 @@ function friendly(err, name){
 
 async function openFile(file){
   if (!file) return;
-  try { await openBook(zipSource(await JSZip.loadAsync(await file.arrayBuffer())), { name: file.name.replace(/\.epub$/i, '') }); }
+  try {
+    const kind = docKind(file.name, file.type);
+    if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}` });
+    else await openBook(zipSource(await JSZip.loadAsync(await file.arrayBuffer())), { name: file.name.replace(/\.epub$/i, '') });
+  }
   catch (err) { hideStatus(); showNotice(friendly(err, file.name), 'error'); }
 }
 
@@ -2260,7 +2477,8 @@ async function openSample(){
   try { await openBook(zipSource(await JSZip.loadAsync(await makeSample())), { sample: true }); }
   catch (err) { hideStatus(); showNotice("Couldn't build the sample book: " + err.message, 'error'); }
 }
-/* ?book=dir/ opens an extracted EPUB folder; ?book=dir/a.epub fetches and unzips the archive.
+/* ?book=dir/ opens an extracted EPUB folder; ?book=dir/a.epub fetches and unzips the archive;
+   ?book=dir/a.txt, .md or .html opens that document.
    A relative path is tried first relative to this page, then under BOOKSHELF at the site root
    (?book=books/x/ -> books/x/, then /bookshelf/books/x/). Only books on this same site are accepted. */
 function bookCandidates(ref){
@@ -2277,6 +2495,16 @@ async function openFromUrl(ref){
     if (candidates.some(u => u.origin !== location.origin)) throw new Error('Only books hosted on this same site can be opened from the address.');
     const misses = [];
     for (const u of candidates) {
+      const kind = docKind(u.pathname);
+      if (kind) {
+        let r = null;
+        try { r = await fetch(u.href); } catch {}
+        if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
+        // Images, stylesheets and links in the document resolve against its folder on the server.
+        await openDocument(await r.arrayBuffer(), decodeURIComponent(u.pathname.split('/').pop()), kind,
+          { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}` });
+        return;
+      }
       if (/\.epub$/i.test(u.pathname)) {
         let r = null;
         try { r = await fetch(u.href); } catch {}
