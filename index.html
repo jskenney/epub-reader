@@ -527,10 +527,28 @@ function getFile(zip, path){
     const name = Object.keys(zip.files).find(n => n.toLowerCase() === low);
     if (name) f = zip.file(name);
   }
-  // A whole archive read by JSZip: the same size limit as in place (JSZip records each file's size).
-  const n = f?._data?.uncompressedSize;
-  if (n > MAX_ENTRY) return { name: f.name, dir: false, async: () => Promise.reject(new Error(tooLarge(f.name, n))) };
-  return f;
+  return f && f._data?.compressedContent ? checkedEntry(zip, f) : f;
+}
+// A file of a whole archive read by JSZip, read as in place: the size limit, decompression that stops past the
+// declared size (JSZip only notices after inflating it all), and the checksum (which JSZip doesn't check),
+// lenient for uploads as in place. Anything but stored or deflated is left to JSZip.
+function checkedEntry(zip, f){
+  const d = f._data, name = f.name;
+  return { name, dir: f.dir, async async(type){
+    if (d.uncompressedSize > MAX_ENTRY) throw new Error(tooLarge(name, d.uncompressedSize));
+    const raw = d.compressedContent instanceof Uint8Array ? d.compressedContent : null, magic = d.compression?.magic;
+    if (!raw || (magic !== '\x00\x00' && magic !== '\x08\x00')) return f.async(type);
+    const b = magic === '\x00\x00' ? raw : await inflateRaw(raw, d.uncompressedSize, name);
+    if (b.length !== d.uncompressedSize) throw new Error(`${name}: damaged archive (sizes differ)`);
+    if (crc32(b) !== d.crc32 >>> 0) {
+      if (!zip.lenientChecksums) throw new Error(`${name}: damaged archive, or the book changed while it was open (its checksum doesn't match)`);
+      console.warn(`${name}: its checksum doesn't match the archive's; used anyway`);
+    }
+    if (type === 'string' || type === 'text') return new TextDecoder().decode(b);
+    if (type === 'base64') return bytesToBase64(b);
+    if (type === 'arraybuffer') return b.slice().buffer;
+    return b;
+  } };
 }
 async function readText(src, path){ return src.text(path); }
 
@@ -1074,7 +1092,7 @@ async function openComic(zip, name, { key } = {}){
   let ci = {};
   const ciFile = Object.values(zip.files).find(f => !f.dir && /(^|\/)comicinfo\.xml$/i.test(f.name));
   if (ciFile) {
-    const d = parseDoc(clean(await ciFile.async('string')), 'application/xml');
+    const d = parseDoc(clean(await (getFile(zip, ciFile.name) || ciFile).async('string')), 'application/xml');
     const g = t => d?.getElementsByTagName(t)[0]?.textContent.trim() || '';
     ci = { title: g('Title'), series: g('Series'), number: g('Number'), volume: g('Volume'), writer: g('Writer'), penciller: g('Penciller'),
       summary: g('Summary'), lang: g('LanguageISO'), manga: g('Manga'), publisher: g('Publisher'), year: g('Year'), genre: g('Genre') };
@@ -2223,7 +2241,8 @@ async function openFile(file){
     const kind = docKind(file.name, file.type);
     if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}` });
     else {
-      const zip = await zipFromBlob(file).catch(() => null) || await JSZip.loadAsync(await file.arrayBuffer());   // in place when possible
+      let zip = await zipFromBlob(file).catch(() => null);   // in place when possible
+      if (!zip) { zip = await JSZip.loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
       await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}` });
     }
   }

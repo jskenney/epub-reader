@@ -107,13 +107,15 @@ test('a file name that is not UTF-8 is found through its Unicode Path field (L-2
   assert.equal(await page.evaluate(() => window.wholeLoads), 0);
 });
 
-test('an entry that inflates past its declared size fails clearly instead of filling memory (M-9)', async () => {
-  const page = await h.newPage();
-  await h.openReader(page, `${h.READER}?book=books/bomb.epub`);
-  assert.equal(await h.title(page), 'Bomb');
-  await page.click('#tocList a >> nth=1');
-  const note = await h.waitFor(() => h.notice(page), 10000);
-  assert.match(note, /c2\.xhtml: damaged archive \(larger than it says\)/);
+test('an entry that inflates past its declared size fails clearly instead of filling memory, in place or whole (M-9, L-30)', async () => {
+  for (const base of [h.SITE, h.NORANGE]) {
+    const page = await h.newPage();
+    await h.openReader(page, `${base}/reader/index.html?book=books/bomb.epub`);
+    assert.equal(await h.title(page), 'Bomb');
+    await page.click('#tocList a >> nth=1');
+    const note = await h.waitFor(() => h.notice(page), 10000);
+    assert.match(note || '', /c2\.xhtml: damaged archive \(larger than it says\)/, base);
+  }
 });
 
 test('ZIP64, or a range reply without a total size, falls back to the whole file', async () => {
@@ -236,10 +238,12 @@ test('a wrong checksum: an upload reads anyway with a warning, as JSZip would; o
   await page.click('#tocList a >> nth=1');
   await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 10000 });
   assert.ok(warnings.some(w => /c2\.xhtml: its checksum doesn't match/.test(w)), warnings.join(' | '));
-  const page2 = await h.newPage();
-  await h.openReader(page2, `${h.READER}?book=books/bad-crc.epub`);
-  await page2.click('#tocList a >> nth=1');
-  assert.match(await h.waitFor(() => h.notice(page2), 10000) || '', /checksum doesn't match/);
+  for (const base of [h.SITE, h.NORANGE]) {   // in place, and downloaded whole (read by JSZip)
+    const page2 = await h.newPage();
+    await h.openReader(page2, `${base}/reader/index.html?book=books/bad-crc.epub`);
+    await page2.click('#tocList a >> nth=1');
+    assert.match(await h.waitFor(() => h.notice(page2), 10000) || '', /checksum doesn't match/, base);
+  }
 });
 
 test('an uploaded book changed on disk while open says so (M-7)', async () => {
