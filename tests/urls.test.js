@@ -130,10 +130,15 @@ test("a book without an identifier keeps its position after a metadata edit, or 
   await page.goto(`${h.READER}?book=books/twin-a-edited.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
   assert.deepEqual(await posKeys(page), [key]);
-  // Given an identifier: the position moves to it.
+  // The same title and file names but different text: another book, starting at its beginning.
+  await page.goto(`${h.READER}?book=books/twin-c.epub`); await h.waitForBook(page);
+  assert.match(await page.textContent('#spinePos'), /spine 1\/3/);
+  // Given an identifier: the position is copied to it, and kept for a copy without one.
   await page.goto(`${h.READER}?book=books/twin-a-uid.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
-  assert.deepEqual(await posKeys(page), ['spine:pos:urn:twin-a-given']);
+  assert.ok((await posKeys(page)).includes('spine:pos:urn:twin-a-given'));
+  await page.goto(`${h.READER}?book=books/twin-a.epub`); await h.waitForBook(page);
+  assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
 });
 
 test('books with an identifier still use it, so they resume wherever they are opened from (L-13)', async () => {

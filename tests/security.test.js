@@ -66,6 +66,7 @@ test('an HTML page: base and meta refresh are removed before parsing, whatever t
   await page.waitForTimeout(1500);   // longer than the refresh
   const state = await h.inFrame(page, doc => ({ text: doc.body.textContent, custom: doc.querySelectorAll('base-card').length,
     base: doc.querySelectorAll('base').length, refresh: doc.querySelectorAll('meta[http-equiv="refresh" i]').length, where: doc.defaultView.location.href }));
+  assert.match(state.text, /once froze the page/);
   assert.match(state.text, /Custom element kept\.[\s\S]*Don't stop here\./);
   assert.deepEqual([state.custom, state.base, state.refresh, state.where], [1, 0, 0, 'about:srcdoc']);
   assert.deepEqual(await h.remoteLog(), []);

@@ -625,6 +625,7 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
       else { try { name = strict.decode(raw); } catch { name = latin.decode(raw); } }
     }
     const damaged = why => new Error(`${name}: damaged archive (${why})`);
+    let checked = false;
     // The local header and the data in one read: the header's own extra field is usually the central one's
     // size, with a margin; if it is longer, the data is read separately.
     const bytes = async () => {
@@ -639,8 +640,9 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
       if (method === 0 && csize !== usize) throw damaged('sizes differ');
       const out = method === 0 ? data : await inflateRaw(data, usize, name);
       // The checksum also catches a book replaced by another of the same size on a server that sends no
-      // usable validators.
-      if (crc32(out) !== crc) throw new Error(`${name}: damaged archive, or the book changed while it was open (its checksum doesn't match)`);
+      // usable validators. (Files over 32 MB, slow to check on every read, are checked the first time only.)
+      if (!(checked && usize > 32 << 20) && crc32(out) !== crc) throw new Error(`${name}: damaged archive, or the book changed while it was open (its checksum doesn't match)`);
+      checked = true;
       return out;
     };
     files[name] = {
@@ -686,7 +688,7 @@ async function zipFromUrl(url, init = {}){
     // true: another version; false: the same one; null: can't tell (the reply has nothing to compare).
     const differs = res => {
       const t = res.headers.get('etag') || '', m = res.headers.get('last-modified') || '';
-      if (etag && t) return t !== etag;
+      if (etag && t) return t.replace(/^W\//, '') !== etag.replace(/^W\//, '');   // (weak or strong: same tag, same file)
       if (modified && m) return m !== modified;
       return null;
     };
@@ -1246,15 +1248,18 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   next.hasOverlays = spine.some(s => s.overlay);
   next.coverId = md ? [...md.getElementsByTagNameNS('*', 'meta')].find(m => m.getAttribute('name') === 'cover')?.getAttribute('content') || '' : '';
   // Where the reading position is kept: by the book's identifier, so a book resumes wherever it is opened
-  // from. A book without one is keyed by a fingerprint of its title and reading order (the spine's files),
-  // which differs between books even when their titles match, and survives metadata edits (a new author,
-  // date or cover in Calibre) that leave the chapters alone.
-  const stableKey = 'spine:pos:opf:' + fingerprint(JSON.stringify([next.title, spine.map(s => s.href)]));
+  // from. A book without one is keyed by a fingerprint of its title (as written in it, not the file name),
+  // its reading order (the spine's files) and the text of its last chapter: different books stay apart even
+  // with the same title and file names, and metadata edits (a new author, date or cover in Calibre) that
+  // leave the chapters alone keep the key.
+  const last = await readText(zip, spine.at(-1).path).catch(() => '') || '';
+  const stableKey = 'spine:pos:opf:' + fingerprint(JSON.stringify([dc('title')[0] || '', spine.map(s => s.href), fingerprint(last)]));
   next.key = uid ? 'spine:pos:' + uid : stableKey;
-  // Positions under earlier keys are moved over once and the old key removed: the fingerprint of the
-  // whole package file and the title (earlier versions), or, for a book that has since been given an
-  // identifier, its fingerprint key.
-  next.legacyKeys = uid ? [stableKey] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
+  // Positions under earlier keys are moved over once and the old key removed: the fingerprint of the whole
+  // package file and the title (earlier versions). A book since given an identifier copies its fingerprint
+  // key's position without removing it (a copy without the identifier may still be read).
+  next.legacyKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
+  next.copyKeys = uid ? [stableKey] : [];
   await startBook(next);
 }
 // Make a prepared book the current one: show its metadata and contents and open it where the reader left off.
@@ -1269,9 +1274,12 @@ async function startBook(next){
   else hideNotice();
 
   let saved = store.get(book.key);
-  for (const k of saved ? [] : book.legacyKeys || []) {
-    if (k === book.key || (saved = store.get(k)) == null) continue;
-    store.set(book.key, saved); store.del(k);
+  const earlier = [...(book.legacyKeys || []).map(k => [k, true]), ...(book.copyKeys || []).map(k => [k, false])];
+  for (const [k, move] of saved ? [] : earlier) {
+    const v = k === book.key ? null : store.get(k);
+    if (!(v?.i < spine.length)) continue;   // nothing there, or a position that doesn't fit this book
+    if (move) store.del(k);   // first, which also frees the space if storage is full
+    store.set(book.key, v); saved = v;
     break;
   }
   const i = saved && saved.i < spine.length ? saved.i : 0;
@@ -1357,15 +1365,21 @@ function plainCss(css){
       const e = css.indexOf('*/', i + 2); i = from = e < 0 ? n : e + 2;
     } else if (c === '"' || c === "'") {
       let j = i + 1;
-      for (; j < n && css[j] !== c && css[j] !== '\n'; j++) {
+      for (; j < n && css[j] !== c && css[j] !== '\n' && css[j] !== '\r' && css[j] !== '\f'; j++) {   // (a raw newline ends a string)
         if (css[j] !== '\\') continue;
         const nl = css[j + 1] === '\r' && css[j + 2] === '\n' ? 3 : /[\n\r\f]/.test(css[j + 1] || '') ? 2 : 0;
         if (nl) { flush(j); from = j + nl; j += nl - 1; } else j++;
       }
       i = j + 1;
     } else if (c === '\\') i += 2;
-    else if ((c === 'u' || c === 'U') && /^url\(\s*[^'"\s]/i.test(css.slice(i, i + 40)) && !/[\w\\-]/.test(css[i - 1] || '')) {
-      const e = css.indexOf(')', i); i = e < 0 ? n : e + 1;
+    else if ((c === 'u' || c === 'U') && /^url\(/i.test(css.slice(i, i + 4)) && !/[\w\\-]/.test(css[i - 1] || '')) {
+      let j = i + 4;
+      while (j < n && /[ \t\n\r\f]/.test(css[j])) j++;
+      if (css[j] === '"' || css[j] === "'") i = j;   // a quoted address: read as a string next
+      else {   // unquoted: its contents are raw up to ")" (an escaped "\)" doesn't end it)
+        while (j < n && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
+        i = j + 1;
+      }
     } else if (c === '@') {
       const m = /^@((?:[\w-]|\\(?:[0-9a-f]{1,6}(?![0-9a-f])[ \t\n\r\f]?|[^\n\r\f0-9a-f]))+)/i.exec(css.slice(i, i + 200));
       if (m && m[1].includes('\\')) {
@@ -1400,7 +1414,7 @@ function imageSets(css){
 // would drop "cursor: url(x), pointer" or a font's whole src list), and nothing to fetch.
 const NO_IMAGE = 'url(data:,)';   // (unquoted: safe even where the url( was inside a string)
 async function rewriteCss(css, cssPath, depth = 0){
-  css = plainFunctionNames(plainCss(css));
+  css = plainCss(plainFunctionNames(css));   // (names first, so u\72l( is seen as url( too)
   if (!ALLOW_REMOTE_CONTENT) {
     // image-set() takes plain strings as well as url(): one with any remote entry counts as remote.
     for (const [a, b] of imageSets(css).reverse()) {
@@ -1409,9 +1423,10 @@ async function rewriteCss(css, cssPath, depth = 0){
       if (refs.some(r => isRemote(cssUnescape(r.trim())))) css = css.slice(0, a) + NO_IMAGE + css.slice(b);
     }
   }
-  for (const m of [...css.matchAll(/@import\s*(?:url\(\s*)?(['"]?)([^'")\s;]+)\1\s*\)?[^;]*;/gi)]) {
+  // (A quoted address may hold ";"; the last rule of a sheet needs no ";"; a block "{" makes it no @import.)
+  for (const m of [...css.matchAll(/@import\s*(?:url\(\s*)?(?:(['"])((?:\\[\s\S]|(?!\1)[^\\\n\r\f])*)\1|([^'")\s;]+))\s*\)?[^;{}@]*(?:;|$)/gi)]) {
     let inner = '';
-    const ref = cssUnescape(m[2]);
+    const ref = cssUnescape(m[2] ?? m[3]);
     if (isRemote(ref) && ALLOW_REMOTE_CONTENT) continue;   // left as it is: the browser loads it
     if (depth < 4 && !isExternal(ref) && !isRemote(ref)) {
       const p = resolve(cssPath, ref); const t = await readText(book.zip, p);
@@ -1669,11 +1684,37 @@ function releaseComicImages(shownPath){
 /* <base> and <meta http-equiv> take effect as soon as a document is parsed, even an unseen one made only to
    read a chapter, and the browser applies the page's security policy to them there (logging alarming
    messages). The reader never wants them, so they are removed from the text before any parsing. */
-// (A tag's attributes, quoted values may hold ">"; the tag may have a prefix, as <h:base> in XHTML.)
-// A quote opens a value only right after "=" (href=a'b is unquoted), as the HTML parser reads it.
-const ATTRS = String.raw`(?:[^>=]|=\s*(?:"[^"]*"|'[^']*'|[^\s>"'][^\s>]*(?![^\s>])|(?=[\s>]))){0,1000}`;   // (bounded, so text with many unclosed "<meta" stays fast; the sanitizer still removes longer tags)
-const DOC_CONTROLS_RE = new RegExp(String.raw`<(?:[\w-]+:)?(?:base(?=[\s/>])${ATTRS}>|meta(?=[\s/>])(?=${ATTRS.replace(/\}$/, '}?')}[\s/]http-equiv[\s/=>])${ATTRS}>)`, 'gi');
-const withoutDocumentControls = t => t.replace(DOC_CONTROLS_RE, '');
+// Removes <base> and <meta http-equiv> tags (any case, any prefix such as <h:base>) before parsing, reading
+// attributes as the HTML parser does: a quote opens a value only right after "=", and a quoted value may hold
+// ">". One linear pass (a regex here backtracked exponentially on unclosed tags). An unclosed tag is left for
+// the sanitizer, which removes these tags again after parsing.
+function withoutDocumentControls(t){
+  const tag = /<(?:[\w-]+:)?(base|meta)(?=[\s/>])/gi, space = c => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+  const out = [];
+  let from = 0, m;
+  while ((m = tag.exec(t))) {
+    const n = t.length;
+    let i = m.index + m[0].length, control = m[1].toLowerCase() === 'base';
+    while (i < n && t[i] !== '>') {
+      if (space(t[i]) || t[i] === '/') { i++; continue; }
+      const s = i++;   // an attribute name (its first character may be "=")
+      while (i < n && !space(t[i]) && t[i] !== '/' && t[i] !== '>' && t[i] !== '=') i++;
+      if (t.slice(s, i).toLowerCase() === 'http-equiv') control = true;
+      let j = i;
+      while (j < n && space(t[j])) j++;
+      if (t[j] !== '=') continue;
+      j++;
+      while (j < n && space(t[j])) j++;
+      if (t[j] === '"' || t[j] === "'") { const e = t.indexOf(t[j], j + 1); i = e < 0 ? n : e + 1; }
+      else { i = j; while (i < n && !space(t[i]) && t[i] !== '>') i++; }
+    }
+    if (i >= n) break;
+    if (control) { out.push(t.slice(from, m.index)); from = i + 1; }
+    tag.lastIndex = i + 1;
+  }
+  out.push(t.slice(from));
+  return out.join('');
+}
 async function chapterSource(item){
   const raw = withoutDocumentControls(await readText(book.zip, item.path) || '');
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
@@ -3278,13 +3319,19 @@ async function svLoad(){
     });
     sv.voices = list.filter(v => v?.id && (v.ref_audio ? v.ref_text : v.instruction));
     // Each clip's version (ETag, or date and size), so saved audio is made again when a clip is re-recorded
-    // under the same name.
+    // under the same name. If the server can't say (HEAD refused, a timeout), the last version seen is kept,
+    // so saved audio isn't made again for nothing.
+    const seen = store.get('spine:clipVersions') || {};
     await Promise.all(sv.voices.filter(v => v.ref_audio).map(async v => {
+      const url = svClipURL(v);
       try {
-        const h = (await fetch(svClipURL(v), { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(5000) })).headers;
-        v.clipVersion = h.get('etag') || `${h.get('last-modified') || ''}|${h.get('content-length') || ''}`;
-      } catch { v.clipVersion = ''; }
+        const r = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
+        const h = r.headers, version = h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '');
+        if (r.ok && version) seen[url] = version;
+      } catch {}
+      v.clipVersion = seen[url] || '';
     }));
+    store.set('spine:clipVersions', seen);
     if (!sv.voices.length) throw new Error('no voices yet (create one in the voice studio at /tts-studio/)');
     sv.state = 'ready';
   } catch (e) { sv.state = 'error'; sv.error = e.message; }
@@ -3302,7 +3349,8 @@ function svClipURL(v){
 async function svRef(v){
   const url = svClipURL(v);
   if (!url) throw new Error(`the voice clip ${v.ref_audio} isn't in the voices folder`);
-  if (!sv.refs.has(v.ref_audio)) sv.refs.set(v.ref_audio, fetch(url).then(r => {
+  // (Not from the HTTP cache: a re-recorded clip must be the one used, as its version is in the key.)
+  if (!sv.refs.has(v.ref_audio)) sv.refs.set(v.ref_audio, fetch(url, { cache: 'no-cache' }).then(r => {
     if (!r.ok) throw new Error(`the voice clip ${v.ref_audio} answered ${r.status}`);
     return r.blob();
   }));

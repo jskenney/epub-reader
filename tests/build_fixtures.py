@@ -237,7 +237,8 @@ def main():
     entries = zip_entries(books / "bad-upath.epub")
     for e in entries:
         if e["name"] == b"OEBPS/c1.xhtml":
-            e["cextra"] = struct.pack("<HH", 0x7075, 200) + b"\x01" + b"x" * 8
+            # (with the name's real CRC, so only the size check rejects it)
+            e["cextra"] = struct.pack("<HHBI", 0x7075, 200, 1, zlib.crc32(e["name"]) & 0xFFFFFFFF) + b"OEBPS/zz"
         if e["name"] == b"OEBPS/c2.xhtml":
             e["flags"] = 0x800
             e["cextra"] = struct.pack("<HHBI", 0x7075, 5 + 9, 1, zlib.crc32(e["name"]) & 0xFFFFFFFF) + b"OEBPS/zzz"
@@ -254,6 +255,8 @@ def main():
     # Two different books with the same title and no identifier (REVIEW.md L-13).
     for name, n in (("twin-a", 3), ("twin-b", 2)):
         epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)
+    # Twin C: twin A's title and file names, different text (REVIEW.md M-10): a different book.
+    epub(books / "twin-c.epub", "Twin Title", [(f"c{i}.xhtml", f"twin-c {i}", f"<h1>twin-c part {i}</h1>" + paragraphs("twin-c", 2)) for i in range(1, 4)], uid=None)
     # Twin A after a metadata edit (new author, a date, a cover), and after being given an identifier (M-10).
     def edited(src, dst, change, extra=None):
         with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
@@ -297,7 +300,7 @@ def main():
 <area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
 <p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>
 <p id="str-url">A url( inside a CSS string stays text.</p>
-<p class="lc">Line continuation inside an address.</p><p class="cm">Quote in a comment.</p><p class="cm2">Comment in url(.</p>
+<p class="ws2">After a url( with many spaces.</p><p class="lc">Line continuation inside an address.</p><p class="cm">Quote in a comment.</p><p class="cm2">Comment in url(.</p>
 <p id="escapes" style="font-family: '""" + "\\4e2d\\6587" * 16 + """', serif">Many escapes in a row (REVIEW.md: this once froze the page).</p>"""
     # Ways around pattern matching (REVIEW.md H-1, H-2, L-1, L-2), each aimed at both other sites.
     for i, host in enumerate((REMOTE, BLOCKED)):
@@ -322,17 +325,21 @@ def main():
 <p id="cursor-missing" style="cursor: url(missing.cur), pointer">missing cursor</p>
 <p><img class="bypass" src="missing-local.png" alt="missing"/></p>"""
     style = f"""<style>@import url("{REMOTE}/imported.css"); @import"{BLOCKED}/import-no-space.css";
+@import u\\72l(a"b); @\\69mport "{REMOTE}/after-escaped-url.css";
+@import url(a\\)"); @\\69mport "{BLOCKED}/after-escaped-paren.css";
+@import "{REMOTE}/semi;colon.css";
 @import "{REMOTE}/line-continued\\
 .css"; @\\69mport "{BLOCKED}/escaped-at-import.css";
 .lc {{ background: url("{REMOTE}/line-continued\\
 .png") }}
 .cm {{ background-image: image-set(/*"*/"{REMOTE}/comment-quote.png" 1x) }}
 .cm2 {{ background: url(/*x*/"{REMOTE}/comment-before.png") }}
+.ws {{ cursor: url(                                            a") }} .ws2 {{ background-image: image-set(/*"*/"{REMOTE}/after-spaces.png" 1x) }}
 .x {{ background: url({REMOTE}/style-bg.png); border: 30px solid; border-image: URL({BLOCKED}/upper-url.png) 30 }}
 .x::after {{ content: "x"; background: url(\\68ttp://blocked.example/escaped.png) }}
 @font-face {{ font-family: Remote; src: url("{REMOTE}/font.woff2") }}
 #str-url::before {{ content: "see url(missing-in-string.png) " }}
-.many-escapes {{ content: "\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa" }}</style>"""
+.many-escapes {{ content: "\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa" }}</style><style>@import "{BLOCKED}/no-semicolon-at-end.css"</style>"""
     epub(books / "hostile.epub", "Hostile Book", [("c1.xhtml", "Hostile", hostile, style),
                                                   ("c2.xhtml", "Target", "<h1>Target chapter</h1><p>Arrived.</p>")],
          uid="urn:hostile", extra={"OEBPS/pic.png": pic})
@@ -343,7 +350,8 @@ def main():
 <meta content="1;url={REMOTE}/refresh?a>b" http-equiv=refresh>
 <META HTTP-EQUIV="refresh" CONTENT="1;url={REMOTE}/upper">
 <meta name="http-equiv" content="kept">
-</head><body><h1>Controls</h1><base-card>Custom element kept.</base-card><p>Don't stop here.</p></body></html>""")
+</head><body><h1>Controls</h1><base-card>Custom element kept.</base-card><p>Don't stop here.</p>
+<p>An unclosed tag that once froze the page follows.</p><base""" + " = a" * 40 + "\n")
     with zipfile.ZipFile(books / "hostile.epub") as z:   # also as an extracted folder: its files come from the site
         z.extractall(books / "hostile-dir")
 
