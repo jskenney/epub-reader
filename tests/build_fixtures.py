@@ -140,7 +140,8 @@ def main():
                         ("folder-novoice", {"ALLOW_CDN": False, "LIB_FILES": "/reader/", "VOICE_FILES": "/novoices/"}),
                         ("folder-cdn", {"LIB_FILES": "/nolibs/"}),
                         ("folder-partial", {"LIB_FILES": "/reader/", "VOICE_FILES": "/partial/"}),
-                        ("folder-badlib", {"ALLOW_CDN": False, "LIB_FILES": "/badlibs/"})):
+                        ("folder-badlib", {"ALLOW_CDN": False, "LIB_FILES": "/badlibs/"}),
+                        ("folder-keys", {"LIB_FILES": "/reader/", "VOICE_FILES": "/reader/", "shortcuts": False})):
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))

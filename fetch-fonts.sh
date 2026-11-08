@@ -12,8 +12,9 @@
 # check nothing has changed on disk. Delete fonts/ and run it again to update. The fonts are under the SIL
 # Open Font License.
 #
-#   --strict   once fonts/SHA256SUMS exists, fail instead of fetching again: a changed file on disk, or a
-#              font file Google now serves that isn't in the list, stops the run (nothing is replaced)
+#   --strict   check against fonts/SHA256SUMS and fail instead of fetching again: a changed or missing file
+#              on disk, or a font file Google now serves that isn't in the list, stops the run (nothing is
+#              replaced, and the list isn't rewritten). Needs the list: run once without --strict first.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -33,17 +34,23 @@ else echo "sha256sum or shasum is required" >&2; exit 1; fi
 mkdir -p "$DEST/files"
 
 # Files already downloaded must still match what was recorded.
+if [ "$STRICT" = 1 ] && [ ! -s "$DEST/SHA256SUMS" ]; then
+  echo "No fonts/SHA256SUMS to check against (--strict): run ./fetch-fonts.sh once without it first" >&2; exit 1
+fi
 if [ -f "$DEST/SHA256SUMS" ]; then
   echo "Checking existing font files"
   bad=0
   while read -r hash path; do
-    [ -f "$DEST/$path" ] || continue
+    if [ ! -f "$DEST/$path" ]; then
+      if [ "$STRICT" = 1 ]; then echo "  MISSING $path" >&2; bad=1; fi
+      continue
+    fi
     if [ "$("${SHA[@]}" "$DEST/$path" | cut -d' ' -f1)" != "$hash" ]; then
       if [ "$STRICT" = 1 ]; then echo "  BAD    $path" >&2; bad=1; continue; fi
       echo "  BAD    $path (removed)"; rm -f "$DEST/$path"; bad=1
     fi
   done < "$DEST/SHA256SUMS"
-  if [ "$bad" = 1 ] && [ "$STRICT" = 1 ]; then echo "Font files changed on disk (--strict: nothing was replaced)" >&2; exit 1; fi
+  if [ "$bad" = 1 ] && [ "$STRICT" = 1 ]; then echo "Font files changed or missing on disk (--strict: nothing was replaced)" >&2; exit 1; fi
   [ "$bad" = 0 ] || echo "  (removed files are downloaded again below)"
 fi
 KNOWN=""
@@ -87,8 +94,8 @@ while read -r id spec; do
 done < <(grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1 \2/")
 [ "$found" = 1 ] || { echo "Couldn't find the FONTS list in index.html" >&2; exit 1; }
 
-# Record every font file for later runs.
-(cd "$DEST" && find files -type f ! -name '*.part' | sort | while read -r f; do "${SHA[@]}" "$f"; done) > "$DEST/SHA256SUMS"
+# Record every font file for later runs (not with --strict: the list is what was checked against).
+[ "$STRICT" = 1 ] || (cd "$DEST" && find files -type f ! -name '*.part' | sort | while read -r f; do "${SHA[@]}" "$f"; done) > "$DEST/SHA256SUMS"
 cat > "$DEST/NOTICE.txt" <<NOTICE
 Self-hosted copies of the reader's fonts, fetched from Google Fonts by fetch-fonts.sh.
 IBM Plex Sans, IBM Plex Mono, Literata, Source Serif 4, EB Garamond, Crimson Pro and Atkinson Hyperlegible

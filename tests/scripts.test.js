@@ -93,12 +93,25 @@ test('fetch-fonts.sh --strict fails on a changed file or a font file not in the 
   fs.appendFileSync(file, 'x');
   const changed = run(dir, 'fetch-fonts.sh', ['--strict'], env);
   assert.equal(changed.code, 1, changed.out);
-  assert.match(changed.out, /changed on disk \(--strict: nothing was replaced\)/);
+  assert.match(changed.out, /changed or missing on disk \(--strict: nothing was replaced\)/);
   assert.ok(fs.existsSync(file), 'the changed file is left for you to look at');
+  // A listed file that's gone is an error too, not something to fetch and trust again.
+  const sums = fs.readFileSync(path.join(dir, 'fonts', 'SHA256SUMS'), 'utf8');
+  fs.rmSync(file);
+  const missing = run(dir, 'fetch-fonts.sh', ['--strict'], env);
+  assert.equal(missing.code, 1, missing.out);
+  assert.match(missing.out, /MISSING/);
+  assert.equal(fs.readFileSync(path.join(dir, 'fonts', 'SHA256SUMS'), 'utf8'), sums, 'the list is never rewritten with --strict');
   fs.copyFileSync(path.join(REPO, 'fonts', first), file);
   const unknown = run(dir, 'fetch-fonts.sh', ['--strict'], env);
   assert.equal(unknown.code, 1, unknown.out);
   assert.match(unknown.out, /files\/new\/v1\/x\.woff2 isn't in fonts\/SHA256SUMS/);
+  // No list to check against: --strict refuses to start.
+  fs.renameSync(path.join(dir, 'fonts', 'SHA256SUMS'), path.join(dir, 'fonts', 'SUMS.bak'));
+  const nolist = run(dir, 'fetch-fonts.sh', ['--strict'], env);
+  assert.equal(nolist.code, 1, nolist.out);
+  assert.match(nolist.out, /No fonts\/SHA256SUMS to check against/);
+  fs.renameSync(path.join(dir, 'fonts', 'SUMS.bak'), path.join(dir, 'fonts', 'SHA256SUMS'));
   // Without --strict a changed file is still removed to be fetched again (trust on first use).
   fs.appendFileSync(file, 'x');
   assert.match(run(dir, 'fetch-fonts.sh', [], env).out, /BAD .*\(removed\)/);

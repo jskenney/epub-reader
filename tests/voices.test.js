@@ -136,6 +136,7 @@ test('saved server-voice audio survives reordered or added fields in voices.json
   }
 });
 
+const clip = path.join(__dirname, 'site', 'tts-voices', 'narrator.wav'), clipTime = fs.statSync(clip).mtime;
 test('a refused HEAD request keeps the clip version last seen, so saved audio is still used (L-28, L-31, T-10)', async () => {
   const page = await h.newPage();
   try {
@@ -146,14 +147,21 @@ test('a refused HEAD request keeps the clip version last seen, so saved audio is
     await h.waitFor(async () => (await h.breezeLog()).filter(r => !r.aborted).length >= 2, 20000);
     await page.waitForTimeout(1000);
     const first = (await h.breezeLog()).filter(r => !r.aborted)[0].text;
+    const versions = await page.evaluate(() => JSON.parse(localStorage.getItem('spine:clipVersions') || '{}'));
+    assert.ok(Object.values(versions).some(Boolean), 'a clip version was recorded');
+    // HEAD refused, and the clip re-recorded meanwhile: the version last seen is kept (so the key, and the
+    // saved audio, are the same) rather than reset.
     await fetch(`${h.SITE}/__head?on=0`);
+    const later = new Date(Date.now() + 7000);
+    fs.utimesSync(clip, later, later);
     await page.reload(); await h.waitForBook(page);
     await h.clearBreezeLog();
     await page.keyboard.press('r');
     assert.ok(await h.waitFor(() => h.spokenWord(page), 10000));
     await page.waitForTimeout(500);
     assert.ok(!(await h.breezeLog()).map(r => r.text).includes(first), 'the first passage should come from saved audio');
-  } finally { await fetch(`${h.SITE}/__head?on=1`); }
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:clipVersions') || '{}')), versions);
+  } finally { await fetch(`${h.SITE}/__head?on=1`); fs.utimesSync(clip, clipTime, clipTime); }
 });
 
 const slow = !process.env.SLOW && 'set SLOW=1 to run (loads real models on the CPU)';

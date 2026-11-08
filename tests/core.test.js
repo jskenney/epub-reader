@@ -77,8 +77,11 @@ test('single-key shortcuts can be turned off in the Aa menu; arrows still turn p
   await page.click('#keysOpt');
   assert.equal(await page.getAttribute('#keysOpt', 'aria-checked'), 'false');
   await page.keyboard.press('Escape');
+  const state = () => page.evaluate(() => [document.querySelector('#tocBtn').getAttribute('aria-expanded'), document.querySelector('#layoutBtn').dataset.layout]);
+  const before0 = await state();
   for (const k of ['t', 'c', 'l', '/']) await page.keyboard.press(k);
   assert.equal(await theme(), toggled, 'T does nothing now');
+  assert.deepEqual(await state(), before0, 'C and L do nothing now');
   assert.equal(await page.isVisible('#searchPanel'), false, '/ does nothing now');
   const before = await page.textContent('#spinePos');
   await page.keyboard.press('ArrowRight');
@@ -87,6 +90,17 @@ test('single-key shortcuts can be turned off in the Aa menu; arrows still turn p
   await page.reload(); await h.waitForBook(page);
   await page.keyboard.press('t');
   assert.equal(await theme(), toggled);
+});
+
+test('"shortcuts": false in reader-config.json starts with single-key shortcuts off (L-17)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-keys/index.html?book=/reader/books/long.epub`);
+  const theme = () => page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+  const t0 = await theme();
+  await page.keyboard.press('t');
+  assert.equal(await theme(), t0);
+  await page.click('#fontBtn');
+  assert.equal(await page.getAttribute('#keysOpt', 'aria-checked'), 'false');
 });
 
 test('documents open as one continuous page with their headings in the contents', async () => {
