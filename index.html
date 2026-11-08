@@ -1594,6 +1594,10 @@ function cssWrapImport(sheet, cond){
   if (layer !== null) out = `@layer${layer ? ' ' + layer : ''}{\n${out}\n}`;
   return out;
 }
+// CSS going into a <style> element: "</style" would end the element when the page is parsed in the frame, and
+// whatever followed would be markup nothing has cleaned. Written "<\/style": the same CSS (in a string, "\/" is
+// "/"), but no end tag.
+const styleText = css => css.replace(/<\/(?=style)/gi, '<\\/');
 // What one page may paste in from its stylesheets (linked sheets and @imports together): a book whose sheets
 // import each other many times would otherwise grow without limit (N⁴ copies for N self-imports) and freeze the
 // tab. Past the budget, further sheets are left out.
@@ -1749,7 +1753,7 @@ async function localize(doc, path, budget = cssBudget()){
     }
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
-  for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget }).then(c => { st.textContent = c; }));
+  for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget }).then(c => { st.textContent = styleText(c); }));
   for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true }).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
@@ -1815,11 +1819,11 @@ async function buildPage(src, path){
       }
       const p = resolve(path, href), css = await readText(book.zip, p);
       if (!css || !cssSpend(budget, css.length)) continue;   // (a page linking one big sheet thousands of times)
-      const st = out.createElement('style'); st.textContent = await rewriteCss(css, p, { budget });
+      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(css, p, { budget }));
       if (n.getAttribute('media')) st.setAttribute('media', n.getAttribute('media'));
       head.append(st);
     } else {
-      const st = out.createElement('style'); st.textContent = await rewriteCss(n.textContent, path, { budget }); head.append(st);
+      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(n.textContent, path, { budget })); head.append(st);
     }
   }
   const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(); head.append(ov);

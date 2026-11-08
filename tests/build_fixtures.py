@@ -342,6 +342,7 @@ def main():
 <map name="m"><area id="area-in" shape="rect" coords="0,0,20,30" href="c2.xhtml" alt="in"/>
 <area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
 <p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>
+<style>@import "inject.css";</style><p id="after-style">After the body style.</p>
 <div id="shadow-host"><template shadowrootmode="open"><a id="shadow-link" href="https://example.com/shadow">Shadow link</a></template></div>
 <p id="str-url">A url( inside a CSS string stays text.</p>
 <p class="ws2">After a url( with many spaces.</p><p class="lc">Line continuation inside an address.</p><p class="cm">Quote in a comment.</p><p class="cm2">Comment in url(.</p>
@@ -386,7 +387,9 @@ def main():
 .many-escapes {{ content: "\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa" }}</style><style>@import "{BLOCKED}/no-semicolon-at-end.css"</style>"""
     epub(books / "hostile.epub", "Hostile Book", [("c1.xhtml", "Hostile", hostile, style),
                                                   ("c2.xhtml", "Target", "<h1>Target chapter</h1><p>Arrived.</p>")],
-         uid="urn:hostile", extra={"OEBPS/pic.png": pic})
+         uid="urn:hostile", extra={"OEBPS/pic.png": pic,
+         # (M-13) an imported sheet that tries to close the body <style> and add markup after it
+         "OEBPS/inject.css": b'x{color:red}</style><a id="injected" target="_blank" href="https://example.com/inj">injected</a><style>'})
     # An HTML page (parsed as HTML, so attributes can be unquoted) with document controls the pre-parse
     # stripping must catch (REVIEW.md L-24, T-9).
     (books / "controls.html").write_text(f"""<!doctype html><html><head><title>Controls</title>
