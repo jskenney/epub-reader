@@ -47,8 +47,8 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
     spine = "".join(f'<itemref idref="c{i}"/>' for i in range(len(chapters)))
     nav_items = "".join(f'<li><a href="{f}">{t}</a></li>' for f, t, *_r in chapters)
     opf = f"""<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
-<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">{uid}</dc:identifier>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0"{' unique-identifier="uid"' if uid else ''}>
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">{f'<dc:identifier id="uid">{uid}</dc:identifier>' if uid else ''}
 <dc:title>{title}</dc:title><dc:creator>Test Author</dc:creator><dc:language>{lang}</dc:language></metadata>
 <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>{items}</manifest>
 <spine>{spine}</spine></package>"""
@@ -132,6 +132,9 @@ def main():
         ("c3.xhtml", "Chapter Three", "<h1>Chapter Three</h1>" + paragraphs("Third", 4)),
     ], uid="urn:long")
     epub(books / "french.epub", "Le Livre", [("c1.xhtml", "Un", "<h1>Un</h1><p>Il était une fois.</p>")], uid="urn:french", lang="fr")
+    # Two different books with the same title and no identifier (REVIEW.md L-13).
+    for name, n in (("twin-a", 3), ("twin-b", 2)):
+        epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)
     shutil.copy(books / "long.epub", shelf / "shelf-only.epub")
     shutil.copy(books / "long.epub", books / "50%off.epub")   # a "%" in the name (REVIEW.md M-1)
     with zipfile.ZipFile(books / "long.epub") as z:

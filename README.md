@@ -223,7 +223,10 @@ This needs a real web server (for example `npx vite` or
   a cover page), and the site's favicon for books without one.
 - Light/dark toggle in the top bar (or press T). Until you pick one, it
   follows your system setting.
-- Remembers your position, text size, line spacing, font and theme
+- Remembers your position, text size, line spacing, font and theme. An EPUB's
+  position is kept by its identifier, so it resumes wherever the book is opened
+  from; a book without one is kept by a fingerprint of its package file, so
+  books that merely share a title don't share a position.
 
 ## Self-hosting the libraries and fonts
 

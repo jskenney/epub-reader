@@ -433,6 +433,17 @@ let renderToken = 0;
 /* ---------- paths & parsing ---------- */
 const ext = p => (p.split('.').pop() || '').toLowerCase();
 const clean = t => (t || '').replace(/^﻿/, '');
+// A 106-bit fingerprint of a text (two seeded passes of cyrb53), for keys; not for security.
+function fingerprint(t){
+  const pass = seed => {
+    let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  };
+  return pass(0) + pass(1);
+}
 const isExternal = h => /^[a-z][a-z0-9+.\-]*:/i.test(h);
 const kids = (el, name) => el ? [...el.children].filter(c => c.localName === name) : [];
 
@@ -1042,7 +1053,11 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   next.toc = await loadToc(next, spineEl);
   next.hasOverlays = spine.some(s => s.overlay);
   next.coverId = md ? [...md.getElementsByTagNameNS('*', 'meta')].find(m => m.getAttribute('name') === 'cover')?.getAttribute('content') || '' : '';
-  next.key = 'spine:pos:' + (uid || next.title);
+  // Where the reading position is kept: by the book's identifier, so a book resumes wherever it is opened
+  // from. A book without one is keyed by a fingerprint of its package file, which differs between books
+  // even when their titles match (earlier versions used the title: that position is picked up once).
+  next.key = 'spine:pos:' + (uid || 'opf:' + fingerprint(oText));
+  next.legacyKey = uid ? null : 'spine:pos:' + next.title;
   await startBook(next);
 }
 // Make a prepared book the current one: show its metadata and contents and open it where the reader left off.
@@ -1056,7 +1071,7 @@ async function startBook(next){
   if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, comic (.cbz), text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
   else hideNotice();
 
-  const saved = store.get(book.key);
+  const saved = store.get(book.key) ?? (book.legacyKey ? store.get(book.legacyKey) : null);
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
 }
@@ -1638,7 +1653,7 @@ function renderMeta(){
     ...(book.format
       ? [['Format', book.format], ...(book.comic ? [['Pages', plural(book.pageCount, 'page')]] : []), ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
       : [['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
-         ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid]])
+         ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid || 'none (the position is kept by the package file)']])
   ].filter(([, v, id]) => v || id);
   $('#infoList').replaceChildren(...rows.flatMap(([k, v, id]) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
