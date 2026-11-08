@@ -339,7 +339,7 @@ def main():
     def narrated(dst, title, uid, clip):
         wav(books / "narration.wav", 3 * clip)
         narr = [("c1.xhtml", "Narrated", '<h1>Narrated</h1><p id="n1">First narrated paragraph.</p><p id="n2">Second narrated paragraph.</p>'
-                 '<p id="n3">Third narrated paragraph.</p>'), ("c2.xhtml", "After", "<h1>After</h1><p>Not narrated.</p>")]
+                 '<p id="n3">Third narrated paragraph.</p><p id="unnarrated">Not narrated, after the last clip.</p>'), ("c2.xhtml", "After", "<h1>After</h1><p>Not narrated.</p>")]
         smil = ('<?xml version="1.0" encoding="utf-8"?><smil xmlns="http://www.w3.org/ns/SMIL" version="3.0"><body><seq>'
                 + "".join(f'<par id="p{i}"><text src="c1.xhtml#n{i}"/><audio src="narration.wav" clipBegin="{(i - 1) * clip:.1f}s" clipEnd="{i * clip:.1f}s"/></par>' for i in (1, 2, 3))
                 + '</seq></body></smil>')

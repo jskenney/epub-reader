@@ -2250,7 +2250,7 @@ function onKey(e){
   if (!singleKeys && e.key.length === 1 && e.key !== ' ') return;   // letters and symbols are left to the browser
   if (e.key === '/') { e.preventDefault(); searchOpen(); return; }
   // (Space belongs to a focused control: a button, a link, a label acting as one, a <summary>: L-54.)
-  if (e.key === ' ' && tts.open && !e.target.closest?.('button, a, summary, label, [role="button"], [tabindex]:not(body)')) { e.preventDefault(); ttsTogglePlay(); return; }
+  if (e.key === ' ' && tts.open && !e.target.closest?.('button, a, summary, label, input, select, textarea, [contenteditable], [role="button"], [role="checkbox"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="switch"], [role="tab"]')) { e.preventDefault(); ttsTogglePlay(); return; }
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); ttsReadHere(); return; }
   if (e.key === '[' || e.key === ']') { if (tts.open) { e.preventDefault(); ttsSetRate(tts.rate + (e.key === ']' ? 0.1 : -0.1)); } return; }
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
@@ -2966,7 +2966,7 @@ function moMark(i){
 async function moGo(i, { speak = tts.playing, keepFollow = false, resume = false } = {}){
   if (keepFollow && speak && sleepDue()) speak = false;
   const m = tts.mo;
-  if (i >= m.pars.length) { moAudio.pause(); moClearClasses(); ttsEndOfChapter(); return; }
+  if (i >= m.pars.length) { moAudio.pause(); moClearClasses(); if (speak) ttsEndOfChapter(); return; }   // (only while reading: L-49)
   i = Math.max(0, i); m.i = i;
   if (!keepFollow) tts.follow = true;
   const token = ++tts.token;
@@ -3216,7 +3216,9 @@ function ttsUpdateBar(status){
   const eng = $('#ttsEngine'), narr = eng.querySelector('[value="narration"]'), ko = eng.querySelector('[value="kokoro"]');
   // The chosen engine stays shown (disabled) while it can't be used, so choosing Device instead is a change
   // that is saved (L-55); reading uses the device voice meanwhile.
-  narr.disabled = !book?.hasOverlays; narr.hidden = narr.disabled && tts.engine !== 'narration';
+  // ("narration" is also the default, meaning narration when the book has it, else the device voice: shown as
+  // Device then, not as an unavailable choice.)
+  narr.disabled = narr.hidden = !book?.hasOverlays;
   narr.textContent = book?.hasOverlays ? 'Publisher narration' : 'Publisher narration (not in this book)';
   ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Kokoro' : 'Kokoro (English only)';
   const po = eng.querySelector('[value="pocket"]');
@@ -3226,8 +3228,9 @@ function ttsUpdateBar(status){
   so.textContent = !sv.available ? 'Server (unavailable)' : serverFits() ? 'Server' : 'Server (English and Chinese only)';
   const unusable = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ||
     (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'server' && (!sv.available || !serverFits()));
-  eng.value = tts.engine;
-  eng.title = unusable ? 'Not available for this book or right now: the device voice reads instead' : '';
+  const auto = unusable && tts.engine === 'narration';
+  eng.value = auto ? 'device' : tts.engine;
+  eng.title = unusable && !auto ? 'Not available for this book or right now: the device voice reads instead' : '';
   let dl = '';
   const neural = !tts.mo && neuralEngine();
   if (!status && neural && !neural.ready()) {
@@ -3451,7 +3454,7 @@ function kWorker(){
   // The worker failing after it loaded (it crashed, or ran out of memory): its passages fail rather than wait
   // forever, and the voice loads afresh next time (REVIEW.md L-53).
   w.onerror = w.onmessageerror = e => {
-    const err = new Error(e.message || 'the worker failed to start');
+    const err = new Error(e.message || (e.type === 'messageerror' ? "a message from the worker couldn't be read" : 'the worker failed to start'));
     k.onLoad?.rej(err);
     if (k.worker !== w) return;
     for (const job of k.pending.values()) job.rej(err);
@@ -3776,17 +3779,19 @@ function svGenerate(text, opts = {}){
       // (A server that takes the request but never answers: given up on after a while, rather than leaving
       // "Preparing voice…" up for good: L-53. The time limit covers the reply starting, not the whole stream.)
       const ctl = new AbortController(), giveUp = setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000);
-      const stop = () => ctl.abort(); opts.signal?.addEventListener('abort', stop, { once: true });
+      const stop = () => ctl.abort(); opts.signal?.addEventListener('abort', stop, { once: true });   // (removed below)
       try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form, signal: ctl.signal }); }
       catch (e) { if (opts.signal?.aborted) throw staleError(); svLost(); throw new Error('the voice server isn\'t responding'); }
       finally { clearTimeout(giveUp); }
+      // (Kept for the stream while it plays; dropped when this attempt is retried or ends.)
+      const unlisten = () => opts.signal?.removeEventListener('abort', stop);
       // Gateway errors or an HTML page instead of audio: the server behind the proxy is gone.
       if ([502, 503, 504].includes(r.status) || (r.ok && /html/i.test(r.headers.get('content-type') || ''))) {
         svLost(); throw new Error('the voice server isn\'t responding');
       }
       // Busy with another request, often one just cancelled that the server hasn't let go of yet: retry
       // soon, then less often.
-      if (r.status === 409 && attempt < 40) { await new Promise(res => setTimeout(res, Math.min(1500, 150 * 2 ** attempt))); if (opts.signal?.aborted) throw staleError(); continue; }
+      if (r.status === 409 && attempt < 40) { unlisten(); await new Promise(res => setTimeout(res, Math.min(1500, 150 * 2 ** attempt))); if (opts.signal?.aborted) throw staleError(); continue; }
       if (!r.ok) {
         let detail = ''; try { detail = (await r.json()).detail; } catch {}
         throw new Error(`the voice server answered ${r.status}${detail ? ': ' + detail : ''}`);

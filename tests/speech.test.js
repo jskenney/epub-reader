@@ -143,3 +143,29 @@ test('a chosen engine that is unavailable stays shown, so choosing Device instea
   await page.selectOption('#ttsEngine', 'device');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:ttsEngine'))), 'device');
 });
+
+test('a new reader sees Device for a book without narration, not an unavailable narration (round 8 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeSpeech);
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);   // nothing stored: the default engine
+  await page.keyboard.press('r');
+  await page.waitForTimeout(500);
+  assert.equal(await page.$eval('#ttsEngine', s => s.selectedOptions[0].textContent), 'Device');
+  assert.equal(await page.getAttribute('#ttsEngine', 'title'), '');
+  // Space pauses with the position ribbon focused (it isn't a control that wants Space).
+  await page.focus('#ribbon');
+  await page.keyboard.press(' ');
+  await page.waitForFunction(() => document.querySelector('#ttsPlay').getAttribute('aria-label') === 'Play', null, { timeout: 5000 });
+});
+
+test('narration paused: a click after the last narrated paragraph stays in the chapter (L-49)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/narrated.epub`);
+  await page.keyboard.press('r');
+  await h.waitFor(() => h.inFrame(page, doc => !!doc.querySelector('.now-reading')), 10000, 50);
+  await page.keyboard.press(' ');
+  const box = await page.evaluate(() => { const f = document.querySelector('#page').getBoundingClientRect(), r = document.querySelector('#page').contentDocument.querySelector('#unnarrated').getBoundingClientRect(); return { x: f.left + r.left + 5, y: f.top + r.top + r.height / 2 }; });
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(1000);
+  assert.match(await page.textContent('#spinePos'), /spine 1\/2/);
+});
