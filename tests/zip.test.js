@@ -79,7 +79,7 @@ test('a book with an empty file opens with range requests (H-3)', async () => {
     await h.openReader(page, `${base}/reader/index.html?book=books/empty-file.epub`);
     assert.equal(await h.title(page), 'Empty File');
     assert.equal(await h.notice(page), '', base);
-    assert.match(await page.evaluate(() => document.querySelector('#page').contentDocument.body.textContent), /Text\./);
+    assert.match(await page.evaluate(() => (document.querySelector('#page').contentDocument?.body?.textContent || '')), /Text\./);
   }
 });
 
@@ -103,7 +103,7 @@ test('a file name that is not UTF-8 is found through its Unicode Path field (L-2
   await countWholeLoads(page);
   await h.openReader(page, `${h.READER}?book=books/unicode-path.epub`);
   assert.equal(await h.title(page), 'Unicode Path');
-  assert.match(await page.evaluate(() => document.querySelector('#page').contentDocument.body.textContent), /Found by its Unicode name/);
+  assert.match(await page.evaluate(() => (document.querySelector('#page').contentDocument?.body?.textContent || '')), /Found by its Unicode name/);
   assert.equal(await page.evaluate(() => window.wholeLoads), 0);
 });
 
@@ -184,7 +184,7 @@ test(`a book replaced by another of the same size is reported (${folder || 'stro
     // With a strong ETag (which here includes the time to the nanosecond, as nginx's has the second and size)
     // the server may still see the same version; then the checksum catches it.
     assert.match(await h.waitFor(() => h.notice(page), 10000), /changed on the server while it was open|the book changed while it was open/);
-    assert.doesNotMatch(await page.evaluate(() => document.querySelector('#page').contentDocument.body.textContent), /BBBB/);
+    assert.doesNotMatch(await page.evaluate(() => (document.querySelector('#page').contentDocument?.body?.textContent || '')), /BBBB/);
   } finally { fs.rmSync(target, { force: true }); }
 });
 
@@ -212,7 +212,7 @@ test('padding after the archive, and malformed or redundant Unicode Path fields,
     assert.equal(await page.evaluate(() => window.wholeLoads), 0, `${file} should be read in place`);
     assert.equal(await page.locator('#tocList a').count(), chapters, file);
     await page.click('#tocList a >> nth=1');
-    await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 20000 });
+    await page.waitForFunction(() => /Second chapter/.test((document.querySelector('#page').contentDocument?.body?.textContent || '')), null, { timeout: 20000 });
     assert.equal(await h.notice(page), '', file);
   }
 });
@@ -236,7 +236,7 @@ test('a wrong checksum: an upload reads anyway with a warning, as JSZip would; o
   await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Bad Checksum', null, { timeout: 15000 });
   await h.waitForBook(page);
   await page.click('#tocList a >> nth=1');
-  await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 10000 });
+  await page.waitForFunction(() => /Second chapter/.test((document.querySelector('#page').contentDocument?.body?.textContent || '')), null, { timeout: 10000 });
   assert.ok(warnings.some(w => /c2\.xhtml: its checksum doesn't match/.test(w)), warnings.join(' | '));
   for (const base of [h.SITE, h.NORANGE]) {   // in place, and downloaded whole (read by JSZip)
     const page2 = await h.newPage();
