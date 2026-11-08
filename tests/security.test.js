@@ -59,6 +59,19 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
   assert.deepEqual(page.cspViolations, []);
 });
 
+test('an HTML page: base and meta refresh are removed before parsing, whatever their quoting; the text stays (L-24, T-9)', async () => {
+  const page = await h.newPage();
+  await h.clearRemoteLog();
+  await h.openReader(page, `${h.READER}?book=books/controls.html`);
+  await page.waitForTimeout(1500);   // longer than the refresh
+  const state = await h.inFrame(page, doc => ({ text: doc.body.textContent, custom: doc.querySelectorAll('base-card').length,
+    base: doc.querySelectorAll('base').length, refresh: doc.querySelectorAll('meta[http-equiv="refresh" i]').length, where: doc.defaultView.location.href }));
+  assert.match(state.text, /Custom element kept\.[\s\S]*Don't stop here\./);
+  assert.deepEqual([state.custom, state.base, state.refresh, state.where], [1, 0, 0, 'about:srcdoc']);
+  assert.deepEqual(await h.remoteLog(), []);
+  assert.deepEqual(page.cspViolations, [], 'nothing left for the policies to refuse');
+});
+
 test('links of every kind: in-book links open chapters, web links open a new tab, the frame never navigates', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/hostile.epub`);

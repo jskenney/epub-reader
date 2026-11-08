@@ -1317,6 +1317,42 @@ const cssUnescape = t => t.replace(/\\(?:([0-9a-f]{1,6})[ \t\n\r\f]?|([\s\S]))/g
 // over ways to split them.)
 const plainFunctionNames = css => css.replace(/(?<![\w\\-])(?:[\w-]|\\(?:[0-9a-f]{1,6}(?![0-9a-f])[ \t\n\r\f]?|[^\n0-9a-f]))+(?=\()/gi,
   name => { if (!name.includes('\\')) return name; const p = cssUnescape(name); return /^-?[a-z_][\w-]*$/i.test(p) ? p : name; });
+// One linear pass that makes a book's CSS plain for the patterns below, as the browser reads it: comments
+// become a space (a quote inside one no longer pairs with a real string), a "\" and newline inside a string
+// (a line continuation) is removed, and escaped at-rule names (@\69mport) are written plainly. Strings and
+// unquoted url() contents are copied as they are.
+function plainCss(css){
+  const out = [];
+  let i = 0, from = 0;
+  const n = css.length, flush = to => { if (to > from) out.push(css.slice(from, to)); };
+  while (i < n) {
+    const c = css[i];
+    if (c === '/' && css[i + 1] === '*') {
+      flush(i); out.push(' ');
+      const e = css.indexOf('*/', i + 2); i = from = e < 0 ? n : e + 2;
+    } else if (c === '"' || c === "'") {
+      let j = i + 1;
+      for (; j < n && css[j] !== c && css[j] !== '\n'; j++) {
+        if (css[j] !== '\\') continue;
+        const nl = css[j + 1] === '\r' && css[j + 2] === '\n' ? 3 : /[\n\r\f]/.test(css[j + 1] || '') ? 2 : 0;
+        if (nl) { flush(j); from = j + nl; j += nl - 1; } else j++;
+      }
+      i = j + 1;
+    } else if (c === '\\') i += 2;
+    else if ((c === 'u' || c === 'U') && /^url\(\s*[^'"\s]/i.test(css.slice(i, i + 40)) && !/[\w\\-]/.test(css[i - 1] || '')) {
+      const e = css.indexOf(')', i); i = e < 0 ? n : e + 1;
+    } else if (c === '@') {
+      const m = /^@((?:[\w-]|\\(?:[0-9a-f]{1,6}(?![0-9a-f])[ \t\n\r\f]?|[^\n\r\f0-9a-f]))+)/i.exec(css.slice(i, i + 200));
+      if (m && m[1].includes('\\')) {
+        const p = cssUnescape(m[1]);
+        if (/^-?[a-z][\w-]*$/i.test(p)) { flush(i); out.push('@' + p); from = i + m[0].length; }
+      }
+      i += m ? m[0].length : 1;
+    } else i++;
+  }
+  flush(n);
+  return out.join('');
+}
 const STRING_RE = /(['"])((?:\\[\s\S]|(?!\1)[^\\\n])*)\1/g;
 // Each image-set() (nested brackets and quoted strings included) as [start, end].
 function imageSets(css){
@@ -1339,7 +1375,7 @@ function imageSets(css){
 // would drop "cursor: url(x), pointer" or a font's whole src list), and nothing to fetch.
 const NO_IMAGE = 'url(data:,)';   // (unquoted: safe even where the url( was inside a string)
 async function rewriteCss(css, cssPath, depth = 0){
-  css = plainFunctionNames(css);
+  css = plainFunctionNames(plainCss(css));
   if (!ALLOW_REMOTE_CONTENT) {
     // image-set() takes plain strings as well as url(): one with any remote entry counts as remote.
     for (const [a, b] of imageSets(css).reverse()) {
@@ -1610,7 +1646,7 @@ function releaseComicImages(shownPath){
    messages). The reader never wants them, so they are removed from the text before any parsing. */
 // (A tag's attributes, quoted values may hold ">"; the tag may have a prefix, as <h:base> in XHTML.)
 // A quote opens a value only right after "=" (href=a'b is unquoted), as the HTML parser reads it.
-const ATTRS = String.raw`(?:[^>=]|=\s*(?:"[^"]*"|'[^']*'|[^\s>"'][^\s>]*(?![^\s>])|(?=[\s>]))){0,200}`;   // (bounded, so text with many unclosed "<meta" can't take long; the sanitizer catches longer tags)
+const ATTRS = String.raw`(?:[^>=]|=\s*(?:"[^"]*"|'[^']*'|[^\s>"'][^\s>]*(?![^\s>])|(?=[\s>]))){0,1000}`;   // (bounded, so text with many unclosed "<meta" stays fast; the sanitizer still removes longer tags)
 const DOC_CONTROLS_RE = new RegExp(String.raw`<(?:[\w-]+:)?(?:base(?=[\s/>])${ATTRS}>|meta(?=[\s/>])(?=${ATTRS.replace(/\}$/, '}?')}[\s/]http-equiv[\s/=>])${ATTRS}>)`, 'gi');
 const withoutDocumentControls = t => t.replace(DOC_CONTROLS_RE, '');
 async function chapterSource(item){

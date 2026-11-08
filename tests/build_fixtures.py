@@ -268,6 +268,7 @@ def main():
 <area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
 <p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>
 <p id="str-url">A url( inside a CSS string stays text.</p>
+<p class="lc">Line continuation inside an address.</p><p class="cm">Quote in a comment.</p><p class="cm2">Comment in url(.</p>
 <p id="escapes" style="font-family: '""" + "\\4e2d\\6587" * 16 + """', serif">Many escapes in a row (REVIEW.md: this once froze the page).</p>"""
     # Ways around pattern matching (REVIEW.md H-1, H-2, L-1, L-2), each aimed at both other sites.
     for i, host in enumerate((REMOTE, BLOCKED)):
@@ -292,6 +293,12 @@ def main():
 <p id="cursor-missing" style="cursor: url(missing.cur), pointer">missing cursor</p>
 <p><img class="bypass" src="missing-local.png" alt="missing"/></p>"""
     style = f"""<style>@import url("{REMOTE}/imported.css"); @import"{BLOCKED}/import-no-space.css";
+@import "{REMOTE}/line-continued\\
+.css"; @\\69mport "{BLOCKED}/escaped-at-import.css";
+.lc {{ background: url("{REMOTE}/line-continued\\
+.png") }}
+.cm {{ background-image: image-set(/*"*/"{REMOTE}/comment-quote.png" 1x) }}
+.cm2 {{ background: url(/*x*/"{REMOTE}/comment-before.png") }}
 .x {{ background: url({REMOTE}/style-bg.png); border: 30px solid; border-image: URL({BLOCKED}/upper-url.png) 30 }}
 .x::after {{ content: "x"; background: url(\\68ttp://blocked.example/escaped.png) }}
 @font-face {{ font-family: Remote; src: url("{REMOTE}/font.woff2") }}
@@ -300,6 +307,14 @@ def main():
     epub(books / "hostile.epub", "Hostile Book", [("c1.xhtml", "Hostile", hostile, style),
                                                   ("c2.xhtml", "Target", "<h1>Target chapter</h1><p>Arrived.</p>")],
          uid="urn:hostile", extra={"OEBPS/pic.png": pic})
+    # An HTML page (parsed as HTML, so attributes can be unquoted) with document controls the pre-parse
+    # stripping must catch (REVIEW.md L-24, T-9).
+    (books / "controls.html").write_text(f"""<!doctype html><html><head><title>Controls</title>
+<base href={REMOTE}/unquoted'base/>
+<meta content="1;url={REMOTE}/refresh?a>b" http-equiv=refresh>
+<META HTTP-EQUIV="refresh" CONTENT="1;url={REMOTE}/upper">
+<meta name="http-equiv" content="kept">
+</head><body><h1>Controls</h1><base-card>Custom element kept.</base-card><p>Don't stop here.</p></body></html>""")
     with zipfile.ZipFile(books / "hostile.epub") as z:   # also as an extracted folder: its files come from the site
         z.extractall(books / "hostile-dir")
 
