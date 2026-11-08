@@ -25,3 +25,19 @@ test('paths resolve inside the book, with encoded names decoded (M-14, L-43)', (
   // Plain ".." stays inside the book's root at most.
   assert.equal(resolve('OEBPS/content.opf', '../../../x.css'), 'x.css');
 });
+
+test('file lookups that differ in case or Unicode form are fast in large archives (L-70)', () => {
+  const a = src.indexOf('const pathKey'), b = src.indexOf('\n}\n', src.indexOf('function foldedNames')) + 3;
+  const code = src.slice(a, b).replace(/return f && f\._data\?\.compressedContent \? checkedEntry\(zip, f\) : f;/, 'return f;');
+  const { getFile } = new Function(`${code}\nreturn { getFile };`)();
+  const files = {};
+  for (let i = 0; i < 20000; i++) files[`OEBPS/img/p${i}.png`] = { name: `OEBPS/img/p${i}.png` };
+  files['OEBPS/Kapitel-ä.xhtml'] = { name: 'OEBPS/Kapitel-ä.xhtml' };
+  const zip = { files, file: n => files[n] || null };
+  const t0 = Date.now();
+  for (let i = 0; i < 1000; i++) assert.ok(getFile(zip, `OEBPS/IMG/P${i}.PNG`));
+  assert.ok(Date.now() - t0 < 500, `1000 lookups took ${Date.now() - t0} ms`);
+  assert.equal(getFile(zip, 'OEBPS/kapitel-ä.xhtml').name, 'OEBPS/Kapitel-ä.xhtml');
+  assert.equal(getFile(zip, '/OEBPS/img/p5.png').name, 'OEBPS/img/p5.png');
+  assert.equal(getFile(zip, 'missing.xhtml'), null);
+});

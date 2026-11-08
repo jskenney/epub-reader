@@ -159,6 +159,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 #ttsVoice,#ttsEngine,#ttsSleep{height:32px;max-width:190px;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:0 6px}
 #ttsVoice:focus-visible,#ttsEngine:focus-visible,#ttsSleep:focus-visible,.tts-speed input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
 #ttsStatus{font:12px/1.3 var(--font-mono);color:var(--muted);padding:0 4px}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #ttsPlay .i-pause,#ttsPlay.playing .i-play{display:none}
 #ttsPlay.playing .i-pause{display:block}
 #ttsBtn[aria-pressed="true"]{border-color:var(--ribbon);color:var(--ribbon)}
@@ -337,7 +338,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <button class="btn ghost" id="ttsSaved" hidden title="Saved voice audio" aria-label="Saved voice audio">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>
         </button>
-        <span id="ttsStatus" role="status" hidden></span>
+        <span id="ttsStatus" hidden></span>
+        <span id="ttsAnnounce" class="sr-only" role="status"></span>
         <button class="btn" id="ttsDownload" hidden>Download</button>
         <button class="btn" id="ttsBack" hidden title="Go back to the page being read">Back to reading</button>
         <button class="btn ghost" id="ttsClose" title="Stop reading aloud" aria-label="Stop reading aloud">
@@ -542,11 +544,18 @@ const pathKey = p => p.replace(/^\/+/, '').normalize('NFC').toLowerCase();
 function getFile(zip, path){
   let f = zip.file(path) || zip.file(path.replace(/^\/+/, ''));   // (as written first: some archives' names do start with "/")
   if (!f) {
-    const low = pathKey(path);
-    const name = Object.keys(zip.files).find(n => pathKey(n) === low);
+    const name = foldedNames(zip).get(pathKey(path));
     if (name) f = zip.file(name);
   }
   return f && f._data?.compressedContent ? checkedEntry(zip, f) : f;
+}
+// Each archive's names by their folded form, made once (scanning every name on each miss was slow in archives
+// of tens of thousands of files: REVIEW.md L-70). The first name wins where two fold the same.
+const foldedByZip = new WeakMap();
+function foldedNames(zip){
+  let m = foldedByZip.get(zip);
+  if (!m) { m = new Map(); for (const n of Object.keys(zip.files)) { const k = pathKey(n); if (!m.has(k)) m.set(k, n); } foldedByZip.set(zip, m); }
+  return m;
 }
 // A file of a whole archive read by JSZip, read as in place: the size limit, decompression that stops past the
 // declared size (JSZip only notices after inflating it all), and the checksum (which JSZip doesn't check),
@@ -3270,6 +3279,10 @@ function ttsUpdateBar(status){
     else { status = `${neural.name}: one-time ${neural.size()} download`; dl = 'Download'; }
   }
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
+  // Screen readers hear a status when it changes in kind, not each step of a download ("12%", "13%", …): the
+  // live region gets the text only when it differs apart from its numbers (REVIEW.md L-68).
+  const kind = (status || '').replace(/[\d.,]+/g, '#');
+  if (kind !== tts.announced) { tts.announced = kind; $('#ttsAnnounce').textContent = status || ''; }
   $('#ttsDownload').hidden = !dl; $('#ttsDownload').textContent = dl;
   $('#ttsVoice').hidden = !!tts.mo;
   $('#ttsSaved').hidden = !(!tts.mo && neuralEngine());

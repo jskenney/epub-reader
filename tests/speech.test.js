@@ -128,7 +128,10 @@ test('clicking a picture-only page while paused stays on it (L-49); focus and an
   await page.mouse.click(box.x, box.y);
   await page.waitForTimeout(1000);
   assert.match(await page.textContent('#spinePos'), /spine 1\//, 'still on the cover');
-  assert.deepEqual(await page.evaluate(() => [document.querySelector('#notice').getAttribute('role'), document.querySelector('#ttsStatus').getAttribute('role')]), ['alert', 'status']);
+  // (The visible status changes at every download step; a hidden live region announces it only when its kind
+  // changes: L-68.)
+  assert.deepEqual(await page.evaluate(() => [document.querySelector('#notice').getAttribute('role'), document.querySelector('#ttsStatus').getAttribute('role'),
+    document.querySelector('#ttsAnnounce').getAttribute('role')]), ['alert', null, 'status']);
   await page.click('#ttsClose');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'ttsBtn', 'focus goes to the read-aloud button, not the page');
 });
