@@ -380,6 +380,7 @@ const FONTS = [
   { id: 'system-sans', name: 'System sans-serif', note: 'device', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' }
 ];
 const OPS = 'http://www.idpf.org/2007/ops';
+const DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
 const BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
   gif:'image/gif',svg:'image/svg+xml',webp:'image/webp',ttf:'font/ttf',otf:'font/otf',woff:'font/woff',woff2:'font/woff2',
@@ -3283,7 +3284,27 @@ if (!window.JSZip) {
   showNotice("The ZIP library didn't load, so EPUB files can't be opened. Check your connection and reload the page.", 'error');
 } else {
   const ref = new URLSearchParams(location.search).get('book');
-  (ref ? openFromUrl(ref) : openSample());
+  (ref ? openFromUrl(ref) : openDefault());
+}
+/* Without ?book=, a default.epub next to this page opens if there is one; otherwise the built-in sample.
+   A missing file may still come back as 200 (a site's "not found" page), so the reply has to be a real
+   EPUB: a ZIP with a META-INF/container.xml. Anything else falls back to the sample quietly. */
+async function openDefault(){
+  let zip = null;
+  try {
+    const r = await fetch(new URL(DEFAULT_BOOK, location.href), { cache: 'no-cache' });
+    const buf = r.ok ? await r.arrayBuffer() : null;
+    const b = buf && new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    if (b?.length === 4 && b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) {   // "PK\3\4": a ZIP
+      const z = await JSZip.loadAsync(buf);
+      if (getFile(z, 'META-INF/container.xml')) zip = z;
+    }
+  } catch {}
+  if (zip) {
+    try { await openBook(zipSource(zip), { name: 'default' }); return; }
+    catch (err) { console.warn(`${DEFAULT_BOOK} couldn't be opened:`, err); }
+  }
+  await openSample();
 }
 async function openSample(){
   try { await openBook(zipSource(await JSZip.loadAsync(await makeSample())), { sample: true }); }

@@ -4,8 +4,10 @@ A browser-based EPUB reader.
 
 Everything is in one file, `index.html`. Open it, then
 click the folder button (Open a book) at the right of the top bar, or drop a
-file onto the page. It opens on a
-built-in sample book.
+file onto the page. Without a `?book=` link it opens `default.epub` from the
+same folder as `index.html` if there is one (it must be a real EPUB: a "not
+found" page served in its place is ignored), and otherwise a built-in sample
+book.
 
 ## Other formats
 
