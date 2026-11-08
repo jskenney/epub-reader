@@ -297,7 +297,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </aside>
 
     <section class="reader">
-      <div class="notice" id="notice" hidden>
+      <div class="notice" id="notice" role="alert" hidden>
         <p id="noticeText"></p>
         <button class="btn" id="noticeAction"></button>
       </div>
@@ -337,7 +337,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <button class="btn ghost" id="ttsSaved" hidden title="Saved voice audio" aria-label="Saved voice audio">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>
         </button>
-        <span id="ttsStatus" hidden></span>
+        <span id="ttsStatus" role="status" hidden></span>
         <button class="btn" id="ttsDownload" hidden>Download</button>
         <button class="btn" id="ttsBack" hidden title="Go back to the page being read">Back to reading</button>
         <button class="btn ghost" id="ttsClose" title="Stop reading aloud" aria-label="Stop reading aloud">
@@ -2249,7 +2249,8 @@ function onKey(e){
   if (menuOpen() && menuKey(e)) return;
   if (!singleKeys && e.key.length === 1 && e.key !== ' ') return;   // letters and symbols are left to the browser
   if (e.key === '/') { e.preventDefault(); searchOpen(); return; }
-  if (e.key === ' ' && tts.open && tag !== 'button' && tag !== 'a') { e.preventDefault(); ttsTogglePlay(); return; }
+  // (Space belongs to a focused control: a button, a link, a label acting as one, a <summary>: L-54.)
+  if (e.key === ' ' && tts.open && !e.target.closest?.('button, a, summary, label, [role="button"], [tabindex]:not(body)')) { e.preventDefault(); ttsTogglePlay(); return; }
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); ttsReadHere(); return; }
   if (e.key === '[' || e.key === ']') { if (tts.open) { e.preventDefault(); ttsSetRate(tts.rate + (e.key === ']' ? 0.1 : -0.1)); } return; }
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
@@ -2861,7 +2862,9 @@ function speakable(raw){
 function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepFollow } = {}){
   if (keepFollow && speak && sleepDue()) speak = false;   // the sleep timer ran out: stop here, ready to go on
   const chunks = ttsChunks();
-  if (ci >= chunks.length) { ttsEndOfChapter(); return; }
+  // Past the last sentence: the end of the chapter only while reading; a click there while paused (on a
+  // picture-only page, or below the last sentence) mustn't move to the next chapter (REVIEW.md L-49).
+  if (ci >= chunks.length) { if (speak) ttsEndOfChapter(); return; }
   const c = chunks[Math.max(0, ci)]; ci = Math.max(0, ci);
   pos = wordStartAt(c.b, Math.max(c.s, Math.min(c.e - 1, pos ?? c.s)), c.s, c.e);
   tts.ci = ci; tts.pos = pos; if (!keepFollow) tts.follow = true;
@@ -2960,7 +2963,7 @@ function moMark(i){
   el.classList.add(book.info.activeClass);
   follow(r);
 }
-async function moGo(i, { speak = tts.playing, keepFollow = false } = {}){
+async function moGo(i, { speak = tts.playing, keepFollow = false, resume = false } = {}){
   if (keepFollow && speak && sleepDue()) speak = false;
   const m = tts.mo;
   if (i >= m.pars.length) { moAudio.pause(); moClearClasses(); ttsEndOfChapter(); return; }
@@ -2980,7 +2983,9 @@ async function moGo(i, { speak = tts.playing, keepFollow = false } = {}){
     if (moAudio.error) delete moAudio.dataset.path;   // a file that failed is tried afresh next time
     if (token !== tts.token) return;
   }
-  if (Math.abs(moAudio.currentTime - par.begin) > 0.08) moAudio.currentTime = par.begin;
+  // (Resuming after a pause carries on where the clip stopped, rather than from its start: L-55.)
+  const within = moAudio.currentTime >= par.begin - 0.08 && (par.end == null || moAudio.currentTime < par.end - 0.05);
+  if (!(resume && within) && Math.abs(moAudio.currentTime - par.begin) > 0.08) moAudio.currentTime = par.begin;
   moAudio.playbackRate = tts.rate;
   try { await moAudio.play(); }
   catch (e) {
@@ -3005,7 +3010,8 @@ function moTick(token){
   const m = tts.mo, par = m.pars[m.i], t = moAudio.currentTime;
   if (par.end != null && t >= par.end - 0.03) {
     const next = m.pars[m.i + 1];
-    if (next && next.audio === par.audio && Math.abs(next.begin - par.end) < 0.15) { m.i++; moMark(m.i); }
+    // (The sleep timer is checked here too: consecutive clips of one recording don't go through moGo: L-52.)
+    if (next && next.audio === par.audio && Math.abs(next.begin - par.end) < 0.15 && !sleep.due) { m.i++; moMark(m.i); }
     else moGo(m.i + 1, { keepFollow: true });
     return;
   }
@@ -3138,7 +3144,7 @@ async function ttsTogglePlay(){
   const hadMo = tts.mo?.doc === frame.contentDocument;
   await ttsEnsureMode();
   if (!tts.open || !tts.playing) return;   // closed or paused meanwhile
-  if (tts.mo) { hadMo ? moGo(tts.mo.i) : moGo(moPageStart()); return; }
+  if (tts.mo) { hadMo ? moGo(tts.mo.i, { resume: true }) : moGo(moPageStart()); return; }
   if (tts.doc !== frame.contentDocument || !tts.chunks) { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
   else ttsGo(tts.ci, tts.pos);
 }
@@ -3179,7 +3185,7 @@ async function ttsAfterRender(){
   await ttsEnsureMode();
   if (doc !== frame.contentDocument || !tts.open) return;
   ttsUpdateBar();
-  if (!tts.playing) { tts.doc = null; return; }
+  if (!tts.playing) { tts.doc = null; tts.awaitChapter = false; return; }
   if (tts.awaitChapter) { tts.awaitChapter = false; tts.mo ? moGo(0) : ttsGo(0, null, { jump: false }); return; }
   if (tts.mo) moGo(moPageStart());                       // the reader navigated to a new chapter while listening
   else { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
@@ -3208,16 +3214,20 @@ function ttsUpdateBar(status){
   play.title = (tts.playing ? 'Pause' : 'Play') + ' (Space)';
   $('#ttsBack').hidden = tts.follow;
   const eng = $('#ttsEngine'), narr = eng.querySelector('[value="narration"]'), ko = eng.querySelector('[value="kokoro"]');
-  narr.hidden = narr.disabled = !book?.hasOverlays;
+  // The chosen engine stays shown (disabled) while it can't be used, so choosing Device instead is a change
+  // that is saved (L-55); reading uses the device voice meanwhile.
+  narr.disabled = !book?.hasOverlays; narr.hidden = narr.disabled && tts.engine !== 'narration';
+  narr.textContent = book?.hasOverlays ? 'Publisher narration' : 'Publisher narration (not in this book)';
   ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Kokoro' : 'Kokoro (English only)';
   const po = eng.querySelector('[value="pocket"]');
   po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Pocket' : 'Pocket (en, de, it, pt, es)';
   const so = eng.querySelector('[value="server"]');
-  so.hidden = !sv.available; so.disabled = !sv.available || !serverFits();
-  so.textContent = serverFits() ? 'Server' : 'Server (English and Chinese only)';
+  so.hidden = !sv.available && tts.engine !== 'server'; so.disabled = !sv.available || !serverFits();
+  so.textContent = !sv.available ? 'Server (unavailable)' : serverFits() ? 'Server' : 'Server (English and Chinese only)';
   const unusable = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ||
     (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'server' && (!sv.available || !serverFits()));
-  eng.value = unusable ? 'device' : tts.engine;
+  eng.value = tts.engine;
+  eng.title = unusable ? 'Not available for this book or right now: the device voice reads instead' : '';
   let dl = '';
   const neural = !tts.mo && neuralEngine();
   if (!status && neural && !neural.ready()) {
@@ -3293,8 +3303,8 @@ $('#ttsBtn').addEventListener('click', () => tts.open ? ttsClose() : ttsReadHere
 $('#ttsPlay').addEventListener('click', ttsTogglePlay);
 $('#ttsPrev').addEventListener('click', () => ttsSkip(-1));
 $('#ttsNext').addEventListener('click', () => ttsSkip(1));
-$('#ttsBack').addEventListener('click', ttsBack);
-$('#ttsClose').addEventListener('click', ttsClose);
+$('#ttsBack').addEventListener('click', () => { ttsBack(); $('#ttsPlay').focus(); });
+$('#ttsClose').addEventListener('click', () => { ttsClose(); $('#ttsBtn').focus(); });   // (focus stays somewhere useful: L-54)
 $('#ttsRate').addEventListener('input', e => { $('#ttsRateVal').textContent = Number(e.target.value).toFixed(1) + '×'; });
 $('#ttsRate').addEventListener('change', e => ttsSetRate(Number(e.target.value)));
 $('#ttsEngine').addEventListener('change', e => ttsSetEngine(e.target.value));
@@ -3312,7 +3322,7 @@ $('#ttsSaved').addEventListener('click', async () => {
   await clipStore.clear();
   for (const [key, e] of [...n.cache]) if (e.done && !(n.active && n.span && key.endsWith('|' + n.span.out))) { n.cache.delete(key); URL.revokeObjectURL(e.url); }
 });
-$('#ttsDownload').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = true; ne.load(); } });
+$('#ttsDownload').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = true; ne.load(); } $('#ttsPlay').focus(); });
 new ResizeObserver(ttsMeasureBar).observe($('#tts'));
 $('#ttsRate').value = tts.rate; $('#ttsRateVal').textContent = tts.rate.toFixed(1) + '×';
 if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narration can be read aloud in this browser)";
@@ -3438,7 +3448,16 @@ function kWorker(){
       else { const job = k.pending.get(m.id); k.pending.delete(m.id); job?.rej(new Error(m.message)); }
     }
   };
-  w.onerror = e => { k.onLoad?.rej(new Error(e.message || 'the worker failed to start')); };
+  // The worker failing after it loaded (it crashed, or ran out of memory): its passages fail rather than wait
+  // forever, and the voice loads afresh next time (REVIEW.md L-53).
+  w.onerror = w.onmessageerror = e => {
+    const err = new Error(e.message || 'the worker failed to start');
+    k.onLoad?.rej(err);
+    if (k.worker !== w) return;
+    for (const job of k.pending.values()) job.rej(err);
+    k.pending.clear(); k.queue = null;
+    if (k.state === 'ready') { k.state = 'error'; k.error = `the voice stopped working (${err.message})`; w.terminate(); k.worker = null; if (tts.open) ttsUpdateBar(); }
+  };
   return w;
 }
 function kProgress(p){
@@ -3509,7 +3528,7 @@ function kGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();
     const id = k.nextId++;
-    const m = await new Promise((res, rej) => { k.pending.set(id, { res, rej }); k.worker.postMessage({ type: 'generate', id, text, voice: k.voice, speed: tts.rate }); });
+    const m = await new Promise((res, rej) => { k.pending.set(id, { res, rej }); k.worker.postMessage({ type: 'generate', id, text, voice: opts.snap?.kVoice ?? k.voice, speed: opts.snap?.rate ?? tts.rate }); });
     return { data: m.data, rate: m.rate, genSec: m.ms / 1000 };
   };
   const job = (k.queue || Promise.resolve()).then(run, run);
@@ -3598,7 +3617,7 @@ async function pkLoad(){
 function pkGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();
-    const v = pkVoice();
+    const v = opts.snap?.pkVoice ?? pkVoice();
     if (!pk.refs.has(v)) pk.refs.set(v, (await pkRequest('loadBuiltinVoice', { name: v })).ref);
     pk.collect = []; pk.onChunk = opts.onChunk || null;
     const stop = () => pkRequest('stop', {}).catch(() => {});   // overtaken by a jump: stop generating
@@ -3737,13 +3756,14 @@ async function svRef(v){
 function svVoiceHash(){
   const v = svVoice() || {};
   // (The values as the form sends them, so "1.0" and "1" are told apart just as the server sees them.)
-  return hashText(JSON.stringify([v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
+  return hashText(JSON.stringify([TTS_SERVER.api, v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
     String(v.cfg_scale ?? 1), String(v.seed ?? 42)]));
 }
+const SV_REPLY_SEC = 60;   // how long the server voice may take to start answering a request
 function svGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();
-    const v = svVoice();
+    const v = opts.snap?.svVoice ?? svVoice();
     const form = new FormData();
     form.append('text', svText(text));
     if (v.ref_audio) { form.append('ref_audio', await svRef(v), v.ref_audio.split('/').pop()); form.append('ref_text', v.ref_text); }
@@ -3753,8 +3773,13 @@ function svGenerate(text, opts = {}){
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now();
       let r;
-      try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form, signal: opts.signal }); }
+      // (A server that takes the request but never answers: given up on after a while, rather than leaving
+      // "Preparing voice…" up for good: L-53. The time limit covers the reply starting, not the whole stream.)
+      const ctl = new AbortController(), giveUp = setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000);
+      const stop = () => ctl.abort(); opts.signal?.addEventListener('abort', stop, { once: true });
+      try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form, signal: ctl.signal }); }
       catch (e) { if (opts.signal?.aborted) throw staleError(); svLost(); throw new Error('the voice server isn\'t responding'); }
+      finally { clearTimeout(giveUp); }
       // Gateway errors or an HTML page instead of audio: the server behind the proxy is gone.
       if ([502, 503, 504].includes(r.status) || (r.ok && /html/i.test(r.headers.get('content-type') || ''))) {
         svLost(); throw new Error('the voice server isn\'t responding');
@@ -3892,6 +3917,7 @@ const clipStore = (() => {
     },
     async has(key){ return !!(await run('readonly', (st, done) => { const rq = st.count(key); rq.onsuccess = () => done(rq.result); })); },
     async put(key, blob, dur){
+      if (!(SAVED_AUDIO_MB > 0)) return;   // 0: nothing is saved
       await run('readwrite', st => st.put({ key, blob, dur, size: blob.size, used: Date.now() }));
       if (++saves % 10 === 1) sweep(SAVED_AUDIO_MB * 1048576);
     },
@@ -3910,6 +3936,9 @@ function textWeights(text){
    and an unfinished one can be cancelled when a jump makes it unnecessary. Saved audio is checked first
    (e.checked resolves true when the passage comes from there instead of the engine). */
 function nSynth(ne, text){
+  // The settings the audio is made with, taken now, with its key: a speed or voice changed while the passage
+  // waits its turn must not make audio saved under the old key (REVIEW.md L-50).
+  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice() };
   const key = `${ne.key()}|${text}`;
   let e = n.cache.get(key);
   if (e) { n.cache.delete(key); n.cache.set(key, e); return e; }
@@ -3925,14 +3954,16 @@ function nSynth(ne, text){
       return e;
     }
     const r = await ne.generate(text, {
-      signal: ctl.signal,
+      signal: ctl.signal, snap,
       onChunk: (data, rate) => { e.rate = rate; e.chunks.push(data); for (const l of e.listeners) l.chunk?.(data, rate); }
     });
     const dur = r.data.length / r.rate, blob = wavBlob(r.data, r.rate);
     kSpeedCheck(r.genSec / dur, ne);
     n.secPerWeight = n.secPerWeight * 0.6 + (dur / textWeights(text)[text.length]) * 0.4;   // learn the speaking rate
+    clipStore.put(key, blob, dur);   // (saved even if cancelled meanwhile: its key matches what it was made with)
+    // Cancelled while it was being made (Kokoro can't be interrupted): no URL, which nothing would revoke (L-51).
+    if (ctl.signal.aborted) throw staleError();
     Object.assign(e, { done: true, url: URL.createObjectURL(blob), dur, rate: r.rate, chunks: null });
-    clipStore.put(key, blob, dur);
     for (const l of e.listeners) l.done?.();
     return e;
   });
@@ -3953,7 +3984,8 @@ function nTrim(){
   for (const [key, e] of [...n.cache].reverse()) {
     if (!e.done) continue;
     total += e.dur;
-    if (total > NCACHE_SEC) { n.cache.delete(key); URL.revokeObjectURL(e.url); }
+    // (Never less than twice what is prepared ahead, so a clip about to play isn't dropped: L-55.)
+    if (total > Math.max(NCACHE_SEC, LOOKAHEAD_SEC * 2 + 60)) { n.cache.delete(key); URL.revokeObjectURL(e.url); }
   }
 }
 // A jump (click, skip, new voice or speed) makes unfinished work for other passages useless: cancel it so
@@ -4514,21 +4546,21 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
-  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = Math.max(0, v); }],
-  LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.max(0, v); }],
-  SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.max(0, v); }],
-  NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.max(30, v); }],
-  SPAN_MAX: ['object', v => { SPAN_MAX = { ...SPAN_MAX, ...Object.fromEntries(Object.entries(v).filter(([k, n]) => k in SPAN_MAX && n > 20)) }; }],
-  SEARCH_MAX: ['number', v => { SEARCH_MAX = Math.max(1, v); }],
-  COMIC_PART: ['number', v => { COMIC_PART = Math.max(2, Math.round(v / 2) * 2); }],
+  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = Math.min(36500, Math.max(0, v)); }],
+  LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, v)); }],
+  SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, v)); }],
+  NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.min(86400, Math.max(30, v)); }],
+  SPAN_MAX: ['object', v => { SPAN_MAX = { ...SPAN_MAX, ...Object.fromEntries(Object.entries(v).filter(([k, n]) => k in SPAN_MAX && Number.isFinite(n) && n > 20 && n <= 5000)) }; }],
+  SEARCH_MAX: ['number', v => { SEARCH_MAX = Math.min(100000, Math.max(1, Math.round(v))); }],
+  COMIC_PART: ['number', v => { COMIC_PART = Math.min(1000, Math.max(2, Math.round(v / 2) * 2)); }],
 };
 const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
   theme: ['spine:theme', v => v === 'light' || v === 'dark', v => document.documentElement.setAttribute('data-theme', v)],
   layout: ['spine:layout', v => v in LAYOUTS, v => { layout = v; }],
   width: ['spine:width', v => WIDTHS.some(w => w[0].toLowerCase() === String(v).toLowerCase()), v => { widthStep = WIDTHS.findIndex(w => w[0].toLowerCase() === v.toLowerCase()); }],
   font: ['spine:face', v => FONTS.some(f => f.id === v), v => { fontFace = v; }],
-  fontSize: ['spine:font', v => typeof v === 'number' && v >= 60 && v <= 250, v => { fontPct = v; }],
-  lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 3, v => { lineH = v; }],
+  fontSize: ['spine:font', v => typeof v === 'number' && v >= 70 && v <= 200, v => { fontPct = v; }],   // (the A−/A+ range)
+  lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 2.6, v => { lineH = v; }],
   readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'server'].includes(v), v => { tts.engine = v; }],
   shortcuts: ['spine:shortcuts', v => typeof v === 'boolean', v => { singleKeys = v; }],
 };
@@ -4546,6 +4578,7 @@ async function loadConfig(){
       if (CONFIG_SETTINGS[key]) {
         const [type, apply] = CONFIG_SETTINGS[key];
         if (typeof value !== type || value === null) throw new Error(`should be a ${type}`);
+        if (type === 'number' && !Number.isFinite(value)) throw new Error('should be a finite number');
         apply(value);
       } else if (CONFIG_DEFAULTS[key]) {
         const [stored, ok, apply] = CONFIG_DEFAULTS[key];

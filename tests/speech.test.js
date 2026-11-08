@@ -113,3 +113,33 @@ test('closing the bar while the voice server is being checked: nothing starts re
   assert.equal(await page.isVisible('#tts'), false);
   assert.deepEqual(await page.evaluate(() => window.__spoken.map(s => s.text)), [], 'nothing is spoken once the bar is closed');
 });
+
+test('clicking a picture-only page while paused stays on it (L-49); focus and announcements in the bar (L-54)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeSpeech);
+  await h.openReader(page, h.READER, { 'spine:ttsEngine': 'device' });   // the sample opens on its cover picture
+  await page.keyboard.press('r');   // (the cover has no text: reading moves on to the next section)
+  await page.waitForFunction(() => /spine 2\//.test(document.querySelector('#spinePos').textContent), null, { timeout: 10000 });
+  await page.keyboard.press(' ');   // paused, bar open
+  await page.click('#tocList a >> nth=0');   // back to the cover
+  await page.waitForFunction(() => /spine 1\//.test(document.querySelector('#spinePos').textContent) && document.querySelector('#page').contentDocument?.querySelector('img'), null, { timeout: 10000 });
+  await page.waitForTimeout(300);
+  const box = await page.evaluate(() => { const f = document.querySelector('#page').getBoundingClientRect(), r = document.querySelector('#page').contentDocument.querySelector('img').getBoundingClientRect(); return { x: f.left + r.left + r.width / 2, y: f.top + r.top + r.height / 2 }; });
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(1000);
+  assert.match(await page.textContent('#spinePos'), /spine 1\//, 'still on the cover');
+  assert.deepEqual(await page.evaluate(() => [document.querySelector('#notice').getAttribute('role'), document.querySelector('#ttsStatus').getAttribute('role')]), ['alert', 'status']);
+  await page.click('#ttsClose');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'ttsBtn', 'focus goes to the read-aloud button, not the page');
+});
+
+test('a chosen engine that is unavailable stays shown, so choosing Device instead is saved (L-55)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeSpeech);
+  await page.route('**/tts/health', route => route.fulfill({ status: 503, body: 'down' }));
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:ttsEngine': 'server' });
+  await page.keyboard.press('r');
+  await page.waitForFunction(() => document.querySelector('#ttsEngine').selectedOptions[0]?.textContent === 'Server (unavailable)', null, { timeout: 10000 });
+  await page.selectOption('#ttsEngine', 'device');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:ttsEngine'))), 'device');
+});

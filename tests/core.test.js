@@ -154,5 +154,7 @@ test('French books are not offered Pocket TTS, which has no French voices (E-12)
   await page.click('#ttsBtn');
   const pocket = await page.$eval('#ttsEngine option[value="pocket"]', o => ({ disabled: o.disabled, text: o.textContent }));
   assert.deepEqual(pocket, { disabled: true, text: 'Pocket (en, de, it, pt, es)' });
-  assert.equal(await page.inputValue('#ttsEngine'), 'device');
+  // The chosen engine stays shown (disabled) while it can't be used; the device voice reads meanwhile (L-55).
+  assert.equal(await page.inputValue('#ttsEngine'), 'pocket');
+  assert.match(await page.getAttribute('#ttsEngine', 'title'), /device voice reads instead/);
 });

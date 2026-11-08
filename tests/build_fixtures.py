@@ -147,6 +147,10 @@ def main():
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
+    # Numbers out of range in a config (REVIEW.md L-55): 1e999 is Infinity to JSON.parse.
+    (SITE / "folder-nums").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-nums" / "index.html")
+    (SITE / "folder-nums" / "reader-config.json").write_text('{"LIB_FILES": "/reader/", "LOOKAHEAD_SEC": 1e999, "fontSize": 250, "lineSpacing": 3}')
     # Kokoro's library and runtime self-hosted, but not its model: the model must come from the pinned revision.
     if (REPO / "kokoro" / "kokoro.web.js").exists():
         (SITE / "partial" / "kokoro").mkdir(parents=True)

@@ -61,3 +61,13 @@ test('a config that is not JSON, or a "not found" page in its place, is ignored'
   assert.equal(await h.title(soft), 'Folder C Book');
   assert.deepEqual(warnings.filter(w => /reader-config/.test(w)), []);
 });
+
+test('numbers out of range in a config are ignored with a warning, not applied (L-55)', async () => {
+  const page = await h.newPage();
+  const warnings = [];
+  page.on('console', m => { if (m.type() === 'warning') warnings.push(m.text()); });
+  await h.openReader(page, `${h.SITE}/folder-nums/index.html?book=/reader/books/long.epub`);
+  assert.ok(warnings.some(w => /LOOKAHEAD_SEC.*finite/.test(w)), warnings.join(' | '));
+  assert.ok(warnings.some(w => /fontSize/.test(w)) && warnings.some(w => /lineSpacing/.test(w)), warnings.join(' | '));
+  assert.equal(await page.textContent('#fontPct'), '100%', 'a size the A−/A+ buttons can\'t reach is not applied');
+});
