@@ -526,3 +526,21 @@ upstream (a CDN, Hugging Face's download hosts, a model file) show up.
 No build step. The libraries (JSZip, and marked for Markdown) and fonts come
 from `libs/` and `fonts/` when self-hosted, otherwise from cdnjs and Google
 Fonts (with system font fallbacks).
+
+## Licence
+
+The reader (`index.html`, the fetch scripts, the tests and the rest of this
+repository) is under the [MIT licence](LICENSE).
+
+The parts the fetch scripts download aren't part of this repository and keep
+their own licences, which the scripts save beside them (a `LICENSES/` folder
+with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/` and `pocket/`;
+a `NOTICE.txt` in `fonts/`):
+
+- JSZip: MIT or GPLv3 (your choice); marked: MIT.
+- The fonts (IBM Plex Sans and Mono, Literata and the reading fonts): SIL Open
+  Font License 1.1.
+- Kokoro-82M and kokoro-js: Apache-2.0 (kokoro-js bundles a phonemizer built
+  from eSpeak NG, which is GPL-3.0); ONNX Runtime: MIT.
+- Pocket TTS's model: CC-BY-4.0 (credit its authors when redistributing it);
+  pocket-tts-js: MIT.
