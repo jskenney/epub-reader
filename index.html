@@ -523,6 +523,7 @@ function dirSource(base){
   const abs = p => new URL(p.split('/').map(encodeURIComponent).join('/'), base).href;
   return {
     kind: 'dir',
+    base: new URL(base).href,   // the folder its files come from (allowed by the book pages' security policy)
     async text(p){
       try { const r = await fetch(abs(p)); return r.ok ? clean(await r.text()) : null; } catch { return null; }
     },
@@ -808,6 +809,7 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
   const fallback = base ? dirSource(base) : null;
   const src = {
     kind: 'mem',
+    base: fallback?.base,
     async text(p){ return files.has(p) ? files.get(p) : fallback ? fallback.text(p) : null; },
     async exists(p){ return files.has(p); },
     async url(p, type){ return fallback ? fallback.url(p, type) : null; },
@@ -1099,9 +1101,9 @@ function resourceURL(path){
   book.urls.set(path, job);
   return job;
 }
-const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
 async function rewriteCss(css, cssPath, depth = 0){
-  for (const m of [...css.matchAll(/@import\s+(?:url\(\s*)?(['"]?)([^'")\s;]+)\1\s*\)?[^;]*;/g)]) {
+  for (const m of [...css.matchAll(/@import\s*(?:url\(\s*)?(['"]?)([^'")\s;]+)\1\s*\)?[^;]*;/gi)]) {
     let inner = '';
     if (isRemote(m[2]) && ALLOW_REMOTE_CONTENT) continue;   // left as it is: the browser loads it
     if (depth < 4 && !isExternal(m[2])) {
@@ -1113,7 +1115,7 @@ async function rewriteCss(css, cssPath, depth = 0){
   const found = new Map();
   for (const m of css.matchAll(URL_RE)) {
     const ref = m[2].trim();
-    if (!ref || isExternal(ref) || ref.startsWith('#') || found.has(ref)) continue;   // remote ones: see below
+    if (!ref || isExternal(ref) || isRemote(ref) || ref.startsWith('#') || found.has(ref)) continue;   // remote ones: see below
     found.set(ref, resourceURL(resolve(cssPath, ref)));
   }
   const done = new Map();
@@ -1212,31 +1214,39 @@ async function localize(doc, path){
   const targets = [['img','src'],['image','href'],['image','xlink:href'],['source','src'],['video','src'],['video','poster'],['audio','src'],['track','src']];
   for (const [tag, attr] of targets) {
     for (const el of doc.getElementsByTagName(tag)) {
-      const v = el.getAttribute(attr);
-      if (!v || isExternal(v) || v.startsWith('#')) continue;
-      jobs.push(resourceURL(resolve(path, v)).then(u => { if (u) el.setAttribute(attr, u); }));
+      const v = urlText(el.getAttribute(attr));
+      if (!v || v.startsWith('#')) continue;
+      if (isRemote(v)) { if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); continue; }
+      if (isExternal(v)) continue;   // data: and blob:
+      // A file the book doesn't have is removed rather than left to resolve against this site.
+      jobs.push(resourceURL(resolve(path, v)).then(u => { if (u) el.setAttribute(attr, u); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
     }
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
   for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path).then(c => { st.textContent = c; }));
-  for (const el of doc.body.querySelectorAll('[style*="url("]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
+  for (const el of doc.body.querySelectorAll('[style*="url(" i]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
-const isRemote = v => isExternal(v) && !/^(data|blob):/i.test(v);   // data: and blob: are part of the page
+// A reference to another site. Browsers drop tabs and newlines inside URLs and read "//host" (and backslash
+// forms) as another site too, so those count; data: and blob: are part of the page itself.
+const urlText = v => String(v ?? '').replace(/[\t\n\r]/g, '').trim();
+const isRemote = v => { const t = urlText(v); return /^[\\/]{2}/.test(t) || (isExternal(t) && !/^(data|blob):/i.test(t)); };
 // With ALLOW_REMOTE_CONTENT off: take out everything in the page that would fetch from another site.
 function stripRemote(doc){
   if (ALLOW_REMOTE_CONTENT) return;
   const attrs = [['img', 'src'], ['source', 'src'], ['video', 'src'], ['video', 'poster'], ['audio', 'src'], ['track', 'src'],
     ['input', 'src'], ['image', 'href'], ['use', 'href'], ['feImage', 'href'], ['*', 'background']];
   for (const [tag, attr] of attrs) {
-    for (const el of doc.querySelectorAll(`${tag}[${attr}]`)) if (isRemote(el.getAttribute(attr).trim())) el.removeAttribute(attr);
+    for (const el of doc.querySelectorAll(`${tag}[${attr}]`)) if (isRemote(el.getAttribute(attr))) el.removeAttribute(attr);
   }
   for (const el of doc.querySelectorAll('image, use, feImage')) {   // SVG's older xlink:href
     const v = el.getAttributeNS(XLINK, 'href');
-    if (v && isRemote(v.trim())) el.removeAttributeNS(XLINK, 'href');
+    if (v && isRemote(v)) el.removeAttributeNS(XLINK, 'href');
   }
   doc.body.querySelectorAll('link').forEach(el => el.remove());
+  // SVG animation can set an address after the attributes above were checked.
+  doc.querySelectorAll('set, animate').forEach(el => { if (/href/i.test(el.getAttribute('attributeName') || '')) el.remove(); });
   doc.querySelectorAll('[autoplay]').forEach(el => el.removeAttribute('autoplay'));
   doc.querySelectorAll('[ping]').forEach(el => el.removeAttribute('ping'));
 }
@@ -1247,9 +1257,9 @@ function markLinks(doc, path){
   for (const a of doc.querySelectorAll('a, area')) {
     const raw = a.getAttribute('href') ?? a.getAttributeNS(XLINK, 'href');
     if (raw == null) continue;
-    const h = raw.trim();
+    const h = urlText(raw);
     const drop = () => { a.removeAttribute('href'); a.removeAttributeNS(XLINK, 'href'); };
-    if (/^(https?|mailto|tel):/i.test(h)) {
+    if (/^(https?|mailto|tel):/i.test(h) || /^[\\/]{2}/.test(h)) {
       if (ALLOW_EXTERNAL_LINKS) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
       else drop();
     }
@@ -1295,11 +1305,32 @@ async function buildPage(src, path){
   if (sBody) for (const c of [...sBody.childNodes]) flow.append(out.importNode(c, true));
   const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
   clip.append(flow); out.body.append(clip);
-  sanitize(out);
-  stripRemote(out);
-  await localize(out, path);
-  markLinks(out, path);
-  return '<!doctype html>\n' + out.documentElement.outerHTML;
+  // Chapters parsed as XHTML keep the case of names (<IMG SRC>, <IFRAME>), which the checks below wouldn't
+  // match, yet the frame's HTML parser would turn them into working elements. So parse the page as HTML
+  // first, exactly as the frame will, and clean that.
+  const page = new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
+  sanitize(page);
+  stripRemote(page);
+  await localize(page, path);
+  markLinks(page, path);
+  if (!ALLOW_REMOTE_CONTENT) {   // and have the browser refuse anything that isn't part of the book
+    const csp = page.createElement('meta');
+    csp.httpEquiv = 'Content-Security-Policy'; csp.content = bookPolicy();
+    page.head.prepend(csp);
+  }
+  return '<!doctype html>\n' + page.documentElement.outerHTML;
+}
+/* The security policy for book pages (with ALLOW_REMOTE_CONTENT off): pictures, media and fonts only from the
+   book itself (blob: and data: copies, or the folder a book opened from a folder is in), styles only inline
+   or the reader's fonts, and nothing else: no frames, no other sites, no forms, no <base>. This catches
+   whatever the cleaning above might miss. */
+function bookPolicy(){
+  const folder = book?.src?.base || '';
+  const fontCssFrom = fontsLocal ? fontsBase() : ALLOW_CDN ? 'https://fonts.googleapis.com' : '';
+  const fontFilesFrom = fontsLocal ? fontsBase() : ALLOW_CDN ? 'https://fonts.gstatic.com' : '';
+  return [`default-src 'none'`, `img-src data: blob: ${folder}`, `media-src data: blob: ${folder}`,
+    `font-src data: blob: ${fontFilesFrom} ${folder}`, `style-src 'unsafe-inline' data: ${fontCssFrom}`,
+    `base-uri 'none'`, `form-action 'none'`].map(d => d.replace(/\s+/g, ' ').trim()).join('; ');
 }
 
 function loadFrame(html){

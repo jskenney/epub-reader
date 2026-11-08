@@ -6,12 +6,21 @@ const h = require('./helpers');
 test.afterEach(h.closePages);
 test.after(h.close);
 
-test('a hostile book reaches no other site, and its own pictures still show', async () => {
+for (const [label, ref] of [['from an EPUB file', 'books/hostile.epub'], ['from an extracted folder', 'books/hostile-dir/']])
+test(`a hostile book reaches no other site, and its own pictures still show (${label})`, async () => {
   const page = await h.newPage();
+  const sameSite = [];
+  page.on('request', r => { if (/missing-local|\/base\/|\/refresh/.test(r.url())) sameSite.push(r.url()); });
   await h.clearRemoteLog();
-  await h.openReader(page, `${h.READER}?book=books/hostile.epub`);
+  await h.openReader(page, `${h.READER}?book=${ref}`);
+  // Wait for every picture in the page to finish (or fail), then a little longer than the page's meta refresh.
+  await page.waitForFunction(() => [...document.querySelector('#page').contentDocument.images].every(i => i.complete), null, { timeout: 10000 });
   await page.waitForTimeout(1500);
   assert.deepEqual(await h.remoteLog(), [], 'requests reached the other site');
+  assert.deepEqual(page.blocked, [], 'requests went to a blocked site');
+  // (A book opened from a folder can only find out a file is missing by asking its own folder for it.)
+  const outside = sameSite.filter(u => !(ref.endsWith('/') && u.startsWith(`${h.SITE}/reader/${ref}`)));
+  assert.deepEqual(outside, [], 'requests went to this site outside the book');
   const state = await h.inFrame(page, doc => ({
     remoteImg: doc.querySelector('#remote-img').getAttribute('src'),
     local: doc.querySelector('#local-img').naturalWidth,
@@ -20,6 +29,14 @@ test('a hostile book reaches no other site, and its own pictures still show', as
     poster: doc.querySelector('#vid').getAttribute('poster'),
     links: doc.body.querySelectorAll('link').length,
     ping: doc.querySelector('#ping-link').hasAttribute('ping'),
+    bypassSrcs: [...doc.querySelectorAll('img.bypass')].map(i => i.getAttribute('src')).filter(Boolean),
+    iframes: doc.querySelectorAll('iframe').length,
+    base: doc.querySelectorAll('base').length,
+    refresh: doc.querySelectorAll('meta[http-equiv="refresh" i]').length,
+    animations: doc.querySelectorAll('set').length,
+    policy: doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content || '',
+    where: doc.defaultView.location.href,
+    still: /Hostile/.test(doc.body.textContent),
   }));
   assert.equal(state.remoteImg, null);
   assert.ok(state.local > 0, 'the picture inside the book should load');
@@ -28,6 +45,11 @@ test('a hostile book reaches no other site, and its own pictures still show', as
   assert.equal(state.poster, null);
   assert.equal(state.links, 0);
   assert.equal(state.ping, false);
+  assert.deepEqual(state.bypassSrcs.filter(u => !(ref.endsWith('/') && u.startsWith(`${h.SITE}/reader/${ref}`))), [],
+    'protocol-relative, tab-in-scheme, upper-case and missing pictures are removed');
+  assert.deepEqual([state.iframes, state.base, state.refresh, state.animations], [0, 0, 0, 0], 'upper-case IFRAME, BASE, META and SVG set are removed');
+  assert.match(state.policy, ref.endsWith('/') ? /^default-src 'none'; img-src data: blob: http:\/\/localhost:8790\/reader\/books\/hostile-dir\// : /^default-src 'none'; img-src data: blob:;/);
+  assert.deepEqual([state.where, state.still], ['about:srcdoc', true], 'the page is still the book');
 });
 
 test('links of every kind: in-book links open chapters, web links open a new tab, the frame never navigates', async () => {
@@ -53,6 +75,7 @@ test('ALLOW_REMOTE_CONTENT and ALLOW_EXTERNAL_LINKS from a folder config', async
   await page.waitForTimeout(1500);
   const log = await h.remoteLog();
   assert.ok(log.includes('/pixel.png'), `remote image should load when allowed (saw ${log})`);
-  const web = await h.inFrame(page, doc => [doc.querySelector('#web-link').hasAttribute('href'), doc.querySelector('#svg-in').getAttribute('data-spine-path')]);
-  assert.deepEqual(web, [false, 'OEBPS/c2.xhtml']);
+  const web = await h.inFrame(page, doc => [doc.querySelector('#web-link').hasAttribute('href'), doc.querySelector('#svg-in').getAttribute('data-spine-path'),
+    !!doc.querySelector('meta[http-equiv="Content-Security-Policy"]')]);
+  assert.deepEqual(web, [false, 'OEBPS/c2.xhtml', false], 'no security policy when remote content is allowed');
 });

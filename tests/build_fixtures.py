@@ -20,6 +20,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 SITE = HERE / "site"
 REMOTE = "http://localhost:8792"  # the "other site" the hostile book points at (see server.py --log)
+BLOCKED = "http://blocked.example"  # a site the test browser blocks: any request to it shows up in page.blocked
 
 
 def png(w, h, rgb):
@@ -152,12 +153,31 @@ def main():
 </svg>
 <img src="pic.png" usemap="#m" alt="map" width="40" height="30"/>
 <map name="m"><area id="area-in" shape="rect" coords="0,0,20,30" href="c2.xhtml" alt="in"/>
-<area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>"""
-    style = f"""<style>@import url("{REMOTE}/imported.css"); .x {{ background: url({REMOTE}/style-bg.png) }}
+<area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
+<p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>"""
+    # Ways around pattern matching (REVIEW.md H-1, H-2, L-1, L-2), each aimed at both other sites.
+    for i, host in enumerate((REMOTE, BLOCKED)):
+        hostile += f"""
+<p><img class="bypass" src="{host.replace('http:', '')}/protocol-relative.png" alt="pr"/>
+<img class="bypass" src="ht&#9;{host[2:]}/tab-in-scheme.png" alt="tab"/>
+<IMG class="bypass" SRC="{host}/upper-xhtml.png" alt="up"/></p>
+<IFRAME id="upper-iframe-{i}" SRC="{host}/upper-iframe"></IFRAME>
+<p style="background: URL({host}/inline-upper.png)">Upper-case URL(</p>
+<p style="background-image: image-set('{host}/image-set.png' 1x)">image-set</p>
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><image width="10" height="10"><set attributeName="href" to="{host}/smil.png" begin="0s"/></image></svg>"""
+    hostile += f"""
+<BASE href="{REMOTE}/base/"/>
+<META http-equiv="refresh" content="1;url={REMOTE}/refresh"/>
+<p><img class="bypass" src="missing-local.png" alt="missing"/></p>"""
+    style = f"""<style>@import url("{REMOTE}/imported.css"); @import"{BLOCKED}/import-no-space.css";
+.x {{ background: url({REMOTE}/style-bg.png); border: 30px solid; border-image: URL({BLOCKED}/upper-url.png) 30 }}
+.x::after {{ content: "x"; background: url(\\68ttp://blocked.example/escaped.png) }}
 @font-face {{ font-family: Remote; src: url("{REMOTE}/font.woff2") }}</style>"""
     epub(books / "hostile.epub", "Hostile Book", [("c1.xhtml", "Hostile", hostile, style),
                                                   ("c2.xhtml", "Target", "<h1>Target chapter</h1><p>Arrived.</p>")],
          uid="urn:hostile", extra={"OEBPS/pic.png": pic})
+    with zipfile.ZipFile(books / "hostile.epub") as z:   # also as an extracted folder: its files come from the site
+        z.extractall(books / "hostile-dir")
 
     # Documents.
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")

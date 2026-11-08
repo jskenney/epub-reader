@@ -193,11 +193,19 @@ This needs a real web server (for example `npx vite` or
   from your reading speed (learned from how fast you turn pages, starting at
   about 200 words a minute) or, while reading aloud, from the voice's actual
   pace. Phones show the chapter part only.
-- Books can't contact other sites: images, media, stylesheets and fonts a
-  book points at on the web are removed, with autoplay, link pings and
-  `<link>` elements in the text (`ALLOW_REMOTE_CONTENT`). Web links still
-  open in a new tab (`ALLOW_EXTERNAL_LINKS`), SVG links and image maps work
-  like other links, and nothing in a book can navigate the page away.
+- Books can't contact other sites (`ALLOW_REMOTE_CONTENT`, off by default),
+  in two layers:
+  - **Cleaning:** each page is cleaned as the browser will read it. That
+    removes references to other sites in images, media, stylesheets and
+    fonts, plus autoplay, link pings, `<link>`, `<iframe>`, `<base>` and
+    `<meta>` refresh, and references to files the book doesn't contain.
+  - **A Content-Security-Policy on every book page:** the browser itself
+    refuses anything that isn't part of the book (or the reader's fonts),
+    whatever the cleaning missed.
+
+  Web links still open in a new tab (`ALLOW_EXTERNAL_LINKS`), SVG links and
+  image maps work like other links, and nothing in a book can navigate the
+  page away.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Press I to show or hide the book's information (publisher, language,
   format, file…) below the contents; it is hidden when the page opens
@@ -334,7 +342,7 @@ marked ✓).
 | `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
-| `ALLOW_REMOTE_CONTENT` ✓ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read). |
+| `ALLOW_REMOTE_CONTENT` ✓ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. |
 | `ALLOW_EXTERNAL_LINKS` ✓ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
 | `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
