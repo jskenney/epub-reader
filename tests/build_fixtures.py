@@ -42,7 +42,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
     items = "".join(f'<item id="c{i}" href="{f}" media-type="application/xhtml+xml"/>' for i, (f, *_r) in enumerate(chapters))
     for name in (extra or {}):
         if name.startswith("OEBPS/"):
-            mt = "image/png" if name.endswith(".png") else "text/css" if name.endswith(".css") else "application/octet-stream"
+            mt = {".png": "image/png", ".css": "text/css", ".wav": "audio/wav", ".smil": "application/smil+xml"}.get(os.path.splitext(name)[1], "application/octet-stream")
             items += f'<item id="x{abs(hash(name))}" href="{name[6:]}" media-type="{mt}"/>'
     spine = "".join(f'<itemref idref="c{i}"/>' for i in range(len(chapters)))
     nav_items = "".join(f'<li><a href="{f}">{t}</a></li>' for f, t, *_r in chapters)
@@ -288,6 +288,21 @@ def main():
             if i.filename == "OEBPS/c3.xhtml":
                 data = data.replace(b"twin-a part 3", b"twin-a part 3 (revised)")
             zout.writestr(i, data)
+    # A narrated book (Media Overlays, REVIEW.md T-3): three paragraphs, each a 0.6 s clip of one recording,
+    # then a second chapter without narration.
+    wav(books / "narration.wav", 1.8)
+    narr = [("c1.xhtml", "Narrated", '<h1>Narrated</h1><p id="n1">First narrated paragraph.</p><p id="n2">Second narrated paragraph.</p>'
+             '<p id="n3">Third narrated paragraph.</p>'), ("c2.xhtml", "After", "<h1>After</h1><p>Not narrated.</p>")]
+    smil = ('<?xml version="1.0" encoding="utf-8"?><smil xmlns="http://www.w3.org/ns/SMIL" version="3.0"><body><seq>'
+            + "".join(f'<par id="p{i}"><text src="c1.xhtml#n{i}"/><audio src="narration.wav" clipBegin="{(i - 1) * 0.6:.1f}s" clipEnd="{i * 0.6:.1f}s"/></par>' for i in (1, 2, 3))
+            + '</seq></body></smil>')
+    epub(books / "narrated-src.epub", "Narrated Book", narr, uid="urn:narrated",
+         extra={"OEBPS/c1.smil": smil.encode(), "OEBPS/narration.wav": (books / "narration.wav").read_bytes()})
+    edited(books / "narrated-src.epub", books / "narrated.epub",
+           lambda o: o.replace('<item id="c0" href="c1.xhtml"', '<item id="c0" media-overlay="mo1" href="c1.xhtml"')
+                      .replace("</manifest>", '<item id="mo1" href="c1.smil" media-type="application/smil+xml"/></manifest>')
+                      .replace("</metadata>", '<meta property="media:duration">0:00:01.8</meta><meta property="media:active-class">now-reading</meta></metadata>'))
+    (books / "narrated-src.epub").unlink(); (books / "narration.wav").unlink()
     edited(books / "twin-a.epub", books / "twin-a-uid.epub",
            lambda o: o.replace('version="3.0">', 'version="3.0" unique-identifier="uid">')
                       .replace('<dc:title>', '<dc:identifier id="uid">urn:twin-a-given</dc:identifier><dc:title>'))
