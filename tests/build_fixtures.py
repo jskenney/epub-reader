@@ -220,6 +220,35 @@ def main():
     end = data.rfind(b"PK\x05\x06")
     data[end + 8:end + 12] = b"\xff\xff\xff\xff"   # the counts say "see the ZIP64 record", as in real ZIP64 archives
     (books / "zip64.epub").write_bytes(bytes(data))
+    # Two books of exactly the same size, stored, differing only in their chapter text (a same-size
+    # replacement, REVIEW.md L-26; chapters over the 256 KB cache limit, so they are read again), for folders whose server sends a weak ETag or no validators.
+    for d in ("weak-etag", "no-validators"):
+        (books / d).mkdir()
+    for name, letter in (("same-a", "A"), ("same-b", "B")):
+        epub(books / f"{name}.epub", "Same Size", [(f"c{i}.xhtml", f"Part {i}", f"<h1>Part {i}</h1><p>{letter * 300000}</p>") for i in range(1, 4)], uid="urn:same-size")
+        raw_zip(books / f"{name}.epub", [{**e, "deflate": False} for e in zip_entries(books / f"{name}.epub")])
+    assert (books / "same-a.epub").stat().st_size == (books / "same-b.epub").stat().st_size
+    # Padding after the end record (some tools add it): still read in place (L-27).
+    epub(books / "trailing.epub", "Trailing Bytes", base, uid="urn:trailing")
+    with open(books / "trailing.epub", "ab") as f:
+        f.write(b"\0" * 100)
+    # A Unicode Path field longer than its extra data, and one on a name already marked UTF-8 (L-27): both ignored.
+    epub(books / "bad-upath.epub", "Bad Unicode Path", base, uid="urn:bad-upath")
+    entries = zip_entries(books / "bad-upath.epub")
+    for e in entries:
+        if e["name"] == b"OEBPS/c1.xhtml":
+            e["cextra"] = struct.pack("<HH", 0x7075, 200) + b"\x01" + b"x" * 8
+        if e["name"] == b"OEBPS/c2.xhtml":
+            e["flags"] = 0x800
+            e["cextra"] = struct.pack("<HHBI", 0x7075, 5 + 9, 1, zlib.crc32(e["name"]) & 0xFFFFFFFF) + b"OEBPS/zzz"
+    raw_zip(books / "bad-upath.epub", entries)
+    # A chapter that says it is 600 MB (L-27): refused with a clear message rather than decompressed.
+    epub(books / "huge-entry.epub", "Huge Entry", base, uid="urn:huge-entry")
+    entries = zip_entries(books / "huge-entry.epub")
+    for e in entries:
+        if e["name"] == b"OEBPS/c2.xhtml":
+            e["usize"] = 600 << 20
+    raw_zip(books / "huge-entry.epub", entries)
     (books / "star-total").mkdir()
     shutil.copy(books / "long.epub", books / "star-total" / "long.epub")
     # Two different books with the same title and no identifier (REVIEW.md L-13).

@@ -161,6 +161,52 @@ test('a book replaced on the server while it is open is reported, not read as a 
   } finally { fs.rmSync(target, { force: true }); }
 });
 
+// A same-size replacement with the same date (L-26): only the checksums can tell, so it must be reported, on
+// a server with a strong ETag, only a weak one, or no validators at all.
+for (const folder of ['', 'weak-etag/', 'no-validators/'])
+test(`a book replaced by another of the same size is reported (${folder || 'strong ETag'}) (L-26, T-9)`, async () => {
+  const books = path.join(__dirname, 'site', 'reader', 'books');
+  const target = path.join(books, folder, 'same-now.epub');
+  const when = new Date('2026-01-01T00:00:00Z');
+  fs.copyFileSync(path.join(books, 'same-a.epub'), target);
+  fs.utimesSync(target, when, when);
+  try {
+    const page = await h.newPage();
+    await countWholeLoads(page);
+    await h.openReader(page, `${h.READER}?book=books/${folder}same-now.epub`);
+    assert.equal(await h.title(page), 'Same Size');
+    assert.equal(await page.evaluate(() => window.wholeLoads), 0, 'read in place');
+    fs.copyFileSync(path.join(books, 'same-b.epub'), target);
+    fs.utimesSync(target, when, when);   // the same date, so the same Last-Modified
+    await page.click('#tocList a >> nth=2');
+    // With a strong ETag (which here includes the time to the nanosecond, as nginx's has the second and size)
+    // the server may still see the same version; then the checksum catches it.
+    assert.match(await h.waitFor(() => h.notice(page), 10000), /changed on the server while it was open|the book changed while it was open/);
+    assert.doesNotMatch(await page.evaluate(() => document.querySelector('#page').contentDocument.body.textContent), /BBBB/);
+  } finally { fs.rmSync(target, { force: true }); }
+});
+
+test('padding after the archive, and malformed or redundant Unicode Path fields, still read in place (L-27, T-9)', async () => {
+  for (const [file, want, chapters] of [['trailing.epub', 'Trailing Bytes', 2], ['bad-upath.epub', 'Bad Unicode Path', 2]]) {
+    const page = await h.newPage();
+    await countWholeLoads(page);
+    await h.openReader(page, `${h.READER}?book=books/${file}`);
+    assert.equal(await h.title(page), want, file);
+    assert.equal(await page.evaluate(() => window.wholeLoads), 0, `${file} should be read in place`);
+    assert.equal(await page.locator('#tocList a').count(), chapters, file);
+    await page.click('#tocList a >> nth=1');
+    await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 10000 });
+    assert.equal(await h.notice(page), '', file);
+  }
+});
+
+test('a file inside a book that says it is huge is refused clearly, not decompressed (L-27)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/huge-entry.epub`);
+  await page.click('#tocList a >> nth=1');
+  assert.match(await h.waitFor(() => h.notice(page), 10000), /too large to open \(600 MB; the limit is 512 MB\)/);
+});
+
 test('an uploaded book changed on disk while open says so (M-7)', async () => {
   const tmp = path.join(require('node:os').tmpdir(), `spine-upload-${Date.now()}.epub`);
   fs.copyFileSync(BIG, tmp);

@@ -580,11 +580,18 @@ async function inflate(data, expected, name){
 // text files, in a cache of a few MB that forgets the oldest. Pictures and audio are never kept here.
 const KEEP_RE = /(\.(x?html?|opf|ncx|xml|css|smil|svg|txt|md)|^mimetype)$/i;
 const KEEP_MAX = 4 << 20;
+const MAX_ENTRY = 512 << 20;   // a file inside a book larger than this isn't decompressed (it would fill memory)
 async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Array>
   if (typeof DecompressionStream !== 'function' || size < 22) return null;
   const tailStart = Math.max(0, size - 65557), tail = await read(tailStart, size - tailStart);
-  let e = -1;   // the end-of-directory record: searched from the end, and its comment must reach the end exactly
-  for (let i = tail.length - 22; i >= 0; i--) if (u32(tail, i) === 0x06054b50 && i + 22 + u16(tail, i + 20) === tail.length) { e = i; break; }
+  // The end-of-directory record, searched from the end: first one whose comment reaches the end exactly (so a
+  // fake record inside a comment isn't taken); failing that, padding after the archive is allowed if the
+  // record's directory ends right where the record starts.
+  let e = -1;
+  for (let i = tail.length - 22; i >= 0 && e < 0; i--) if (u32(tail, i) === 0x06054b50 && i + 22 + u16(tail, i + 20) === tail.length) e = i;
+  for (let i = tail.length - 22; i >= 0 && e < 0; i--) {
+    if (u32(tail, i) === 0x06054b50 && i + 22 + u16(tail, i + 20) <= tail.length && u32(tail, i + 16) + u32(tail, i + 12) === tailStart + i) e = i;
+  }
   if (e < 0) return null;
   const count = u16(tail, e + 10), cdSize = u32(tail, e + 12), cdOffset = u32(tail, e + 16);
   if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF || cdOffset + cdSize > size) return null;   // ZIP64
@@ -600,13 +607,15 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
   const utf8 = new TextDecoder(), strict = new TextDecoder('utf-8', { fatal: true }), latin = new TextDecoder('latin1');
   for (let n = 0, p = 0; n < count; n++) {
     if (p + 46 > cd.length || u32(cd, p) !== 0x02014b50) return null;
-    const flags = u16(cd, p + 8), method = u16(cd, p + 10), csize = u32(cd, p + 20), usize = u32(cd, p + 24);
+    const flags = u16(cd, p + 8), method = u16(cd, p + 10), crc = u32(cd, p + 16), csize = u32(cd, p + 20), usize = u32(cd, p + 24);
     const nlen = u16(cd, p + 28), xlen = u16(cd, p + 30), clen = u16(cd, p + 32), local = u32(cd, p + 42);
     const raw = cd.subarray(p + 46, p + 46 + nlen);
     let name = null;
-    for (let x = p + 46 + nlen, end = x + xlen; x + 4 <= end;) {   // extra fields: the Info-ZIP Unicode Path (0x7075)
+    // Extra fields: the Info-ZIP Unicode Path (0x7075), for names not already marked as UTF-8 (as JSZip does).
+    for (let x = p + 46 + nlen, end = Math.min(x + xlen, cd.length); x + 4 <= end;) {
       const id = u16(cd, x), len = u16(cd, x + 2);
-      if (id === 0x7075 && len >= 5 && cd[x + 4] === 1 && u32(cd, x + 5) === crc32(raw)) name = utf8.decode(cd.subarray(x + 9, x + 4 + len));
+      if (x + 4 + len > end) break;   // a field that doesn't fit: ignore the rest
+      if (id === 0x7075 && !(flags & 0x800) && len >= 5 && cd[x + 4] === 1 && u32(cd, x + 5) === crc32(raw)) name = utf8.decode(cd.subarray(x + 9, x + 4 + len));
       x += 4 + len;
     }
     p += 46 + nlen + xlen + clen;
@@ -619,6 +628,7 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
     // The local header and the data in one read: the header's own extra field is usually the central one's
     // size, with a margin; if it is longer, the data is read separately.
     const bytes = async () => {
+      if (usize > MAX_ENTRY) throw new Error(`${name} is too large to open (${Math.round(usize / 1048576)} MB; the limit is ${MAX_ENTRY / 1048576} MB)`);
       if (local + 30 > size) throw damaged('outside the file');
       const buf = await read(local, Math.min(30 + nlen + xlen + 64 + csize, size - local));
       if (buf.length < 30 || u32(buf, 0) !== 0x04034b50) throw damaged('no local header');
@@ -626,8 +636,12 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
       if (local + start + csize > size) throw damaged('outside the file');
       const data = start + csize <= buf.length ? buf.subarray(start, start + csize) : await read(local + start, csize);
       if (data.length !== csize) throw damaged('cut short');
-      if (method === 0) { if (csize !== usize) throw damaged('sizes differ'); return data; }
-      return inflateRaw(data, usize, name);
+      if (method === 0 && csize !== usize) throw damaged('sizes differ');
+      const out = method === 0 ? data : await inflateRaw(data, usize, name);
+      // The checksum also catches a book replaced by another of the same size on a server that sends no
+      // usable validators.
+      if (crc32(out) !== crc) throw new Error(`${name}: damaged archive, or the book changed while it was open (its checksum doesn't match)`);
+      return out;
     };
     files[name] = {
       name, dir: name.endsWith('/'),
@@ -664,9 +678,18 @@ async function zipFromUrl(url, init = {}){
   if (total > 0) {
     const head = new Uint8Array(await r.arrayBuffer());
     if (!isZipBytes(head.buffer)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
-    const etag = r.headers.get('etag'), modified = r.headers.get('last-modified');
-    const version = etag && !etag.startsWith('W/') ? etag : modified || '';   // If-Range needs a strong ETag or a date
+    // The version first seen. If-Range needs a strong ETag or a date; every reply's validators are also compared
+    // with these, kind with kind (a weak ETag still changes when the file does).
+    const etag = r.headers.get('etag') || '', modified = r.headers.get('last-modified') || '';
+    const version = etag && !etag.startsWith('W/') ? etag : modified;
     const changed = () => new Error('the book changed on the server while it was open; reload the page to open the new version');
+    // true: another version; false: the same one; null: can't tell (the reply has nothing to compare).
+    const differs = res => {
+      const t = res.headers.get('etag') || '', m = res.headers.get('last-modified') || '';
+      if (etag && t) return t !== etag;
+      if (modified && m) return m !== modified;
+      return null;
+    };
     const read = async (o, l) => {
       if (l <= 0) return new Uint8Array(0);   // "bytes=o-(o-1)" isn't a valid range
       const ctl = new AbortController(), headers = { Range: `bytes=${o}-${o + l - 1}` };
@@ -675,12 +698,14 @@ async function zipFromUrl(url, init = {}){
       const got = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(part.headers.get('content-range') || '');
       if (part.status !== 206 || !got) {
         ctl.abort();   // don't download the whole file
-        // A whole-file reply to If-Range means the file changed, unless it is still the same version (then the
-        // server just isn't answering ranges any more).
-        const now = part.headers.get('etag') && !part.headers.get('etag').startsWith('W/') ? part.headers.get('etag') : part.headers.get('last-modified') || '';
-        throw part.status === 200 && version && now && now !== version ? changed() : new Error(`the server stopped answering range requests for ${url}`);
+        // 416: the range is past the end, so the file is shorter now. A whole-file reply to If-Range means the
+        // file changed, unless it is still the same version (then the server just stopped answering ranges).
+        if (part.status === 416) throw changed();
+        const d = part.status === 200 ? differs(part) : null;
+        if (d) throw changed();
+        throw new Error(`the server stopped answering range requests for ${url}${d === null && part.status === 200 ? ' (or the book changed)' : ''}`);
       }
-      if (Number(got[1]) !== o || (got[3] !== '*' && Number(got[3]) !== total)) { ctl.abort(); throw changed(); }
+      if (Number(got[1]) !== o || (got[3] !== '*' && Number(got[3]) !== total) || differs(part)) { ctl.abort(); throw changed(); }
       const b = new Uint8Array(await part.arrayBuffer());
       if (b.length !== Math.min(l, total - o)) throw new Error(`the server sent part of ${url} cut short`);
       return b;

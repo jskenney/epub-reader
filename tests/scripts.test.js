@@ -92,6 +92,14 @@ test('versions pinned in index.html and in the fetch scripts agree (D-3)', () =>
   assert.ok(page.includes(`pocket-tts-onnx/resolve/${v(pocket, 'REV')}/`), 'Pocket REV');
 });
 
+test('the Subresource Integrity hashes in LIBS match the files in libs/ (T-9)', { skip: !libsFetched && 'libs/ not fetched' }, () => {
+  const page = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const file of ['jszip.min.js', 'marked.min.js']) {
+    const want = 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(__dirname, '..', 'libs', file))).digest('base64');
+    assert.ok(page.includes(`file: 'libs/${file}'`) && page.includes(`integrity: '${want}'`), `${file}: ${want} isn't in LIBS`);
+  }
+});
+
 test('no GNU-only sed escapes (a tab written as \\t) in the scripts (M-4)', () => {
   for (const f of ['fetch-libs.sh', 'fetch-kokoro.sh', 'fetch-pocket.sh', 'fetch-fonts.sh']) {
     const sedCalls = fs.readFileSync(path.join(REPO, f), 'utf8').split('\n').filter(l => /\bsed\b/.test(l) && !l.trim().startsWith('#'));
