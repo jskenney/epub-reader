@@ -72,7 +72,8 @@ A relative path is looked up in two places, in this order:
 The first location that has the book wins. A path that starts with `/`
 (`?book=/library/x.epub`) is used as-is. To change the root folder, edit the
 `BOOKSHELF` constant (see [Settings](#settings)). Books on other sites are refused. If the book
-can't be loaded, the reader shows why and falls back to the sample book.
+can't be loaded, the reader shows why and opens the folder's `default.epub`
+(or the sample book when there isn't one).
 This needs a real web server (for example `npx vite` or
 `python3 -m http.server`); browsers block these requests on `file://` pages.
 

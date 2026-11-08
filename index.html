@@ -3897,7 +3897,7 @@ async function openFromUrl(ref){
     }
     throw new Error(`Nothing was found at ${misses.join(' or ')}.`);
   } catch (err) {
-    await openSample();
+    await openDefault();   // the folder's default book (or the sample), with a note about the link
     showNotice(friendly(err, ref), 'error');
   }
 }

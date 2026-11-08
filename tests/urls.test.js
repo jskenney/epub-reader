@@ -110,3 +110,14 @@ test('books with an identifier still use it, so they resume wherever they are op
   await page.goto(`${h.READER}?book=books/shelf-only.epub`); await h.waitForBook(page);   // a copy of the same book
   assert.match(await page.textContent('#spinePos'), /spine 2\/3/);
 });
+
+test("a bad ?book= link opens the folder's default.epub, with a note about the link (L-14)", async () => {
+  const target = path.join(__dirname, 'site', 'reader', 'default.epub');
+  fs.copyFileSync(path.join(__dirname, 'site', 'reader', 'books', 'long.epub'), target);
+  try {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/nothing.epub`);
+    assert.equal(await h.title(page), 'The Long Book');
+    assert.match(await h.notice(page), /books\/nothing.epub couldn't be opened\. Nothing was found/);
+  } finally { fs.rmSync(target, { force: true }); }
+});
