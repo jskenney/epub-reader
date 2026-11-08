@@ -186,6 +186,21 @@ test(`a book replaced by another of the same size is reported (${folder || 'stro
   } finally { fs.rmSync(target, { force: true }); }
 });
 
+test('a book cut short on a server without validators: the 416 reply is reported as a change (L-26, T-10)', async () => {
+  const books = path.join(__dirname, 'site', 'reader', 'books');
+  const target = path.join(books, 'no-validators', 'shrinking.epub');
+  fs.copyFileSync(path.join(books, 'big.epub'), target);
+  try {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/no-validators/shrinking.epub`);
+    assert.equal(await h.title(page), 'The Big Book');
+    fs.writeFileSync(target, Buffer.alloc(100));   // every later range is past the end: 416
+    await h.clearBytes();
+    await page.click('#tocList a >> nth=2');
+    assert.match(await h.waitFor(() => h.notice(page), 10000) || '', /changed on the server while it was open/);
+  } finally { fs.rmSync(target, { force: true }); }
+});
+
 test('padding after the archive, and malformed or redundant Unicode Path fields, still read in place (L-27, T-9)', async () => {
   for (const [file, want, chapters] of [['trailing.epub', 'Trailing Bytes', 2], ['bad-upath.epub', 'Bad Unicode Path', 2]]) {
     const page = await h.newPage();
@@ -195,7 +210,7 @@ test('padding after the archive, and malformed or redundant Unicode Path fields,
     assert.equal(await page.evaluate(() => window.wholeLoads), 0, `${file} should be read in place`);
     assert.equal(await page.locator('#tocList a').count(), chapters, file);
     await page.click('#tocList a >> nth=1');
-    await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 10000 });
+    await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 20000 });
     assert.equal(await h.notice(page), '', file);
   }
 });

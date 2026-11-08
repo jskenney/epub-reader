@@ -40,6 +40,7 @@ args = ap.parse_args()
 seen, breeze_log, busy = [], [], threading.Lock()
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
+head_on = [True]     # GET /__head?on=0 makes HEAD requests answer 405 (and ?on=1 again)
 
 
 def validators(file, path=""):
@@ -118,6 +119,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/__ranges":
             ranges_on[0] = "on=0" not in self.path
             return self.json(200, {"ranges": ranges_on[0]})
+        if path == "/__head":
+            head_on[0] = "on=0" not in self.path
+            return self.json(200, {"head": head_on[0]})
         if args.log:
             if path == "/__log":
                 return self.json(200, seen)
@@ -141,6 +145,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_HEAD(self):
+        if not head_on[0]:
+            self.file_validators = None
+            return self.send_error(405)
         file = self.translate_path(self.path)
         self.file_validators = validators(file, self.path) if os.path.isfile(file) else None
         self.validators_sent = False

@@ -136,6 +136,26 @@ test('saved server-voice audio survives reordered or added fields in voices.json
   }
 });
 
+test('a refused HEAD request keeps the clip version last seen, so saved audio is still used (L-28, L-31, T-10)', async () => {
+  const page = await h.newPage();
+  try {
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, server);
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    await h.waitFor(async () => (await h.breezeLog()).filter(r => !r.aborted).length >= 2, 20000);
+    await page.waitForTimeout(1000);
+    const first = (await h.breezeLog()).filter(r => !r.aborted)[0].text;
+    await fetch(`${h.SITE}/__head?on=0`);
+    await page.reload(); await h.waitForBook(page);
+    await h.clearBreezeLog();
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page), 10000));
+    await page.waitForTimeout(500);
+    assert.ok(!(await h.breezeLog()).map(r => r.text).includes(first), 'the first passage should come from saved audio');
+  } finally { await fetch(`${h.SITE}/__head?on=1`); }
+});
+
 const slow = !process.env.SLOW && 'set SLOW=1 to run (loads real models on the CPU)';
 for (const [engine, folder] of [['kokoro', 'kokoro'], ['pocket', 'pocket']]) {
   const missing = !fs.existsSync(path.join(__dirname, '..', folder)) && `${folder}/ not fetched`;
