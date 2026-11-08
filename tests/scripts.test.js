@@ -32,6 +32,14 @@ function pathWithoutHashTools() {
   }
   return bin;
 }
+// A stub command in a folder of links to the real ones: the link is removed first, so writing the stub can
+// never write through it to the real program (as root, that replaced /usr/bin/curl: REVIEW.md T-12).
+function stub(bin, name, text) {
+  const file = path.join(bin, name);
+  fs.rmSync(file, { force: true });
+  fs.writeFileSync(file, text, { mode: 0o755 });
+  assert.equal(fs.lstatSync(file).isSymbolicLink(), false);
+}
 const libsFetched = fs.existsSync(path.join(REPO, 'libs', 'jszip.min.js'));
 
 test('options work in any order, and unknown ones are refused (L-5)', () => {
@@ -69,7 +77,7 @@ test('downloads are checked, and the check fails closed (L-3, L-4)', { skip: !li
   assert.match(run(dir, 'fetch-libs.sh').out, /note +libs\/jszip\.min has no pinned checksum/);
   // A changed file is removed, and the run fails (with downloading disabled by an unusable curl).
   fs.appendFileSync(path.join(dir, 'libs', 'marked.min.js'), '\n');
-  fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nexit 7\n', { mode: 0o755 });
+  stub(bin, 'curl', '#!/bin/sh\nexit 7\n');
   fs.symlinkSync(fs.realpathSync(spawnSync('sh', ['-c', 'command -v sha256sum']).stdout.toString().trim()), path.join(bin, 'sha256sum'));
   const bad = run(dir, 'fetch-libs.sh', [], { PATH: bin });
   assert.equal(bad.code, 1, bad.out);
@@ -85,7 +93,7 @@ test('fetch-fonts.sh --strict fails on a changed file or a font file not in the 
   fs.cpSync(path.join(REPO, 'fonts'), path.join(dir, 'fonts'), { recursive: true, dereference: true });
   // Offline: Google's stylesheet now names a font file that isn't in fonts/SHA256SUMS; nothing else answers.
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-bin-'));
-  fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nfor a; do u=$a; done\ncase $u in *googleapis*) echo "@font-face{src:url(https://fonts.gstatic.com/s/new/v1/x.woff2)}";; *) exit 7;; esac\n', { mode: 0o755 });
+  stub(bin, 'curl', '#!/bin/sh\nfor a; do u=$a; done\ncase $u in *googleapis*) echo "@font-face{src:url(https://fonts.gstatic.com/s/new/v1/x.woff2)}";; *) exit 7;; esac\n');
   const env = { PATH: `${bin}:${process.env.PATH}` };
   assert.equal(run(dir, 'fetch-fonts.sh', ['--bogus'], env).code, 2);
   const first = fs.readFileSync(path.join(dir, 'fonts', 'SHA256SUMS'), 'utf8').split('\n')[0].split(/\s+/)[1];
