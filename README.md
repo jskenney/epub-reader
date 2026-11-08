@@ -66,7 +66,7 @@ A relative path is looked up in two places, in this order:
 
 The first location that has the book wins. A path that starts with `/`
 (`?book=/library/x.epub`) is used as-is. To change the root folder, edit the
-`BOOKSHELF` constant near the top of the script in `index.html`. Books on other sites are refused. If the book
+`BOOKSHELF` constant (see [Settings](#settings)). Books on other sites are refused. If the book
 can't be loaded, the reader shows why and falls back to the sample book.
 This needs a real web server (for example `npx vite` or
 `python3 -m http.server`); browsers block these requests on `file://` pages.
@@ -251,6 +251,34 @@ files are downloaded and cached by the browser once. Run the fetch scripts in
 that folder (they write next to themselves). The browser treats the same
 file under two different paths as two files, which is why sharing one
 folder matters.
+
+## Settings
+
+These constants near the top of the script in `index.html` are meant to be
+changed. Edit the file and reload the page.
+
+| Constant | Default | What it does / when to change it |
+|---|---|---|
+| `DEFAULT_BOOK` | `'default.epub'` | Opened when the address has no `?book=`, from the same folder as `index.html`, if it is a valid EPUB; otherwise the built-in sample opens. |
+| `BOOKSHELF` | `'/bookshelf/'` | Site folder searched for a relative `?book=` path that isn't found next to `index.html`. |
+| `VOICE_FILES` | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
+| `TTS_SERVER` | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else. |
+| `FULL_PRECISION` | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
+| `LOOKAHEAD_SEC` | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
+| `SAVED_AUDIO_MB` | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. |
+| `NCACHE_SEC` | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices. |
+| `SPAN_MAX` | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. |
+| `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
+| `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
+| `SEARCH_MAX` | `500` | Most search results listed. |
+| `COMIC_PART` | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. |
+
+External libraries are pinned to exact versions in `index.html`: JSZip
+3.10.1 (cdnjs, in a `<script>` tag), `MARKED_URL` (marked 15.0.12, loaded only
+for Markdown), and the `lib`/`ort` URLs in `KOKORO` (kokoro-js 1.2.1) and
+`POCKET` (pocket-tts-js 0.1.0, onnxruntime-web 1.20.0). When upgrading Kokoro
+or Pocket TTS, change the matching version in `fetch-kokoro.sh` or
+`fetch-pocket.sh` too; their comments say which line has to match.
 
 ## Requirements
 

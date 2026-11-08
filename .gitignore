@@ -5,5 +5,8 @@
 # Server voice clips from older setups (they now live on the TTS server; see epub-reader-tts-server)
 /tts-voices/
 
+# The book a site opens by default (see DEFAULT_BOOK)
+default.epub
+
 # Interrupted or in-progress downloads
 *.part
