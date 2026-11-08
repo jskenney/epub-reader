@@ -1291,14 +1291,44 @@ function resourceURL(path){
   return job;
 }
 const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
-// CSS escapes (\68ttp is "http") decoded, so an address is checked as the browser will read it.
-const cssUnescape = t => t.replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?/gi, (_, h) => String.fromCodePoint(Math.min(parseInt(h, 16), 0x10FFFF) || 0xFFFD))
-  .replace(/\\(.)/g, '$1');
-// image-set() takes plain strings as well as url(): one with any remote entry counts as remote.
-const IMAGE_SET_RE = /(?:-webkit-)?image-set\((?:[^()]|\([^()]*\))*\)/gi;
+// CSS escapes (\68ttp is "http") decoded in one pass, as the browser reads them, so an address is checked as
+// the browser will see it ("\00005c\00005c" is two backslashes, not one escaped one).
+const cssUnescape = t => t.replace(/\\(?:([0-9a-f]{1,6})[ \t\n\r\f]?|([\s\S]))/gi,
+  (_, h, c) => h ? String.fromCodePoint(Math.min(parseInt(h, 16), 0x10FFFF) || 0xFFFD) : c === '\n' ? '' : c);
+// A name written with escapes before "(" (u\72l(, im\61ge-set() is the same function to the browser:
+// written plainly, so the patterns below see it.
+const plainFunctionNames = css => css.replace(/(?:[\w-]|\\(?:[0-9a-f]{1,6}[ \t\n\r\f]?|[^\n0-9a-f]))+(?=\()/gi,
+  name => { if (!name.includes('\\')) return name; const p = cssUnescape(name); return /^-?[a-z_][\w-]*$/i.test(p) ? p : name; });
+const STRING_RE = /(['"])((?:\\[\s\S]|(?!\1)[^\\\n])*)\1/g;
+// Each image-set() (nested brackets and quoted strings included) as [start, end].
+function imageSets(css){
+  const out = [];
+  for (const m of css.matchAll(/(?:-webkit-)?image-set\(/gi)) {
+    if (out.length && m.index < out.at(-1)[1]) continue;   // inside one already found
+    let depth = 0, i = m.index + m[0].length - 1, q = '';
+    for (; i < css.length; i++) {
+      const c = css[i];
+      if (q) { if (c === '\\') i++; else if (c === q) q = ''; }
+      else if (c === '"' || c === "'") q = c;
+      else if (c === '(') depth++;
+      else if (c === ')' && --depth === 0) break;
+    }
+    out.push([m.index, i + 1]);
+  }
+  return out;
+}
+// What a missing or remote image becomes: an empty picture, valid wherever an image is (unlike "none", which
+// would drop "cursor: url(x), pointer" or a font's whole src list), and nothing to fetch.
+const NO_IMAGE = 'url("data:,")';
 async function rewriteCss(css, cssPath, depth = 0){
+  css = plainFunctionNames(css);
   if (!ALLOW_REMOTE_CONTENT) {
-    css = css.replace(IMAGE_SET_RE, all => [...all.matchAll(/(['"])(.*?)\1/g)].some(m => isRemote(cssUnescape(m[2]))) ? 'none' : all);
+    // image-set() takes plain strings as well as url(): one with any remote entry counts as remote.
+    for (const [a, b] of imageSets(css).reverse()) {
+      const set = css.slice(a, b);
+      const refs = [...set.matchAll(STRING_RE)].map(m => m[2]).concat([...set.matchAll(URL_RE)].map(m => m[2]));
+      if (refs.some(r => isRemote(cssUnescape(r.trim())))) css = css.slice(0, a) + NO_IMAGE + css.slice(b);
+    }
   }
   for (const m of [...css.matchAll(/@import\s*(?:url\(\s*)?(['"]?)([^'")\s;]+)\1\s*\)?[^;]*;/gi)]) {
     let inner = '';
@@ -1324,7 +1354,7 @@ async function rewriteCss(css, cssPath, depth = 0){
     if (u) return `url("${u}")`;
     if (ALLOW_REMOTE_CONTENT || ref.startsWith('#') || /^(data|blob):/i.test(ref)) return all;
     // Another site, or a file the book doesn't have: no image (rather than a request the policy would refuse).
-    return isRemote(ref) || done.has(ref) ? 'none' : all;
+    return isRemote(ref) || done.has(ref) ? NO_IMAGE : all;
   });
 }
 
@@ -1425,7 +1455,7 @@ async function localize(doc, path){
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
   for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path).then(c => { st.textContent = c; }));
-  for (const el of doc.body.querySelectorAll('[style*="url(" i], [style*="image-set" i]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
+  for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
@@ -1559,7 +1589,10 @@ function releaseComicImages(shownPath){
 /* <base> and <meta http-equiv> take effect as soon as a document is parsed, even an unseen one made only to
    read a chapter, and the browser applies the page's security policy to them there (logging alarming
    messages). The reader never wants them, so they are removed from the text before any parsing. */
-const withoutDocumentControls = t => t.replace(/<base\b[^>]*>/gi, '').replace(/<meta\b[^>]*\bhttp-equiv\b[^>]*>/gi, '');
+// (A tag's attributes, quoted values may hold ">"; the tag may have a prefix, as <h:base> in XHTML.)
+const TAG_REST = String.raw`(?:[^>"']|"[^"]*"|'[^']*')*>`;
+const DOC_CONTROLS_RE = new RegExp(String.raw`<(?:[\w-]+:)?(?:base\b${TAG_REST}|meta\b(?=(?:[^>"']|"[^"]*"|'[^']*')*?[\s/]http-equiv\b)${TAG_REST})`, 'gi');
+const withoutDocumentControls = t => t.replace(DOC_CONTROLS_RE, '');
 async function chapterSource(item){
   const raw = withoutDocumentControls(await readText(book.zip, item.path) || '');
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);

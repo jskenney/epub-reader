@@ -256,10 +256,18 @@ def main():
 <IFRAME id="upper-iframe-{i}" SRC="{host}/upper-iframe"></IFRAME>
 <p style="background: URL({host}/inline-upper.png)">Upper-case URL(</p>
 <p style="background-image: image-set('{host}/image-set.png' 1x)">image-set</p>
-<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><image width="10" height="10"><set attributeName="href" to="{host}/smil.png" begin="0s"/></image></svg>"""
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><image width="10" height="10"><set attributeName="href" to="{host}/smil.png" begin="0s"/></image></svg>
+<p style="background-image: image-set(linear-gradient(red, rgb(0,0,0)) 1x, '{host}/nested-image-set.png' 2x)">nested image-set</p>
+<p style="background-image: im\\61ge-set('{host}/escaped-image-set.png' 1x)">escaped image-set</p>
+<p style="background-image: u\\72l({host}/escaped-url.png)">escaped url(</p>
+<p style="background-image: url('\\00005c\\00005c{host[7:]}/double-escape.png')">double escape</p>
+<p class="cursor-remote" style="cursor: url({host}/cursor.cur), pointer">remote cursor</p>"""
     hostile += f"""
 <BASE href="{REMOTE}/base/"/>
 <META http-equiv="refresh" content="1;url={REMOTE}/refresh"/>
+<meta content="1;url={REMOTE}/refresh?a>b" http-equiv="refresh"/>
+<h:base xmlns:h="http://www.w3.org/1999/xhtml" href="{REMOTE}/prefixed-base/"/>
+<p id="cursor-missing" style="cursor: url(missing.cur), pointer">missing cursor</p>
 <p><img class="bypass" src="missing-local.png" alt="missing"/></p>"""
     style = f"""<style>@import url("{REMOTE}/imported.css"); @import"{BLOCKED}/import-no-space.css";
 .x {{ background: url({REMOTE}/style-bg.png); border: 30px solid; border-image: URL({BLOCKED}/upper-url.png) 30 }}

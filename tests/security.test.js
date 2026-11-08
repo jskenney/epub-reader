@@ -37,6 +37,7 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
     policy: doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content || '',
     where: doc.defaultView.location.href,
     still: /Hostile/.test(doc.body.textContent),
+    cursors: [...doc.querySelectorAll('#cursor-missing, .cursor-remote')].map(e => doc.defaultView.getComputedStyle(e).cursor),
   }));
   assert.equal(state.remoteImg, null);
   assert.ok(state.local > 0, 'the picture inside the book should load');
@@ -50,6 +51,8 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
   assert.deepEqual([state.iframes, state.base, state.refresh, state.animations], [0, 0, 0, 0], 'upper-case IFRAME, BASE, META and SVG set are removed');
   assert.match(state.policy, ref.endsWith('/') ? /^default-src 'none'; img-src data: blob: http:\/\/localhost:8790\/reader\/books\/hostile-dir\// : /^default-src 'none'; img-src data: blob:;/);
   assert.deepEqual([state.where, state.still], ['about:srcdoc', true], 'the page is still the book');
+  // A missing or remote cursor image falls back to the next cursor, rather than dropping the declaration (L-21).
+  assert.deepEqual(state.cursors.map(c => c.replace(/^url\("[^"]*"\), /, '')), ['pointer', 'pointer', 'pointer']);
   // The cleaning leaves nothing for the policies to refuse, so the console stays quiet (L-19).
   assert.deepEqual(page.cspViolations, []);
 });
