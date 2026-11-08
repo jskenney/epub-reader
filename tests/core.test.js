@@ -64,6 +64,30 @@ test("a book element with the reader's own ids doesn't break page counting, and 
   await page.waitForFunction(() => /page (\d+)\/\1\b/.test(document.querySelector('#spinePos').textContent), null, { timeout: 5000 });
 });
 
+test('single-key shortcuts can be turned off in the Aa menu; arrows still turn pages (L-17)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  const theme = () => page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+  await page.keyboard.press('t');
+  const toggled = await theme();
+  assert.ok(toggled, 'T switches the theme');
+  await page.click('#fontBtn');
+  assert.equal(await page.getAttribute('#keysOpt', 'aria-checked'), 'true');
+  await page.click('#keysOpt');
+  assert.equal(await page.getAttribute('#keysOpt', 'aria-checked'), 'false');
+  await page.keyboard.press('Escape');
+  for (const k of ['t', 'c', 'l', '/']) await page.keyboard.press(k);
+  assert.equal(await theme(), toggled, 'T does nothing now');
+  assert.equal(await page.isVisible('#searchPanel'), false, '/ does nothing now');
+  const before = await page.textContent('#spinePos');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(b => document.querySelector('#spinePos').textContent !== b, before);
+  // Remembered after a reload.
+  await page.reload(); await h.waitForBook(page);
+  await page.keyboard.press('t');
+  assert.equal(await theme(), toggled);
+});
+
 test('documents open as one continuous page with their headings in the contents', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/notes.md`);

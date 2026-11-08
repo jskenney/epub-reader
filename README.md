@@ -229,6 +229,10 @@ This needs a real web server (for example `npx vite` or
 - The browser tab shows the book's cover as its icon (EPUB 3 `cover-image`,
   EPUB 2 `<meta name="cover">`, an image named "cover", or the first image on
   a cover page), and the site's favicon for books without one.
+- Single-key shortcuts (C contents, I information, F full screen, T theme,
+  L layout, R read aloud, / search, [ and ] speed) can be turned off under
+  Keyboard in the Aa menu if they clash with a screen reader; arrow keys,
+  Page Up/Down, Space and Ctrl+F keep working.
 - Light/dark toggle in the top bar (or press T). Until you pick one, it
   follows your system setting.
 - Remembers your position, text size, line spacing, font and theme. An EPUB's
@@ -465,7 +469,8 @@ each with its own `default.epub`:
   (`"light"` or `"dark"`), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
   such as `"literata"`), `fontSize` (percent, 60–250), `lineSpacing`
-  (1–3) and `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`).
+  (1–3), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`) and
+  `shortcuts` (`false` starts with single-key shortcuts off).
 - Unknown names and wrong values are ignored with a warning in the browser
   console. A missing file, or a "not found" page in its place, means no
   config.

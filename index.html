@@ -170,6 +170,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .menu{position:absolute;z-index:30;right:0;top:calc(100% + 6px);width:270px;max-width:calc(100vw - 32px);box-sizing:border-box;
   display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--surface);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow)}
 .menu .label{margin:4px 8px 8px}
+.menu .label.sep{margin-top:10px;padding-top:10px;border-top:1px solid var(--rule)}
 .opt{display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;padding:8px 10px;border:0;border-radius:5px;
   background:transparent;color:var(--ink);cursor:pointer;text-align:left;font-size:17px;line-height:1.25}
 .opt:hover,.opt:focus-visible{background:var(--paper);outline:none}
@@ -423,6 +424,10 @@ const store = {
 let book = null;
 let cur = { i: 0 };
 let fontPct = Number(store.get('spine:font')) || 100;
+// Single-letter shortcuts (C, F, T, L, I, R, /, [ and ]) can clash with screen readers' browse-mode keys, so
+// they can be turned off (the Aa menu, or "shortcuts": false in reader-config.json as the starting choice).
+// Arrow keys, Page Up/Down, Space, Escape and Ctrl+F keep working.
+let singleKeys = store.get('spine:shortcuts') ?? true;
 let lineH = Number(store.get('spine:line')) || 1.65;
 const LAYOUTS = { two: 'Two columns', one: 'One column', scroll: 'Scrolling' };
 // Text width: the widest the text may get; anything beyond becomes side margin. [name, one column/scroll, two columns]
@@ -1950,8 +1955,9 @@ function onKey(e){
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox') { e.preventDefault(); searchOpen(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-  if (e.key === '/') { e.preventDefault(); searchOpen(); return; }
   if (menuOpen() && menuKey(e)) return;
+  if (!singleKeys && e.key.length === 1 && e.key !== ' ') return;   // letters and symbols are left to the browser
+  if (e.key === '/') { e.preventDefault(); searchOpen(); return; }
   if (e.key === ' ' && tts.open && tag !== 'button' && tag !== 'a') { e.preventDefault(); ttsTogglePlay(); return; }
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); ttsReadHere(); return; }
   if (e.key === '[' || e.key === ']') { if (tts.open) { e.preventDefault(); ttsSetRate(tts.rate + (e.key === ']' ? 0.1 : -0.1)); } return; }
@@ -2241,10 +2247,24 @@ function buildFontMenu(){
     b.addEventListener('click', () => { setFace(f.id); setMenu(false); $('#fontBtn').focus(); });
     menu.append(b);
   }
+  const keys = document.createElement('p'); keys.className = 'label sep'; keys.textContent = 'Keyboard';
+  const k = document.createElement('button');
+  k.className = 'opt'; k.type = 'button'; k.id = 'keysOpt'; k.setAttribute('role', 'menuitemcheckbox');
+  const kn = document.createElement('span'); kn.textContent = 'Single-key shortcuts';
+  const ks = document.createElement('small'); ks.textContent = 'C F T L I R /';
+  k.append(kn, ks);
+  k.title = 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.';
+  k.addEventListener('click', () => { setSingleKeys(!singleKeys); });
+  menu.append(keys, k);
+  syncFontMenu();
+}
+function setSingleKeys(on){
+  singleKeys = on; store.set('spine:shortcuts', on);
   syncFontMenu();
 }
 function syncFontMenu(){
-  for (const b of $('#fontMenu').querySelectorAll('.opt')) b.setAttribute('aria-checked', String(b.dataset.face === fontFace));
+  for (const b of $('#fontMenu').querySelectorAll('.opt[data-face]')) b.setAttribute('aria-checked', String(b.dataset.face === fontFace));
+  $('#keysOpt')?.setAttribute('aria-checked', String(singleKeys));
   $('#fontBtn .aa').style.fontFamily = face().stack || face().preview;
   $('#fontBtn').title = `Reading font: ${face().name}`;
 }
@@ -2270,7 +2290,7 @@ function menuKey(e){
     opts[n].focus(); return true;
   }
   if (e.key === 'Tab') { setMenu(false); return false; }
-  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']', 'l', 'L'].includes(e.key);
+  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(e.key) || (singleKeys && ['f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']', 'l', 'L'].includes(e.key));
 }
 $('#fontBtn').addEventListener('click', () => setMenu(!menuOpen()));
 document.addEventListener('click', e => { if (menuOpen() && !e.target.closest('.font-pick')) setMenu(false); });
@@ -4164,6 +4184,7 @@ const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
   fontSize: ['spine:font', v => typeof v === 'number' && v >= 60 && v <= 250, v => { fontPct = v; }],
   lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 3, v => { lineH = v; }],
   readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'server'].includes(v), v => { tts.engine = v; }],
+  shortcuts: ['spine:shortcuts', v => typeof v === 'boolean', v => { singleKeys = v; }],
 };
 let readerConfig = null;   // the folder's config as loaded, for reference
 async function loadConfig(){
