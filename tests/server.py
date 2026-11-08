@@ -37,6 +37,13 @@ args = ap.parse_args()
 
 seen, breeze_log, busy = [], [], threading.Lock()
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
+ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
+
+
+def validators(file):
+    """A strong ETag and Last-Modified for a file, as nginx sends (for If-Range)."""
+    st = os.stat(file)
+    return f'"{st.st_mtime_ns:x}-{st.st_size:x}"', time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(st.st_mtime))
 POLICY = None
 if args.csp_from:
     import re
@@ -60,6 +67,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
     def end_headers(self):
+        if getattr(self, "file_validators", None) and not getattr(self, "validators_sent", False):
+            self.send_header("ETag", self.file_validators[0])
+            self.validators_sent = True
         if POLICY and not any(p and self.path.startswith(p) for p in args.csp_skip.split(",")):
             self.send_header("Content-Security-Policy", POLICY)
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -93,6 +103,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/__bytes":
             return self.json(200, sent)
+        if path == "/__ranges":
+            ranges_on[0] = "on=0" not in self.path
+            return self.json(200, {"ranges": ranges_on[0]})
         if args.log:
             if path == "/__log":
                 return self.json(200, seen)
@@ -106,9 +119,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if path.startswith("/tts/"):
                 return self.json(404, {"detail": "Not Found"})
         file = self.translate_path(self.path)
+        self.file_validators = validators(file) if os.path.isfile(file) else None
+        self.validators_sent = False   # one handler serves every request on a kept-alive connection
         rng = self.headers.get("Range")
-        if rng and not args.no_range and os.path.isfile(file):
-            return self.send_range(file, rng)
+        if rng and not args.no_range and ranges_on[0] and os.path.isfile(file):
+            if_range = self.headers.get("If-Range")
+            if not if_range or if_range in self.file_validators:   # If-Range: a part only of the same version
+                return self.send_range(file, rng)
         super().do_GET()
 
     def copyfile(self, source, outputfile):   # count what is sent
@@ -135,7 +152,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             data = f.read(end - start + 1)
         self.send_response(206)
         self.send_header("Content-Type", self.guess_type(file))
-        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        # Files under a folder named star-total answer without the total size ("bytes 0-3/*").
+        self.send_header("Content-Range", f"bytes {start}-{end}/{'*' if '/star-total/' in self.path else size}")
+        self.send_header("Last-Modified", self.file_validators[1])
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Accept-Ranges", "bytes")
         self.end_headers()

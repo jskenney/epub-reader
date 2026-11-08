@@ -541,40 +541,96 @@ function bytesToBase64(u8){
   for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
   return btoa(s);
 }
+let crcTable;
+function crc32(b){
+  if (!crcTable) {
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
+  }
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < b.length; i++) c = crcTable[(c ^ b[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+// Inflate, stopping as soon as the output passes the size the archive declares: a small entry that would
+// inflate to gigabytes (a "decompression bomb") fails instead of filling the memory.
+async function inflateRaw(data, expected, name){
+  const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const parts = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.length;
+    if (n > expected) { reader.cancel().catch(() => {}); throw new Error(`${name}: damaged archive (larger than it says)`); }
+    parts.push(value);
+  }
+  if (n !== expected) throw new Error(`${name}: damaged archive (smaller than it says)`);
+  if (parts.length === 1) return parts[0];
+  const out = new Uint8Array(n);
+  for (let i = 0, o = 0; i < parts.length; o += parts[i].length, i++) out.set(parts[i], o);
+  return out;
+}
+// Files worth keeping in memory once read (the package, contents, chapters, styles, narration timing): small
+// text files, in a cache of a few MB that forgets the oldest. Pictures and audio are never kept here.
+const KEEP_RE = /(\.(x?html?|opf|ncx|xml|css|smil|svg|txt|md)|^mimetype)$/i;
+const KEEP_MAX = 4 << 20;
 async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Array>
   if (typeof DecompressionStream !== 'function' || size < 22) return null;
   const tailStart = Math.max(0, size - 65557), tail = await read(tailStart, size - tailStart);
-  let e = -1;   // the end-of-directory record, searched from the end (a comment can follow it)
-  for (let i = tail.length - 22; i >= 0; i--) if (u32(tail, i) === 0x06054b50) { e = i; break; }
+  let e = -1;   // the end-of-directory record: searched from the end, and its comment must reach the end exactly
+  for (let i = tail.length - 22; i >= 0; i--) if (u32(tail, i) === 0x06054b50 && i + 22 + u16(tail, i + 20) === tail.length) { e = i; break; }
   if (e < 0) return null;
   const count = u16(tail, e + 10), cdSize = u32(tail, e + 12), cdOffset = u32(tail, e + 16);
   if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF || cdOffset + cdSize > size) return null;   // ZIP64
   const cd = cdOffset >= tailStart ? tail.subarray(cdOffset - tailStart, cdOffset - tailStart + cdSize) : await read(cdOffset, cdSize);
   if (cd.length < cdSize) return null;
-  const files = {}, utf8 = new TextDecoder(), strict = new TextDecoder('utf-8', { fatal: true }), latin = new TextDecoder('latin1');
+  // A plain object would let an entry named "__proto__" change it, and "constructor" look like an entry.
+  const files = Object.create(null), kept = new Map();
+  let keptBytes = 0;
+  const keep = (name, bytes) => {
+    kept.set(name, bytes); keptBytes += bytes.length;
+    while (keptBytes > KEEP_MAX && kept.size > 1) { const [k, v] = kept.entries().next().value; kept.delete(k); keptBytes -= v.length; }
+  };
+  const utf8 = new TextDecoder(), strict = new TextDecoder('utf-8', { fatal: true }), latin = new TextDecoder('latin1');
   for (let n = 0, p = 0; n < count; n++) {
     if (p + 46 > cd.length || u32(cd, p) !== 0x02014b50) return null;
     const flags = u16(cd, p + 8), method = u16(cd, p + 10), csize = u32(cd, p + 20), usize = u32(cd, p + 24);
     const nlen = u16(cd, p + 28), xlen = u16(cd, p + 30), clen = u16(cd, p + 32), local = u32(cd, p + 42);
     const raw = cd.subarray(p + 46, p + 46 + nlen);
+    let name = null;
+    for (let x = p + 46 + nlen, end = x + xlen; x + 4 <= end;) {   // extra fields: the Info-ZIP Unicode Path (0x7075)
+      const id = u16(cd, x), len = u16(cd, x + 2);
+      if (id === 0x7075 && len >= 5 && cd[x + 4] === 1 && u32(cd, x + 5) === crc32(raw)) name = utf8.decode(cd.subarray(x + 9, x + 4 + len));
+      x += 4 + len;
+    }
     p += 46 + nlen + xlen + clen;
     if (flags & 1 || (method !== 0 && method !== 8) || csize === 0xFFFFFFFF || usize === 0xFFFFFFFF || local === 0xFFFFFFFF) return null;
-    let name;
-    if (flags & 0x800) name = utf8.decode(raw);   // marked as UTF-8; otherwise try UTF-8, then Latin-1
-    else { try { name = strict.decode(raw); } catch { name = latin.decode(raw); } }
-    let cache = null;
+    if (name === null) {
+      if (flags & 0x800) name = utf8.decode(raw);   // marked as UTF-8; otherwise try UTF-8, then Latin-1
+      else { try { name = strict.decode(raw); } catch { name = latin.decode(raw); } }
+    }
+    const damaged = why => new Error(`${name}: damaged archive (${why})`);
+    // The local header and the data in one read: the header's own extra field is usually the central one's
+    // size, with a margin; if it is longer, the data is read separately.
     const bytes = async () => {
-      const head = await read(local, 30);
-      if (u32(head, 0) !== 0x04034b50) throw new Error(`${name}: damaged archive`);
-      const data = csize ? await read(local + 30 + u16(head, 26) + u16(head, 28), csize) : new Uint8Array(0);   // an empty file needs no read
-      if (method === 0) return data;
-      return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+      if (local + 30 > size) throw damaged('outside the file');
+      const buf = await read(local, Math.min(30 + nlen + xlen + 64 + csize, size - local));
+      if (buf.length < 30 || u32(buf, 0) !== 0x04034b50) throw damaged('no local header');
+      const start = 30 + u16(buf, 26) + u16(buf, 28);
+      if (local + start + csize > size) throw damaged('outside the file');
+      const data = start + csize <= buf.length ? buf.subarray(start, start + csize) : await read(local + start, csize);
+      if (data.length !== csize) throw damaged('cut short');
+      if (method === 0) { if (csize !== usize) throw damaged('sizes differ'); return data; }
+      return inflateRaw(data, usize, name);
     };
     files[name] = {
       name, dir: name.endsWith('/'),
       async async(type){
-        // Small files (the package, contents, chapters) are often read more than once: keep them.
-        const b = await (usize <= 262144 ? (cache ??= bytes()) : bytes());
+        let b = kept.get(name);
+        if (!b) {   // a failed read isn't remembered: the next attempt tries again
+          b = await bytes();
+          if (KEEP_RE.test(name) && usize <= 262144) keep(name, b);
+        }
         if (type === 'string' || type === 'text') return utf8.decode(b);
         if (type === 'base64') return bytesToBase64(b);
         if (type === 'arraybuffer') return b.slice().buffer;
@@ -582,25 +638,46 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
       },
     };
   }
-  return { files, file: name => files[name] || null, inPlace: true };
+  return { files, file: name => { const f = files[name]; return f && !f.dir ? f : null; }, inPlace: true };
 }
-// An uploaded file, read in place.
-const zipFromBlob = blob => lazyZip(async (o, l) => new Uint8Array(await blob.slice(o, o + l).arrayBuffer()), blob.size);
+// An uploaded file, read in place (it can't be read once it is moved, deleted or replaced on disk).
+const zipFromBlob = blob => lazyZip(async (o, l) => {
+  try { return new Uint8Array(await blob.slice(o, o + l).arrayBuffer()); }
+  catch { throw new Error(`${blob.name || 'the file'} changed or moved on disk while it was open; open it again`); }
+}, blob.size);
 /* A ZIP on the site: with range requests when the server answers them (only the parts needed are fetched),
-   otherwise downloaded whole. Returns { zip } or { miss: reason } (not there, or not a ZIP: a "not found" page). */
+   otherwise downloaded whole. Every part is tied to the version of the file first seen (If-Range with its
+   ETag or Last-Modified) and checked against what was asked, so a book replaced on the server while it's open
+   is reported instead of read as a mix of two files. Returns { zip } or { miss: reason }. */
 async function zipFromUrl(url, init = {}){
   let r;
   try { r = await fetch(url, { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
   if (!r.ok) return { miss: String(r.status) };
-  const total = r.status === 206 && Number((r.headers.get('content-range') || '').split('/')[1]);
+  const first = r.status === 206 && /^bytes 0-\d+\/(\d+)$/.exec(r.headers.get('content-range') || '');
+  const total = first ? Number(first[1]) : 0;
   if (total > 0) {
     const head = new Uint8Array(await r.arrayBuffer());
     if (!isZipBytes(head.buffer)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
+    const etag = r.headers.get('etag'), modified = r.headers.get('last-modified');
+    const version = etag && !etag.startsWith('W/') ? etag : modified || '';   // If-Range needs a strong ETag or a date
+    const changed = () => new Error('the book changed on the server while it was open; reload the page to open the new version');
     const read = async (o, l) => {
       if (l <= 0) return new Uint8Array(0);   // "bytes=o-(o-1)" isn't a valid range
-      const part = await fetch(url, { headers: { Range: `bytes=${o}-${o + l - 1}` } });
-      if (part.status !== 206) throw new Error(`the server stopped answering range requests for ${url}`);
-      return new Uint8Array(await part.arrayBuffer());
+      const ctl = new AbortController(), headers = { Range: `bytes=${o}-${o + l - 1}` };
+      if (version) headers['If-Range'] = version;
+      const part = await fetch(url, { cache: init.cache, headers, signal: ctl.signal });
+      const got = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(part.headers.get('content-range') || '');
+      if (part.status !== 206 || !got) {
+        ctl.abort();   // don't download the whole file
+        // A whole-file reply to If-Range means the file changed, unless it is still the same version (then the
+        // server just isn't answering ranges any more).
+        const now = part.headers.get('etag') && !part.headers.get('etag').startsWith('W/') ? part.headers.get('etag') : part.headers.get('last-modified') || '';
+        throw part.status === 200 && version && now && now !== version ? changed() : new Error(`the server stopped answering range requests for ${url}`);
+      }
+      if (Number(got[1]) !== o || (got[3] !== '*' && Number(got[3]) !== total)) { ctl.abort(); throw changed(); }
+      const b = new Uint8Array(await part.arrayBuffer());
+      if (b.length !== Math.min(l, total - o)) throw new Error(`the server sent part of ${url} cut short`);
+      return b;
     };
     const zip = await lazyZip(read, total).catch(() => null);
     if (zip) return { zip };
@@ -1210,6 +1287,7 @@ function resourceURL(path){
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
   const job = book.src.url(path, type);
   book.urls.set(path, job);
+  job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
 }
 const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
@@ -1521,6 +1599,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     if (token !== renderToken) return;
     position(frag, fraction);
     hideStatus();
+    cur.shown = true;
     releaseComicImages(item.path);
     ttsAfterRender();
     searchAfterRender();
@@ -1656,8 +1735,8 @@ function onFrameClick(e){
 function goTo(path, frag = ''){
   const idx = book.spine.findIndex(s => s.path === path);
   if (idx < 0) { showNotice(`That link points to ${path}, which isn't part of the book's reading order.`, 'error'); return; }
-  if (idx === cur.i && frame.contentDocument) { position(frag, 0); return; }
-  renderChapter(idx, { frag });
+  if (idx === cur.i && cur.shown && frame.contentDocument) { position(frag, 0); return; }
+  renderChapter(idx, { frag });   // (also a chapter that failed to load: choosing it again tries again)
 }
 function restyleFrame(){
   const doc = frame.contentDocument; if (!doc) return;

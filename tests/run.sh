@@ -24,10 +24,11 @@ trap cleanup EXIT
 # Folders whose config uses CDNs or remote content (which that policy forbids, by design) are left out.
 skip=/folder-remote/,/folder-cdn/,/folder-partial/
 python3 tests/server.py --root tests/site --port 8790 --breeze --csp-from nginx.conf.example --csp-skip "$skip" & pids+=($!)
-# The soft-404 site also ignores range requests, so books there are downloaded whole (the fallback path).
-python3 tests/server.py --root tests/site --port 8791 --soft404 --no-range --csp-from nginx.conf.example --csp-skip "$skip" & pids+=($!)
+python3 tests/server.py --root tests/site --port 8791 --soft404 --csp-from nginx.conf.example --csp-skip "$skip" & pids+=($!)
+# A server that ignores range requests, so books there are downloaded whole (the fallback path).
+python3 tests/server.py --root tests/site --port 8793 --no-range --csp-from nginx.conf.example --csp-skip "$skip" & pids+=($!)
 python3 tests/server.py --root tests/site --port 8792 --log & pids+=($!)
-for port in 8790 8791 8792; do
+for port in 8790 8791 8792 8793; do
   for _ in $(seq 1 50); do curl -s -o /dev/null "http://localhost:$port/" && break; sleep 0.1; done
 done
 

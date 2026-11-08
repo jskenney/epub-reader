@@ -65,6 +65,35 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
             z.writestr(zipfile.ZipInfo(name) if data == b"" else name, data)   # empty files stored (0 bytes), as tools do
 
 
+def raw_zip(path, entries, comment=b""):
+    """Write a ZIP byte by byte, for archives zipfile won't make on purpose. entries: dicts with name (bytes),
+    data, and optionally deflate (bool), method (override), flags, cextra / lextra (central / local extra
+    fields) and usize (a declared size that isn't true)."""
+    out, central = bytearray(), bytearray()
+    for e in entries:
+        data, name = e["data"], e["name"]
+        if e.get("deflate"):
+            c = zlib.compressobj(9, zlib.DEFLATED, -15); comp = c.compress(data) + c.flush()
+        else:
+            comp = data
+        method = e.get("method", 8 if e.get("deflate") else 0)
+        crc, flags = zlib.crc32(data) & 0xFFFFFFFF, e.get("flags", 0)
+        usize = e.get("usize", len(data))
+        lextra, cextra, offset = e.get("lextra", b""), e.get("cextra", b""), len(out)
+        out += struct.pack("<IHHHHHIIIHH", 0x04034b50, 20, flags, method, 0, 0, crc, len(comp), usize, len(name), len(lextra)) + name + lextra + comp
+        central += struct.pack("<IHHHHHHIIIHHHHHII", 0x02014b50, 20, 20, flags, method, 0, 0, crc, len(comp), usize,
+                               len(name), len(cextra), 0, 0, 0, 0, offset) + name + cextra
+    cd_offset = len(out)
+    out += central + struct.pack("<IHHHHIIH", 0x06054b50, 0, 0, len(entries), len(entries), len(central), cd_offset, len(comment)) + comment
+    open(path, "wb").write(bytes(out))
+
+
+def zip_entries(path):
+    """The entries of a zip as raw_zip dicts (deflated, except mimetype)."""
+    with zipfile.ZipFile(path) as z:
+        return [{"name": i.filename.encode(), "data": z.read(i), "deflate": i.filename != "mimetype"} for i in z.infolist()]
+
+
 def paragraphs(prefix, n, words=60):
     sentence = "The keeper walked the long path along the cliffs and counted the boats below. "
     return "".join(f"<p>{prefix} paragraph {i + 1}. " + sentence * (words // 14) + "</p>" for i in range(n))
@@ -141,6 +170,55 @@ def main():
     # A book with an empty stylesheet (a zero-length file in the archive) (REVIEW.md H-3).
     epub(books / "empty-file.epub", "Empty File", [("c1.xhtml", "One", "<h1>One</h1><p>Text.</p>", '<link rel="stylesheet" href="empty.css"/>')],
          uid="urn:empty-file", extra={"OEBPS/empty.css": b""})
+    # Unusual archives for the in-place reader (REVIEW.md T-6, M-7 to M-9, L-22, L-23).
+    base = [("c1.xhtml", "First", "<h1>First</h1>" + paragraphs("Odd", 2)), ("c2.xhtml", "Second", "<h1>Second</h1><p>Second chapter.</p>")]
+    epub(books / "dirs.epub", "Directory Entries", base, uid="urn:dirs")
+    with zipfile.ZipFile(books / "dirs.epub", "a") as z:
+        for d in ("OEBPS/", "OEBPS/images/", "META-INF/"):
+            z.writestr(zipfile.ZipInfo(d), b"")
+    epub(books / "comment.epub", "Archive Comment", base, uid="urn:comment")
+    with zipfile.ZipFile(books / "comment.epub", "a") as z:
+        z.comment = b"notes: PK\x05\x06 is not the end record " + b"x" * 40
+    epub(books / "local-extra.epub", "Local Extra", base + [("c3.xhtml", "Third", '<h1>Third</h1><p><img id="le-pic" src="pic.png" alt="p"/></p>')],
+         uid="urn:local-extra", extra={"OEBPS/pic.png": png(30, 20, (10, 200, 10))})
+    entries = zip_entries(books / "local-extra.epub")
+    for e in entries:   # a local header extra field much longer than the central one: the data needs a second read
+        if e["name"] == b"OEBPS/pic.png":
+            e["lextra"] = struct.pack("<HH", 0xCAFE, 300) + b"\0" * 300
+    raw_zip(books / "local-extra.epub", entries)
+    epub(books / "bomb.epub", "Bomb", base, uid="urn:bomb")
+    entries = zip_entries(books / "bomb.epub")
+    for e in entries:   # chapter 2 inflates to far more than it declares
+        if e["name"] == b"OEBPS/c2.xhtml":
+            e["data"] = e["data"].replace(b"Second chapter.", b"Second chapter. " + b"A" * 200000)
+            e["usize"] = 1000
+    raw_zip(books / "bomb.epub", entries)
+    epub(books / "method99.epub", "Odd Method", base, uid="urn:method99")
+    entries = zip_entries(books / "method99.epub") + [{"name": b"OEBPS/unused.bin", "data": b"xyz", "method": 99}]
+    raw_zip(books / "method99.epub", entries)
+    # A chapter whose stored name isn't UTF-8 (old archivers), with the real name in a Unicode Path field.
+    uni = "ch\u00e4pter.xhtml"
+    epub(books / "unicode-path.epub", "Unicode Path", [(uni, "Chapter", "<h1>Umlaut chapter</h1><p>Found by its Unicode name.</p>")], uid="urn:unicode-path")
+    entries = zip_entries(books / "unicode-path.epub")
+    for e in entries:
+        if e["name"] == ("OEBPS/" + uni).encode():
+            cp = ("OEBPS/" + uni).encode("cp437")
+            e["cextra"] = struct.pack("<HHBI", 0x7075, 5 + len(e["name"]), 1, zlib.crc32(cp) & 0xFFFFFFFF) + e["name"]
+            e["name"] = cp
+    raw_zip(books / "unicode-path.epub", entries)
+    # ZIP64 structures (as in archives with very many files): read by JSZip, not in place.
+    limits = zipfile.ZIP_FILECOUNT_LIMIT
+    zipfile.ZIP_FILECOUNT_LIMIT = 2
+    try:
+        epub(books / "zip64.epub", "Zip64 Book", base, uid="urn:zip64")
+    finally:
+        zipfile.ZIP_FILECOUNT_LIMIT = limits
+    data = bytearray((books / "zip64.epub").read_bytes())
+    end = data.rfind(b"PK\x05\x06")
+    data[end + 8:end + 12] = b"\xff\xff\xff\xff"   # the counts say "see the ZIP64 record", as in real ZIP64 archives
+    (books / "zip64.epub").write_bytes(bytes(data))
+    (books / "star-total").mkdir()
+    shutil.copy(books / "long.epub", books / "star-total" / "long.epub")
     # Two different books with the same title and no identifier (REVIEW.md L-13).
     for name, n in (("twin-a", 3), ("twin-b", 2)):
         epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)
