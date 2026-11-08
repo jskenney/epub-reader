@@ -1015,7 +1015,7 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   }
   return parts.length ? parts : [[]];
 }
-async function openDocument(buffer, name, kind, { base = null, key } = {}){
+async function openDocument(buffer, name, kind, { base = null, key, seq } = {}){
   showStatus('Opening book…');
   const text = decodeText(new Uint8Array(buffer));
   let doc, meta = {}, headExtra = '';
@@ -1087,7 +1087,7 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
   const spine = parts.map((_, i) => ({ id: `part${i + 1}`, href: path(i), path: path(i), type: 'text/html', props: [], overlay: '', linear: true }));
   const info = { publisher: '', published: '', isbn: '', series: '', subjects: '', layout: 'Reflowable', direction: 'Left to right',
     description: '', narrator: '', duration: '', activeClass: '-epub-media-overlay-active', playbackClass: '' };
-  await startBook({ zip: src, src, opfPath: name, version: '', format: { text: 'Plain text', markdown: 'Markdown', html: 'HTML' }[kind],
+  await startBook({ seq, zip: src, src, opfPath: name, version: '', format: { text: 'Plain text', markdown: 'Markdown', html: 'HTML' }[kind],
     title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
     manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
     urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}` });
@@ -1101,7 +1101,7 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
 const COMIC_IMG = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
 let COMIC_PART = 40;
 const comicPages = zip => Object.values(zip.files).filter(f => !f.dir && COMIC_IMG.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name));
-async function openComic(zip, name, { key } = {}){
+async function openComic(zip, name, { key, seq } = {}){
   showStatus('Opening comic…');
   const pages = comicPages(zip);
   if (!pages.length) throw new Error('This archive has no page images in it.');
@@ -1159,14 +1159,14 @@ async function openComic(zip, name, { key } = {}){
   const items = [...spine, cover];
   // Which page images each section shows, so a section's images can be released when another is shown.
   const comicParts = new Map(parts.map((part, i) => [path(i), part.pages.map(f => f.name)]));
-  await startBook({ zip: src, src, opfPath: name + '.cbz', version: '', format: 'Comic book (CBZ)', comic: true, pageCount: pages.length, comicParts,
+  await startBook({ seq, zip: src, src, opfPath: name + '.cbz', version: '', format: 'Comic book (CBZ)', comic: true, pageCount: pages.length, comicParts,
     title, authors, language, uid: '', info, manifest: new Map(items.map(s => [s.id, s])), byPath: new Map(items.map(s => [s.path, s])),
     spine, toc, urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:cbz:${name}` });
 }
 // A ZIP is opened as a comic when it is named .cbz, or has page images and no EPUB container.
 async function openZip(zip, name, opts = {}){
   if (/\.cbz$/i.test(name) || (!getFile(zip, 'META-INF/container.xml') && comicPages(zip).length)) return openComic(zip, name.replace(/\.(cbz|zip)$/i, ''), opts);
-  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, '') });
+  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, ''), seq: opts.seq });
 }
 
 /* ---------- descriptive metadata ---------- */
@@ -1257,7 +1257,7 @@ function descriptionParagraphs(raw){
 }
 
 /* ---------- opening a book ---------- */
-async function openBook(zip, { sample = false, name = '' } = {}){
+async function openBook(zip, { sample = false, name = '', seq } = {}){
   showStatus('Opening book…');
   const cText = await readText(zip, 'META-INF/container.xml');
   if (!cText) throw new Error(zip.kind === 'dir'
@@ -1329,10 +1329,17 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   // key's position without removing it (a copy without the identifier may still be read).
   next.legacyKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
   next.copyKeys = uid ? [stableKey] : [];
+  next.seq = seq;
   await startBook(next);
 }
 // Make a prepared book the current one: show its metadata and contents and open it where the reader left off.
+// Which open is the newest: each open (a file, a link, the default book, the sample) takes the next number,
+// and a book whose open was overtaken by a later one is dropped when it is ready, rather than replacing the
+// newer one (REVIEW.md M-15).
+let openSeq = 0;
+const isStale = seq => seq != null && seq !== openSeq;
 async function startBook(next){
+  if (isStale(next.seq)) { next.src?.dispose?.(); return; }
   if (book) book.src.dispose();
   book = next;
   pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
@@ -2320,16 +2327,17 @@ function friendly(err, name){
 
 async function openFile(file){
   if (!file) return;
+  const seq = ++openSeq;
   try {
     const kind = docKind(file.name, file.type);
-    if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}` });
+    if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}`, seq });
     else {
       let zip = await zipFromBlob(file).catch(() => null);   // in place when possible
       if (!zip) { zip = await JSZip.loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
-      await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}` });
+      await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}`, seq });
     }
   }
-  catch (err) { hideStatus(); showNotice(friendly(err, file.name), 'error'); }
+  catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, file.name), 'error'); } }
 }
 
 /* ---------- events ---------- */
@@ -4478,21 +4486,21 @@ async function loadConfig(){
 /* Without ?book=, a default.epub next to this page opens if there is one; otherwise the built-in sample.
    A missing file may still come back as 200 (a site's "not found" page), so the reply has to be a real
    EPUB: a ZIP with a META-INF/container.xml. Anything else falls back to the sample quietly. */
-async function openDefault(){
+async function openDefault(seq = ++openSeq){
   let zip = null;
   try {
     const found = await zipFromUrl(new URL(DEFAULT_BOOK, location.href), { cache: 'no-cache' });
     if (found.zip && getFile(found.zip, 'META-INF/container.xml')) zip = found.zip;
   } catch {}
   if (zip) {
-    try { await openBook(zipSource(zip), { name: 'default' }); return; }
+    try { await openBook(zipSource(zip), { name: 'default', seq }); return; }
     catch (err) { console.warn(`${DEFAULT_BOOK} couldn't be opened:`, err); }
   }
-  await openSample();
+  if (!isStale(seq)) await openSample(seq);
 }
-async function openSample(){
-  try { await openBook(zipSource(await JSZip.loadAsync(await makeSample())), { sample: true }); }
-  catch (err) { hideStatus(); showNotice("Couldn't build the sample book: " + err.message, 'error'); }
+async function openSample(seq = ++openSeq){
+  try { await openBook(zipSource(await JSZip.loadAsync(await makeSample())), { sample: true, seq }); }
+  catch (err) { if (!isStale(seq)) { hideStatus(); showNotice("Couldn't build the sample book: " + err.message, 'error'); } }
 }
 /* ?book=dir/ opens an extracted EPUB folder; ?book=dir/a.epub fetches and unzips the archive;
    ?book=dir/a.txt, .md or .html opens that document.
@@ -4507,6 +4515,7 @@ function bookCandidates(ref){
   return urls.filter((u, i) => urls.findIndex(v => v.href === u.href) === i);
 }
 async function openFromUrl(ref){
+  const seq = ++openSeq;
   showStatus(`Loading ${ref}…`);
   // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
   const name = (ref.replace(/\/+$/, '').split('/').pop() || ref).replace(/\.epub$/i, '');
@@ -4527,7 +4536,7 @@ async function openFromUrl(ref){
         if (kind === 'html' && await isSoftNotFound(u.href, new TextDecoder().decode(buf))) { misses.push(`${u.pathname} (the site's "not found" page)`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(buf, safeDecode(u.pathname.split('/').pop()), kind,
-          { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}` });
+          { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq });
         return;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
@@ -4535,7 +4544,7 @@ async function openFromUrl(ref){
         if (found.miss) { misses.push(`${u.pathname} (${found.miss})`); continue; }
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
-        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
+        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}`, seq });
         return;
       }
       if (!u.pathname.endsWith('/')) u.pathname += '/';
@@ -4544,13 +4553,14 @@ async function openFromUrl(ref){
       if (!container || !parseDoc(container, 'application/xml')?.getElementsByTagNameNS('*', 'rootfile')[0]) {
         misses.push(`${u.pathname} (no META-INF/container.xml)`); continue;
       }
-      await openBook(src, { name });
+      await openBook(src, { name, seq });
       return;
     }
     throw new Error(`Nothing was found at ${misses.join(' or ')}.`);
   } catch (err) {
-    await openDefault();   // the folder's default book (or the sample), with a note about the link
-    showNotice(friendly(err, ref), 'error');
+    if (isStale(seq)) return;   // another book was opened meanwhile: leave it
+    await openDefault(seq);   // the folder's default book (or the sample), with a note about the link
+    if (!isStale(seq)) showNotice(friendly(err, ref), 'error');
   }
 }
 })();

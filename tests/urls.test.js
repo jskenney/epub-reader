@@ -171,6 +171,26 @@ test('positions not read for KEEP_POSITIONS_DAYS are forgotten; older ones witho
   assert.ok(kept['spine:pos:urn:long'] === undefined || kept['spine:pos:urn:long'].t > now - day);
 });
 
+test('a book that finishes loading after another was opened does not replace it (M-15)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page);
+  // The link's book is slow to arrive; a file is opened meanwhile.
+  let first = true;   // (only its first request: the rest of it then arrives at once)
+  await page.route('**/books/long.epub', async route => { if (first) { first = false; await new Promise(r => setTimeout(r, 2500)); } await route.continue(); });
+  const tmp = path.join(require('node:os').tmpdir(), `spine-race-${Date.now()}.txt`);
+  fs.writeFileSync(tmp, 'Opened second\n\nThis file was opened while the other book was still loading.');
+  try {
+    await page.goto(`${h.READER}?book=books/long.epub`);
+    await page.waitForTimeout(300);
+    await page.setInputFiles('#fileInput', tmp);
+    await page.waitForFunction(() => /Opened second|spine-race/.test(document.querySelector('#bookTitle').textContent), null, { timeout: 10000 });
+    const now = await h.title(page);
+    await page.waitForTimeout(4000);   // the slow book has arrived by now
+    assert.equal(await h.title(page), now);
+    assert.equal(await h.notice(page), '');
+  } finally { fs.rmSync(tmp, { force: true }); }
+});
+
 test('books with an identifier still use it, so they resume wherever they are opened from (L-13)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
