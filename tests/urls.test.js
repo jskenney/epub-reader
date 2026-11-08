@@ -75,6 +75,23 @@ test('default.epub: used when it is a real EPUB, otherwise the sample', async ()
   } finally { fs.rmSync(target, { force: true }); }
 });
 
+test('default.md when there is no default.epub, on servers with real and with "not found" pages; a configured list', async () => {
+  const dir = path.join(__dirname, 'site', 'reader'), md = path.join(dir, 'default.md'), epub = path.join(dir, 'default.epub');
+  const open = async (base = h.SITE, folder = 'reader') => { const page = await h.newPage(); await h.openReader(page, `${base}/${folder}/index.html`); return [await h.title(page), await h.notice(page)]; };
+  try {
+    fs.writeFileSync(md, '# The Default Notes\n\nOpened because there is no default.epub.\n');
+    for (const base of [h.SITE, h.SOFT]) assert.deepEqual(await open(base), ['The Default Notes', ''], base);
+    // default.epub comes first when both are there.
+    fs.copyFileSync(path.join(dir, 'books', 'long.epub'), epub);
+    assert.equal((await open())[0], 'The Long Book');
+    fs.rmSync(epub); fs.rmSync(md);
+    // Neither: the sample, also where every missing file answers 200 with a page.
+    for (const base of [h.SITE, h.SOFT]) assert.equal((await open(base))[0], 'Four Fables', base);
+    // A list from the folder's config, tried in order (on both kinds of server).
+    for (const base of [h.SITE, h.SOFT]) assert.equal((await open(base, 'folder-list'))[0], 'story', base);   // (a text file is titled by its name)
+  } finally { fs.rmSync(md, { force: true }); fs.rmSync(epub, { force: true }); }
+});
+
 test('books without an identifier keep separate positions even with the same title (L-13)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/twin-a.epub`);

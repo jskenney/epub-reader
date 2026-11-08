@@ -147,6 +147,11 @@ def main():
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
+    # A folder whose default list is set in its config, ending in a text file (DEFAULT_BOOK as a list).
+    (SITE / "folder-list").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-list" / "index.html")
+    (SITE / "folder-list" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "DEFAULT_BOOK": ["missing.epub", "missing.md", "story.txt"]}))
+    (SITE / "folder-list" / "story.txt").write_text("A Listed Story\n\nOpened as the third default in the list.\n")
     # Numbers out of range in a config (REVIEW.md L-55): 1e999 is Infinity to JSON.parse.
     (SITE / "folder-nums").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-nums" / "index.html")

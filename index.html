@@ -419,7 +419,9 @@ let SLEEP_TIMER = false;
 // left under older keys don't pile up in the browser. 0 keeps them forever.
 let KEEP_POSITIONS_DAYS = 730;
 let TIME_LEFT = false;
-let DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
+// Opened if the address has no ?book=: the first of these that is really there, next to this page (an EPUB or
+// comic must be a valid archive; a document mustn't be the site's "not found" page). A single name works too.
+let DEFAULT_BOOK = ['default.epub', 'default.md'];
 let BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
   gif:'image/gif',svg:'image/svg+xml',webp:'image/webp',ttf:'font/ttf',otf:'font/otf',woff:'font/woff',woff2:'font/woff2',
@@ -4582,7 +4584,7 @@ setInterval(() => {
    invalid entries are ignored with a console warning; a missing file, or a "not found" page, is no config. */
 const CONFIG_FILE = 'reader-config.json';
 const CONFIG_SETTINGS = {   // name: [type, apply]
-  DEFAULT_BOOK: ['string', v => { DEFAULT_BOOK = v; }],
+  DEFAULT_BOOK: ['books', v => { DEFAULT_BOOK = v; }],   // a name, or a list of names tried in order
   BOOKSHELF: ['string', v => { BOOKSHELF = v.endsWith('/') ? v : v + '/'; }],
   VOICE_FILES: ['string', v => { VOICE_FILES = v; }],
   LIB_FILES: ['string', v => { LIB_FILES = v; }],
@@ -4628,7 +4630,8 @@ async function loadConfig(){
     try {
       if (CONFIG_SETTINGS[key]) {
         const [type, apply] = CONFIG_SETTINGS[key];
-        if (typeof value !== type || value === null) throw new Error(`should be a ${type}`);
+        if (type === 'books') { if (!(typeof value === 'string' || (Array.isArray(value) && value.length && value.every(v => typeof v === 'string')))) throw new Error('should be a name or a list of names'); }
+        else if (typeof value !== type || value === null) throw new Error(`should be a ${type}`);
         if (type === 'number' && !Number.isFinite(value)) throw new Error('should be a finite number');
         apply(value);
       } else if (CONFIG_DEFAULTS[key]) {
@@ -4669,15 +4672,35 @@ async function loadConfig(){
 /* Without ?book=, a default.epub next to this page opens if there is one; otherwise the built-in sample.
    A missing file may still come back as 200 (a site's "not found" page), so the reply has to be a real
    EPUB: a ZIP with a META-INF/container.xml. Anything else falls back to the sample quietly. */
+// A document on the site (text, Markdown, HTML), checked to be the file rather than a "not found" page served
+// with status 200: { buf } or { miss: reason }. Such pages are nearly always sent as HTML, which no text or
+// Markdown file is; and any document is compared with what the folder answers for a name that can't exist.
+async function fetchDocument(u, kind, init = {}){
+  let r = null;
+  try { r = await fetch(u.href, init); } catch {}
+  if (!r?.ok) return { miss: r ? String(r.status) : 'network error' };
+  if (kind !== 'html' && looksHtml(r)) return { miss: 'a web page came back instead' };
+  const buf = await r.arrayBuffer();
+  if (await isSoftNotFound(u.href, new TextDecoder().decode(buf))) return { miss: `the site's "not found" page` };
+  return { buf };
+}
+// The folder's default book: the first name in DEFAULT_BOOK that is really there, else the built-in sample.
 async function openDefault(seq = ++openSeq){
-  let zip = null;
-  try {
-    const found = await zipFromUrl(new URL(DEFAULT_BOOK, location.href), { cache: 'no-cache' });
-    if (found.zip && getFile(found.zip, 'META-INF/container.xml')) zip = found.zip;
-  } catch {}
-  if (zip) {
-    try { await openBook(zipSource(zip), { name: 'default', seq }); return; }
-    catch (err) { console.warn(`${DEFAULT_BOOK} couldn't be opened:`, err); }
+  for (const ref of [DEFAULT_BOOK].flat()) {
+    if (isStale(seq)) return;
+    const u = new URL(ref, location.href); u.search = ''; u.hash = '';
+    if (u.origin !== location.origin) { console.warn(`${ref}: only books on this same site can be the default`); continue; }
+    const name = safeDecode(u.pathname.split('/').pop()), kind = docKind(u.pathname);
+    try {
+      if (kind) {
+        const got = await fetchDocument(u, kind, { cache: 'no-cache' });
+        if (got.buf) { await openDocument(got.buf, name, kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq }); return; }
+      } else {
+        const found = await zipFromUrl(u, { cache: 'no-cache' });
+        if (found.zip && /\.cbz$/i.test(u.pathname)) { await openZip(found.zip, name, { key: `spine:pos:url:${u.pathname}`, seq }); return; }
+        if (found.zip && getFile(found.zip, 'META-INF/container.xml')) { await openBook(zipSource(found.zip), { name: 'default', seq }); return; }
+      }
+    } catch (err) { console.warn(`${ref} couldn't be opened:`, err); }
   }
   if (!isStale(seq)) await openSample(seq);
 }
@@ -4711,14 +4734,10 @@ async function openFromUrl(ref){
       // Each candidate must really be the book: a "not found" page served with status 200 counts as a miss,
       // so the next location is tried.
       if (kind) {
-        let r = null;
-        try { r = await fetch(u.href); } catch {}
-        if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
-        if (kind !== 'html' && looksHtml(r)) { misses.push(`${u.pathname} (a web page came back instead)`); continue; }
-        const buf = await r.arrayBuffer();
-        if (kind === 'html' && await isSoftNotFound(u.href, new TextDecoder().decode(buf))) { misses.push(`${u.pathname} (the site's "not found" page)`); continue; }
+        const got = await fetchDocument(u, kind);
+        if (got.miss) { misses.push(`${u.pathname} (${got.miss})`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
-        await openDocument(buf, safeDecode(u.pathname.split('/').pop()), kind,
+        await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
           { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq });
         return;
       }

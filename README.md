@@ -5,8 +5,9 @@ A browser-based EPUB reader.
 Everything is in one file, `index.html`. Open it, then
 click the folder button (Open a book) at the right of the top bar, or drop a
 file onto the page. Without a `?book=` link it opens `default.epub` from the
-same folder as `index.html` if there is one (it must be a real EPUB: a "not
-found" page served in its place is ignored), and otherwise a built-in sample
+same folder as `index.html` if there is one, or else `default.md` (each must
+really be there: a "not found" page served in its place is ignored, even by a
+server that answers every missing file with a 200 page), and otherwise a built-in sample
 book.
 
 Everything it needs can be served from your own site (see
@@ -80,8 +81,8 @@ A relative path is looked up in two places, in this order:
 The first location that has the book wins. A path that starts with `/`
 (`?book=/library/x.epub`) is used as-is. To change the root folder, edit the
 `BOOKSHELF` constant (see [Settings](#settings)). Books on other sites are refused. If the book
-can't be loaded, the reader shows why and opens the folder's `default.epub`
-(or the sample book when there isn't one).
+can't be loaded, the reader shows why and opens the folder's default book
+(`default.epub`, else `default.md`, else the sample book).
 This needs a real web server (for example `npx vite` or
 `python3 -m http.server`); browsers block these requests on `file://` pages.
 
@@ -437,7 +438,7 @@ marked ✓).
 
 | Constant | Default | What it does / when to change it |
 |---|---|---|
-| `DEFAULT_BOOK` ✓ | `'default.epub'` | Opened when the address has no `?book=`, from the same folder as `index.html`, if it is a valid EPUB; otherwise the built-in sample opens. |
+| `DEFAULT_BOOK` ✓ | `['default.epub', 'default.md']` | Opened when the address has no `?book=`: the first of these that is really there, from the same folder as `index.html` (an EPUB or comic must be a valid archive; a text, Markdown or HTML document mustn't be the site's "not found" page). Otherwise the built-in sample opens. A single name works too; names must be on the same site. |
 | `BOOKSHELF` ✓ | `'/bookshelf/'` | Site folder searched for a relative `?book=` path that isn't found next to `index.html`. |
 | `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
@@ -475,7 +476,7 @@ each with its own `default.epub`:
 {
   "LIB_FILES": "/reader/",
   "VOICE_FILES": "/reader/",
-  "DEFAULT_BOOK": "default.epub",
+  "DEFAULT_BOOK": ["default.epub", "notes.md"],
   "theme": "dark",
   "layout": "one",
   "readAloud": "server"
@@ -511,7 +512,7 @@ with 200 "not found" pages, one ignoring range requests, one sending the CDN
 version of the reader policy, and an "other site" that records any request a
 book makes to it. The browser is blocked from every other site, so the tests
 also check that nothing is fetched from elsewhere. They cover opening books and
-the `/bookshelf/` fallback, `default.epub`, per-folder configs, remote-content
+the `/bookshelf/` fallback, the default book (`default.epub`, `default.md`), per-folder configs, remote-content
 stripping and links, self-hosting and integrity checks, search, layouts,
 comics, the server voice (streaming, cancelling, preparing ahead, saved audio),
 media controls, the sleep timer and time left.
