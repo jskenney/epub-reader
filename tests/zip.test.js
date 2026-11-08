@@ -200,11 +200,31 @@ test('padding after the archive, and malformed or redundant Unicode Path fields,
   }
 });
 
-test('a file inside a book that says it is huge is refused clearly, not decompressed (L-27)', async () => {
+test('a file inside a book that says it is huge is refused clearly, read in place or whole (L-27, L-30)', async () => {
+  for (const base of [h.SITE, h.NORANGE]) {
+    const page = await h.newPage();
+    await h.openReader(page, `${base}/reader/index.html?book=books/huge-entry.epub`);
+    await page.click('#tocList a >> nth=1');
+    assert.match(await h.waitFor(() => h.notice(page), 10000) || '', /too large to open \(600 MB; the limit is 512 MB\)/, base);
+  }
+});
+
+test('a wrong checksum: an upload reads anyway with a warning, as JSZip would; over HTTP it is reported (L-30)', async () => {
+  const file = path.join(__dirname, 'site', 'reader', 'books', 'bad-crc.epub');
   const page = await h.newPage();
-  await h.openReader(page, `${h.READER}?book=books/huge-entry.epub`);
+  const warnings = [];
+  page.on('console', m => { if (m.type() === 'warning') warnings.push(m.text()); });
+  await h.openReader(page);
+  await page.setInputFiles('#fileInput', file);
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Bad Checksum', null, { timeout: 15000 });
+  await h.waitForBook(page);
   await page.click('#tocList a >> nth=1');
-  assert.match(await h.waitFor(() => h.notice(page), 10000), /too large to open \(600 MB; the limit is 512 MB\)/);
+  await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument.body.textContent), null, { timeout: 10000 });
+  assert.ok(warnings.some(w => /c2\.xhtml: its checksum doesn't match/.test(w)), warnings.join(' | '));
+  const page2 = await h.newPage();
+  await h.openReader(page2, `${h.READER}?book=books/bad-crc.epub`);
+  await page2.click('#tocList a >> nth=1');
+  assert.match(await h.waitFor(() => h.notice(page2), 10000) || '', /checksum doesn't match/);
 });
 
 test('an uploaded book changed on disk while open says so (M-7)', async () => {

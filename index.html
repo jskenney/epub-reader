@@ -527,6 +527,9 @@ function getFile(zip, path){
     const name = Object.keys(zip.files).find(n => n.toLowerCase() === low);
     if (name) f = zip.file(name);
   }
+  // A whole archive read by JSZip: the same size limit as in place (JSZip records each file's size).
+  const n = f?._data?.uncompressedSize;
+  if (n > MAX_ENTRY) return { name: f.name, dir: false, async: () => Promise.reject(new Error(tooLarge(f.name, n))) };
   return f;
 }
 async function readText(src, path){ return src.text(path); }
@@ -586,7 +589,11 @@ async function inflate(data, expected, name){
 const KEEP_RE = /(\.(x?html?|opf|ncx|xml|css|smil|svg|txt|md)|^mimetype)$/i;
 const KEEP_MAX = 4 << 20;
 const MAX_ENTRY = 512 << 20;   // a file inside a book larger than this isn't decompressed (it would fill memory)
-async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Array>
+const tooLarge = (name, n) => `${name} is too large to open (${Math.round(n / 1048576)} MB; the limit is ${MAX_ENTRY / 1048576} MB)`;
+// read(offset, length) -> Promise<Uint8Array>. lenientChecksums: a file whose checksum doesn't match is used
+// anyway, with a console warning, as JSZip does (for uploads, where a change on disk can't be the cause: the
+// browser refuses to read a changed file).
+async function lazyZip(read, size, { lenientChecksums = false } = {}){
   if (typeof DecompressionStream !== 'function' || size < 22) return null;
   const tailStart = Math.max(0, size - 65557), tail = await read(tailStart, size - tailStart);
   // The end-of-directory record, searched from the end: first one whose comment reaches the end exactly (so a
@@ -634,7 +641,7 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
     // The local header and the data in one read: the header's own extra field is usually the central one's
     // size, with a margin; if it is longer, the data is read separately.
     const bytes = async () => {
-      if (usize > MAX_ENTRY) throw new Error(`${name} is too large to open (${Math.round(usize / 1048576)} MB; the limit is ${MAX_ENTRY / 1048576} MB)`);
+      if (usize > MAX_ENTRY) throw new Error(tooLarge(name, usize));
       if (local + 30 > size) throw damaged('outside the file');
       const buf = await read(local, Math.min(30 + nlen + xlen + 64 + csize, size - local));
       if (buf.length < 30 || u32(buf, 0) !== 0x04034b50) throw damaged('no local header');
@@ -646,7 +653,10 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
       const out = method === 0 ? data : await inflateRaw(data, usize, name);
       // The checksum also catches a book replaced by another of the same size on a server that sends no
       // usable validators. (Files over 32 MB, slow to check on every read, are checked the first time only.)
-      if (!(checked && usize > 32 << 20) && crc32(out) !== crc) throw new Error(`${name}: damaged archive, or the book changed while it was open (its checksum doesn't match)`);
+      if (!(checked && usize > 32 << 20) && crc32(out) !== crc) {
+        if (!lenientChecksums) throw new Error(`${name}: damaged archive, or the book changed while it was open (its checksum doesn't match)`);
+        if (!checked) console.warn(`${name}: its checksum doesn't match the archive's; used anyway`);
+      }
       checked = true;
       return out;
     };
@@ -671,7 +681,7 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
 const zipFromBlob = blob => lazyZip(async (o, l) => {
   try { return new Uint8Array(await blob.slice(o, o + l).arrayBuffer()); }
   catch { throw new Error(`${blob.name || 'the file'} changed or moved on disk while it was open; open it again`); }
-}, blob.size);
+}, blob.size, { lenientChecksums: true });
 /* A ZIP on the site: with range requests when the server answers them (only the parts needed are fetched),
    otherwise downloaded whole. Every part is tied to the version of the file first seen (If-Range with its
    ETag or Last-Modified) and checked against what was asked, so a book replaced on the server while it's open

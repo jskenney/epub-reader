@@ -68,7 +68,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
 def raw_zip(path, entries, comment=b""):
     """Write a ZIP byte by byte, for archives zipfile won't make on purpose. entries: dicts with name (bytes),
     data, and optionally deflate (bool), method (override), flags, cextra / lextra (central / local extra
-    fields) and usize (a declared size that isn't true)."""
+    fields), usize (a declared size that isn't true) and crc (a wrong checksum)."""
     out, central = bytearray(), bytearray()
     for e in entries:
         data, name = e["data"], e["name"]
@@ -77,7 +77,7 @@ def raw_zip(path, entries, comment=b""):
         else:
             comp = data
         method = e.get("method", 8 if e.get("deflate") else 0)
-        crc, flags = zlib.crc32(data) & 0xFFFFFFFF, e.get("flags", 0)
+        crc, flags = e.get("crc", zlib.crc32(data) & 0xFFFFFFFF), e.get("flags", 0)
         usize = e.get("usize", len(data))
         lextra, cextra, offset = e.get("lextra", b""), e.get("cextra", b""), len(out)
         out += struct.pack("<IHHHHHIIIHH", 0x04034b50, 20, flags, method, 0, 0, crc, len(comp), usize, len(name), len(lextra)) + name + lextra + comp
@@ -243,6 +243,13 @@ def main():
             e["flags"] = 0x800
             e["cextra"] = struct.pack("<HHBI", 0x7075, 5 + 9, 1, zlib.crc32(e["name"]) & 0xFFFFFFFF) + b"OEBPS/zzz"
     raw_zip(books / "bad-upath.epub", entries)
+    # A chapter with a wrong checksum, as some archivers write (L-30): read from an upload, refused over HTTP.
+    epub(books / "bad-crc.epub", "Bad Checksum", base, uid="urn:bad-crc")
+    entries = zip_entries(books / "bad-crc.epub")
+    for e in entries:
+        if e["name"] == b"OEBPS/c2.xhtml":
+            e["crc"] = 0x12345678
+    raw_zip(books / "bad-crc.epub", entries)
     # A chapter that says it is 600 MB (L-27): refused with a clear message rather than decompressed.
     epub(books / "huge-entry.epub", "Huge Entry", base, uid="urn:huge-entry")
     entries = zip_entries(books / "huge-entry.epub")
