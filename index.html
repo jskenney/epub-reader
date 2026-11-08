@@ -554,6 +554,11 @@ function crc32(b){
 // Inflate, stopping as soon as the output passes the size the archive declares: a small entry that would
 // inflate to gigabytes (a "decompression bomb") fails instead of filling the memory.
 async function inflateRaw(data, expected, name){
+  if (!expected && !data.length) return new Uint8Array(0);   // an empty entry some archivers mark as deflated
+  try { return await inflate(data, expected, name); }
+  catch (e) { throw /damaged archive/.test(e.message) ? e : new Error(`${name}: damaged archive (${e.message || 'bad compressed data'})`); }
+}
+async function inflate(data, expected, name){
   const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
   const parts = [];
   let n = 0;
@@ -1297,7 +1302,9 @@ const cssUnescape = t => t.replace(/\\(?:([0-9a-f]{1,6})[ \t\n\r\f]?|([\s\S]))/g
   (_, h, c) => h ? String.fromCodePoint(Math.min(parseInt(h, 16), 0x10FFFF) || 0xFFFD) : c === '\n' ? '' : c);
 // A name written with escapes before "(" (u\72l(, im\61ge-set() is the same function to the browser:
 // written plainly, so the patterns below see it.
-const plainFunctionNames = css => css.replace(/(?:[\w-]|\\(?:[0-9a-f]{1,6}[ \t\n\r\f]?|[^\n0-9a-f]))+(?=\()/gi,
+// (Linear: a name starts only at a name's start, and a hex escape takes all its digits, so nothing backtracks
+// over ways to split them.)
+const plainFunctionNames = css => css.replace(/(?<![\w\\-])(?:[\w-]|\\(?:[0-9a-f]{1,6}(?![0-9a-f])[ \t\n\r\f]?|[^\n0-9a-f]))+(?=\()/gi,
   name => { if (!name.includes('\\')) return name; const p = cssUnescape(name); return /^-?[a-z_][\w-]*$/i.test(p) ? p : name; });
 const STRING_RE = /(['"])((?:\\[\s\S]|(?!\1)[^\\\n])*)\1/g;
 // Each image-set() (nested brackets and quoted strings included) as [start, end].
@@ -1319,7 +1326,7 @@ function imageSets(css){
 }
 // What a missing or remote image becomes: an empty picture, valid wherever an image is (unlike "none", which
 // would drop "cursor: url(x), pointer" or a font's whole src list), and nothing to fetch.
-const NO_IMAGE = 'url("data:,")';
+const NO_IMAGE = 'url(data:,)';   // (unquoted: safe even where the url( was inside a string)
 async function rewriteCss(css, cssPath, depth = 0){
   css = plainFunctionNames(css);
   if (!ALLOW_REMOTE_CONTENT) {
@@ -1351,7 +1358,8 @@ async function rewriteCss(css, cssPath, depth = 0){
   return css.replace(URL_RE, (all, q, raw) => {
     const ref = cssUnescape(raw.trim());
     const u = done.get(ref);
-    if (u) return `url("${u}")`;
+    // Unquoted, with the characters that would end it encoded, so it is safe even inside a CSS string.
+    if (u) return `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))})`;
     if (ALLOW_REMOTE_CONTENT || ref.startsWith('#') || /^(data|blob):/i.test(ref)) return all;
     // Another site, or a file the book doesn't have: no image (rather than a request the policy would refuse).
     return isRemote(ref) || done.has(ref) ? NO_IMAGE : all;
@@ -1590,8 +1598,9 @@ function releaseComicImages(shownPath){
    read a chapter, and the browser applies the page's security policy to them there (logging alarming
    messages). The reader never wants them, so they are removed from the text before any parsing. */
 // (A tag's attributes, quoted values may hold ">"; the tag may have a prefix, as <h:base> in XHTML.)
-const TAG_REST = String.raw`(?:[^>"']|"[^"]*"|'[^']*')*>`;
-const DOC_CONTROLS_RE = new RegExp(String.raw`<(?:[\w-]+:)?(?:base\b${TAG_REST}|meta\b(?=(?:[^>"']|"[^"]*"|'[^']*')*?[\s/]http-equiv\b)${TAG_REST})`, 'gi');
+// A quote opens a value only right after "=" (href=a'b is unquoted), as the HTML parser reads it.
+const ATTRS = String.raw`(?:[^>=]|=\s*(?:"[^"]*"|'[^']*'|[^\s>"'][^\s>]*(?![^\s>])|(?=[\s>]))){0,200}`;   // (bounded, so text with many unclosed "<meta" can't take long; the sanitizer catches longer tags)
+const DOC_CONTROLS_RE = new RegExp(String.raw`<(?:[\w-]+:)?(?:base(?=[\s/>])${ATTRS}>|meta(?=[\s/>])(?=${ATTRS.replace(/\}$/, '}?')}[\s/]http-equiv[\s/=>])${ATTRS}>)`, 'gi');
 const withoutDocumentControls = t => t.replace(DOC_CONTROLS_RE, '');
 async function chapterSource(item){
   const raw = withoutDocumentControls(await readText(book.zip, item.path) || '');
@@ -3963,7 +3972,8 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_CDN: ['boolean', v => { ALLOW_CDN = v; }],
   TTS_SERVER: ['object', v => {
     if (typeof v.api !== 'string' || typeof v.voices !== 'string') throw new Error('needs "api" and "voices" paths');
-    TTS_SERVER = { api: new URL(v.api, location.href).href, voices: new URL(v.voices, location.href).href };
+    const dir = u => { const h = new URL(u, location.href).href; return h.endsWith('/') ? h : h + '/'; };
+    TTS_SERVER = { api: dir(v.api), voices: dir(v.voices) };
   }],
   FULL_PRECISION: ['boolean', v => { FULL_PRECISION = v; }],
   ALLOW_REMOTE_CONTENT: ['boolean', v => { ALLOW_REMOTE_CONTENT = v; }],

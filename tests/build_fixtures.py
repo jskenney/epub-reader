@@ -168,8 +168,11 @@ def main():
         ("c3.xhtml", "Big Three", '<h1>Big Three</h1><p><img id="big-pic" src="pic.png" alt="pic"/></p>'),
     ], uid="urn:big", extra={"OEBPS/pic.png": png(80, 60, (40, 120, 200)), "OEBPS/unused.bin": os.urandom(5_000_000)})
     # A book with an empty stylesheet (a zero-length file in the archive) (REVIEW.md H-3).
-    epub(books / "empty-file.epub", "Empty File", [("c1.xhtml", "One", "<h1>One</h1><p>Text.</p>", '<link rel="stylesheet" href="empty.css"/>')],
+    epub(books / "empty-file.epub", "Empty File", [("c1.xhtml", "One", "<h1>One</h1><p>Text.</p>", '<link rel="stylesheet" href="empty.css"/><link rel="stylesheet" href="empty-deflated.css"/>')],
          uid="urn:empty-file", extra={"OEBPS/empty.css": b""})
+    # ... and one marked deflated with no data at all (some archivers write empty files so).
+    entries = [{**e, "deflate": e["deflate"] and e["name"] != b"OEBPS/empty.css"} for e in zip_entries(books / "empty-file.epub")]
+    raw_zip(books / "empty-file.epub", entries + [{"name": b"OEBPS/empty-deflated.css", "data": b"", "method": 8}])
     # Unusual archives for the in-place reader (REVIEW.md T-6, M-7 to M-9, L-22, L-23).
     base = [("c1.xhtml", "First", "<h1>First</h1>" + paragraphs("Odd", 2)), ("c2.xhtml", "Second", "<h1>Second</h1><p>Second chapter.</p>")]
     epub(books / "dirs.epub", "Directory Entries", base, uid="urn:dirs")
@@ -246,7 +249,9 @@ def main():
 <img src="pic.png" usemap="#m" alt="map" width="40" height="30"/>
 <map name="m"><area id="area-in" shape="rect" coords="0,0,20,30" href="c2.xhtml" alt="in"/>
 <area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
-<p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>"""
+<p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>
+<p id="str-url">A url( inside a CSS string stays text.</p>
+<p id="escapes" style="font-family: '""" + "\\4e2d\\6587" * 16 + """', serif">Many escapes in a row (REVIEW.md: this once froze the page).</p>"""
     # Ways around pattern matching (REVIEW.md H-1, H-2, L-1, L-2), each aimed at both other sites.
     for i, host in enumerate((REMOTE, BLOCKED)):
         hostile += f"""
@@ -272,7 +277,9 @@ def main():
     style = f"""<style>@import url("{REMOTE}/imported.css"); @import"{BLOCKED}/import-no-space.css";
 .x {{ background: url({REMOTE}/style-bg.png); border: 30px solid; border-image: URL({BLOCKED}/upper-url.png) 30 }}
 .x::after {{ content: "x"; background: url(\\68ttp://blocked.example/escaped.png) }}
-@font-face {{ font-family: Remote; src: url("{REMOTE}/font.woff2") }}</style>"""
+@font-face {{ font-family: Remote; src: url("{REMOTE}/font.woff2") }}
+#str-url::before {{ content: "see url(missing-in-string.png) " }}
+.many-escapes {{ content: "\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa\\aaaaaa" }}</style>"""
     epub(books / "hostile.epub", "Hostile Book", [("c1.xhtml", "Hostile", hostile, style),
                                                   ("c2.xhtml", "Target", "<h1>Target chapter</h1><p>Arrived.</p>")],
          uid="urn:hostile", extra={"OEBPS/pic.png": pic})
