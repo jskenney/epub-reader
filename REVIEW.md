@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-08, after round 9): `index.html` (about 4,700 lines), the fetch scripts,
+Review of the repository (2026-11-08, after round 10): `index.html` (about 4,700 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -24,10 +24,15 @@ All of these are in the Resolved table.
 Round 9 (`90a6b6f` to `614e88c`) fixed L-68, L-69, L-70 and D-4. An independent review of it found that the
 L-68 announcements were not repeated when the bar was reopened and swallowed changes that differ only in
 numbers (L-71), and a few inaccurate sentences (D-5): the gzip note, which files each fetch script reads, and
-`FULL_PRECISION` for Kokoro on WebGPU. Both were fixed in `7a86a5f`. *Reproduced* means confirmed in Chromium, Node or nginx against the real
+`FULL_PRECISION` for Kokoro on WebGPU. Both were fixed in `7a86a5f`.
+
+Round 10 (`a29374c`) added E-16: without a `?book=` link, the reader opens `default.epub`, else `default.md`
+(`DEFAULT_BOOK` is now an ordered list). The new code uses the same "not found" page checks as `?book=` links,
+and is tested on a server with real 404s and on one that answers every missing file with a 200 page. No
+independent review was run for this round. *Reproduced* means confirmed in Chromium, Node or nginx against the real
 code; *read* means confirmed by reading the code only.
 
-**Tests.** All 111 tests pass, as root and (for the scripts) as an unprivileged user. Five more need `SLOW=1` or
+**Tests.** All 112 tests pass, as root and (for the scripts) as an unprivileged user. Five more need `SLOW=1` or
 `NETWORK=1`. They passed here before the last two fix commits, which don't touch the voice or loading code:
 - the real Kokoro and Pocket TTS, self-hosted and from the CDNs under the CDN policy
 - libraries and fonts from the CDNs
@@ -296,3 +301,4 @@ From all reviews so far, with the commits that fixed them.
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
+| E-16 | Default book: `default.epub`, else `default.md` (an ordered `DEFAULT_BOOK` list, with "not found" page checks) | `a29374c` |
