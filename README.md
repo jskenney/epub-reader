@@ -9,6 +9,11 @@ same folder as `index.html` if there is one (it must be a real EPUB: a "not
 found" page served in its place is ignored), and otherwise a built-in sample
 book.
 
+Everything it needs can be served from your own site (see
+[Self-hosting](#self-hosting-the-libraries-and-fonts)), and one `index.html`
+can be linked into several folders, each with its own default book and
+[settings](#per-folder-settings-reader-configjson).
+
 ## Other formats
 
 Besides EPUB, the reader opens **plain text** (`.txt`), **Markdown** (`.md`,
@@ -174,6 +179,25 @@ This needs a real web server (for example `npx vite` or
   it.
   The natural voices use full-precision models by default; set
   `FULL_PRECISION = false` in `index.html` for the smaller 8-bit models.
+- Lock-screen, headphone and media-key controls while reading aloud
+  (play/pause, next and previous sentence), showing the chapter, book,
+  author and cover. Browsers only offer these to a page playing audio, so a
+  silent clip plays alongside read-aloud. (iPhones and iPads stop device
+  voices when the screen locks, whatever the page does.)
+- Sleep timer in the read-aloud bar: stop after 15, 30, 45, 60 or 90 minutes
+  of listening, or at the end of the chapter. It counts down only while
+  reading aloud plays, and stops at the end of the sentence or passage being
+  read; play carries on from there. The note saying why it stopped stays
+  until you play again.
+- Time left, in the footer: "12 min left in chapter · 3 h 10 min in book",
+  from your reading speed (learned from how fast you turn pages, starting at
+  about 200 words a minute) or, while reading aloud, from the voice's actual
+  pace. Phones show the chapter part only.
+- Books can't contact other sites: images, media, stylesheets and fonts a
+  book points at on the web are removed, with autoplay, link pings and
+  `<link>` elements in the text (`ALLOW_REMOTE_CONTENT`). Web links still
+  open in a new tab (`ALLOW_EXTERNAL_LINKS`), SVG links and image maps work
+  like other links, and nothing in a book can navigate the page away.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Press I to show or hide the book's information (publisher, language,
   format, file…) below the contents; it is hidden when the page opens
@@ -193,6 +217,43 @@ This needs a real web server (for example `npx vite` or
   follows your system setting.
 - Remembers your position, text size, line spacing, font and theme
 
+## Self-hosting the libraries and fonts
+
+```bash
+./fetch-libs.sh     # JSZip and marked into ./libs/ (about 190 KB)
+./fetch-fonts.sh    # the interface and reading fonts into ./fonts/ (about 2 MB)
+```
+
+With these (and the voice scripts below), the reader loads nothing from other
+sites. Without them it falls back to cdnjs and Google Fonts.
+
+- **Libraries:** `libs/jszip.min.js` (opens EPUB and comic files) and
+  `libs/marked.min.js` (Markdown) are tried first. The local and the cdnjs
+  copy must both match hashes pinned in `index.html` (Subresource Integrity),
+  so a changed or damaged file is refused rather than run.
+- **Fonts:** `fetch-fonts.sh` writes `fonts/ui.css` (IBM Plex Sans and Mono,
+  Literata), one stylesheet per reading font in the font menu (read from
+  `FONTS` in `index.html`) and the WOFF2 files under `fonts/files/`. Google
+  changes its font files from time to time, so they can't be pinned in
+  advance: each download must be a real WOFF2 file, and `fonts/SHA256SUMS`
+  records them so later runs can check nothing has changed on disk.
+- `LIB_FILES` says where `libs/` and `fonts/` are (default: next to the
+  page), like `VOICE_FILES` for the voices.
+- `ALLOW_CDN = false` makes the reader refuse CDNs entirely: missing libraries
+  or voice files are reported instead of fetched elsewhere, and missing fonts
+  fall back to the device's own.
+
+### Checksums
+
+Every file `fetch-libs.sh`, `fetch-kokoro.sh` and `fetch-pocket.sh` download
+is checked against SHA-256 hashes committed in `checksums/`. A file that
+doesn't match is deleted, with a message to run the script again. Files
+already on disk are checked on every run too. After changing a pinned version
+or model revision, regenerate the lists with `python3 tools/make-checksums.py`;
+large model files aren't downloaded for this, since Hugging Face records
+their SHA-256. Each script also has a `--list` option that prints what it
+would download without downloading it.
+
 ## Self-hosting Pocket TTS
 
 ```bash
@@ -207,8 +268,12 @@ This fills `./pocket/` with pocket-tts-js 0.1.0 (`lib/`), ONNX Runtime Web
 (`model/<bundle>/`, pinned to a fixed revision of
 `vlapky/pocket-tts-onnx`), and `LICENSES/` with a NOTICE that includes the
 CC BY 4.0 attribution for Kyutai's model. As with Kokoro, each piece falls
-back to the CDN if it's missing, re-runs skip finished files, and `pocket/`
-is git-ignored.
+back to the CDN if it's missing, re-runs skip finished files, every file is
+checked against `checksums/pocket.sha256`, and `pocket/` is git-ignored.
+
+The French bundle at this revision has no `voices.bin` (the built-in voices),
+so the script skips it. French Pocket TTS may not be able to speak without
+those voices.
 
 ## Self-hosting the natural voice
 
@@ -224,14 +289,17 @@ It fetches about 435 MB into `./kokoro/`:
 |---|---|
 | `kokoro/kokoro.web.js` | kokoro-js 1.2.1 |
 | `kokoro/ort/` | ONNX Runtime WebAssembly/WebGPU files (from transformers.js 3.5.1) |
-| `kokoro/model/` | Kokoro-82M-v1.0-ONNX: config, tokenizer, `onnx/model.onnx` (fp32, WebGPU) and `onnx/model_quantized.onnx` (q8, CPU) |
+| `kokoro/model/` | Kokoro-82M-v1.0-ONNX at a pinned revision (the same one the reader asks Hugging Face for): config, tokenizer, `onnx/model.onnx` (fp32, WebGPU) and `onnx/model_quantized.onnx` (q8, CPU) |
 | `kokoro/model/voices/` | the 27 voices the reader offers (read from `index.html`) |
 | `kokoro/LICENSES/` | licences and a NOTICE listing each component |
 
 The reader checks for these files when you press Download and uses each
-local piece it finds, falling back to the CDN for anything missing. The
-script is safe to re-run: finished files are skipped and interrupted
-downloads resume. `kokoro/` is in `.gitignore` because the fp32 model alone
+local piece it finds, falling back to the CDN for anything missing. A site
+that answers a missing file with a "not found" page and status 200 is
+handled: the reader looks at what came back, not just the status. The
+script is safe to re-run: finished files are skipped, interrupted
+downloads resume, and every file is checked against
+`checksums/kokoro.sha256`. `kokoro/` is in `.gitignore` because the fp32 model alone
 is larger than GitHub's 100 MB file limit. Serve `.wasm` files as
 `application/wasm`.
 
@@ -255,32 +323,87 @@ folder matters.
 ## Settings
 
 These constants near the top of the script in `index.html` are meant to be
-changed. Edit the file and reload the page.
+changed. Edit the file and reload the page, or set them for one folder in a
+[`reader-config.json`](#per-folder-settings-reader-configjson) (the ones
+marked ✓).
 
 | Constant | Default | What it does / when to change it |
 |---|---|---|
-| `DEFAULT_BOOK` | `'default.epub'` | Opened when the address has no `?book=`, from the same folder as `index.html`, if it is a valid EPUB; otherwise the built-in sample opens. |
-| `BOOKSHELF` | `'/bookshelf/'` | Site folder searched for a relative `?book=` path that isn't found next to `index.html`. |
-| `VOICE_FILES` | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
-| `TTS_SERVER` | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else. |
-| `FULL_PRECISION` | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
-| `LOOKAHEAD_SEC` | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
-| `SAVED_AUDIO_MB` | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. |
-| `NCACHE_SEC` | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices. |
-| `SPAN_MAX` | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. |
+| `DEFAULT_BOOK` ✓ | `'default.epub'` | Opened when the address has no `?book=`, from the same folder as `index.html`, if it is a valid EPUB; otherwise the built-in sample opens. |
+| `BOOKSHELF` ✓ | `'/bookshelf/'` | Site folder searched for a relative `?book=` path that isn't found next to `index.html`. |
+| `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
+| `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
+| `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
+| `ALLOW_REMOTE_CONTENT` ✓ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read). |
+| `ALLOW_EXTERNAL_LINKS` ✓ | `true` | `false` turns a book's web and e-mail links into plain text. |
+| `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
+| `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
+| `LOOKAHEAD_SEC` ✓ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
+| `SAVED_AUDIO_MB` ✓ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. |
+| `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices. |
+| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. |
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
-| `SEARCH_MAX` | `500` | Most search results listed. |
-| `COMIC_PART` | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. |
+| `SEARCH_MAX` ✓ | `500` | Most search results listed. |
+| `COMIC_PART` ✓ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. |
 
-External libraries are pinned to exact versions in `index.html`: JSZip
-3.10.1 (cdnjs, in a `<script>` tag), `MARKED_URL` (marked 15.0.12, loaded only
-for Markdown), and the `lib`/`ort` URLs in `KOKORO` (kokoro-js 1.2.1) and
-`POCKET` (pocket-tts-js 0.1.0, onnxruntime-web 1.20.0). When upgrading Kokoro
-or Pocket TTS, change the matching version in `fetch-kokoro.sh` or
-`fetch-pocket.sh` too; their comments say which line has to match.
+External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
+3.10.1 and marked 15.0.12, with their SRI hashes), the `lib`/`ort` URLs and
+model `revision` in `KOKORO` (kokoro-js 1.2.1), and `POCKET` (pocket-tts-js
+0.1.0, onnxruntime-web 1.20.0, a fixed model revision). When upgrading, change
+the matching version in the fetch script too (their comments say which line
+has to match) and regenerate `checksums/` with `tools/make-checksums.py`.
+
+## Per-folder settings (reader-config.json)
+
+An optional `reader-config.json` next to the page changes settings for that
+folder only. This is useful when `index.html` is linked into several folders,
+each with its own `default.epub`:
+
+```json
+{
+  "LIB_FILES": "/reader/",
+  "VOICE_FILES": "/reader/",
+  "DEFAULT_BOOK": "default.epub",
+  "theme": "dark",
+  "layout": "one",
+  "readAloud": "server"
+}
+```
+
+- Any setting marked ✓ in the table above, by name.
+- Starting preferences, used until the reader picks their own: `theme`
+  (`"light"` or `"dark"`), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
+  (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
+  such as `"literata"`), `fontSize` (percent, 60–250), `lineSpacing`
+  (1–3) and `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`).
+- Unknown names and wrong values are ignored with a warning in the browser
+  console. A missing file, or a "not found" page in its place, means no
+  config.
+
+## Tests
+
+```bash
+cd tests && npm install && npx playwright install chromium && cd ..   # once
+tests/run.sh                        # all tests (about a minute)
+tests/run.sh tests/urls.test.js     # one file
+SLOW=1 tests/run.sh                 # also load the real self-hosted Kokoro and Pocket TTS on the CPU
+```
+
+`run.sh` fetches the libraries and fonts if they're missing, builds a test
+site under `tests/site/` (books, documents, comics and a voice, made by
+`tests/build_fixtures.py`), and starts three local servers (`tests/server.py`):
+the site with a mock Breeze voice server, the same site answering missing files
+with 200 "not found" pages, and an "other site" that records any request a
+book makes to it. The browser is blocked from every other site, so the tests
+also check that nothing is fetched from elsewhere. They cover opening books and
+the `/bookshelf/` fallback, `default.epub`, per-folder configs, remote-content
+stripping and links, self-hosting and integrity checks, search, layouts,
+comics, the server voice (streaming, cancelling, preparing ahead, saved audio),
+media controls, the sleep timer and time left.
 
 ## Requirements
 
-No build step. The only dependency is JSZip 3.10.1, loaded from cdnjs, plus
-Google Fonts for the UI and reading typefaces (with system fallbacks).
+No build step. The libraries (JSZip, and marked for Markdown) and fonts come
+from `libs/` and `fonts/` when self-hosted, otherwise from cdnjs and Google
+Fonts (with system font fallbacks).

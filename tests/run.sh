@@ -10,6 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+export NODE_PATH="$PWD/tests/node_modules${NODE_PATH:+:$NODE_PATH}"   # Playwright from tests/node_modules, or a global install
 node -e "require('playwright')" 2>/dev/null || { echo "Playwright not found: cd tests && npm install && npx playwright install chromium" >&2; exit 1; }
 # The tests run self-hosted (the browser can't reach CDNs): fetch the libraries and fonts once if missing.
 [ -f libs/jszip.min.js ] || ./fetch-libs.sh

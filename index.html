@@ -112,6 +112,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .foot{display:flex;align-items:center;gap:14px;padding-block:10px 12px;border-top:1px solid var(--rule)}
 .where{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
 .loc{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.loc .mono{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #chapLabel{font-family:var(--font-read);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .mono{font:12px/1 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .ribbon{--n:1;position:relative;height:7px;border-radius:2px;background:var(--rule);overflow:hidden;cursor:pointer}
@@ -153,8 +154,10 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .tts-speed{display:flex;align-items:center;gap:6px;padding:0 4px}
 .tts-speed input{width:96px;accent-color:var(--ribbon)}
 #ttsRateVal{min-width:3.5ch}
-#ttsVoice,#ttsEngine{height:32px;max-width:190px;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:0 6px}
-#ttsVoice:focus-visible,#ttsEngine:focus-visible,.tts-speed input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
+#ttsSleep{max-width:170px}
+@media (max-width:640px){#timeLeft .book,#timeLeft .ctx,#spinePos .spine-n,.loc .pct-part{display:none}}
+#ttsVoice,#ttsEngine,#ttsSleep{height:32px;max-width:190px;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:0 6px}
+#ttsVoice:focus-visible,#ttsEngine:focus-visible,#ttsSleep:focus-visible,.tts-speed input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
 #ttsStatus{font:12px/1.3 var(--font-mono);color:var(--muted);padding:0 4px}
 #ttsPlay .i-pause,#ttsPlay.playing .i-play{display:none}
 #ttsPlay.playing .i-pause{display:block}
@@ -321,6 +324,15 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <option value="server" hidden>Server voice</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
+        <select id="ttsSleep" aria-label="Sleep timer" title="Sleep timer: stop reading after a while (at the end of the sentence or passage being read)">
+          <option value="off">No sleep timer</option>
+          <option value="15">Stop in 15 min</option>
+          <option value="30">Stop in 30 min</option>
+          <option value="45">Stop in 45 min</option>
+          <option value="60">Stop in 60 min</option>
+          <option value="90">Stop in 90 min</option>
+          <option value="chapter">Stop at chapter end</option>
+        </select>
         <button class="btn ghost" id="ttsSaved" hidden title="Saved voice audio" aria-label="Saved voice audio">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>
         </button>
@@ -340,7 +352,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="hide-sm">Previous</span>
     </button>
     <div class="where">
-      <div class="loc"><span id="chapLabel"></span><span class="mono"><span id="spinePos"></span> · <span id="pct">0%</span></span></div>
+      <div class="loc"><span id="chapLabel"></span><span class="mono"><span id="spinePos"></span><span class="pct-part"> · <span id="pct">0%</span></span><span id="timeLeft"></span></span></div>
       <div class="ribbon" id="ribbon" role="progressbar" aria-label="Position in book" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" title="Click to jump to a section"><div id="ribbonFill"></div></div>
     </div>
     <button class="btn" id="nextBtn" title="Next page (Right arrow)">
@@ -568,6 +580,11 @@ async function setBookIcon(){
     const k = Math.min(N / iw, N / ih), w = iw * k, h = ih * k;
     g.drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
     setIcons([{ href: c.toDataURL('image/png'), type: 'image/png', sizes: `${N}x${N}` }]);
+    // A larger copy for the lock screen and media controls while reading aloud.
+    const A = 256, a = document.createElement('canvas'); a.width = a.height = A;
+    const ag = a.getContext('2d'); ag.imageSmoothingQuality = 'high';
+    const ak = Math.min(A / iw, A / ih); ag.drawImage(img, (A - iw * ak) / 2, (A - ih * ak) / 2, iw * ak, ih * ak);
+    b.artwork = a.toDataURL('image/png'); updateMedia(true);
   } catch {
     if (token !== iconToken) return;
     setIcons(pageIcons.length ? pageIcons : [{ href: new URL('/favicon.ico', location.href).href }]);
@@ -868,7 +885,9 @@ async function openComic(zip, name, { key } = {}){
     direction: /righttoleft/i.test(ci.manga) ? 'Right to left' : 'Left to right', description: ci.summary || '', narrator: '', duration: '',
     activeClass: '-epub-media-overlay-active', playbackClass: '' };
   const items = [...spine, cover];
-  await startBook({ zip: src, src, opfPath: name + '.cbz', version: '', format: 'Comic book (CBZ)', comic: true, pageCount: pages.length,
+  // Which page images each section shows, so a section's images can be released when another is shown.
+  const comicParts = new Map(parts.map((part, i) => [path(i), part.pages.map(f => f.name)]));
+  await startBook({ zip: src, src, opfPath: name + '.cbz', version: '', format: 'Comic book (CBZ)', comic: true, pageCount: pages.length, comicParts,
     title, authors, language, uid: '', info, manifest: new Map(items.map(s => [s.id, s])), byPath: new Map(items.map(s => [s.path, s])),
     spine, toc, urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:cbz:${name}` });
 }
@@ -1291,6 +1310,20 @@ function loadFrame(html){
   });
 }
 
+// Comics: each page image becomes an in-memory copy while its section is shown. Free the copies for every
+// other section (they are made again if the reader goes back), so a long comic doesn't fill the memory.
+function releaseComicImages(shownPath){
+  if (!book?.comicParts) return;
+  for (const [partPath, images] of book.comicParts) {
+    if (partPath === shownPath) continue;
+    for (const img of images) {
+      const job = book.urls.get(img);
+      if (!job) continue;
+      book.urls.delete(img);
+      Promise.resolve(job).then(u => { if (u?.startsWith('blob:')) URL.revokeObjectURL(u); });
+    }
+  }
+}
 async function chapterSource(item){
   const raw = await readText(book.zip, item.path) || '';
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
@@ -1330,6 +1363,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     if (token !== renderToken) return;
     position(frag, fraction);
     hideStatus();
+    releaseComicImages(item.path);
     ttsAfterRender();
     searchAfterRender();
   } catch (err) {
@@ -1613,9 +1647,16 @@ function updateChrome(){
   $('#curFile').textContent = book.spine[cur.i].path;
   updateProgress();
 }
+// "page 3/12 · spine 2/9": the spine part is hidden on narrow screens, where the time left matters more.
+function setSpinePos(where, n){
+  const sp = document.createElement('span'); sp.className = 'spine-n'; sp.textContent = ` · spine ${cur.i + 1}/${n}`;
+  $('#spinePos').replaceChildren(where, sp);
+}
 function updateProgress(){
   if (!book) return;
   updateSection();
+  turnedPage();
+  updateTimeLeft();
   const overall = (cur.i + fraction()) / book.spine.length;
   const pct = Math.round(overall * 100);
   $('#ribbonFill').style.width = (overall * 100).toFixed(2) + '%';
@@ -1624,12 +1665,12 @@ function updateProgress(){
   const n = book.spine.length;
   if (scrolling()) {
     const within = Math.round(fraction() * 100);
-    $('#spinePos').textContent = `${within}% of section · spine ${cur.i + 1}/${n}`;
+    setSpinePos(`${within}% of section`, n);
     $('#fsPos').textContent = `${pct}%`;
     $('#prevBtn').disabled = cur.i === 0 && atTop();
     $('#nextBtn').disabled = cur.i === n - 1 && atBottom();
   } else {
-    $('#spinePos').textContent = `page ${cur.page + 1}/${cur.pages} · spine ${cur.i + 1}/${n}`;
+    setSpinePos(`page ${cur.page + 1}/${cur.pages}`, n);
     $('#fsPos').textContent = `page ${cur.page + 1}/${cur.pages} · ${pct}%`;
     $('#prevBtn').disabled = cur.i === 0 && cur.page === 0;
     $('#nextBtn').disabled = cur.i === n - 1 && cur.page >= cur.pages - 1;
@@ -2093,6 +2134,7 @@ function speakable(raw){
   return { out, map };
 }
 function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepFollow } = {}){
+  if (keepFollow && speak && sleepDue()) speak = false;   // the sleep timer ran out: stop here, ready to go on
   const chunks = ttsChunks();
   if (ci >= chunks.length) { ttsEndOfChapter(); return; }
   const c = chunks[Math.max(0, ci)]; ci = Math.max(0, ci);
@@ -2136,6 +2178,10 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepF
   setTimeout(() => { if (token === tts.token) synth.speak(u); }, 0);
 }
 function ttsEndOfChapter(){
+  if (tts.playing && sleep.mode === 'chapter') {   // sleep timer: stop at the end of this chapter
+    tts.playing = false; ++tts.token; moAudio.pause(); nStop(); synth?.cancel(); hl('tts-word');
+    setSleep('off'); tts.note = 'Sleep timer: stopped at the end of the chapter'; ttsUpdateBar(); return;
+  }
   if (book && cur.i < book.spine.length - 1) { tts.awaitChapter = true; renderChapter(cur.i + 1); return; }
   tts.playing = false; ++tts.token; moAudio.pause(); hl('tts-word'); ttsUpdateBar('End of book');
 }
@@ -2190,6 +2236,7 @@ function moMark(i){
   follow(r);
 }
 async function moGo(i, { speak = tts.playing, keepFollow = false } = {}){
+  if (keepFollow && speak && sleepDue()) speak = false;
   const m = tts.mo;
   if (i >= m.pars.length) { moAudio.pause(); moClearClasses(); ttsEndOfChapter(); return; }
   i = Math.max(0, i); m.i = i;
@@ -2308,7 +2355,7 @@ function ttsOpen(){
 }
 function ttsStopAudio(){ ++tts.token; synth?.cancel(); nStop(); moAudio.pause(); moClearClasses(); }
 function ttsClose(){
-  tts.open = false; tts.playing = false; ttsStopAudio();
+  tts.open = false; tts.playing = false; ttsStopAudio(); setSleep('off');
   ttsClearHL(); tts.chunks = null; tts.mo = null;
   $('#tts').hidden = true; $('#ttsBtn').setAttribute('aria-pressed', 'false');
   ttsUpdateBar(); ttsMeasureBar();
@@ -2420,6 +2467,10 @@ function ttsRefollow(){
 function ttsBack(){ tts.follow = true; ttsRefollow(); ttsUpdateBar(); }
 
 function ttsUpdateBar(status){
+  updateMedia();
+  // A note (such as the sleep timer stopping) stays until reading starts again.
+  if (tts.playing) tts.note = '';
+  else if (!status && tts.note) status = tts.note;
   const play = $('#ttsPlay');
   play.classList.toggle('playing', tts.playing);
   play.setAttribute('aria-label', tts.playing ? 'Pause' : 'Play');
@@ -3434,6 +3485,176 @@ $('#searchResults').addEventListener('click', e => {
   searchGo(+btn.dataset.n);
   if (narrow.matches) setToc(false);
 });
+
+/* ---------- listening: media controls, sleep timer, time left ---------- */
+
+/* Lock-screen, headphone and keyboard media keys while reading aloud (Media Session API). Browsers only
+   route those keys to a page that is playing media, and device voices and streamed audio don't count, so a
+   silent looping clip plays alongside whenever read-aloud is playing. */
+const media = { keeper: null, active: false, meta: '' };
+function mediaKeeper(){
+  if (!media.keeper) {
+    const n = 8000 * 10, buf = new ArrayBuffer(44 + n), v = new DataView(buf);   // 10 s of silence, 8 kHz, 8-bit
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    str(36, 'data'); v.setUint32(40, n, true); new Uint8Array(buf, 44).fill(128);
+    media.keeper = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+    media.keeper.loop = true;
+  }
+  return media.keeper;
+}
+function updateMedia(force = false){
+  if (!('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession;
+  if (!tts.open || !book) {
+    if (media.active) { ms.metadata = null; ms.playbackState = 'none'; media.keeper?.pause(); media.active = false; media.meta = ''; }
+    return;
+  }
+  if (!media.active) {
+    media.active = true;
+    const on = (action, fn) => { try { ms.setActionHandler(action, fn); } catch {} };
+    on('play', () => { if (!tts.playing) ttsTogglePlay(); });
+    on('pause', () => { if (tts.playing) ttsTogglePlay(); });
+    on('stop', () => { if (tts.playing) ttsTogglePlay(); });
+    for (const a of ['nexttrack', 'seekforward']) on(a, () => $('#ttsNext').click());
+    for (const a of ['previoustrack', 'seekbackward']) on(a, () => $('#ttsPrev').click());
+  }
+  const meta = [$('#chapLabel').textContent || book.title, book.authors.join(', '), book.title, book.artwork || ''];
+  if (force || meta.join('|') !== media.meta) {
+    media.meta = meta.join('|');
+    try {
+      ms.metadata = new MediaMetadata({ title: meta[0], artist: meta[1], album: meta[2],
+        artwork: book.artwork ? [{ src: book.artwork, sizes: '256x256', type: 'image/png' }] : [] });
+    } catch {}
+  }
+  ms.playbackState = tts.playing ? 'playing' : 'paused';
+  const k = mediaKeeper();
+  if (tts.playing && k.paused) k.play().catch(() => {});
+  else if (!tts.playing && !k.paused) k.pause();
+}
+
+/* Sleep timer: counts down only while reading aloud is playing; when time is up, reading stops at the end of
+   the sentence or passage being read (or straight away if that takes more than a minute). "Stop at chapter
+   end" stops instead of going on to the next chapter. It runs on the clock (endAt), not by counting ticks:
+   browsers slow timers down in background tabs, such as with the screen off. */
+const sleep = { mode: 'off', left: 0, endAt: 0, due: 0 };
+function setSleep(mode){
+  sleep.mode = mode; sleep.due = 0; sleep.endAt = 0;
+  sleep.left = /^\d+$/.test(mode) ? Number(mode) * 60 : 0;
+  if (sleep.left && tts.playing) sleep.endAt = Date.now() + sleep.left * 1000;
+  $('#ttsSleep').value = mode;
+  sleepLabel();
+}
+function sleepLabel(){
+  for (const o of $('#ttsSleep').options) {
+    const minutes = /^\d+$/.test(o.value) ? o.value : null;
+    o.textContent = minutes && o.value === sleep.mode
+      ? (sleep.due ? 'Stopping after this passage' : `Stops in ${Math.floor(sleep.left / 60)}:${String(sleep.left % 60).padStart(2, '0')}`)
+      : { off: 'No sleep timer', chapter: 'Stop at chapter end' }[o.value] || `Stop in ${o.value} min`;
+  }
+}
+// Called where reading would go on to the next sentence by itself: true when the timer has run out.
+function sleepDue(){
+  if (!sleep.due) return false;
+  tts.playing = false;
+  setSleep('off');
+  tts.note = 'Sleep timer: reading stopped';
+  ttsUpdateBar();
+  return true;
+}
+$('#ttsSleep').addEventListener('change', e => setSleep(e.target.value));
+
+/* Time left in the chapter and the book, from how fast you read (page turns) or, while reading aloud, how
+   fast the voice reads. Chapter lengths are counted in the background after a book opens. */
+const pace = { read: Number(store.get('spine:readCpm')) || 1000, listen: 0, lastTurn: null, samples: [] };
+async function chapterLengths(){
+  const b = book;
+  if (!b || b.comic) return null;
+  b.lengths ??= (async () => {
+    const out = [];
+    for (let i = 0; i < b.spine.length; i++) {
+      let n = 0;
+      try { for (const blk of textBlocks(await chapterDoc(i), TTS_SKIP)) n += blk.text.replace(/\s+/g, ' ').trim().length; } catch {}
+      out.push(n);
+      if (i % 8 === 7) await new Promise(r => setTimeout(r));
+    }
+    return out;
+  })();
+  return b.lengths;
+}
+// How far reading aloud has got in this chapter, in characters (null when unknown).
+function listenedChars(){
+  if (tts.mo) return null;
+  if (tts.doc !== frame.contentDocument || !tts.chunks?.length) return null;
+  let n = 0;
+  for (let i = 0; i < tts.ci && i < tts.chunks.length; i++) n += tts.chunks[i].e - tts.chunks[i].s;
+  const c = tts.chunks[tts.ci];
+  return c ? n + Math.max(0, tts.pos - c.s) : n;
+}
+function turnedPage(){   // learn the reading pace from forward page turns that took a believable time
+  const now = performance.now(), at = { i: cur.i, f: fraction(), t: now };
+  const last = pace.lastTurn; pace.lastTurn = at;
+  if (!last || tts.playing || !book?.lengths || last.i !== at.i || at.f <= last.f) return;
+  book.lengths.then(L => {
+    const chars = (at.f - last.f) * (L?.[at.i] || 0), sec = (now - last.t) / 1000;
+    if (chars < 200 || sec < 4 || sec > 600) return;
+    pace.read = Math.round(Math.min(4000, Math.max(300, pace.read * 0.8 + (chars / sec * 60) * 0.2)));
+    store.set('spine:readCpm', pace.read);
+  });
+}
+function fmtLeft(sec){
+  if (!(sec > 0)) return '';
+  const m = Math.round(sec / 60);
+  if (m < 1) return 'under a minute';
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+async function updateTimeLeft(){
+  const el = $('#timeLeft');
+  const L = await chapterLengths();
+  if (!L || !book || !L[cur.i]) { el.textContent = ''; return; }
+  const listening = tts.open && !tts.mo && (tts.playing || n.paused);
+  const done = listening ? listenedChars() : null;
+  const inChapter = Math.max(0, done != null ? L[cur.i] - done : L[cur.i] * (1 - fraction()));
+  const after = L.slice(cur.i + 1).reduce((a, b) => a + b, 0);
+  const perSec = listening ? (pace.listen || 14 * tts.rate) : pace.read / 60;
+  const ch = fmtLeft(inChapter / perSec), bk = fmtLeft((inChapter + after) / perSec);
+  el.replaceChildren();
+  if (!ch) return;
+  const ctx = document.createElement('span'); ctx.className = 'ctx'; ctx.textContent = ' in chapter';
+  el.append(` · ${ch} left`, ctx);
+  if (after > 0) { const s = document.createElement('span'); s.className = 'book'; s.textContent = ` · ${bk} in book`; el.append(s); }
+  el.title = listening ? 'At the read-aloud speed' : `At your reading speed (about ${Math.round(pace.read / 5)} words a minute)`;
+}
+// Once a second: the sleep timer, the read-aloud pace and (every few seconds) the time left.
+let tick = 0;
+setInterval(() => {
+  tick++;
+  if (sleep.left > 0 && !sleep.due) {
+    if (tts.playing) {
+      sleep.endAt ||= Date.now() + sleep.left * 1000;
+      sleep.left = Math.max(0, Math.ceil((sleep.endAt - Date.now()) / 1000));
+      if (sleep.left === 0) sleep.due = Date.now();
+      sleepLabel();
+    } else if (sleep.endAt) {   // paused: keep what's left
+      sleep.left = Math.max(1, Math.ceil((sleep.endAt - Date.now()) / 1000)); sleep.endAt = 0;
+    }
+  }
+  if (sleep.due && tts.playing && Date.now() - sleep.due > 60000) {   // a very long passage: stop now
+    setSleep('off'); ttsTogglePlay(); tts.note = 'Sleep timer: reading stopped'; ttsUpdateBar();
+  }
+  const doneChars = tts.playing ? listenedChars() : null;
+  if (doneChars != null) {
+    const s = pace.samples; s.push([Date.now(), doneChars, cur.i]);
+    while (s.length > 40) s.shift();
+    const first = s.find(x => x[2] === cur.i);
+    const span = (Date.now() - first[0]) / 1000, moved = doneChars - first[1];
+    if (moved < 0 || moved > 3000) pace.samples = [[Date.now(), doneChars, cur.i]];   // a jump: start again
+    else if (span >= 8 && moved > 0) pace.listen = moved / span;
+  } else if (!tts.playing) pace.samples = [];
+  if (tick % 5 === 0 && tts.open) updateTimeLeft();
+}, 1000);
 
 /* ---------- per-folder settings: reader-config.json ----------
    An optional JSON file next to the page overrides the settings constants for that folder (useful when

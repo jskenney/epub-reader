@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./helpers');
 
+test.afterEach(h.closePages);
 test.after(h.close);
 
 test('a hostile book reaches no other site, and its own pictures still show', async () => {

@@ -98,7 +98,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.json(409, {"detail": "An inference request is already running."})
         try:
             text = f["text"].decode()
-            breeze_log.append({"text": text, "ref_text": (f.get("ref_text") or b"").decode(), "ref_bytes": len(f.get("ref_audio") or b"")})
+            entry = {"text": text, "ref_text": (f.get("ref_text") or b"").decode(), "ref_bytes": len(f.get("ref_audio") or b"")}
+            breeze_log.append(entry)
             seconds = 0.3 * len(text.split()) + 0.3
             n, step = int(24000 * seconds), 1920
             self.send_response(200)
@@ -111,7 +112,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.flush()
                     time.sleep(0.08 / args.rtf)
             except (BrokenPipeError, ConnectionResetError):
-                breeze_log[-1]["aborted"] = True
+                entry["aborted"] = True   # the reader cancelled this passage
         finally:
             busy.release()
 

@@ -7,16 +7,20 @@ const REMOTE = 'http://localhost:8792';   // "another site": records every reque
 const READER = `${SITE}/reader/index.html`;
 
 let browser;
+const contexts = [];
 async function launch() {
   browser ??= await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   return browser;
 }
 async function close() { await browser?.close(); browser = null; }
+// Close every page a test opened, so one test's reading aloud can't keep the mock voice server busy for the next.
+async function closePages() { while (contexts.length) await contexts.pop().close().catch(() => {}); }
 
 /* A page that can only reach the test servers: every other request (CDNs, Google Fonts, Hugging Face) is
    blocked and listed in page.blocked, so tests also prove nothing leaves the site. */
 async function newPage({ allow = [], viewport = { width: 1280, height: 800 } } = {}) {
   const ctx = await (await launch()).newContext({ viewport });
+  contexts.push(ctx);
   const page = await ctx.newPage();
   page.blocked = [];
   page.errors = [];
@@ -73,5 +77,5 @@ async function waitFor(fn, ms = 20000, step = 100) {
   return null;
 }
 
-module.exports = { SITE, SOFT, REMOTE, READER, launch, close, newPage, openReader, waitForBook, title, notice, inFrame,
+module.exports = { SITE, SOFT, REMOTE, READER, launch, close, closePages, newPage, openReader, waitForBook, title, notice, inFrame,
   remoteLog, clearRemoteLog, breezeLog, clearBreezeLog, spokenWord, waitFor };

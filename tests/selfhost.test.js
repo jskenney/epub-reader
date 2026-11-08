@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const h = require('./helpers');
 
+test.afterEach(h.closePages);
 test.after(h.close);
 
 test('with libs/ and fonts/ fetched, nothing is loaded from other sites', async () => {
