@@ -421,6 +421,9 @@ const store = {
   del(k){ try { localStorage.removeItem(k); } catch {} }
 };
 
+// The reader's own element ids in book pages, with a random part per page load: a book's ids can't clash with
+// them (a book element with id="spine-end" once threw off page counting).
+const RID = Object.fromEntries(['clip', 'flow', 'end', 'base', 'override', 'font'].map(n => [n, `spine-${n}-${Math.random().toString(36).slice(2, 8)}`]));
 let book = null;
 let cur = { i: 0 };
 let fontPct = Number(store.get('spine:font')) || 100;
@@ -1613,7 +1616,7 @@ a{color:${t.ribbon}}`;
    two-column layout, one in the single-column layout, and a continuous strip in the scroll layout. */
 function comicCss(){
   return `body{--v:12px;--vb:${12 + tts.barH}px;--m:12px;--g:12px}
-#spine-flow{column-rule:none !important}
+#${RID.flow}{column-rule:none !important}
 .cbz-page{margin:0;display:flex;align-items:center;justify-content:center;break-inside:avoid;break-after:column;height:calc(100vh - var(--v) - var(--vb))}
 .cbz-page:last-of-type{break-after:auto}
 .cbz-page img{max-width:100% !important;max-height:100% !important;width:auto;height:auto;object-fit:contain}
@@ -1633,28 +1636,28 @@ function overrideCss(){
     ? `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:auto !important;overflow:auto !important}
 ${common}
 body{padding:var(--v) var(--m) calc(var(--vb) + 30vh) !important;height:auto !important;overflow:visible !important}
-#spine-clip{height:auto;overflow:visible}
-#spine-flow{height:auto;column-count:auto;transform:none !important;overflow-wrap:break-word}`
+#${RID.clip}{height:auto;overflow:visible}
+#${RID.flow}{height:auto;column-count:auto;transform:none !important;overflow-wrap:break-word}`
     : `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;overflow:hidden !important}
 ${common}
 body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;overflow:hidden !important}
-#spine-clip{height:100%;overflow:hidden}
-#spine-flow{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
-@media (max-width:640px){#spine-flow{column-count:1}}`;
+#${RID.clip}{height:100%;overflow:hidden}
+#${RID.flow}{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
+@media (max-width:640px){#${RID.flow}{column-count:1}}`;
   return `${frameCss}
-#spine-flow{line-height:${lineH} !important}
-#spine-flow :is(p,li,blockquote,dd,dt,td,th,div,span,a,em,strong,i,b,small,cite,q,sup,sub,section,article,aside){line-height:inherit !important}
-#spine-flow :is(h1,h2,h3,h4,h5,h6){line-height:${Math.max(1.15, lineH * 0.78).toFixed(2)} !important}
+#${RID.flow}{line-height:${lineH} !important}
+#${RID.flow} :is(p,li,blockquote,dd,dt,td,th,div,span,a,em,strong,i,b,small,cite,q,sup,sub,section,article,aside){line-height:inherit !important}
+#${RID.flow} :is(h1,h2,h3,h4,h5,h6){line-height:${Math.max(1.15, lineH * 0.78).toFixed(2)} !important}
 img,svg,video,canvas{max-width:100% !important;max-height:calc(100vh - var(--v) - var(--vb) - 8px) !important;height:auto;object-fit:contain;break-inside:avoid}
 figure,table{break-inside:avoid}
 pre{white-space:pre-wrap !important}
-#spine-end{display:inline}
+#${RID.end}{display:inline}
 ::highlight(tts-sentence){background-color:${t.soft}}
 ::highlight(tts-word){background-color:${t.ribbon};color:${t.onRibbon}}
 ::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
 ::highlight(search-current){background-color:${dark ? '#E0B040' : '#F2B630'};color:#1a1408}
 ${book?.comic ? comicCss() : ''}
-${faceStack() ? `#spine-flow,#spine-flow :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
+${faceStack() ? `#${RID.flow},#${RID.flow} :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
 a,a *{color:${t.ribbon} !important}` : ''}`;
@@ -1737,8 +1740,8 @@ async function buildPage(src, path){
     const v = sHtml.getAttribute(a); if (v) out.documentElement.setAttribute(a === 'xml:lang' ? 'lang' : a, v);
   }
   const head = out.head;
-  head.innerHTML = `<meta charset="utf-8"><link id="spine-font" rel="stylesheet" href="${fontHref()}"><style id="spine-base"></style>`;
-  head.querySelector('#spine-base').textContent = baseCss();
+  head.innerHTML = `<meta charset="utf-8"><link id="${RID.font}" rel="stylesheet" href="${fontHref()}"><style id="${RID.base}"></style>`;
+  head.querySelector('#' + RID.base).textContent = baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
     if (n.localName === 'link') {
       const rel = n.getAttribute('rel') || '', href = n.getAttribute('href');
@@ -1756,15 +1759,14 @@ async function buildPage(src, path){
       const st = out.createElement('style'); st.textContent = await rewriteCss(n.textContent, path); head.append(st);
     }
   }
-  const ov = out.createElement('style'); ov.id = 'spine-override'; ov.textContent = overrideCss(); head.append(ov);
+  const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(); head.append(ov);
   if (sBody) {
     for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.value);
   }
-  const clip = out.createElement('div'); clip.id = 'spine-clip';
-  const flow = out.createElement('div'); flow.id = 'spine-flow';
+  const clip = out.createElement('div'); clip.id = RID.clip;
+  const flow = out.createElement('div'); flow.id = RID.flow;
   if (sBody) for (const c of [...sBody.childNodes]) flow.append(out.importNode(c, true));
-  renameReaderIds(flow);
-  const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
+  const end = out.createElement('span'); end.id = RID.end; flow.append(end);
   clip.append(flow); out.body.append(clip);
   // Chapters parsed as XHTML keep the case of names (<IMG SRC>, <IFRAME>), which the checks below wouldn't
   // match, yet the frame's HTML parser would turn them into working elements. So parse the page as HTML
@@ -1856,23 +1858,15 @@ async function chapterSource(item){
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
   return (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
 }
-// A book element with one of the reader's own ids (spine-end, spine-flow, …) would be found instead of the
-// reader's, and throw off page counting: it is renamed (book-spine-end), and links to it follow.
-function renameReaderIds(root){
-  const renamed = new Set();
-  for (const el of root.querySelectorAll('[id^="spine-" i]')) { renamed.add(el.id); el.id = 'book-' + el.id; }
-  if (renamed.size) for (const a of root.querySelectorAll('a[href^="#"]')) if (renamed.has(a.getAttribute('href').slice(1))) a.setAttribute('href', '#book-' + a.getAttribute('href').slice(1));
-}
 // A detached copy of a chapter, built like the page shown in the frame (without its styles and resources),
 // so its text splits into the same blocks and sentences: for preparing speech ahead and for search.
 async function chapterDoc(i){
   const src = await chapterSource(book.spine[i]);
   const out = document.implementation.createHTMLDocument('');
-  const flow = out.createElement('div'); flow.id = 'spine-flow';
+  const flow = out.createElement('div'); flow.id = RID.flow;
   const body = src.getElementsByTagNameNS('*', 'body')[0];
   if (body) for (const c of [...body.childNodes]) flow.append(out.importNode(c, true));
-  renameReaderIds(flow);
-  const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
+  const end = out.createElement('span'); end.id = RID.end; flow.append(end);
   out.body.append(flow);
   sanitize(out);
   // Serialize and parse again, as the frame's srcdoc does, so the text splits the same way.
@@ -1914,7 +1908,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
    after the last content, so its offset from the flow's left edge says which page is the last. */
 function geom(){
   const doc = frame.contentDocument, win = frame.contentWindow;
-  const flow = doc?.getElementById('spine-flow'), end = doc?.getElementById('spine-end');
+  const flow = doc?.getElementById(RID.flow), end = doc?.getElementById(RID.end);
   if (!flow || !end) return null;
   const step = flow.clientWidth + (parseFloat(win.getComputedStyle(flow).columnGap) || 0);
   if (!(step > 0)) return null;
@@ -1944,12 +1938,12 @@ function showPage(n){
 function position(frag, f){
   if (scrolling()) {
     const doc = frame.contentDocument, se = scroller(); if (!se) return;
-    const el = frag && (doc.getElementById(/^spine-/i.test(frag) ? 'book-' + frag : frag) || doc.getElementsByName(frag)[0]);
+    const el = frag && (doc.getElementById(frag) || doc.getElementsByName(frag)[0]);
     scrollTo(el ? el.getBoundingClientRect().top + se.scrollTop - 24 : (f || 0) * (se.scrollHeight - se.clientHeight));
     return;
   }
   const g = geom(); if (!g) return;
-  const el = frag && (g.doc.getElementById(/^spine-/i.test(frag) ? 'book-' + frag : frag) || g.doc.getElementsByName(frag)[0]);
+  const el = frag && (g.doc.getElementById(frag) || g.doc.getElementsByName(frag)[0]);
   if (el) showPage(Math.floor((el.getBoundingClientRect().left - g.left + 1) / g.step));
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
@@ -2044,10 +2038,10 @@ function goTo(path, frag = ''){
 }
 function restyleFrame(){
   const doc = frame.contentDocument; if (!doc) return;
-  const b = doc.getElementById('spine-base'), o = doc.getElementById('spine-override');
+  const b = doc.getElementById(RID.base), o = doc.getElementById(RID.override);
   if (b) b.textContent = baseCss();
   if (o) o.textContent = overrideCss();
-  const l = doc.getElementById('spine-font'), h = fontHref();
+  const l = doc.getElementById(RID.font), h = fontHref();
   if (l && l.getAttribute('href') !== h) {
     l.addEventListener('load', () => (doc.fonts?.ready || Promise.resolve()).then(relayout), { once: true });
     l.setAttribute('href', h);
@@ -2160,7 +2154,7 @@ function tocLinkFor(path){
 // above the upper third of the view). Null before the first heading, or while the page isn't laid out.
 function sectionLink(){
   const doc = frame.contentDocument, path = book.spine[cur.i].path;
-  if (!doc?.getElementById('spine-flow')) return null;
+  if (!doc?.getElementById(RID.flow)) return null;
   const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
   if (hits.length < 2) return null;
   let best = null, bestEl = null;
@@ -2567,7 +2561,7 @@ const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
   barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
-const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],#spine-end,' +
+const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],#' + RID.end + ',' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
 const hasWords = t => /[\p{L}\p{N}]/u.test(t);
@@ -2584,7 +2578,7 @@ function ttsBuild(){
 // The text of a page, block by block (paragraphs, headings, list items…), with where each text node sits,
 // leaving out elements matching skip. Line breaks and images count as one space.
 function textBlocks(doc, skip, nodes = null){
-  const flow = doc?.getElementById('spine-flow'), blocks = [];
+  const flow = doc?.getElementById(RID.flow), blocks = [];
   if (!flow) return blocks;
   let b = null;
   const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: n =>
@@ -3970,7 +3964,7 @@ function nStop(){
    splits the page in the frame) and searched ignoring case, accents and curly-vs-straight quotes. A match
    is kept as (chapter, block, offset), so after the chapter renders the same block in the frame gives its
    DOM range: matches in the chapter are highlighted, the chosen one more strongly, and the page turns to it. */
-const SEARCH_SKIP = 'script,style,noscript,template,[hidden],#spine-end';
+const SEARCH_SKIP = 'script,style,noscript,template,[hidden],#' + RID.end;
 let SEARCH_MAX = 500;
 const search = { q: '', hits: [], cur: -1, token: 0, timer: 0, shown: false };
 const foldMap = new Map();

@@ -9,7 +9,7 @@ test.afterEach(h.closePages);
 test.after(h.close);
 
 const look = page => page.evaluate(() => {
-  const flow = document.querySelector('#page').contentDocument.getElementById('spine-flow');
+  const flow = document.querySelector('#page').contentDocument.querySelector('[id^="spine-flow-"]');
   const fw = document.querySelector('#page').contentWindow;
   return { theme: document.documentElement.getAttribute('data-theme') || 'auto',
     columns: fw.getComputedStyle(flow).columnCount, scrolling: fw.getComputedStyle(flow).transform === 'none' && fw.getComputedStyle(fw.document.documentElement).overflow === 'auto' };

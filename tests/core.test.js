@@ -23,7 +23,7 @@ test('layouts: two columns, one column, scrolling (L), remembered', async () => 
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
   const cols = () => page.evaluate(() => {
-    const d = document.querySelector('#page').contentDocument, flow = d.getElementById('spine-flow');
+    const d = document.querySelector('#page').contentDocument, flow = d.querySelector('[id^="spine-flow-"]');
     return d.defaultView.getComputedStyle(flow).columnCount;
   });
   assert.equal(await cols(), '2');
@@ -60,6 +60,7 @@ test("a book element with the reader's own ids doesn't break page counting, and 
   await h.openReader(page, `${h.READER}?book=books/reader-ids.epub`);
   const pages = Number((await page.textContent('#spinePos')).match(/page \d+\/(\d+)/)[1]);
   assert.ok(pages > 2, `pages counted: ${pages}`);
+  assert.match(await h.inFrame(page, doc => doc.getElementById('spine-end')?.textContent || ''), /Starts here/, "the book's own ids are left as they are");
   await h.inFrame(page, doc => doc.querySelector('#to-end').click());
   await page.waitForFunction(() => /page (\d+)\/\1\b/.test(document.querySelector('#spinePos').textContent), null, { timeout: 5000 });
 });
