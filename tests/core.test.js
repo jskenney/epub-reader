@@ -55,6 +55,15 @@ test('search: across chapters, ignoring case, accents and curly quotes; Enter st
   assert.equal(await page.isVisible('#tocNav'), true);
 });
 
+test("a book element with the reader's own ids doesn't break page counting, and links to it still work (L-11)", async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/reader-ids.epub`);
+  const pages = Number((await page.textContent('#spinePos')).match(/page \d+\/(\d+)/)[1]);
+  assert.ok(pages > 2, `pages counted: ${pages}`);
+  await h.inFrame(page, doc => doc.querySelector('#to-end').click());
+  await page.waitForFunction(() => /page (\d+)\/\1\b/.test(document.querySelector('#spinePos').textContent), null, { timeout: 5000 });
+});
+
 test('documents open as one continuous page with their headings in the contents', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/notes.md`);

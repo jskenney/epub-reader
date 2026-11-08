@@ -79,6 +79,33 @@ test('downloads are checked, and the check fails closed (L-3, L-4)', { skip: !li
   fs.rmSync(bin, { recursive: true, force: true });
 });
 
+const fontsFetched = fs.existsSync(path.join(REPO, 'fonts', 'SHA256SUMS'));
+test('fetch-fonts.sh --strict fails on a changed file or a font file not in the list, replacing nothing (L-6)', { skip: !fontsFetched && 'fonts/ not fetched' }, () => {
+  const dir = sandbox();
+  fs.cpSync(path.join(REPO, 'fonts'), path.join(dir, 'fonts'), { recursive: true, dereference: true });
+  // Offline: Google's stylesheet now names a font file that isn't in fonts/SHA256SUMS; nothing else answers.
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-bin-'));
+  fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nfor a; do u=$a; done\ncase $u in *googleapis*) echo "@font-face{src:url(https://fonts.gstatic.com/s/new/v1/x.woff2)}";; *) exit 7;; esac\n', { mode: 0o755 });
+  const env = { PATH: `${bin}:${process.env.PATH}` };
+  assert.equal(run(dir, 'fetch-fonts.sh', ['--bogus'], env).code, 2);
+  const first = fs.readFileSync(path.join(dir, 'fonts', 'SHA256SUMS'), 'utf8').split('\n')[0].split(/\s+/)[1];
+  const file = path.join(dir, 'fonts', first);
+  fs.appendFileSync(file, 'x');
+  const changed = run(dir, 'fetch-fonts.sh', ['--strict'], env);
+  assert.equal(changed.code, 1, changed.out);
+  assert.match(changed.out, /changed on disk \(--strict: nothing was replaced\)/);
+  assert.ok(fs.existsSync(file), 'the changed file is left for you to look at');
+  fs.copyFileSync(path.join(REPO, 'fonts', first), file);
+  const unknown = run(dir, 'fetch-fonts.sh', ['--strict'], env);
+  assert.equal(unknown.code, 1, unknown.out);
+  assert.match(unknown.out, /files\/new\/v1\/x\.woff2 isn't in fonts\/SHA256SUMS/);
+  // Without --strict a changed file is still removed to be fetched again (trust on first use).
+  fs.appendFileSync(file, 'x');
+  assert.match(run(dir, 'fetch-fonts.sh', [], env).out, /BAD .*\(removed\)/);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(bin, { recursive: true, force: true });
+});
+
 test('versions pinned in index.html and in the fetch scripts agree (D-3)', () => {
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const page = read('index.html'), libs = read('fetch-libs.sh'), kokoro = read('fetch-kokoro.sh'), pocket = read('fetch-pocket.sh');
@@ -98,6 +125,17 @@ test('the Subresource Integrity hashes in LIBS match the files in libs/ (T-9)', 
     const want = 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(__dirname, '..', 'libs', file))).digest('base64');
     assert.ok(page.includes(`file: 'libs/${file}'`) && page.includes(`integrity: '${want}'`), `${file}: ${want} isn't in LIBS`);
   }
+});
+
+test("the Kokoro worker's source, written inside a template string in index.html, parses (L-7)", () => {
+  const src = fs.readFileSync(path.join(REPO, 'index.html'), 'utf8');
+  const start = src.indexOf('const KOKORO_WORKER = `') + 'const KOKORO_WORKER = '.length;
+  let end = start + 1;
+  while (!(src[end] === '`' && src[end - 1] !== '\\')) end++;
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'spine-worker-')), 'worker.mjs');
+  fs.writeFileSync(file, eval(src.slice(start, end + 1)));   // the text the worker is given
+  const r = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
 });
 
 test('no GNU-only sed escapes (a tab written as \\t) in the scripts (M-4)', () => {

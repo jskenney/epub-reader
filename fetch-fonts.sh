@@ -11,8 +11,19 @@
 # instead every file must be a real WOFF2 font, and fonts/SHA256SUMS records each one so later runs can
 # check nothing has changed on disk. Delete fonts/ and run it again to update. The fonts are under the SIL
 # Open Font License.
+#
+#   --strict   once fonts/SHA256SUMS exists, fail instead of fetching again: a changed file on disk, or a
+#              font file Google now serves that isn't in the list, stops the run (nothing is replaced)
 set -euo pipefail
 cd "$(dirname "$0")"
+
+STRICT=0
+for arg in "$@"; do
+  case "$arg" in
+    --strict) STRICT=1 ;;
+    *) echo "Unknown option: $arg (options: --strict)" >&2; exit 2 ;;
+  esac
+done
 
 DEST=fonts
 UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'   # asks for WOFF2
@@ -27,10 +38,16 @@ if [ -f "$DEST/SHA256SUMS" ]; then
   bad=0
   while read -r hash path; do
     [ -f "$DEST/$path" ] || continue
-    if [ "$("${SHA[@]}" "$DEST/$path" | cut -d' ' -f1)" != "$hash" ]; then echo "  BAD    $path (removed)"; rm -f "$DEST/$path"; bad=1; fi
+    if [ "$("${SHA[@]}" "$DEST/$path" | cut -d' ' -f1)" != "$hash" ]; then
+      if [ "$STRICT" = 1 ]; then echo "  BAD    $path" >&2; bad=1; continue; fi
+      echo "  BAD    $path (removed)"; rm -f "$DEST/$path"; bad=1
+    fi
   done < "$DEST/SHA256SUMS"
+  if [ "$bad" = 1 ] && [ "$STRICT" = 1 ]; then echo "Font files changed on disk (--strict: nothing was replaced)" >&2; exit 1; fi
   [ "$bad" = 0 ] || echo "  (removed files are downloaded again below)"
 fi
+KNOWN=""
+[ "$STRICT" = 1 ] && [ -f "$DEST/SHA256SUMS" ] && KNOWN=$(cut -d' ' -f3- "$DEST/SHA256SUMS")
 
 # fetch NAME CSS-URL: the stylesheet, its font files, and a local copy of the stylesheet pointing at them.
 fetch() {
@@ -40,6 +57,9 @@ fetch() {
   for font in $(printf '%s\n' "$css" | grep -o 'https://fonts\.gstatic\.com/[^)]*' | sort -u); do
     file=files/${font#https://fonts.gstatic.com/s/}
     out=$DEST/$file
+    if [ -n "$KNOWN" ] && ! printf '%s\n' "$KNOWN" | grep -qxF "$file"; then
+      echo "  $file isn't in fonts/SHA256SUMS: Google serves a different file now (--strict: stopping)" >&2; exit 1
+    fi
     if [ ! -s "$out" ]; then
       mkdir -p "$(dirname "$out")"
       curl -fsSL --retry 3 -o "$out.part" "$font"

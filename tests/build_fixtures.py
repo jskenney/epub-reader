@@ -255,6 +255,9 @@ def main():
     # Two different books with the same title and no identifier (REVIEW.md L-13).
     for name, n in (("twin-a", 3), ("twin-b", 2)):
         epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)
+    # A book using the reader's own ids (REVIEW.md L-11): page counting must still find the real end.
+    epub(books / "reader-ids.epub", "Reader Ids", [("c1.xhtml", "One", '<p id="spine-end">Starts here. <a id="to-end" href="#spine-flow">to the end</a></p>'
+         + paragraphs("Ids", 30) + '<p id="spine-flow">The end.</p>')], uid="urn:reader-ids")
     # Twin C: twin A's title and file names, different text (REVIEW.md M-10): a different book.
     epub(books / "twin-c.epub", "Twin Title", [(f"c{i}.xhtml", f"twin-c {i}", f"<h1>twin-c part {i}</h1>" + paragraphs("twin-c", 2)) for i in range(1, 4)], uid=None)
     # Twin A after a metadata edit (new author, a date, a cover), and after being given an identifier (M-10).

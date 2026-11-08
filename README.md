@@ -256,7 +256,9 @@ sites. Without them it falls back to cdnjs and Google Fonts.
   `FONTS` in `index.html`) and the WOFF2 files under `fonts/files/`. Google
   changes its font files from time to time, so they can't be pinned in
   advance: each download must be a real WOFF2 file, and `fonts/SHA256SUMS`
-  records them so later runs can check nothing has changed on disk.
+  records them so later runs can check nothing has changed on disk. With
+  `--strict`, a changed file, or a font file Google now serves that isn't in that
+  list, stops the run instead of being fetched again.
 - `LIB_FILES` says where `libs/` and `fonts/` are (default: next to the
   page), like `VOICE_FILES` for the voices.
 - `ALLOW_CDN = false` makes the reader refuse CDNs entirely: missing libraries

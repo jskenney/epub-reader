@@ -722,7 +722,7 @@ async function zipFromUrl(url, init = {}){
 }
 
 function zipSource(zip){
-  const blobs = [];
+  const blobs = new Set();
   return {
     kind: 'zip',
     async text(p){ const f = getFile(zip, p); return f ? clean(await f.async('string')) : null; },
@@ -731,9 +731,10 @@ function zipSource(zip){
       const f = getFile(zip, p); if (!f) return null;
       if (type.startsWith('font/')) return `data:${type};base64,` + await f.async('base64');
       const u = URL.createObjectURL(new Blob([await f.async('uint8array')], { type }));
-      blobs.push(u); return u;
+      blobs.add(u); return u;
     },
-    dispose(){ blobs.forEach(u => URL.revokeObjectURL(u)); }
+    revoke(u){ URL.revokeObjectURL(u); blobs.delete(u); },
+    dispose(){ blobs.forEach(u => URL.revokeObjectURL(u)); blobs.clear(); }
   };
 }
 function dirSource(base){
@@ -1096,6 +1097,7 @@ async function openComic(zip, name, { key } = {}){
     async text(p){ return files.has(p) ? files.get(p) : zsrc.text(p); },
     async exists(p){ return files.has(p) || zsrc.exists(p); },
     url: (p, type) => zsrc.url(p, type),
+    revoke: u => zsrc.revoke(u),
     dispose(){ zsrc.dispose(); }
   };
   const spine = parts.map((_, i) => ({ id: `part${i + 1}`, href: path(i), path: path(i), type: 'text/html', props: [], overlay: '', linear: true }));
@@ -1266,6 +1268,7 @@ async function openBook(zip, { sample = false, name = '' } = {}){
 async function startBook(next){
   if (book) book.src.dispose();
   book = next;
+  pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
   const spine = book.spine;
   search.token++; Object.assign(search, { q: '', hits: [], cur: -1, shown: false });
   $('#searchBox').value = ''; $('#searchPanel').hidden = true; $('#tocNav').hidden = false; $('#searchResults').replaceChildren();
@@ -1629,6 +1632,7 @@ async function buildPage(src, path){
   const clip = out.createElement('div'); clip.id = 'spine-clip';
   const flow = out.createElement('div'); flow.id = 'spine-flow';
   if (sBody) for (const c of [...sBody.childNodes]) flow.append(out.importNode(c, true));
+  renameReaderIds(flow);
   const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
   clip.append(flow); out.body.append(clip);
   // Chapters parsed as XHTML keep the case of names (<IMG SRC>, <IFRAME>), which the checks below wouldn't
@@ -1677,7 +1681,8 @@ function releaseComicImages(shownPath){
       const job = book.urls.get(img);
       if (!job) continue;
       book.urls.delete(img);
-      Promise.resolve(job).then(u => { if (u?.startsWith('blob:')) URL.revokeObjectURL(u); });
+      const src = book.src;
+      Promise.resolve(job).then(u => { if (u?.startsWith('blob:')) src.revoke ? src.revoke(u) : URL.revokeObjectURL(u); });
     }
   }
 }
@@ -1720,6 +1725,13 @@ async function chapterSource(item){
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
   return (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
 }
+// A book element with one of the reader's own ids (spine-end, spine-flow, …) would be found instead of the
+// reader's, and throw off page counting: it is renamed (book-spine-end), and links to it follow.
+function renameReaderIds(root){
+  const renamed = new Set();
+  for (const el of root.querySelectorAll('[id^="spine-" i]')) { renamed.add(el.id); el.id = 'book-' + el.id; }
+  if (renamed.size) for (const a of root.querySelectorAll('a[href^="#"]')) if (renamed.has(a.getAttribute('href').slice(1))) a.setAttribute('href', '#book-' + a.getAttribute('href').slice(1));
+}
 // A detached copy of a chapter, built like the page shown in the frame (without its styles and resources),
 // so its text splits into the same blocks and sentences: for preparing speech ahead and for search.
 async function chapterDoc(i){
@@ -1728,6 +1740,7 @@ async function chapterDoc(i){
   const flow = out.createElement('div'); flow.id = 'spine-flow';
   const body = src.getElementsByTagNameNS('*', 'body')[0];
   if (body) for (const c of [...body.childNodes]) flow.append(out.importNode(c, true));
+  renameReaderIds(flow);
   const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
   out.body.append(flow);
   sanitize(out);
@@ -1800,12 +1813,12 @@ function showPage(n){
 function position(frag, f){
   if (scrolling()) {
     const doc = frame.contentDocument, se = scroller(); if (!se) return;
-    const el = frag && (doc.getElementById(frag) || doc.getElementsByName(frag)[0]);
+    const el = frag && (doc.getElementById(/^spine-/i.test(frag) ? 'book-' + frag : frag) || doc.getElementsByName(frag)[0]);
     scrollTo(el ? el.getBoundingClientRect().top + se.scrollTop - 24 : (f || 0) * (se.scrollHeight - se.clientHeight));
     return;
   }
   const g = geom(); if (!g) return;
-  const el = frag && (g.doc.getElementById(frag) || g.doc.getElementsByName(frag)[0]);
+  const el = frag && (g.doc.getElementById(/^spine-/i.test(frag) ? 'book-' + frag : frag) || g.doc.getElementsByName(frag)[0]);
   if (el) showPage(Math.floor((el.getBoundingClientRect().left - g.left + 1) / g.step));
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
@@ -3028,13 +3041,26 @@ self.onmessage = e => { const m = e.data; queue = queue.then(() => handle(m)); }
 // first and fall back to Hugging Face for anything it doesn't have.
 function preferLocal(remote, local, pinned, noCdn) {
   const net = self.fetch.bind(self);
+  // A "not found" page under another content type: look at the reply's first bytes (a copy of it, so the
+  // reply itself is untouched), as realFile() does on the page.
+  const looksLikePage = async r => {
+    try {
+      const rd = r.clone().body.getReader(), { value } = await rd.read(); rd.cancel().catch(() => {});
+      // (Inside this template string: no backslashes, so the worker sees the pattern as written.)
+      const t = new TextDecoder().decode((value || new Uint8Array()).subarray(0, 256)).replace(/^[\ufeff]/, '').trimStart();
+      return /^<(!doctype|html|head|body|[?]xml|!--)/i.test(t);
+    } catch (e) { return false; }
+  };
   self.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url.startsWith(remote)) {
       const rest = url.slice(remote.length);
       // A "not found" page served with status 200 isn't the file: use the original then.
       if (local) {
-        try { const r = await net(local + rest, init); if (r.ok && !(r.headers.get('content-type') || '').toLowerCase().includes('text/html')) return r; } catch (e) {}
+        try {
+          const r = await net(local + rest, init);
+          if (r.ok && !(r.headers.get('content-type') || '').toLowerCase().includes('text/html') && !(await looksLikePage(r))) return r;
+        } catch (e) {}
       }
       if (noCdn) return new Response('not self-hosted', { status: 404 });
       return net(pinned + rest, init);   // the pinned revision, not whatever "main" is now
@@ -3070,8 +3096,18 @@ const k = { state: 'idle', worker: null, gpu: false, device: '', error: '', prog
 const kokoroFits = () => /^en\b/i.test(bookLang());
 (async () => { try { k.gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch { k.gpu = false; } if (tts.open) ttsUpdateBar(); })();
 
+// A module worker from source text. Its blob URL is revoked once the worker has started (its first message)
+// or failed, rather than left for the life of the page.
+function workerFrom(source){
+  const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+  const w = new Worker(url, { type: 'module' });
+  const revoke = () => URL.revokeObjectURL(url);
+  w.addEventListener('message', revoke, { once: true });
+  w.addEventListener('error', revoke, { once: true });
+  return w;
+}
 function kWorker(){
-  const w = new Worker(URL.createObjectURL(new Blob([KOKORO_WORKER], { type: 'text/javascript' })), { type: 'module' });
+  const w = workerFrom(KOKORO_WORKER);
   w.onmessage = ({ data: m }) => {
     if (m.type === 'progress') kProgress(m.p);
     else if (m.type === 'ready') k.onLoad?.res();
@@ -3184,7 +3220,7 @@ const pk = { state: 'idle', worker: null, lang: '', voices: [], refs: new Map(),
 const pkReady = () => pk.state === 'ready' && pk.lang === pocketLang();
 const pkVoice = () => pk.voices.includes(pk.voice) ? pk.voice : pk.voices[0];
 function pkWorker(lib){
-  const w = new Worker(URL.createObjectURL(new Blob([`import ${JSON.stringify(lib + 'worker.js')};`], { type: 'text/javascript' })), { type: 'module' });
+  const w = workerFrom(`import ${JSON.stringify(lib + 'worker.js')};`);
   w.onmessage = ({ data: m }) => {
     if (m.type === 'progress') { if (m.label && m.total) pk.files[m.label] = { loaded: m.loaded || 0, total: m.total }; pkProgress(); }
     else if (m.type === 'ready') pk.bundle = m.bundle;
