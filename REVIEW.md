@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-08, after round 8): `index.html` (about 4,700 lines), the fetch scripts,
+Review of the repository (2026-11-08, after round 9): `index.html` (about 4,700 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -19,10 +19,15 @@ for, but not the author's conclusions. Their findings were reproduced again and 
 - **M-21 and M-22.**
 - **L-60 to L-67,** including two regressions from round 8's path work.
 
-All of these are in the Resolved table. *Reproduced* means confirmed in Chromium, Node or nginx against the real
+All of these are in the Resolved table.
+
+Round 9 (`90a6b6f` to `614e88c`) fixed L-68, L-69, L-70 and D-4. An independent review of it found that the
+L-68 announcements were not repeated when the bar was reopened and swallowed changes that differ only in
+numbers (L-71), and a few inaccurate sentences (D-5): the gzip note, which files each fetch script reads, and
+`FULL_PRECISION` for Kokoro on WebGPU. Both were fixed in `7a86a5f`. *Reproduced* means confirmed in Chromium, Node or nginx against the real
 code; *read* means confirmed by reading the code only.
 
-**Tests.** All 109 tests pass, as root and (for the scripts) as an unprivileged user. Five more need `SLOW=1` or
+**Tests.** All 111 tests pass, as root and (for the scripts) as an unprivileged user. Five more need `SLOW=1` or
 `NETWORK=1`. They passed here before the last two fix commits, which don't touch the voice or loading code:
 - the real Kokoro and Pocket TTS, self-hosted and from the CDNs under the CDN policy
 - libraries and fonts from the CDNs
@@ -38,7 +43,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
   folder that linked back into the repository. That overwrote the working `index.html` and
   `libs/jszip.min.js`. No commit was affected: both were restored and checked, and the links were removed.
 
-**Labels.** Each item has an ID you can ask for by name (for example, "fix T-11 and D-4").
+**Labels.** Each item has an ID you can ask for by name (for example, "fix T-11 and T-13").
 
 | Prefix | Meaning |
 |---|---|
@@ -52,47 +57,21 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-No critical, high, medium or low items are open from this round's reviews, except the three minor
-observations L-68 to L-70. The other open items are:
+No critical, high, medium or low items are open. The open items are:
 - **Tests:** T-11 (the weekly workflow hasn't run yet) and T-13 to T-17.
-- **Documentation:** D-4.
-- **Enhancements.**
+- **Enhancements:** E-1 to E-11 and E-15.
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
-| [L-68](#l-68-the-read-aloud-status-announces-every-download-step) | The read-aloud status announces every download step | Low |
-| [L-69](#l-69-nginxconfexample-compressible-files-ignore-range-requests-when-the-browser-accepts-gzip) | nginx.conf.example: compressible files ignore range requests when the browser accepts gzip | Low |
-| [L-70](#l-70-looking-up-a-file-that-differs-only-in-case-scans-every-name) | Looking up a file that differs only in case scans every name | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-13](#t-13-a-self-hosting-test-needs-internet-but-isnt-gated) | A self-hosting test needs internet but isn't gated | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
 | [T-15](#t-15-test-housekeeping) | Test housekeeping | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-17](#t-17-workflow-upkeep) | Workflow upkeep | Tests |
-| [D-4](#d-4-documentation-out-of-date) | Documentation out of date | Docs |
 | [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
-
-## Low
-
-### L-68. The read-aloud status announces every download step
-
-*Read* (new). `#ttsStatus` is now a live region (L-54), so a screen reader hears each progress update while a
-voice model downloads ("Downloading natural voice… 12%", "13%", …). **Fix:** announce the start and the end, and
-update the percentage without announcing it (or every 25%).
-
-### L-69. nginx.conf.example: compressible files ignore range requests when the browser accepts gzip
-
-*Reproduced with nginx 1.24* (unchanged by round 8). nginx serves gzip-eligible types (such as `.wasm`) whole
-when compressing, ignoring `Range`. Nothing in the reader asks for ranges of those files, so this only matters
-for other clients. **Fix:** leave it, or turn off gzip for files that are fetched by range.
-
-### L-70. Looking up a file that differs only in case scans every name
-
-*Read* (new). `getFile`'s case- and Unicode-insensitive fallback (L-48) compares against every entry name on
-each miss: about 4.6 ms per miss in an archive of 20,000 files. **Fix:** build the folded-name map once per
-archive.
 
 ## Tests
 
@@ -143,18 +122,6 @@ the reader policy and nothing leaked. **Fix:** also run them on a port without t
 *Read.* `slow.yml` uses Node 20 (end of life since April 2026), `checkout@v4`/`setup-node@v4` (Node 20
 runtime), `npm install` rather than `npm ci`, and downloads about 900 MB of models every run without a cache.
 
-## Documentation
-
-### D-4. Documentation out of date
-
-*Read.*
-- README says "the 27 voices" in one place; there are 28.
-- `tests/run.sh` says Node 18+; Playwright needs Node 20.
-- README says Markdown is loaded from cdnjs; it comes from `libs/` first.
-- The fetch scripts' "run it in that folder" leaves out that they work in their own folder and need
-  `checksums/` and `index.html` beside them.
-- A comment on Pocket TTS in `index.html` says the int8 models are the default; full precision is.
-
 ## Enhancements
 
 ### E-1. Footnote pop-ups
@@ -199,9 +166,9 @@ items) would suit comics-style and picture books.
 
 ## Suggested order
 
-1. **T-11:** run the workflow once by hand.
-2. **D-4** and **T-13 to T-17:** documentation and test housekeeping.
-3. **L-68 to L-70,** then the enhancements, as wanted.
+1. **T-11:** run the workflow once by hand (Actions → Slow tests → Run workflow).
+2. **T-13 to T-17:** test housekeeping.
+3. The enhancements, as wanted.
 
 ## Resolved
 
@@ -306,6 +273,10 @@ From all reviews so far, with the commits that fixed them.
 | L-65 | Narration jumped chapters on a click past its last clip while paused (round 8 review) | `f8ed09c` |
 | L-66 | Space didn't pause with the position ribbon focused (round 8 review) | `f8ed09c` |
 | L-67 | A listener left per server-voice retry; a vague worker message error; README config ranges (round 8 review) | `f8ed09c` |
+| L-68 | The read-aloud status announced every download step | `90a6b6f`, `7a86a5f` |
+| L-69 | nginx.conf.example: why books, audio and models stay out of gzip_types | `99b2a18`, `7a86a5f` |
+| L-70 | Case-insensitive file lookups scanned every name in large archives | `90a6b6f` |
+| L-71 | Status announcements weren't repeated on reopening the bar, and changes differing only in numbers were swallowed (round 9 review) | `7a86a5f` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -320,6 +291,8 @@ From all reviews so far, with the commits that fixed them.
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
+| D-4 | Documentation out of date (voice count, Node version, Markdown library, fetch-script folders, model precision) | `614e88c` |
+| D-5 | Inaccurate sentences from D-4 and L-69: the gzip note, which files each fetch script reads, FULL_PRECISION on WebGPU (round 9 review) | `7a86a5f` |
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
