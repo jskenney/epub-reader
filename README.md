@@ -275,6 +275,35 @@ large model files aren't downloaded for this, since Hugging Face records
 their SHA-256. Each script also has a `--list` option that prints what it
 would download without downloading it.
 
+### Upgrading a pinned version
+
+Library versions and model revisions are pinned in two places each, which must agree
+(`tests/scripts.test.js` checks this):
+
+| What | In `index.html` | In the fetch script |
+| --- | --- | --- |
+| JSZip | `LIBS.jszip.cdn` | `JSZIP` in `fetch-libs.sh` |
+| marked | `MARKED_URL` | `MARKED` in `fetch-libs.sh` |
+| kokoro-js | `KOKORO.lib` | `KOKORO_JS` in `fetch-kokoro.sh` (and `TRANSFORMERS`, the transformers.js it bundles) |
+| Kokoro model | `KOKORO.revision` | `REV` in `fetch-kokoro.sh` |
+| pocket-tts-js | `POCKET.lib` | `POCKET_JS` in `fetch-pocket.sh` |
+| ONNX Runtime (Pocket) | `POCKET.ort` | `ORT` in `fetch-pocket.sh` |
+| Pocket model | `POCKET.model` | `REV` in `fetch-pocket.sh` |
+
+To upgrade one:
+
+1. Change the version or revision in both places.
+2. Run `python3 tools/make-checksums.py libs` (or `kokoro`, `pocket`) to rewrite its list in
+   `checksums/`. For a library, it also prints the new `sha384-…` hash: put it in `integrity` in `LIBS`,
+   or the browser refuses the new file.
+3. Run the fetch script again (`./fetch-libs.sh`, …): the old files fail the new checksums and are
+   downloaded again.
+4. For a new model revision, check that every voice and language still works (the French Pocket TTS bundle
+   once had no voices at a revision), and update `POCKET_LANGS` sizes if the files changed.
+5. Fonts aren't pinned: rerun `./fetch-fonts.sh` after changing `FONTS` in `index.html`.
+6. Run the tests (`tests/run.sh`, and `SLOW=1 tests/run.sh` for the voice models), and commit
+   `index.html`, the script and `checksums/` together.
+
 ## Self-hosting Pocket TTS
 
 ```bash

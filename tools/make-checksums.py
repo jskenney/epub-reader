@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Write checksums/kokoro.sha256 and checksums/pocket.sha256: the SHA-256 of every file the fetch scripts can
+"""Write checksums/libs.sha256, kokoro.sha256 and pocket.sha256: the SHA-256 of every file the fetch scripts can
 download, which they then check after downloading. Run it after changing a version or revision pinned in
-fetch-kokoro.sh or fetch-pocket.sh (and index.html):
+a fetch script (and index.html); see "Upgrading a pinned version" in the README.
 
-    python3 tools/make-checksums.py            # both
+    python3 tools/make-checksums.py            # all three
     python3 tools/make-checksums.py pocket     # one
+
+For libs it also prints the Subresource Integrity hash (sha384) of each library, for LIBS in index.html.
 
 Large model files aren't downloaded: their SHA-256 comes from Hugging Face's file list for the pinned
 revision (Git LFS records it). Everything else is downloaded with curl and hashed.
 """
+import base64
 import hashlib
 import json
 import re
@@ -17,7 +20,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-JOBS = {"kokoro": [["./fetch-kokoro.sh", "--list"]],
+JOBS = {"libs": [["./fetch-libs.sh", "--list"]],
+        "kokoro": [["./fetch-kokoro.sh", "--list"]],
         "pocket": [["./fetch-pocket.sh", "--list", "all"], ["./fetch-pocket.sh", "--list", "--int8", "all"]]}
 HF = re.compile(r"^https://huggingface\.co/([^/]+/[^/]+)/resolve/([^/]+)/(.+)$")
 trees = {}
@@ -50,7 +54,10 @@ def main(names):
             digest = lfs_sha256(*m.groups()) if m else None
             how = "lfs"
             if not digest:
-                digest, how = hashlib.sha256(curl(url)).hexdigest(), "downloaded"
+                data = curl(url)
+                digest, how = hashlib.sha256(data).hexdigest(), "downloaded"
+                if path.endswith(".min.js"):
+                    print(f"  SRI for {path}: sha384-{base64.b64encode(hashlib.sha384(data).digest()).decode()}", file=sys.stderr)
             print(f"  {how:10} {path}", file=sys.stderr)
             lines.append(f"{digest}  {path}")
         out = ROOT / "checksums" / f"{name}.sha256"

@@ -79,6 +79,19 @@ test('downloads are checked, and the check fails closed (L-3, L-4)', { skip: !li
   fs.rmSync(bin, { recursive: true, force: true });
 });
 
+test('versions pinned in index.html and in the fetch scripts agree (D-3)', () => {
+  const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const page = read('index.html'), libs = read('fetch-libs.sh'), kokoro = read('fetch-kokoro.sh'), pocket = read('fetch-pocket.sh');
+  const v = (src, name) => src.match(new RegExp(`^${name}=(\\S+)`, 'm'))?.[1];
+  assert.ok(page.includes(`/jszip/${v(libs, 'JSZIP')}/jszip.min.js`), 'JSZIP');
+  assert.ok(page.includes(`/marked/${v(libs, 'MARKED')}/marked.min.js`), 'MARKED');
+  assert.ok(page.includes(`kokoro-js@${v(kokoro, 'KOKORO_JS')}/`), 'KOKORO_JS');
+  assert.ok(page.includes(`revision: '${v(kokoro, 'REV')}'`), 'Kokoro REV');
+  assert.ok(page.includes(`pocket-tts-js@${v(pocket, 'POCKET_JS')}/`), 'POCKET_JS');
+  assert.ok(page.includes(`onnxruntime-web@${v(pocket, 'ORT')}/`), 'ORT');
+  assert.ok(page.includes(`pocket-tts-onnx/resolve/${v(pocket, 'REV')}/`), 'Pocket REV');
+});
+
 test('no GNU-only sed escapes (a tab written as \\t) in the scripts (M-4)', () => {
   for (const f of ['fetch-libs.sh', 'fetch-kokoro.sh', 'fetch-pocket.sh', 'fetch-fonts.sh']) {
     const sedCalls = fs.readFileSync(path.join(REPO, f), 'utf8').split('\n').filter(l => /\bsed\b/.test(l) && !l.trim().startsWith('#'));
