@@ -1,43 +1,40 @@
 # Code and security review
 
-Review of the repository (2026-11-08, updated after round 4): `index.html` (about 4,100 lines), the fetch scripts,
-`tools/make-checksums.py`, `nginx.conf.example` and the test suite in `tests/`. It replaces the earlier
-review documents. Open items keep their IDs from those documents; new findings are numbered after the
+Review of the repository (2026-11-08, updated after round 5): `index.html` (about 4,400 lines), the fetch
+scripts, `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml` and the test suite in
+`tests/`. Open items keep their IDs from earlier versions of this document; new findings are numbered after the
 highest earlier ID in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
 
 ## Method
 
-**Round 3** (commits `7c5c55c` to `630738a`) fixed M-7, M-8, M-9, L-12, L-15, L-20 to L-24, T-6, T-8 and D-3.
-An independent review of those commits found:
-- **H-4,** an exponential regex that could freeze the page on ordinary CSS. Fixed in `87cd424`.
-- **L-25 to L-28 and T-9.**
+Each round fixes the items asked for. An independent reviewer then goes over the round's commits, with the
+code and what the changes were for but not the author's conclusions. Each finding is checked again before it
+is recorded. *Reproduced* means confirmed in Chromium or Node against the real code; *read* means confirmed
+by reading the code only.
 
-**Round 4** (commits `432deba` to `b834226`) fixed M-10, T-7, L-25, L-26, L-27, L-28 and T-9. A second
-independent review of those commits found:
-- **H-5,** another exponential regex, in the pattern that strips `<base>` and `<meta>` before parsing. An
-  unclosed tag of about 130 bytes froze the tab. It is now a linear scanner (`78a8a9e`).
-- **Desyncs in the CSS normalizer** that reopened some L-25 forms (escaped `url(`, `\)`, CR and FF in strings,
-  long whitespace after `url(`), and two `@import` forms. All fixed in `78a8a9e`.
-- **Position-key collisions.** Books with the same title and file names but different text shared one
-  position. A newly given identifier also deleted the position of a copy without one. Both fixed in
-  `78a8a9e`.
-- **Clip versions** for saved server-voice audio could be stale or keep changing. Fixed in `78a8a9e`.
-- **What is left** is recorded as L-29 to L-31 and T-10.
+- **Round 3** (`7c5c55c` to `630738a`): the review found H-4, an exponential regex. Fixed in `87cd424`.
+- **Round 4** (`432deba` to `b834226`): the review found H-5, another exponential regex. Fixed in `78a8a9e`.
+- **Round 5** (`48d5993` to `a9c1cce`) fixed L-6 to L-11, L-17, L-29, L-30, L-31, T-3, T-4, T-5 and T-10. Its
+  review found:
+  - **M-11:** four differences between the new CSS tokenizer and Chromium's that let remote addresses
+    through, imported sheets joining into new addresses, and a quadratic rescan. Reproduced in Chromium;
+    fixed in `3a98b99`.
+  - **M-12:** the loose position record mixed up different books that share a cover page. Reproduced; fixed
+    in `5199dda`.
+  - **L-32 to L-34:** fixed in `76a92bc`, `f7c6ef9` and `87c0cff`.
+  - **What is left:** recorded as L-35 to L-37 and T-11.
 
-Each reviewer was given the code and what the changes were for, but not the author's conclusions. Each
-finding was checked again before it was recorded. *Reproduced* means confirmed in Chromium or Node against
-the real code; *read* means confirmed by reading the code only.
+**Tests.** All 86 tests pass. Five more need `SLOW=1` (the real Kokoro and Pocket TTS models) or `NETWORK=1`
+(the CDNs). The real-model tests passed in this session, after a broken pattern in the Kokoro worker was
+caught and fixed. The `NETWORK=1` tests could not be run here, because this machine has no internet access
+(see T-11). Each fix in round 5 has a test, and most of those tests were run against the code before the fix
+and failed there. The suite now also covers:
+- CSS cleaning against every bypass found so far, with each result loaded in Chromium.
+- Device voices (with a fake speech engine) and publisher narration (a narrated test book).
+- The CDN version of the reader policy, checked offline by answering CDN requests with local copies.
+- `lazyZip` run in Node on archives built in memory.
 
-**Tests.** All 69 tests pass. Two more, which load the real Kokoro and Pocket TTS models, need `SLOW=1`.
-Each fix in rounds 3 and 4 has a test, apart from the cases in T-10. Most were run against the code before
-the fix and failed there; the round 4 HTML test hangs the old pre-parse code. The suite now also covers:
-- Same-size book replacements, on servers with strong, weak or no validators.
-- Padding after the archive, malformed Unicode Path fields, and oversized entries.
-- Position keys across metadata edits, older keys and newly given identifiers.
-- Clips outside the voices folder, re-recorded clips, and the versions pinned in `index.html` and the fetch
-  scripts.
-
-**Labels.** Each item has an ID you can ask for by name (for example, "fix L-29 and T-10").
+**Labels.** Each item has an ID you can ask for by name (for example, "fix L-35 and T-11").
 
 | Prefix | Meaning |
 |---|---|
@@ -52,81 +49,26 @@ the fix and failed there; the round 4 HTML test hangs the old pre-parse code. Th
 ## Summary
 
 No critical, high or medium items are open. The open items are low:
-- **Defence in depth.** The CSS cleaning is still pattern-based (L-29); the book-page policy is the backstop.
-- **Small differences from JSZip** in what the in-place reader accepts (L-30).
-- **Small leftovers** in position keys and voice clips (L-31).
-- **Older small leaks and quirks.**
+- **L-18:** in the server repository.
+- **L-35:** what imported stylesheets lose when they are pasted in.
+- **L-36:** older position keys that accumulate.
+- **L-37:** a short window in which re-recorded voice clips are missed.
+
+Tests: T-11 covers the network and model tests, which run only in the new weekly workflow, which hasn't run
+yet.
 
 ## Open items
 
 | ID | Title | Area |
 |---|---|---|
-| [L-6](#l-6-fetch-fontssh-is-trust-on-first-use) | `fetch-fonts.sh` is trust-on-first-use | Fetch scripts |
-| [L-7](#l-7-kokoros-local-first-fetch-shim-is-weaker-than-realfile) | Kokoro's local-first fetch shim is weaker than `realFile()` | Voices |
-| [L-8](#l-8-worker-blob-urls-are-never-revoked) | Worker blob URLs are never revoked | Memory |
-| [L-9](#l-9-reading-pace-state-isnt-reset-for-a-new-book) | Reading-pace state isn't reset for a new book | Bug |
-| [L-10](#l-10-zipsources-blob-url-list-keeps-growing) | `zipSource`'s blob URL list keeps growing | Memory |
-| [L-11](#l-11-a-book-element-with-idspine-end-breaks-page-counting) | A book element with `id="spine-end"` breaks page counting | Robustness |
-| [L-17](#l-17-single-letter-shortcuts-clash-with-screen-readers) | Single-letter shortcuts clash with screen readers | Accessibility |
 | [L-18](#l-18-tts-server-ports-are-open-to-the-network) | TTS server ports are open to the network (server repo) | Security |
-| [L-29](#l-29-the-css-cleaning-is-still-pattern-based) | The CSS cleaning is still pattern-based | Privacy / defence in depth |
-| [L-30](#l-30-the-in-place-reader-is-stricter-than-jszip-in-two-ways) | The in-place reader is stricter than JSZip in two ways | Compatibility |
-| [L-31](#l-31-position-key-and-voice-clip-leftovers) | Position-key and voice-clip leftovers | Bug / voices |
-| [T-3](#t-3-device-voices-and-publisher-narration-have-no-tests) | Device voices and publisher narration have no tests | Tests |
-| [T-4](#t-4-real-kokoro-and-pocket-tts-only-run-on-request) | Real Kokoro and Pocket TTS only run on request | Tests |
-| [T-5](#t-5-the-cdn-version-of-the-reader-policy-isnt-tested) | The CDN version of the reader policy isn't tested | Tests |
-| [T-10](#t-10-cases-checked-only-by-script) | Cases checked only by script | Tests |
+| [L-35](#l-35-inlined-stylesheets-lose-their-import-conditions) | Inlined stylesheets lose their `@import` conditions | Rendering |
+| [L-36](#l-36-older-position-keys-accumulate) | Older position keys accumulate | Storage |
+| [L-37](#l-37-a-voice-chosen-before-its-clip-check-finishes) | A voice chosen before its clip check finishes | Voices |
+| [T-11](#t-11-the-network-and-model-tests-only-run-weekly) | The network and model tests only run weekly | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel) | Enhancements | — |
 
 ## Low
-
-### L-6. `fetch-fonts.sh` is trust-on-first-use
-
-Google's font files can't be pinned in advance. The first download is recorded in `fonts/SHA256SUMS`, and
-later runs compare against it. A changed file is reported and fetched again, but the run doesn't fail. This
-is by design.
-
-**Fix:** a `--strict` option could make a mismatch fail instead.
-
-### L-7. Kokoro's local-first fetch shim is weaker than `realFile()`
-
-The worker's shim rejects only `text/html` replies. A "not found" reply with another content type is handed
-to the model loader instead of falling back to the pinned CDN revision, and fails with an obscure error.
-
-**Fix:** also reject replies that start with `<`, as `realFile()` does.
-
-### L-8. Worker blob URLs are never revoked
-
-The Kokoro and Pocket TTS workers are created from blob URLs that are never revoked: a tiny leak on each
-load attempt.
-
-**Fix:** revoke the URL once the worker has started.
-
-### L-9. Reading-pace state isn't reset for a new book
-
-`pace.lastTurn` and `pace.samples` carry over when a new book opens, so the first page turn may be paired
-with the previous book's timestamp. The bounds checks filter out most of this.
-
-**Fix:** reset them in `startBook()`.
-
-### L-10. `zipSource`'s blob URL list keeps growing
-
-As comic sections are revisited, revoked blob URLs stay in `zipSource`'s list until the book closes. The
-memory is freed; only the list grows.
-
-**Fix:** remove entries when they are revoked.
-
-### L-11. A book element with `id="spine-end"` breaks page counting
-
-A book element with that id comes before the reader's own end marker, so `geom()` counts pages wrongly.
-
-**Fix:** use an unguessable id, or keep a direct reference to the marker.
-
-### L-17. Single-letter shortcuts clash with screen readers
-
-C, F, T, L, I, R and / are global shortcuts, which can conflict with screen readers' browse-mode keys.
-
-**Fix:** a setting (and a `reader-config.json` key) to turn them off.
 
 ### L-18. TTS server ports are open to the network
 
@@ -136,77 +78,53 @@ delete voices and upload files of up to 1 GB.
 
 **Fix:** a firewall rule that allows only the proxy host.
 
-### L-29. The CSS cleaning is still pattern-based
+### L-35. Inlined stylesheets lose their import conditions
 
-*Read* (new). After each fix the reviewers found new forms. Every one was caught by the book-page policy:
-nothing left the site, but each logged a console message. The cleaning now:
-- Makes the CSS plain first: comments, line continuations, escaped names.
-- Then matches addresses with patterns.
+*Read*; this predates round 5. A local `@import` is pasted into the importing sheet.
+- **Conditions dropped.** The rule's media query, `supports()` and `layer()` are lost, so
+  `@import "print.css" print` also applies on screen.
+- **Late imports kept.** Imports after other rules, which browsers ignore, are pasted in too.
 
-A form that gets past both steps is still refused by the policy. One exception: with `ALLOW_CDN` on, the
-policy's `style-src` allows fonts.googleapis.com, so an `@import` from there would load.
+Since round 5, each pasted sheet is closed at its end and the result is read again, so nothing can join into a
+new address.
 
-**Fix:** tokenize CSS once, following the CSS Syntax spec, and check `url` tokens, `@import` preludes and
-`image-set` strings on the tokens.
+**Fix:** wrap the pasted sheet in `@media …{}`, `@supports …{}` or `@layer …{}` as its conditions say. Drop
+imports that come after other rules.
 
-### L-30. The in-place reader is stricter than JSZip in two ways
+### L-36. Older position keys accumulate
 
-*Read* (new).
-- **Checksums.** Every file read in place is checked against its CRC-32 (this is how L-26 catches same-size
-  replacements). JSZip doesn't check by default. An archive with wrong checksums that opened before now fails
-  on those files, saying "damaged archive, or the book changed".
-- **Size cap.** The 512 MB cap on a single file applies only in place. The whole-file JSZip path, used when
-  the server doesn't answer ranges, has none.
+*Read.* Positions saved under older keys (the whole package file's fingerprint, the title) are moved over once,
+by whichever book with that title opens first. Two cases leave keys behind:
+- **Older keys that weren't moved.** If the current key already has a position, the older keys are never
+  removed. Identical package files share those keys, so deleting them could take another book's position.
+- **A book whose last chapter was edited.** Its old key is kept, since the old file may still be read.
 
-**Fix:** accept the first difference, as damaged archives are rare and the message is clear. Apply the cap in
-the JSZip path too.
+Each key is a few dozen bytes.
 
-### L-31. Position-key and voice-clip leftovers
+**Fix:** an occasional cleanup of `spine:pos:` keys not used for a long time (store a last-read date with
+each).
 
-*Read* (new).
-- **Last chapter edited.** A book without an identifier whose last chapter is edited gets a new key (the key
-  includes that chapter's text, so different books with the same title and file names stay apart), and starts
-  again from the beginning.
-- **Old keys not cleaned up.** Older keys are moved over only while the current key has no position. Once it
-  has one, any older keys stay in storage.
-- **Waiting on HEAD requests.** The voice list waits for one HEAD request per voice (each up to 8 s) before
-  server voices can be used. With many voices on a slow server, that wait can be noticeable.
+### L-37. A voice chosen before its clip check finishes
 
-**Fix:** a "position moved" fallback that tries the key without the chapter text when the full key has
-nothing. Clean up older keys once the current one exists. Read only the selected voice's clip version, later.
+*Read.* When a server voice is chosen, its clip version is checked in the background, and reading can start
+before the check finishes. If the clip was re-recorded since, audio saved for the old clip can play once.
+
+**Fix:** await the check (one request) before the first passage after a voice change.
 
 ## Tests
 
-### T-3. Device voices and publisher narration have no tests
+### T-11. The network and model tests only run weekly
 
-Web Speech (device voices) and Media Overlays (publisher narration) were tested by hand earlier, but have no
-committed tests.
+New.
+- **Not run in this session.** The tests that load everything from the CDNs (`NETWORK=1`) couldn't run here:
+  there is no internet access. The offline check of the CDN policy did run.
+- **Workflow not yet run.** `.github/workflows/slow.yml` runs these tests and the real models weekly and on
+  demand, but it hasn't run yet.
+- **Scheduled runs can lapse.** GitHub disables scheduled workflows after 60 days without activity in the
+  repository.
+- **`--strict` isn't run in CI.** A fresh checkout has no font list to check against.
 
-**Fix:** a fake `speechSynthesis` (as used in the earlier manual tests) and a narrated test book.
-
-### T-4. Real Kokoro and Pocket TTS only run on request
-
-The tests that load the real models run only with `SLOW=1`, and only after their fetch scripts have run.
-That's reasonable given the models' size; a scheduled run on a machine with the models would catch upstream
-changes.
-
-### T-5. The CDN version of the reader policy isn't tested
-
-The tests block every other site, so only the self-hosted policy in `nginx.conf.example` is exercised. The
-commented CDN version (cdnjs, jsDelivr, Google Fonts, Hugging Face and its download hosts) was never run, and
-Hugging Face changes its download hosts from time to time.
-
-**Fix:** a test mode that allows those CDNs and sends that policy, run occasionally with network access.
-
-### T-10. Cases checked only by script
-
-New. Some cases are checked with Node scripts against the real functions, but have no committed test:
-- **CR and FF in CSS strings:** XHTML can't contain these characters.
-- **A refused or failed HEAD request for a voice clip.**
-- **The checksum on files over 32 MB:** checked on first read only.
-- **A 416 reply** on its own (the replacement test may meet a total-size mismatch first).
-
-**Fix:** a CSS unit test page served as HTML, a test-server switch that refuses HEAD, and a 416 case.
+**Fix:** run the workflow once by hand (Actions → Slow tests → Run workflow) and fix anything that fails there.
 
 ## Enhancements
 
@@ -246,10 +164,9 @@ saved-audio limit, remote content, shortcuts and so on.
 
 ## Suggested order
 
-1. **L-29:** a CSS tokenizer, to end the run of pattern bypasses for good.
-2. **L-31 and T-10:** small leftovers, with tests.
-3. **L-7 to L-11:** small fixes, quick to do together.
-4. **L-30, T-5, T-3, L-17, L-6** and the enhancements, as wanted.
+1. **T-11:** run the slow workflow once by hand.
+2. **L-35 and L-37:** small fixes.
+3. **L-36, L-18** and the enhancements, as wanted.
 
 ## Resolved
 
@@ -272,16 +189,25 @@ From all reviews so far, with the commits that fixed them.
 | M-8 | Range requests weren't tied to one version of the file; now `If-Range` and reply checks | `7c5c55c` |
 | M-9 | Decompression wasn't checked against declared sizes, and the small-file cache never emptied | `7c5c55c` |
 | M-10 | Editing a book without an identifier lost its position; keys now use title, chapter files and last chapter text | `432deba`, `78a8a9e` |
+| M-11 | The CSS tokenizer let remote addresses through in four ways (number, final escape, NUL, unclosed url string); imported sheets joined into new addresses; quadratic rescan (round 5 review) | `3a98b99` |
+| M-12 | The loose position record mixed up books sharing a title, file names and cover page, and deleted their keys (round 5 review) | `5199dda` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
 | L-4 | The "no pinned checksum" note used a substring match | `770c237` |
 | L-5 | `--list` only worked as the first argument | `770c237` |
+| L-6 | `fetch-fonts.sh` was trust-on-first-use; now `--strict` | `48d5993`, `87c0cff` |
+| L-7 | Kokoro's local-first shim accepted "not found" pages of other types | `48d5993` |
+| L-8 | Worker blob URLs were never revoked | `48d5993` |
+| L-9 | Reading-pace state wasn't reset for a new book | `48d5993` |
+| L-10 | `zipSource`'s blob URL list kept growing | `48d5993` |
+| L-11 | A book element with `id="spine-end"` broke page counting; the reader's ids now have a random part | `48d5993`, `f7c6ef9` |
 | L-12 | Voice clip URLs weren't restricted to the voices folder | `c24dd62`, `87cd424` |
 | L-13 | Books without an ID shared reading positions by title | `c992d26` |
 | L-14 | A bad `?book=` link fell back to the sample, not `default.epub` | `41455c8` |
 | L-15 | The server voice cache key depended on field order | `c24dd62` |
 | L-16 | The whole book file was held in memory; books are now read in place | `ef520ac` |
+| L-17 | Single-letter shortcuts clashed with screen readers; now a switch | `c4bcef1` |
 | L-19 | Parsing a book reported policy violations in the console | `8ead107` |
 | L-20 | CSS forms got past the cleaning (nested and escaped `image-set()`/`url()`, double escapes) | `4632330`, `87cd424` |
 | L-21 | Replacing a missing CSS file with `none` could drop a whole declaration; now `url(data:,)` | `4632330`, `87cd424` |
@@ -292,12 +218,22 @@ From all reviews so far, with the commits that fixed them.
 | L-26 | Range-request checks had gaps with weak or missing validators; now kind-with-kind checks and checksums | `888f900` |
 | L-27 | In-place ZIP reader leftovers: padding, Unicode Path bounds, size cap | `888f900` |
 | L-28 | Server voice details: instruction fallback, clip version in the key, values as sent | `aceea22`, `78a8a9e` |
+| L-29 | The CSS cleaning was pattern-based; now a CSS Syntax tokenizer | `5a16313`, `3a98b99` |
+| L-30 | The in-place reader was stricter than JSZip; uploads are lenient, and whole-file reads get the same checks | `079a2c8`, `76a92bc` |
+| L-31 | Position-key and voice-clip leftovers (the remaining part is L-36) | `fa178b5`, `5199dda` |
+| L-32 | Whole archives read by JSZip skipped checksums and inflated past their declared sizes (round 5 review) | `76a92bc` |
+| L-33 | Renaming book ids that start with `spine-` missed references to them (round 5 review) | `f7c6ef9` |
+| L-34 | `fetch-fonts.sh --strict` refetched missing files and ran without a list (round 5 review) | `87c0cff` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
+| T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
+| T-4 | Real Kokoro and Pocket TTS only ran on request; now also weekly | `4e3ceac` |
+| T-5 | The CDN version of the reader policy wasn't tested | `4e3ceac` |
 | T-6 | The in-place ZIP tests covered only the normal cases | `7c5c55c` |
-| T-8 | The hostile test book lacked the remaining CSS forms | `4632330` |
 | T-7 | Position-key tests left gaps | `432deba`, `78a8a9e` |
+| T-8 | The hostile test book lacked the remaining CSS forms | `4632330` |
 | T-9 | Gaps left after round 3 (same-size replacement, ZIP cases, pre-parse test, SRI check) | `888f900`, `37b6f2f`, `78a8a9e` |
+| T-10 | Cases checked only by script | `0231f23`, `5a16313`, `3a98b99` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
