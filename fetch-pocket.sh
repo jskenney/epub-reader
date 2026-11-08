@@ -13,7 +13,6 @@
 # The reader uses whichever of these files exist and falls back to the CDNs for the rest.
 set -euo pipefail
 cd "$(dirname "$0")"
-LIST=0; if [ "${1:-}" = --list ]; then LIST=1; shift; fi   # --list: print URL and path of each file, download nothing (tools/make-checksums.py)
 
 POCKET_JS=0.1.0                                         # must match POCKET.lib in index.html
 ORT=1.20.0                                              # must match POCKET.ort in index.html
@@ -33,9 +32,21 @@ bundle_for() {   # language code -> model bundle (keep in sync with POCKET_LANGS
     *) echo "Unknown language '$1' (use en, fr, de, it, pt, es or all)" >&2; exit 1 ;;
   esac
 }
-suffix=""   # full precision (the reader's default)
-if [ "${1:-}" = --int8 ]; then suffix=_int8; shift; fi
-langs=("$@"); [ ${#langs[@]} -gt 0 ] || langs=(en)
+# Arguments, in any order: language codes (or all), and the options
+#   --int8        the 8-bit models instead of full precision (the reader's default)
+#   --list        print the URL and path of each file and download nothing (tools/make-checksums.py uses it)
+#   --no-verify   skip the checksum check (not recommended)
+LIST=0 VERIFY=1 suffix="" langs=()
+for arg in "$@"; do
+  case "$arg" in
+    --list) LIST=1 ;;
+    --no-verify) VERIFY=0 ;;
+    --int8) suffix=_int8 ;;
+    -*) echo "Unknown option: $arg (options: --int8, --list, --no-verify)" >&2; exit 2 ;;
+    *) langs+=("$arg") ;;
+  esac
+done
+[ ${#langs[@]} -gt 0 ] || langs=(en)
 [ "${langs[0]}" = all ] && langs=(en fr de it pt es)
 
 say() { [ "$LIST" = 1 ] || echo "$@"; }
@@ -54,16 +65,18 @@ get() {   # get URL PATH-UNDER-DEST
 # Files that don't match are removed, so running the script again downloads them afresh.
 verify() {
   local sums=checksums/$1.sha256 bad=0 hash path tool
-  [ -f "$sums" ] || { echo "No $sums, so the files weren't verified" >&2; return; }
+  if [ "$VERIFY" = 0 ]; then echo "Checksums not checked (--no-verify)."; return; fi
+  [ -f "$sums" ] || { echo "Missing $sums, so the downloads can't be checked. Run --no-verify to skip the check." >&2; exit 1; }
   if command -v sha256sum >/dev/null; then tool=(sha256sum); elif command -v shasum >/dev/null; then tool=(shasum -a 256)
-  else echo "Neither sha256sum nor shasum found, so the files weren't verified" >&2; return; fi
+  else echo "Neither sha256sum nor shasum is installed, so the downloads can't be checked." >&2
+       echo "Install one (coreutils, or perl for shasum), or run again with --no-verify to skip the check." >&2; exit 1; fi
   echo "Checking files against $sums"
   while read -r hash path; do
     [ -f "$path" ] || continue
     if [ "$("${tool[@]}" "$path" | cut -d' ' -f1)" != "$hash" ]; then echo "  BAD    $path (removed)"; rm -f "$path"; bad=1; fi
   done < "$sums"
-  while IFS= read -r path; do
-    grep -qF "  $path" "$sums" || echo "  note   $path has no pinned checksum"
+  while IFS= read -r path; do   # lines are "<64 hex digits>  <path>": compare whole paths
+    awk -v p="$path" 'substr($0, 67) == p { found = 1 } END { exit !found }' "$sums" || echo "  note   $path has no pinned checksum"
   done < <(find "$DEST" -type f ! -name NOTICE.txt ! -name '*.part' | sort)
   if [ "$bad" = 1 ]; then echo "Some files didn't match their checksums and were removed; run this script again." >&2; exit 1; fi
   echo "All files match their checksums."

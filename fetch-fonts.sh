@@ -60,10 +60,11 @@ fetch ui "$ui"
 echo "Reading fonts"
 # FONTS entries with a Google Fonts family: { id: 'literata', ..., css: 'Literata:ital,...', ... }
 found=0
-while IFS=$'\t' read -r id spec; do
+# (Ids and family specs contain no spaces, so a space separates them: "\t" in a sed replacement is GNU-only.)
+while read -r id spec; do
   fetch "$id" "https://fonts.googleapis.com/css2?family=$spec&display=swap"
   found=1
-done < <(grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1\t\2/")
+done < <(grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1 \2/")
 [ "$found" = 1 ] || { echo "Couldn't find the FONTS list in index.html" >&2; exit 1; }
 
 # Record every font file for later runs.

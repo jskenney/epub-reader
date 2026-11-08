@@ -256,7 +256,11 @@ sites. Without them it falls back to cdnjs and Google Fonts.
 Every file `fetch-libs.sh`, `fetch-kokoro.sh` and `fetch-pocket.sh` download
 is checked against SHA-256 hashes committed in `checksums/`. A file that
 doesn't match is deleted, with a message to run the script again. Files
-already on disk are checked on every run too. After changing a pinned version
+already on disk are checked on every run too. The check fails closed: without
+`sha256sum` or `shasum`, or without the checksum list, the script stops
+instead of carrying on unchecked. `--no-verify` skips the check if you really
+need to. Options can go in any order (`./fetch-pocket.sh fr --int8`), and the
+scripts stick to what macOS's older bash and BSD tools support. After changing a pinned version
 or model revision, regenerate the lists with `python3 tools/make-checksums.py`;
 large model files aren't downloaded for this, since Hugging Face records
 their SHA-256. Each script also has a `--list` option that prints what it
