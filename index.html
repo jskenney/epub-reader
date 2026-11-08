@@ -1373,118 +1373,177 @@ function resourceURL(path){
   job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
 }
-const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
-// CSS escapes (\68ttp is "http") decoded in one pass, as the browser reads them, so an address is checked as
-// the browser will see it ("\00005c\00005c" is two backslashes, not one escaped one).
-const cssUnescape = t => t.replace(/\\(?:([0-9a-f]{1,6})[ \t\n\r\f]?|([\s\S]))/gi,
-  (_, h, c) => h ? String.fromCodePoint(Math.min(parseInt(h, 16), 0x10FFFF) || 0xFFFD) : c === '\n' ? '' : c);
-// A name written with escapes before "(" (u\72l(, im\61ge-set() is the same function to the browser:
-// written plainly, so the patterns below see it.
-// (Linear: a name starts only at a name's start, and a hex escape takes all its digits, so nothing backtracks
-// over ways to split them.)
-const plainFunctionNames = css => css.replace(/(?<![\w\\-])(?:[\w-]|\\(?:[0-9a-f]{1,6}(?![0-9a-f])[ \t\n\r\f]?|[^\n0-9a-f]))+(?=\()/gi,
-  name => { if (!name.includes('\\')) return name; const p = cssUnescape(name); return /^-?[a-z_][\w-]*$/i.test(p) ? p : name; });
-// One linear pass that makes a book's CSS plain for the patterns below, as the browser reads it: comments
-// become a space (a quote inside one no longer pairs with a real string), a "\" and newline inside a string
-// (a line continuation) is removed, and escaped at-rule names (@\69mport) are written plainly. Strings and
-// unquoted url() contents are copied as they are.
-function plainCss(css){
-  const out = [];
-  let i = 0, from = 0;
-  const n = css.length, flush = to => { if (to > from) out.push(css.slice(from, to)); };
-  while (i < n) {
-    const c = css[i];
-    if (c === '/' && css[i + 1] === '*') {
-      flush(i); out.push(' ');
-      const e = css.indexOf('*/', i + 2); i = from = e < 0 ? n : e + 2;
-    } else if (c === '"' || c === "'") {
-      let j = i + 1;
-      for (; j < n && css[j] !== c && css[j] !== '\n' && css[j] !== '\r' && css[j] !== '\f'; j++) {   // (a raw newline ends a string)
-        if (css[j] !== '\\') continue;
-        const nl = css[j + 1] === '\r' && css[j + 2] === '\n' ? 3 : /[\n\r\f]/.test(css[j + 1] || '') ? 2 : 0;
-        if (nl) { flush(j); from = j + nl; j += nl - 1; } else j++;
-      }
-      i = j + 1;
-    } else if (c === '\\') i += 2;
-    else if ((c === 'u' || c === 'U') && /^url\(/i.test(css.slice(i, i + 4)) && !/[\w\\-]/.test(css[i - 1] || '')) {
-      let j = i + 4;
-      while (j < n && /[ \t\n\r\f]/.test(css[j])) j++;
-      if (css[j] === '"' || css[j] === "'") i = j;   // a quoted address: read as a string next
-      else {   // unquoted: its contents are raw up to ")" (an escaped "\)" doesn't end it)
-        while (j < n && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
-        i = j + 1;
-      }
-    } else if (c === '@') {
-      const m = /^@((?:[\w-]|\\(?:[0-9a-f]{1,6}(?![0-9a-f])[ \t\n\r\f]?|[^\n\r\f0-9a-f]))+)/i.exec(css.slice(i, i + 200));
-      if (m && m[1].includes('\\')) {
-        const p = cssUnescape(m[1]);
-        if (/^-?[a-z][\w-]*$/i.test(p)) { flush(i); out.push('@' + p); from = i + m[0].length; }
-      }
-      i += m ? m[0].length : 1;
-    } else i++;
-  }
-  flush(n);
-  return out.join('');
-}
-const STRING_RE = /(['"])((?:\\[\s\S]|(?!\1)[^\\\n])*)\1/g;
-// Each image-set() (nested brackets and quoted strings included) as [start, end].
-function imageSets(css){
-  const out = [];
-  for (const m of css.matchAll(/(?:-webkit-)?image-set\(/gi)) {
-    if (out.length && m.index < out.at(-1)[1]) continue;   // inside one already found
-    let depth = 0, i = m.index + m[0].length - 1, q = '';
-    for (; i < css.length; i++) {
-      const c = css[i];
-      if (q) { if (c === '\\') i++; else if (c === q) q = ''; }
-      else if (c === '"' || c === "'") q = c;
-      else if (c === '(') depth++;
-      else if (c === ')' && --depth === 0) break;
+/* A book's CSS is read with a tokenizer that follows the CSS Syntax spec (level 3), so addresses are found as
+   the browser finds them: escapes decoded (u\72l( is url(, \68ttp is http), comments and strings kept apart,
+   line continuations and bad strings and urls handled as the browser does. Earlier versions matched patterns
+   on the text, and each fix was followed by another form that got past them. Only the address constructs are
+   rewritten; everything else is copied as written, so the browser reads it exactly as before. */
+const cssWs = c => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+const cssHex = c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+const cssNameStart = c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_' || (c !== undefined && c >= '\x80');
+const cssNameChar = c => cssNameStart(c) || (c >= '0' && c <= '9') || c === '-';
+// Tokens as { t: type, s: start, e: end, v: value }. Types: ws, comment, string, bad-string, url, bad-url,
+// function, ident, at, hash, number, ( ) [ ] { } , : ; and delim. Values of names, strings and urls are
+// decoded; function and at-rule names are lower-cased.
+function cssTokens(css){
+  const n = css.length, out = [];
+  const validEscape = j => css[j] === '\\' && j + 1 < n && css[j + 1] !== '\n' && css[j + 1] !== '\r' && css[j + 1] !== '\f';
+  const escape = j => {   // j: just after the backslash; returns [text, next]
+    if (!cssHex(css[j])) return [css[j] ?? '�', j + 1];
+    let k = j;
+    while (k < n && k - j < 6 && cssHex(css[k])) k++;
+    const cp = parseInt(css.slice(j, k), 16);
+    if (css[k] === '\r' && css[k + 1] === '\n') k += 2; else if (cssWs(css[k])) k++;
+    return [cp === 0 || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF ? '�' : String.fromCodePoint(cp), k];
+  };
+  const identStarts = j => css[j] === '-' ? cssNameStart(css[j + 1]) || css[j + 1] === '-' || validEscape(j + 1) : cssNameStart(css[j]) || validEscape(j);
+  const name = j => {   // returns [name, next]
+    let v = '';
+    for (;;) {
+      if (cssNameChar(css[j])) v += css[j++];
+      else if (validEscape(j)) { const [c, k] = escape(j + 1); v += c; j = k; }
+      else return [v, j];
     }
-    out.push([m.index, i + 1]);
+  };
+  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
+  const numberStarts = j => { NUM.lastIndex = j; return NUM.test(css) && !(css[j] === '.' && !/\d/.test(css[j + 1] || '')); };
+  let i = 0;
+  while (i < n) {
+    const s = i, c = css[i];
+    const push = (t, v) => out.push({ t, s, e: i, v });
+    if (c === '/' && css[i + 1] === '*') { const e = css.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; push('comment'); }
+    else if (cssWs(c)) { while (i < n && cssWs(css[i])) i++; push('ws'); }
+    else if (c === '"' || c === "'") {
+      let v = '', t = 'string';
+      for (i++; ; ) {
+        if (i >= n) break;
+        const d = css[i];
+        if (d === c) { i++; break; }
+        if (d === '\n' || d === '\r' || d === '\f') { t = 'bad-string'; break; }   // (the newline isn't part of it)
+        if (d === '\\') {
+          if (i + 1 >= n) { i++; continue; }
+          if (css[i + 1] === '\n' || css[i + 1] === '\f') { i += 2; continue; }   // a line continuation
+          if (css[i + 1] === '\r') { i += css[i + 2] === '\n' ? 3 : 2; continue; }
+          const [ch, k] = escape(i + 1); v += ch; i = k; continue;
+        }
+        v += d; i++;
+      }
+      push(t, v);
+    }
+    else if (c === '#' && (cssNameChar(css[i + 1]) || validEscape(i + 1))) { const [v, k] = name(i + 1); i = k; push('hash', v); }
+    else if ('()[]{},:;'.includes(c)) { i++; push(c); }
+    else if ((c === '+' || c === '-' || c === '.' || (c >= '0' && c <= '9')) && numberStarts(i)) {
+      NUM.lastIndex = i; NUM.test(css); i = NUM.lastIndex;
+      if (identStarts(i)) i = name(i)[1]; else if (css[i] === '%') i++;
+      push('number');
+    }
+    else if (c === '<' && css.startsWith('<!--', i)) { i += 4; push('delim'); }
+    else if (c === '-' && css.startsWith('-->', i)) { i += 3; push('delim'); }
+    else if (c === '@' && identStarts(i + 1)) { const [v, k] = name(i + 1); i = k; push('at', v.toLowerCase()); }
+    else if (identStarts(i)) {
+      const [v, k] = name(i); i = k;
+      if (css[i] !== '(') { push('ident', v); continue; }
+      i++;
+      let j = i;
+      while (cssWs(css[j])) j++;
+      if (v.toLowerCase() !== 'url' || css[j] === '"' || css[j] === "'") { push('function', v.toLowerCase()); continue; }
+      // An unquoted url( ... ): its contents are the address, up to ")".
+      let u = '', t = 'url';
+      for (i = j; ; ) {
+        if (i >= n) break;
+        const d = css[i];
+        if (d === ')') { i++; break; }
+        if (cssWs(d)) {
+          while (cssWs(css[i])) i++;
+          if (i >= n || css[i] === ')') { if (i < n) i++; break; }
+          t = 'bad-url'; continue;
+        }
+        if (t === 'bad-url') { i += validEscape(i) ? 2 : 1; continue; }   // skipped to ")" (escapes don't end it)
+        if (d === '"' || d === "'" || d === '(' || d <= '\x08' || d === '\x0B' || (d >= '\x0E' && d <= '\x1F') || d === '\x7F') { t = 'bad-url'; continue; }
+        if (d === '\\') {
+          if (validEscape(i)) { const [ch, k2] = escape(i + 1); u += ch; i = k2; } else { t = 'bad-url'; i++; }
+          continue;
+        }
+        u += d; i++;
+      }
+      push(t, t === 'url' ? u : undefined);
+    }
+    else { i++; push('delim'); }
   }
   return out;
 }
 // What a missing or remote image becomes: an empty picture, valid wherever an image is (unlike "none", which
 // would drop "cursor: url(x), pointer" or a font's whole src list), and nothing to fetch.
-const NO_IMAGE = 'url(data:,)';   // (unquoted: safe even where the url( was inside a string)
+const NO_IMAGE = 'url(data:,)';
+// A local address written as an unquoted url(), with the characters that would end it encoded.
+const cssUrl = u => `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))})`;
+// The addresses in a stylesheet: [{ s, e, ref, kind }], kind "import" (an @import rule, s..e the whole rule)
+// or "image" (a url token, url() or src() with a string, or a string inside image-set() or image()).
+function cssRefs(css){
+  const toks = cssTokens(css), refs = [], fns = [];
+  let block = 0;
+  const next = k => { while (toks[k]?.t === 'ws' || toks[k]?.t === 'comment') k++; return k; };
+  for (let k = 0; k < toks.length; k++) {
+    const tk = toks[k];
+    if (tk.t === 'url') refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
+    else if (tk.t === 'function') {
+      if (tk.v === 'url' || tk.v === 'src') {
+        const m = next(k + 1), q = next(m + 1);
+        if (toks[m]?.t === 'string' && toks[q]?.t === ')') { refs.push({ s: tk.s, e: toks[q].e, ref: toks[m].v, kind: 'image' }); k = q; continue; }
+      }
+      fns.push(tk.v);
+    }
+    else if (tk.t === '(') fns.push('(');
+    else if (tk.t === ')') fns.pop();
+    else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1) || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
+    else if (tk.t === '{') block++;
+    else if (tk.t === '}') block = Math.max(0, block - 1);
+    else if (tk.t === 'at' && (tk.v === 'import' || tk.v === 'namespace') && block === 0) {
+      // The prelude, to ";" or the end; a "{" makes it a block rule, which @import and @namespace aren't.
+      let m = k + 1;
+      while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++;
+      if (toks[m]?.t === '{') continue;
+      if (tk.v === 'import') {
+        const a = next(k + 1), at = toks[a];
+        let ref = at?.t === 'string' || at?.t === 'url' ? at.v : null;
+        if (at?.t === 'function' && at.v === 'url' && toks[next(a + 1)]?.t === 'string') ref = toks[next(a + 1)].v;
+        if (ref != null) refs.push({ s: tk.s, e: toks[m]?.e ?? css.length, ref, kind: 'import' });
+      }
+      k = m;   // (an @namespace address is a name, not a file: left alone)
+    }
+  }
+  return refs;
+}
 async function rewriteCss(css, cssPath, depth = 0){
-  css = plainCss(plainFunctionNames(css));   // (names first, so u\72l( is seen as url( too)
-  if (!ALLOW_REMOTE_CONTENT) {
-    // image-set() takes plain strings as well as url(): one with any remote entry counts as remote.
-    for (const [a, b] of imageSets(css).reverse()) {
-      const set = css.slice(a, b);
-      const refs = [...set.matchAll(STRING_RE)].map(m => m[2]).concat([...set.matchAll(URL_RE)].map(m => m[2]));
-      if (refs.some(r => isRemote(cssUnescape(r.trim())))) css = css.slice(0, a) + NO_IMAGE + css.slice(b);
-    }
-  }
-  // (A quoted address may hold ";"; the last rule of a sheet needs no ";"; a block "{" makes it no @import.)
-  for (const m of [...css.matchAll(/@import\s*(?:url\(\s*)?(?:(['"])((?:\\[\s\S]|(?!\1)[^\\\n\r\f])*)\1|([^'")\s;]+))\s*\)?[^;{}@]*(?:;|$)/gi)]) {
-    let inner = '';
-    const ref = cssUnescape(m[2] ?? m[3]);
-    if (isRemote(ref) && ALLOW_REMOTE_CONTENT) continue;   // left as it is: the browser loads it
-    if (depth < 4 && !isExternal(ref) && !isRemote(ref)) {
-      const p = resolve(cssPath, ref); const t = await readText(book.zip, p);
-      if (t) inner = await rewriteCss(t, p, depth + 1);
-    }
-    css = css.replace(m[0], () => inner);
-  }
-  const found = new Map();
-  for (const m of css.matchAll(URL_RE)) {
-    const ref = cssUnescape(m[2].trim());
-    if (!ref || isExternal(ref) || isRemote(ref) || ref.startsWith('#') || found.has(ref)) continue;   // remote ones: see below
-    found.set(ref, resourceURL(resolve(cssPath, ref)));
+  const refs = cssRefs(css);
+  const jobs = new Map();   // local files, each fetched once
+  for (const r of refs) {
+    const ref = r.ref.replace(/[\t\n\r]/g, '').trim();
+    r.local = !!ref && !ref.startsWith('#') && !isExternal(ref) && !isRemote(ref);
+    if (r.local && r.kind === 'image' && !jobs.has(ref)) jobs.set(ref, resourceURL(resolve(cssPath, ref)));
+    r.clean = ref;
   }
   const done = new Map();
-  for (const [k, v] of found) done.set(k, await v);
-  return css.replace(URL_RE, (all, q, raw) => {
-    const ref = cssUnescape(raw.trim());
-    const u = done.get(ref);
-    // Unquoted, with the characters that would end it encoded, so it is safe even inside a CSS string.
-    if (u) return `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))})`;
-    if (ALLOW_REMOTE_CONTENT || ref.startsWith('#') || /^(data|blob):/i.test(ref)) return all;
-    // Another site, or a file the book doesn't have: no image (rather than a request the policy would refuse).
-    return isRemote(ref) || done.has(ref) ? NO_IMAGE : all;
-  });
+  for (const [k, v] of jobs) done.set(k, await v);
+  const parts = [];
+  let at = 0;
+  for (const r of refs) {
+    let text = null;   // null: leave it as written
+    if (r.kind === 'import') {
+      if (r.local) {
+        const p = resolve(cssPath, r.clean), t = depth < 4 ? await readText(book.zip, p) : null;
+        text = t ? await rewriteCss(t, p, depth + 1) : '';
+      } else if (!ALLOW_REMOTE_CONTENT || !isRemote(r.clean)) text = '';   // another site (or a data: sheet): dropped
+    } else if (r.local) {
+      const u = done.get(r.clean);
+      text = u ? cssUrl(u) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
+    } else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
+    if (text === null) continue;
+    parts.push(css.slice(at, r.s), text);
+    at = r.e;
+  }
+  parts.push(css.slice(at));
+  return parts.join('');
 }
 
 /* ---------- building a page ---------- */
