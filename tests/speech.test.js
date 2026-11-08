@@ -99,3 +99,17 @@ test("a second narrated book with the same audio path plays its own recording, n
   }), 10000, 100);
   assert.ok(Math.abs(duration - 6) < 0.3, `narration plays a ${duration} s recording (B's is 6 s, A's 1.8 s)`);
 });
+
+test('closing the bar while the voice server is being checked: nothing starts reading afterwards (M-18)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeSpeech);
+  // The voice server hangs, then fails: the reader would fall back to the device voice.
+  await page.route('**/tts/health', async route => { await new Promise(r => setTimeout(r, 3000)); await route.fulfill({ status: 503, body: 'down' }); });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:ttsEngine': 'server' });
+  await page.keyboard.press('r');
+  await page.waitForTimeout(300);
+  await page.click('#ttsClose');
+  await page.waitForTimeout(5000);
+  assert.equal(await page.isVisible('#tts'), false);
+  assert.deepEqual(await page.evaluate(() => window.__spoken.map(s => s.text)), [], 'nothing is spoken once the bar is closed');
+});

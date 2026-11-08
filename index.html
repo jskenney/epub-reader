@@ -3048,8 +3048,10 @@ function ttsStartPoint(){
 // R / the Read aloud button.
 async function ttsReadHere(){
   if (!book || !ttsOpen()) return;
-  if (tts.engine === 'server') await svProbe();
-  await ttsEnsureMode(); ttsUpdateBar();
+  // (After each wait: the bar may have been closed meanwhile, and then nothing may start: REVIEW.md M-18.)
+  if (tts.engine === 'server') { await svProbe(); if (!tts.open) return; }
+  await ttsEnsureMode(); if (!tts.open) return;
+  ttsUpdateBar();
   const [a, b] = ttsStartPoint();
   tts.playing = true;
   if (tts.mo) moGo(a); else ttsGo(a, b);
@@ -3082,9 +3084,10 @@ async function ttsTogglePlay(){
     ttsUpdateBar(); return;
   }
   tts.playing = true;
-  if (tts.engine === 'server') await svProbe();
+  if (tts.engine === 'server') { await svProbe(); if (!tts.open || !tts.playing) return; }
   const hadMo = tts.mo?.doc === frame.contentDocument;
   await ttsEnsureMode();
+  if (!tts.open || !tts.playing) return;   // closed or paused meanwhile
   if (tts.mo) { hadMo ? moGo(tts.mo.i) : moGo(moPageStart()); return; }
   if (tts.doc !== frame.contentDocument || !tts.chunks) { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
   else ttsGo(tts.ci, tts.pos);
@@ -3113,7 +3116,7 @@ async function ttsSetEngine(engine){
   const wasPlaying = tts.playing;
   ttsStopAudio(); ttsClearHL(); tts.mo = null; tts.chunks = null;
   await ttsEnsureMode(); ttsUpdateBar();
-  if (!wasPlaying) return;
+  if (!wasPlaying || !tts.open) return;
   if (tts.mo) moGo(moPageStart()); else { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
 }
 
@@ -3124,7 +3127,7 @@ async function ttsAfterRender(){
   tts.chunks = null; tts.ci = 0; tts.pos = 0;
   const doc = frame.contentDocument;
   await ttsEnsureMode();
-  if (doc !== frame.contentDocument) return;
+  if (doc !== frame.contentDocument || !tts.open) return;
   ttsUpdateBar();
   if (!tts.playing) { tts.doc = null; return; }
   if (tts.awaitChapter) { tts.awaitChapter = false; tts.mo ? moGo(0) : ttsGo(0, null, { jump: false }); return; }
