@@ -1411,7 +1411,9 @@ function parseNcx(text, path){
 
 /* ---------- resources ---------- */
 function typeOf(path){ return book.byPath.get(path)?.type || MIME[ext(path)] || 'application/octet-stream'; }
-function resourceURL(path){
+// owner: the chapter whose page uses it (pictures are released when no nearby chapter does: releaseImages).
+function resourceURL(path, owner){
+  if (owner) { if (!book.owners) book.owners = new Map(); if (!book.owners.has(path)) book.owners.set(path, new Set()); book.owners.get(path).add(owner); }
   if (book.urls.has(path)) return book.urls.get(path);
   let type = typeOf(path);
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
@@ -1624,14 +1626,14 @@ function cssSpend(budget, n){
 // opts: depth (of @import), again (read the joined result once more), budget (the page's), chain (the sheets
 // being pasted, outermost first: an @import of one of them is a cycle, which browsers ignore), attr (a style
 // attribute: @import means nothing there).
-async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssBudget(), chain = [cssPath], attr = false } = {}){
+async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssBudget(), chain = [cssPath], attr = false, owner } = {}){
   css = cssPreprocess(css);
   const refs = cssRefs(css);
   const jobs = new Map();   // local files, each fetched once
   for (const r of refs) {
     const ref = r.ref.replace(/[\t\n\r]/g, '').trim();
     r.local = !!ref && !ref.startsWith('#') && !isExternal(ref) && !isRemote(ref);
-    if (r.local && r.kind === 'image' && !jobs.has(ref)) jobs.set(ref, resourceURL(resolve(cssPath, ref)));
+    if (r.local && r.kind === 'image' && !jobs.has(ref)) jobs.set(ref, resourceURL(resolve(cssPath, ref), owner));
     r.clean = ref;
   }
   const done = new Map();
@@ -1648,7 +1650,7 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
         if (depth < 4 && !chain.includes(p)) {
           if (!budget.cache.has(p)) {
             const t = await readText(book.zip, p);
-            budget.cache.set(p, t ? cssCloseAtEnd(await rewriteCss(t, p, { depth: depth + 1, budget, chain: [...chain, p] })) : '');
+            budget.cache.set(p, t ? cssCloseAtEnd(await rewriteCss(t, p, { depth: depth + 1, budget, chain: [...chain, p], owner })) : '');
           }
           sheet = budget.cache.get(p);
           if (sheet && !cssSpend(budget, sheet.length)) sheet = null;   // over the page's budget: left out
@@ -1666,7 +1668,7 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
   }
   parts.push(css.slice(at));
   // Sheets pasted together are read as one: read the result again, in case the joins made new addresses.
-  return inlined && again ? rewriteCss(parts.join(''), cssPath, { depth, again: false, budget, chain, attr }) : parts.join('');
+  return inlined && again ? rewriteCss(parts.join(''), cssPath, { depth, again: false, budget, chain, attr, owner }) : parts.join('');
 }
 
 /* ---------- building a page ---------- */
@@ -1763,12 +1765,12 @@ async function localize(doc, path, budget = cssBudget()){
       if (isRemote(v)) { if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); continue; }
       if (isExternal(v)) continue;   // data: and blob:
       // A file the book doesn't have is removed rather than left to resolve against this site.
-      jobs.push(resourceURL(resolve(path, v)).then(u => { if (u) el.setAttribute(attr, u); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
+      jobs.push(resourceURL(resolve(path, v), path).then(u => { if (u) el.setAttribute(attr, u); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
     }
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
-  for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget }).then(c => { st.textContent = styleText(c); }));
-  for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true }).then(c => el.setAttribute('style', c)));
+  for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget, owner: path }).then(c => { st.textContent = styleText(c); }));
+  for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true, owner: path }).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
@@ -1833,11 +1835,11 @@ async function buildPage(src, path){
       }
       const p = resolve(path, href), css = await readText(book.zip, p);
       if (!css || !cssSpend(budget, css.length)) continue;   // (a page linking one big sheet thousands of times)
-      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(css, p, { budget }));
+      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(css, p, { budget, owner: path }));
       if (n.getAttribute('media')) st.setAttribute('media', n.getAttribute('media'));
       head.append(st);
     } else {
-      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(n.textContent, path, { budget })); head.append(st);
+      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(n.textContent, path, { budget, owner: path })); head.append(st);
     }
   }
   const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(); head.append(ov);
@@ -1887,6 +1889,25 @@ function loadFrame(html){
 
 // Comics: each page image becomes an in-memory copy while its section is shown. Free the copies for every
 // other section (they are made again if the reader goes back), so a long comic doesn't fill the memory.
+// EPUB pictures: once a chapter is shown, pictures used only by chapters other than it and its neighbours are
+// released (the cover is kept), so a long illustrated or fixed-layout book doesn't keep every page it has shown
+// in memory (REVIEW.md M-16). They are read again if those chapters are shown again.
+function releaseImages(shownPath){
+  if (book?.comicParts) return releaseComicImages(shownPath);
+  if (!book?.owners) return;
+  const i = book.spine.findIndex(s => s.path === shownPath);
+  const keep = new Set(book.spine.slice(Math.max(0, i - 1), i + 2).map(s => s.path));
+  const cover = book.coverId && book.manifest.get(book.coverId)?.path;
+  const src = book.src;
+  for (const [path, owners] of book.owners) {
+    if (path === cover || [...owners].some(o => keep.has(o)) || !typeOf(path).startsWith('image/')) continue;
+    const job = book.urls.get(path);
+    book.owners.delete(path);
+    if (!job) continue;
+    book.urls.delete(path);
+    Promise.resolve(job).then(u => { if (u?.startsWith('blob:')) src.revoke ? src.revoke(u) : URL.revokeObjectURL(u); }, () => {});
+  }
+}
 function releaseComicImages(shownPath){
   if (!book?.comicParts) return;
   for (const [partPath, images] of book.comicParts) {
@@ -1974,7 +1995,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     position(frag, fraction);
     hideStatus();
     cur.shown = true;
-    releaseComicImages(item.path);
+    releaseImages(item.path);
     ttsAfterRender();
     searchAfterRender();
   } catch (err) {

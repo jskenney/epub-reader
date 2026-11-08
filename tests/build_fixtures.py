@@ -290,6 +290,9 @@ def main():
             if i.filename == "OEBPS/c3.xhtml":
                 data = data.replace(b"twin-a part 3", b"twin-a part 3 (revised)")
             zout.writestr(i, data)
+    # Six chapters, each with its own picture (REVIEW.md M-16): pictures of far chapters are released.
+    epub(books / "pictures.epub", "Pictures", [(f"c{i}.xhtml", f"Pictures {i}", f'<h1>Picture {i}</h1><p><img class="pic" src="p{i}.png" alt="p{i}"/></p>') for i in range(1, 7)],
+         uid="urn:pictures", extra={f"OEBPS/p{i}.png": png(40 + i, 30, (30 * i, 90, 120)) for i in range(1, 7)})
     # A stylesheet that imports itself 30 times, linked 50 times (REVIEW.md H-6): must open quickly.
     epub(books / "css-fanout.epub", "CSS Fanout", [("c1.xhtml", "One", "<h1>Fanout</h1><p class='f'>Text.</p>",
          '<link rel="stylesheet" href="self.css"/>' * 50)], uid="urn:css-fanout",

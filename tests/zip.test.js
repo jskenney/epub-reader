@@ -246,6 +246,22 @@ test('a wrong checksum: an upload reads anyway with a warning, as JSZip would; o
   }
 });
 
+test("an EPUB's pictures are released when no nearby chapter uses them, and come back when needed (M-16)", async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/pictures.epub`);
+  const pic = () => h.inFrame(page, doc => doc.querySelector('img.pic')?.getAttribute('src'));
+  const live = u => page.evaluate(u => fetch(u).then(() => true, () => false), u);
+  const go = async n => { await page.click(`#tocList a >> nth=${n}`); await page.waitForFunction(n => (document.querySelector('#page').contentDocument?.body?.textContent || '').includes(`Picture ${n + 1}`), n); await page.waitForTimeout(300); };
+  const first = await pic();
+  assert.match(first, /^blob:/);
+  await go(1); const second = await pic();
+  await go(2);   // chapter 3: chapter 1 is two chapters away, chapter 2 next to it
+  assert.equal(await live(first), false, "chapter 1's picture is released two chapters away");
+  assert.equal(await live(second), true, "chapter 2's picture is kept next to chapter 3");
+  await go(0);
+  assert.ok(await page.waitForFunction(() => document.querySelector('#page').contentDocument.querySelector('img.pic')?.naturalWidth > 0), 'read again when shown again');
+});
+
 test('an uploaded book changed on disk while open says so (M-7)', async () => {
   const tmp = path.join(require('node:os').tmpdir(), `spine-upload-${Date.now()}.epub`);
   fs.copyFileSync(BIG, tmp);
