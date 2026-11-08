@@ -521,11 +521,15 @@ const textOf = el => (el?.textContent || '').replace(/\s+/g, ' ').trim();
 
 function resolve(base, href){
   const hash = href.indexOf('#');
-  const h = hash < 0 ? href : href.slice(0, hash);
+  // (A "%" not followed by two hex digits is a plain "%" in the name: REVIEW.md L-43.)
+  const h = (hash < 0 ? href : href.slice(0, hash)).replace(/%(?![0-9a-f]{2})/gi, '%25');
   if (!h) return base;
   const enc = base.split('/').map(encodeURIComponent).join('/');
   const p = new URL(h, 'https://book.invalid/' + enc).pathname.slice(1);
-  try { return decodeURIComponent(p); } catch { return p; }
+  // Each segment decoded on its own, after the folders were worked out: an encoded "/" or "\\" (%2F, %5C) is
+  // part of a name, so a segment that would decode to one stays encoded, rather than becoming a step to
+  // another folder or "//another.site" (REVIEW.md M-14).
+  return p.split('/').map(seg => { const d = safeDecode(seg); return /[\/\\]/.test(d) || d === '.' || d === '..' ? seg : d; }).join('/');
 }
 function fragOf(href){
   const i = href.indexOf('#'); if (i < 0) return '';
@@ -782,14 +786,17 @@ function zipSource(zip){
   };
 }
 function dirSource(base){
-  const abs = p => new URL(p.split('/').map(encodeURIComponent).join('/'), base).href;
+  // Only addresses inside the book's folder (resolve keeps paths inside it; this makes sure).
+  const root = new URL(base).href;
+  const abs = p => { const u = new URL(p.split('/').map(encodeURIComponent).join('/'), root).href; return u.startsWith(root) ? u : null; };
   return {
     kind: 'dir',
     base: new URL(base).href,   // the folder its files come from (allowed by the book pages' security policy)
     async text(p){
-      try { const r = await fetch(abs(p)); return r.ok ? clean(await r.text()) : null; } catch { return null; }
+      const u = abs(p); if (!u) return null;
+      try { const r = await fetch(u); return r.ok ? clean(await r.text()) : null; } catch { return null; }
     },
-    async exists(){ return true; },
+    async exists(p){ return !!abs(p); },
     async url(p){ return abs(p); },
     dispose(){}
   };
