@@ -413,6 +413,9 @@ let ALLOW_EXTERNAL_LINKS = true;
 // reader-config.json): the sleep timer in the read-aloud bar, and the reading time left ("12 min left in chapter
 // · 3 h 5 min in book") in the footer.
 let SLEEP_TIMER = false;
+// Reading positions of books not opened for this many days are forgotten (checked once a day), so positions
+// left under older keys don't pile up in the browser. 0 keeps them forever.
+let KEEP_POSITIONS_DAYS = 730;
 let TIME_LEFT = false;
 let DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
 let BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
@@ -1985,9 +1988,24 @@ function position(frag, f){
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
 function relayout(){ if (book && cur.f != null) { position('', cur.f); ttsRefollow(); } }
+// Forget positions not read for KEEP_POSITIONS_DAYS (at most once a day). One saved before positions had a
+// time gets one now, so it is kept that long from today.
+function sweepPositions(){
+  const now = Date.now();
+  if (!(KEEP_POSITIONS_DAYS > 0) || now - (store.get('spine:posSweep') || 0) < 86400000) return;
+  store.set('spine:posSweep', now);
+  let keys = [];
+  try { keys = Object.keys(localStorage).filter(k => k.startsWith('spine:pos:')); } catch { return; }
+  for (const k of keys) {
+    const v = store.get(k);
+    if (!v || typeof v !== 'object') continue;
+    if (!(v.t > 0)) store.set(k, { ...v, t: now });
+    else if (now - v.t > KEEP_POSITIONS_DAYS * 86400000) store.del(k);
+  }
+}
 function savePos(){
   if (!book) return;
-  const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000 };
+  const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
   store.set(book.key, pos);
   if (book.writeLoose) store.set(book.looseKey, pos);
 }
@@ -4349,6 +4367,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
+  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = Math.max(0, v); }],
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.max(0, v); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.max(0, v); }],
   NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.max(30, v); }],
@@ -4396,6 +4415,7 @@ async function loadConfig(){
 /* ---------- start ---------- */
 (async () => {
   await loadConfig();
+  sweepPositions();
   $('#ttsSleep').hidden = !SLEEP_TIMER;   // (off: the sleep timer stays "off" and isn't shown)
   await Promise.all([setupFonts(), loadLib('jszip').catch(err => console.warn(err.message))]);
   $('#fontPct').textContent = fontPct + '%';

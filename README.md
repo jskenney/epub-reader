@@ -434,6 +434,7 @@ marked ✓).
 | `ALLOW_EXTERNAL_LINKS` ✓ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `SLEEP_TIMER` ✓ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `TIME_LEFT` ✓ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
+| `KEEP_POSITIONS_DAYS` ✓ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day). `0` keeps them forever. |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
 | `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
 | `LOOKAHEAD_SEC` ✓ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |

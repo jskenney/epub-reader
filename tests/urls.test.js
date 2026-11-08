@@ -158,6 +158,19 @@ test('books sharing a title, file names and cover page, but not their text, keep
   }
 });
 
+test('positions not read for KEEP_POSITIONS_DAYS are forgotten; older ones without a time get one (L-36)', async () => {
+  const page = await h.newPage();
+  const day = 86400000, now = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, {
+    'spine:pos:opf:stale': { i: 1, f: 0, t: now - 800 * day }, 'spine:pos:urn:recent': { i: 2, f: 0, t: now - 10 * day },
+    'spine:pos:Old Title': { i: 0, f: 0.5 } });
+  const kept = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter(k => k.startsWith('spine:pos:')).map(k => [k, JSON.parse(localStorage.getItem(k))])));
+  assert.equal(kept['spine:pos:opf:stale'], undefined, 'not read for 800 days: forgotten');
+  assert.equal(kept['spine:pos:urn:recent'].i, 2);
+  assert.ok(kept['spine:pos:Old Title'].t > now - day, 'an old entry without a time is given one, not removed');
+  assert.ok(kept['spine:pos:urn:long'] === undefined || kept['spine:pos:urn:long'].t > now - day);
+});
+
 test('books with an identifier still use it, so they resume wherever they are opened from (L-13)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
