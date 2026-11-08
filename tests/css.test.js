@@ -22,7 +22,11 @@ function cleaner(allowRemote = false) {
     // H-6: sheets that import themselves or each other many times.
     'self.css': '@import "self.css";\n'.repeat(30) + '/*' + 'x'.repeat(1000) + '*/ s{color:red}',
     'f1.css': '@import "f2.css";\n'.repeat(30) + 'a{b:c}', 'f2.css': '@import "f3.css";\n'.repeat(30) + 'a{b:c}',
-    'f3.css': '@import "f4.css";\n'.repeat(30) + 'a{b:c}', 'f4.css': '/*' + 'y'.repeat(1000) + '*/ a{b:c}' };
+    'f3.css': '@import "f4.css";\n'.repeat(30) + 'a{b:c}', 'f4.css': '/*' + 'y'.repeat(1000) + '*/ a{b:c}',
+    // A book's ordinary nesting with big font sheets (round 8 review): nothing may be left out.
+    'base.css': '@import "fonts.css"; .b{color:blue}', 'fonts.css': '@font-face{font-family:F;src:url(f1.ttf)} @font-face{font-family:G;src:url(f2.ttf)}' + '/*' + 'z'.repeat(2e6) + '*/',
+    // A sheet reached first at the depth limit, then directly (round 8 review): the second use is complete.
+    'd1.css': '@import "d2.css";', 'd2.css': '@import "d3.css";', 'd3.css': '@import "d4.css";', 'd4.css': '@import "dd.css";', 'dd.css': '@import "ee.css"; .d{}', 'ee.css': '.e{color:red}' };
   return new Function('ALLOW_REMOTE_CONTENT', 'book', 'resolve', 'readText', 'resourceURL', `${body}\nreturn { rewriteCss, cssTokens, cssRefs, cssPreprocess };`)(
     allowRemote, { zip: null }, (base, ref) => ref, async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`));
 }
@@ -83,13 +87,17 @@ test('everything else is left as written: strings, local files, fragments, data:
 
 test('stylesheets importing themselves or each other many times stay small and fast (H-6)', async () => {
   const { rewriteCss } = cleaner();
-  for (const [css, max] of [['@import "self.css";', 4000], ['@import "f1.css";', (4 << 20) + 100000]]) {
+  for (const [css, max] of [['@import "self.css";', 4000], ['@import "f1.css";', (8 << 20) + 200000]]) {
     const t0 = Date.now();
     const out = await rewriteCss(css, 'x.css');
     assert.ok(Date.now() - t0 < 3000, `${css}: ${Date.now() - t0} ms`);
     assert.ok(out.length <= max, `${css}: ${out.length} characters`);
   }
   assert.match(await rewriteCss('@import "self.css";', 'x.css'), /s\{color:red\}/, 'the sheet itself is still used, once');
+  const nested = await rewriteCss('@import "base.css"; .a{}', 'x.css');
+  assert.match(nested, /\.b\{color:blue\}/); assert.match(nested, /font-family:G/);
+  const both = await rewriteCss('@import "d1.css"; @import "dd.css";', 'x.css');
+  assert.match(both.slice(both.lastIndexOf('.d{}') - 40), /\.e\{color:red\}[\s\S]*\.d\{\}/, 'dd.css pasted directly includes ee.css');
   // @import in a style attribute means nothing: dropped, not pasted in.
   assert.equal(await rewriteCss('@import "red.css"; color: blue', 'x.css', { attr: true }), ' color: blue');
 });

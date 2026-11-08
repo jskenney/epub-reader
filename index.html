@@ -527,9 +527,10 @@ function resolve(base, href){
   const enc = base.split('/').map(encodeURIComponent).join('/');
   const p = new URL(h, 'https://book.invalid/' + enc).pathname.slice(1);
   // Each segment decoded on its own, after the folders were worked out: an encoded "/" or "\\" (%2F, %5C) is
-  // part of a name, so a segment that would decode to one stays encoded, rather than becoming a step to
+  // part of a name, so a segment that would decode to "/" stays encoded, rather than becoming a step to
   // another folder or "//another.site" (REVIEW.md M-14).
-  return p.split('/').map(seg => { const d = safeDecode(seg); return /[\/\\]/.test(d) || d === '.' || d === '..' ? seg : d; }).join('/');
+  // (A backslash is an ordinary character in a ZIP entry name, as some Windows tools write them.)
+  return p.split('/').map(seg => { const d = safeDecode(seg); return d.includes('/') || d === '.' || d === '..' ? seg : d; }).join('/');
 }
 function fragOf(href){
   const i = href.indexOf('#'); if (i < 0) return '';
@@ -537,10 +538,9 @@ function fragOf(href){
 }
 // (A leading "/" is dropped, and a name that differs only in case or Unicode form, as macOS archivers write
 // them, is found too: L-44, L-48.)
-const pathKey = p => p.normalize('NFC').toLowerCase();
+const pathKey = p => p.replace(/^\/+/, '').normalize('NFC').toLowerCase();
 function getFile(zip, path){
-  path = path.replace(/^\/+/, '');
-  let f = zip.file(path);
+  let f = zip.file(path) || zip.file(path.replace(/^\/+/, ''));   // (as written first: some archives' names do start with "/")
   if (!f) {
     const low = pathKey(path);
     const name = Object.keys(zip.files).find(n => pathKey(n) === low);
@@ -794,7 +794,7 @@ function zipSource(zip){
     async exists(p){ return !!getFile(zip, p); },
     async url(p, type){
       const f = getFile(zip, p); if (!f) return null;
-      if (type.startsWith('font/')) return `data:${type};base64,` + await f.async('base64');
+      // (Fonts too: a data: copy pasted into every place the font is named could make pages of hundreds of MB.)
       const u = URL.createObjectURL(new Blob([await f.async('uint8array')], { type }));
       if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
@@ -1034,7 +1034,7 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   return parts.length ? parts : [[]];
 }
 async function openDocument(buffer, name, kind, { base = null, key, seq } = {}){
-  showStatus('Opening book…');
+  if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const text = decodeText(new Uint8Array(buffer));
   let doc, meta = {}, headExtra = '';
   if (kind === 'html') {
@@ -1122,7 +1122,7 @@ const COMIC_IMG = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
 let COMIC_PART = 40;
 const comicPages = zip => Object.values(zip.files).filter(f => !f.dir && COMIC_IMG.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name));
 async function openComic(zip, name, { key, seq } = {}){
-  showStatus('Opening comic…');
+  if (!isStale(seq)) showStatus('Opening comic…');
   const pages = comicPages(zip);
   if (!pages.length) throw new Error('This archive has no page images in it.');
   const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -1278,7 +1278,7 @@ function descriptionParagraphs(raw){
 
 /* ---------- opening a book ---------- */
 async function openBook(zip, { sample = false, name = '', seq } = {}){
-  showStatus('Opening book…');
+  if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const cText = await readText(zip, 'META-INF/container.xml');
   if (!cText) throw new Error(zip.kind === 'dir'
     ? "There's no META-INF/container.xml in that folder, so it isn't an extracted EPUB (or the path is wrong)."
@@ -1640,16 +1640,19 @@ const styleText = css => css.replace(/<\/(?=style)/gi, '<\\/');
 // What one page may paste in from its stylesheets (linked sheets and @imports together): a book whose sheets
 // import each other many times would otherwise grow without limit (N⁴ copies for N self-imports) and freeze the
 // tab. Past the budget, further sheets are left out.
-const CSS_BUDGET = { sheets: 200, chars: 4 << 20 };
+// Pasted text is counted once, where it goes into the page's own styles (depth 0); deeper, each sheet's text is
+// capped on its own. The first sheet is always allowed, however large (a book's one big stylesheet).
+const CSS_BUDGET = { sheets: 200, chars: 8 << 20 };
 const cssBudget = () => ({ sheets: 0, chars: 0, cache: new Map() });
 function cssSpend(budget, n){
-  if (budget.sheets + 1 > CSS_BUDGET.sheets || budget.chars + n > CSS_BUDGET.chars) return false;
+  if (budget.sheets + 1 > CSS_BUDGET.sheets || (budget.chars > 0 && budget.chars + n > CSS_BUDGET.chars)) return false;
   budget.sheets++; budget.chars += n; return true;
 }
 // opts: depth (of @import), again (read the joined result once more), budget (the page's), chain (the sheets
 // being pasted, outermost first: an @import of one of them is a cycle, which browsers ignore), attr (a style
-// attribute: @import means nothing there).
-async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssBudget(), chain = [cssPath], attr = false, owner } = {}){
+// attribute: @import means nothing there), cut (set when something was left out: the depth limit, a cycle or
+// the budget; such a result depends on where it was reached, so it isn't kept for reuse).
+async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssBudget(), chain = [cssPath], attr = false, owner, cut = {} } = {}){
   css = cssPreprocess(css);
   const refs = cssRefs(css);
   const jobs = new Map();   // local files, each fetched once
@@ -1662,21 +1665,27 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
   const done = new Map();
   for (const [k, v] of jobs) done.set(k, await v);
   const parts = [];
-  let at = 0, inlined = false;
+  let at = 0, inlined = false, pastedHere = 0;
   for (const r of refs) {
     let text = null;   // null: leave it as written
     if (r.kind === 'import') {
       if (r.late || attr) text = '';   // (ignored by the browser anyway)
       else if (r.local) {
-        const p = resolve(cssPath, r.clean);
+        const p = resolve(cssPath, r.clean), key = `${depth}|${p}`;
         let sheet = null;
-        if (depth < 4 && !chain.includes(p)) {
-          if (!budget.cache.has(p)) {
-            const t = await readText(book.zip, p);
-            budget.cache.set(p, t ? cssCloseAtEnd(await rewriteCss(t, p, { depth: depth + 1, budget, chain: [...chain, p], owner })) : '');
+        if (depth >= 4 || chain.includes(p)) cut.v = true;
+        else {
+          sheet = budget.cache.get(key);
+          if (sheet == null) {
+            const t = await readText(book.zip, p), inner = {};
+            sheet = t ? cssCloseAtEnd(await rewriteCss(t, p, { depth: depth + 1, budget, chain: [...chain, p], owner, cut: inner })) : '';
+            if (inner.v) cut.v = true; else budget.cache.set(key, sheet);
           }
-          sheet = budget.cache.get(p);
-          if (sheet && !cssSpend(budget, sheet.length)) sheet = null;   // over the page's budget: left out
+          // Over the budget (the page's at depth 0, or this sheet's own size deeper): left out.
+          const fits = depth === 0 ? cssSpend(budget, sheet.length)
+            : budget.sheets + 1 <= CSS_BUDGET.sheets && pastedHere + sheet.length <= CSS_BUDGET.chars && ++budget.sheets;
+          if (sheet && !fits) { sheet = null; cut.v = true; }
+          else if (sheet) pastedHere += sheet.length;
         }
         text = sheet ? cssWrapImport(sheet, r.cond) + '\n' : '';
         inlined = true;
@@ -1691,7 +1700,7 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
   }
   parts.push(css.slice(at));
   // Sheets pasted together are read as one: read the result again, in case the joins made new addresses.
-  return inlined && again ? rewriteCss(parts.join(''), cssPath, { depth, again: false, budget, chain, attr, owner }) : parts.join('');
+  return inlined && again ? rewriteCss(parts.join(''), cssPath, { depth, again: false, budget, chain, attr, owner, cut }) : parts.join('');
 }
 
 /* ---------- building a page ---------- */
@@ -1851,12 +1860,17 @@ function markLinks(doc, path){
     else if (isExternal(h)) drop();
     else {
       a.setAttribute('data-spine-path', h.startsWith('#') ? path : resolve(path, h)); a.setAttribute('data-spine-frag', fragOf(h));
-      // The address itself only names a place in the page: "open in new tab" can't reach a file of the reader's
-      // site (the link is followed by its data attributes).
-      const local = '#' + (h.includes('#') ? h.slice(h.indexOf('#') + 1) : '');
-      if (a.hasAttribute('href')) a.setAttribute('href', local);
-      if (a.hasAttributeNS(XLINK, 'href')) a.setAttributeNS(XLINK, 'xlink:href', local);
     }
+  }
+}
+// In-book links' addresses then only name a place in the page: "open in new tab" can't reach a file of the
+// reader's site (the link is followed by its data attributes). Done last, once the page is settled.
+function pointLinksHere(doc){
+  for (const a of doc.querySelectorAll('[data-spine-path]')) {
+    const raw = urlText(a.getAttribute('href') ?? a.getAttributeNS(XLINK, 'href') ?? '');
+    const local = '#' + (raw.includes('#') ? raw.slice(raw.indexOf('#') + 1) : '');
+    if (a.hasAttribute('href')) a.setAttribute('href', local);
+    if (a.hasAttributeNS(XLINK, 'href')) a.setAttributeNS(XLINK, 'xlink:href', local);
   }
 }
 
@@ -1868,7 +1882,7 @@ async function buildPage(src, path){
   for (const a of ['lang', 'xml:lang', 'dir', 'class']) {
     const v = sHtml.getAttribute(a); if (v) out.documentElement.setAttribute(a === 'xml:lang' ? 'lang' : a, v);
   }
-  const head = out.head, budget = cssBudget();
+  const head = out.head, budget = cssBudget(), linked = new Set();
   head.innerHTML = `<meta charset="utf-8"><link id="${RID.font}" rel="stylesheet" href="${fontHref()}"><style id="${RID.base}"></style>`;
   head.querySelector('#' + RID.base).textContent = baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
@@ -1880,7 +1894,8 @@ async function buildPage(src, path){
         continue;
       }
       const p = resolve(path, href), css = await readText(book.zip, p);
-      if (!css || !cssSpend(budget, css.length)) continue;   // (a page linking one big sheet thousands of times)
+      if (!css || linked.has(p) || !cssSpend(budget, css.length)) continue;   // (a page linking one big sheet thousands of times)
+      linked.add(p);
       const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(css, p, { budget, owner: path }));
       if (n.getAttribute('media')) st.setAttribute('media', n.getAttribute('media'));
       head.append(st);
@@ -1900,11 +1915,24 @@ async function buildPage(src, path){
   // Chapters parsed as XHTML keep the case of names (<IMG SRC>, <IFRAME>), which the checks below wouldn't
   // match, yet the frame's HTML parser would turn them into working elements. So parse the page as HTML
   // first, exactly as the frame will, and clean that.
-  const page = new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
+  let page = new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
   sanitize(page);
   stripRemote(page);
   await localize(page, path, budget);
   markLinks(page, path);
+  // The frame parses the page from its text, and some markup reads back differently from the tree that was
+  // cleaned (nested forms, raw text in an XHTML <style>: "mutation"), bringing back what was removed. So read
+  // the cleaned page as the frame will, and clean again until it reads back the same; a page that keeps
+  // changing isn't shown.
+  for (let round = 0; ; round++) {
+    const html = page.documentElement.outerHTML;
+    const again = new DOMParser().parseFromString('<!doctype html>\n' + html, 'text/html');
+    if (again.documentElement.outerHTML === html) break;
+    if (round === 3) throw new Error("its markup reads differently each time, so it can't be shown safely");
+    page = again;
+    sanitize(page); stripRemote(page); markLinks(page, path);
+  }
+  pointLinksHere(page);
   if (!ALLOW_REMOTE_CONTENT) {   // and have the browser refuse anything that isn't part of the book
     const csp = page.createElement('meta');
     csp.httpEquiv = 'Content-Security-Policy'; csp.content = bookPolicy();
@@ -2324,18 +2352,18 @@ function sectionLink(){
   if (!doc?.getElementById(RID.flow)) return null;
   const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
   if (hits.length < 2) return null;
-  let best = null, bestEl = null;
-  // (The layout measured once, and the headings, in document order, only up to the first one past the page:
-  // with thousands of headings, measuring each one on every page turn took seconds.)
+  let best = null;
+  // (The layout measured once, and the headings, put in document order, only up to the first one past the
+  // page: with thousands of headings, measuring each one on every page turn took seconds.)
   const g = scrolling() ? null : geom(), third = frame.contentWindow.innerHeight / 3;
-  for (const a of hits) {
-    const el = doc.getElementById(a.dataset.frag);
-    if (!el || (bestEl && !(bestEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))) continue;
+  const found = hits.map(a => ({ a, el: doc.getElementById(a.dataset.frag) })).filter(x => x.el)
+    .sort((x, y) => x.el === y.el ? 0 : x.el.compareDocumentPosition(y.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+  for (const { a, el } of found) {
     let seen;
     if (!g) seen = el.getBoundingClientRect().top <= third;
     else { const r = doc.createRange(); r.selectNode(el); seen = pageOfRange(r, false, g) <= cur.page; }
     if (!seen) break;
-    best = a; bestEl = el;
+    best = a;
   }
   return best;
 }

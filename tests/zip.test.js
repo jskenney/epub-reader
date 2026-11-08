@@ -273,6 +273,10 @@ test('junk after compressed data, a package path with a leading slash, and paths
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/slash.epub`);
   assert.equal(await h.title(page), 'Leading Slash');
+  await h.openReader(page, `${h.READER}?book=books/abs-names.epub`);   // (entry names that start with "/" too)
+  assert.equal(await h.title(page), 'Leading Slash');
+  await h.openReader(page, `${h.READER}?book=books/backslash.cbz`);   // (entry names with backslashes)
+  assert.ok(await page.waitForFunction(() => [...document.querySelector('#page').contentDocument.images].some(i => i.naturalWidth > 0), null, { timeout: 10000 }), 'the pages show');
   await h.openReader(page, `${h.READER}?book=books/case.epub`);
   assert.equal(await page.locator('#tocList a').count(), 3, 'the chapter stored under its NFD name is found');
   await h.inFrame(page, doc => doc.querySelector('#to-c2').click());

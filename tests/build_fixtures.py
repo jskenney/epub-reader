@@ -322,6 +322,19 @@ def main():
             if i.filename == "OEBPS/c3.xhtml":
                 data = data.replace(b"twin-a part 3", b"twin-a part 3 (revised)")
             zout.writestr(i, data)
+    # Mutation: markup in an XHTML <style> that reads back differently once serialized, bringing back a shadow
+    # root with a link to another site (round 8 review). Must be cleaned (or refused), never shown.
+    mx = ('&lt;/style&gt;&lt;form&gt;&lt;math&gt;&lt;mtext&gt;&lt;/form&gt;&lt;form&gt;&lt;mglyph&gt;&lt;style&gt;&lt;/math&gt;&lt;div id="mx-host"&gt;'
+          '&lt;template shadowrootmode="open"&gt;&lt;a id="mx-link" href="https://example.com/mx" target="_blank"&gt;MX&lt;/a&gt;&lt;/template&gt;&lt;/div&gt;')
+    epub(books / "mutation.epub", "Mutation", [("c1.xhtml", "One", "<p>Hello mx</p><style>" + mx + "</style><p>after</p>")], uid="urn:mutation")
+    # A comic whose entry names use backslashes (older Windows tools), and an EPUB whose entry names start with
+    # "/" (round 8 review: both opened before the path changes and must still).
+    raw_zip(books / "backslash.cbz", [{"name": f"Vol1\\{i:03d}.png".encode(), "data": png(60, 90, (40 * i, 80, 120))} for i in (1, 2)])
+    raw_zip(books / "abs-names.epub", [{**e, "name": e["name"] if e["name"] == b"mimetype" else b"/" + e["name"]} for e in zip_entries(books / "slash.epub")])
+    # A 1 MB font named in 300 styles and 300 style attributes (round 8 review): the page stays small.
+    epub(books / "font-bomb.epub", "Font Bomb", [("c1.xhtml", "One", "<h1>Fonts</h1>" + '<style>@font-face{font-family:F;src:url(f.ttf)}</style>' * 300
+         + '<b style="background:url(f.ttf)">x</b>' * 300 + "<p style='font-family:F'>Text.</p>")], uid="urn:font-bomb",
+         extra={"OEBPS/f.ttf": os.urandom(1 << 20)})
     # Six chapters, each with its own picture (REVIEW.md M-16): pictures of far chapters are released.
     epub(books / "pictures.epub", "Pictures", [(f"c{i}.xhtml", f"Pictures {i}", f'<h1>Picture {i}</h1><p><img class="pic" src="p{i}.png" alt="p{i}"/></p>') for i in range(1, 7)],
          uid="urn:pictures", extra={f"OEBPS/p{i}.png": png(40 + i, 30, (30 * i, 90, 120)) for i in range(1, 7)})

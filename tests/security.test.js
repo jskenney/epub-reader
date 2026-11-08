@@ -114,6 +114,28 @@ test('middle-clicking an in-book link opens nothing, and its address only names 
   assert.match(await page.textContent('#spinePos'), /spine 1\//, 'and the reader stays where it is');
 });
 
+test('markup that reads back differently once serialized brings nothing uncleaned into the page (round 8 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/mutation.epub`);
+  const r = await h.inFrame(page, doc => ({ shadow: !!doc.querySelector('#mx-host')?.shadowRoot, link: !!doc.querySelector('#mx-link'),
+    templates: doc.querySelectorAll('template').length, text: doc.body?.textContent || '' }));
+  const note = await h.notice(page);
+  // Either cleaned (no shadow root, no template, no link) or refused with a note: never the live link.
+  assert.equal(r.shadow, false); assert.equal(r.templates, 0);
+  assert.ok(!r.link || /can't be shown safely/.test(note), JSON.stringify(r) + ' ' + note);
+});
+
+test('a big font named in hundreds of styles keeps the page small (round 8 review)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/font-bomb.epub`);
+  assert.ok(Date.now() - t0 < 15000, `opened in ${Date.now() - t0} ms`);
+  const r = await h.inFrame(page, doc => ({ size: doc.documentElement.outerHTML.length, text: /Text\./.test(doc.body?.textContent || '') }));
+  assert.equal(await h.notice(page), '');
+  assert.ok(r.text, 'the chapter shows');
+  assert.ok(r.size < 2e6, `page of ${r.size} characters`);
+});
+
 test('links of every kind: in-book links open chapters, web links open a new tab, the frame never navigates', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/hostile.epub`);
