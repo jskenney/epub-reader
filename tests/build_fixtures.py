@@ -342,6 +342,7 @@ def main():
 <map name="m"><area id="area-in" shape="rect" coords="0,0,20,30" href="c2.xhtml" alt="in"/>
 <area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
 <p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>
+<div id="shadow-host"><template shadowrootmode="open"><a id="shadow-link" href="https://example.com/shadow">Shadow link</a></template></div>
 <p id="str-url">A url( inside a CSS string stays text.</p>
 <p class="ws2">After a url( with many spaces.</p><p class="lc">Line continuation inside an address.</p><p class="cm">Quote in a comment.</p><p class="cm2">Comment in url(.</p>
 <p id="escapes" style="font-family: '""" + "\\4e2d\\6587" * 16 + """', serif">Many escapes in a row (REVIEW.md: this once froze the page).</p>"""

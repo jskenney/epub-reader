@@ -1725,7 +1725,9 @@ a,a *{color:${t.ribbon} !important}` : ''}`;
 }
 
 function sanitize(doc){
-  doc.querySelectorAll('script,object,embed,iframe,frame,frameset,base,meta[http-equiv]').forEach(e => e.remove());
+  // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
+  // it into a live shadow root, links and all. Templates show nothing on their own, so nothing is lost.)
+  doc.querySelectorAll('script,object,embed,iframe,frame,frameset,base,meta[http-equiv],template').forEach(e => e.remove());
   for (const el of doc.body.querySelectorAll('*')) {
     for (const a of [...el.attributes]) {
       if (/^on/i.test(a.name)) el.removeAttribute(a.name);
