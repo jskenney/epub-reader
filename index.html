@@ -1270,12 +1270,20 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   // with the same title and file names, and metadata edits (a new author, date or cover in Calibre) that
   // leave the chapters alone keep the key.
   const last = await readText(zip, spine.at(-1).path).catch(() => '') || '';
-  const stableKey = 'spine:pos:opf:' + fingerprint(JSON.stringify([dc('title')[0] || '', spine.map(s => s.href), fingerprint(last)]));
+  const titleSpine = JSON.stringify([dc('title')[0] || '', spine.map(s => s.href)]);
+  const stableKey = 'spine:pos:opf:' + fingerprint(titleSpine.slice(0, -1) + ',' + JSON.stringify(fingerprint(last)) + ']');
   next.key = uid ? 'spine:pos:' + uid : stableKey;
+  // A looser record by title, files and the first chapter's fingerprint: if the last chapter is
+  // edited (a new key), the position is found again as long as the first chapter is unchanged. Books without
+  // an identifier keep it up to date; a book since given one only reads it.
+  next.firstFp = spine.length > 1 ? fingerprint(await readText(zip, spine[0].path).catch(() => '') || '') : fingerprint(last);
+  next.looseKey = 'spine:pos:loose:' + fingerprint(titleSpine + next.firstFp);   // (books differing in the first chapter don't share it)
+  next.writeLoose = !uid;
   // Positions under earlier keys are moved over once and the old key removed: the fingerprint of the whole
   // package file and the title (earlier versions). A book since given an identifier copies its fingerprint
   // key's position without removing it (a copy without the identifier may still be read).
   next.legacyKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
+  next.ownKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText)];   // only ever this exact book's: safe to clean up
   next.copyKeys = uid ? [stableKey] : [];
   await startBook(next);
 }
@@ -1300,6 +1308,14 @@ async function startBook(next){
     store.set(book.key, v); saved = v;
     break;
   }
+  // The last chapter edited since (so a new key): the looser record, if the first chapter still matches.
+  const loose = !saved && book.looseKey ? store.get(book.looseKey) : null;
+  if (loose && loose.first === book.firstFp && loose.i < spine.length) {
+    saved = { i: loose.i, f: loose.f };
+    if (book.writeLoose && loose.key && loose.key !== book.key) store.del(loose.key);   // the stale key
+    store.set(book.key, saved);
+  }
+  for (const k of book.ownKeys || []) if (k !== book.key) store.del(k);   // older keys of this exact book
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
 }
@@ -1838,7 +1854,12 @@ function position(frag, f){
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
 function relayout(){ if (book && cur.f != null) { position('', cur.f); ttsRefollow(); } }
-function savePos(){ if (book) store.set(book.key, { i: cur.i, f: Math.round(fraction() * 1000) / 1000 }); }
+function savePos(){
+  if (!book) return;
+  const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000 };
+  store.set(book.key, pos);
+  if (book.writeLoose) store.set(book.looseKey, { ...pos, first: book.firstFp, key: book.key });
+}
 
 let wheelAcc = 0, wheelAt = 0;
 function onWheel(e){
@@ -3010,7 +3031,7 @@ $('#ttsEngine').addEventListener('change', e => ttsSetEngine(e.target.value));
 $('#ttsVoice').addEventListener('change', e => {
   if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
   else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
-  else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); }
+  else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); svClipVersion(svVoice()); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
   if (tts.playing) ttsGo(tts.ci, tts.pos);
 });
@@ -3387,17 +3408,12 @@ async function svLoad(){
     // Each clip's version (ETag, or date and size), so saved audio is made again when a clip is re-recorded
     // under the same name. If the server can't say (HEAD refused, a timeout), the last version seen is kept,
     // so saved audio isn't made again for nothing.
-    const seen = store.get('spine:clipVersions') || {};
-    await Promise.all(sv.voices.filter(v => v.ref_audio).map(async v => {
-      const url = svClipURL(v);
-      try {
-        const r = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
-        const h = r.headers, version = h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '');
-        if (r.ok && version) seen[url] = version;
-      } catch {}
-      v.clipVersion = seen[url] || '';
-    }));
-    store.set('spine:clipVersions', seen);
+    // Only the selected voice is waited for (one request); the others start from the last version seen and
+    // are checked in the background, and again when chosen.
+    for (const v of sv.voices) if (v.ref_audio) v.clipVersion = (store.get('spine:clipVersions') || {})[svClipURL(v)] || '';
+    const chosen = svVoice();
+    for (const v of sv.voices) if (v !== chosen) svClipVersion(v);
+    if (chosen) await svClipVersion(chosen);
     if (!sv.voices.length) throw new Error('no voices yet (create one in the voice studio at /tts-studio/)');
     sv.state = 'ready';
   } catch (e) { sv.state = 'error'; sv.error = e.message; }
@@ -3405,6 +3421,25 @@ async function svLoad(){
 }
 // The model reads "(sigh)" and "[laugh]" as performed vocal events; a book's parentheses should be read.
 const svText = t => t.replace(/\s*[(\[]\s*/g, ' — ').replace(/\s*[)\]]\s*/g, ' — ').replace(/(\s—)+/g, ' —').replace(/^\s*—\s*|\s*—\s*$/g, '').trim();
+// A clip's current version (its ETag, or date and size, from a HEAD request), kept per clip address. A failed
+// or refused request keeps the last version seen, so saved audio isn't made again for nothing.
+const svClipChecks = new Map();
+function svClipVersion(v){
+  const url = v.ref_audio && svClipURL(v);
+  if (!url) return Promise.resolve();
+  if (!svClipChecks.has(url)) svClipChecks.set(url, (async () => {
+    try {
+      const r = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
+      const h = r.headers, version = h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '');
+      if (r.ok && version) { const seen = store.get('spine:clipVersions') || {}; seen[url] = version; store.set('spine:clipVersions', seen); }
+    } catch {}
+    svClipChecks.delete(url);
+  })());
+  return svClipChecks.get(url).then(() => {
+    const now = (store.get('spine:clipVersions') || {})[url] || '';
+    for (const w of sv.voices) if (w.ref_audio && svClipURL(w) === url) w.clipVersion = now;
+  });
+}
 // A voice clip's address, only if it is inside the voices folder (URL() has already resolved "..", "%2e%2e").
 function svClipURL(v){
   try {

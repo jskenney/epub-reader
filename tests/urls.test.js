@@ -96,7 +96,7 @@ test('books without an identifier keep separate positions even with the same tit
 // Where the position is saved, once the reader has saved it (T-7: no fixed waits).
 const savedAt = (page, i) => page.waitForFunction(i => Object.entries(localStorage).find(([k, v]) => k.startsWith('spine:pos:') && JSON.parse(v)?.i === i)?.[0], i)
   .then(hd => hd.jsonValue());
-const posKeys = page => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('spine:pos:')).sort());
+const posKeys = page => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('spine:pos:') && !k.startsWith('spine:pos:loose:')).sort());
 
 test('a position under an older key is moved over once, and the old key removed (L-13, M-10)', async () => {
   // The title key (the first versions) ...
@@ -130,6 +130,12 @@ test("a book without an identifier keeps its position after a metadata edit, or 
   await page.goto(`${h.READER}?book=books/twin-a-edited.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
   assert.deepEqual(await posKeys(page), [key]);
+  // Its last chapter edited (so a new key): found again by title, files and first chapter, the stale key removed.
+  await page.goto(`${h.READER}?book=books/twin-a-last.epub`); await h.waitForBook(page);
+  assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
+  const keysNow = await posKeys(page);
+  assert.equal(keysNow.length, 1, keysNow.join(' '));
+  assert.notEqual(keysNow[0], key);
   // The same title and file names but different text: another book, starting at its beginning.
   await page.goto(`${h.READER}?book=books/twin-c.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 1\/3/);

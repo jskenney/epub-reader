@@ -281,6 +281,13 @@ def main():
            lambda o: o.replace("<dc:creator>Test Author</dc:creator>", "<dc:creator>Another Author</dc:creator><dc:date>2020-01-01</dc:date>")
                       .replace("</manifest>", '<item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest>'),
            {"OEBPS/cover.png": png(30, 40, (10, 90, 160))})
+    # ... and with its last chapter edited (L-31).
+    with zipfile.ZipFile(books / "twin-a.epub") as zin, zipfile.ZipFile(books / "twin-a-last.epub", "w", zipfile.ZIP_DEFLATED) as zout:
+        for i in zin.infolist():
+            data = zin.read(i)
+            if i.filename == "OEBPS/c3.xhtml":
+                data = data.replace(b"twin-a part 3", b"twin-a part 3 (revised)")
+            zout.writestr(i, data)
     edited(books / "twin-a.epub", books / "twin-a-uid.epub",
            lambda o: o.replace('version="3.0">', 'version="3.0" unique-identifier="uid">')
                       .replace('<dc:title>', '<dc:identifier id="uid">urn:twin-a-given</dc:identifier><dc:title>'))
