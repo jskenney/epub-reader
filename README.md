@@ -145,9 +145,9 @@ This needs a real web server (for example `npx vite` or
 - Natural voice (Pocket TTS): Kyutai's Pocket TTS through
   [pocket-tts-js](https://www.npmjs.com/package/pocket-tts-js), running on
   the CPU (WebAssembly) in a Web Worker. Unlike Kokoro it reads English,
-  French, German, Italian, Portuguese and Spanish books, with 8 built-in
+  German, Italian, Portuguese and Spanish books, with 8 built-in
   voices per language. Each language is a one-time download of the
-  full-precision models (about 430 MB; French about 1.25 GB) after pressing
+  full-precision models (about 430 MB) after pressing
   Download. It has no speed control of
   its own, so the speed setting changes playback instantly with pitch
   preserved. The model is CC BY 4.0 (Kyutai).
@@ -259,7 +259,7 @@ doesn't match is deleted, with a message to run the script again. Files
 already on disk are checked on every run too. The check fails closed: without
 `sha256sum` or `shasum`, or without the checksum list, the script stops
 instead of carrying on unchecked. `--no-verify` skips the check if you really
-need to. Options can go in any order (`./fetch-pocket.sh fr --int8`), and the
+need to. Options can go in any order (`./fetch-pocket.sh de --int8`), and the
 scripts stick to what macOS's older bash and BSD tools support. After changing a pinned version
 or model revision, regenerate the lists with `python3 tools/make-checksums.py`;
 large model files aren't downloaded for this, since Hugging Face records
@@ -270,8 +270,8 @@ would download without downloading it.
 
 ```bash
 ./fetch-pocket.sh            # English (about 430 MB)
-./fetch-pocket.sh en fr de   # several languages (French is about 1.25 GB)
-./fetch-pocket.sh all        # en fr de it pt es
+./fetch-pocket.sh en de it   # several languages
+./fetch-pocket.sh all        # en de it pt es
 ./fetch-pocket.sh --int8 en  # 8-bit models instead (for FULL_PRECISION = false)
 ```
 
@@ -283,9 +283,9 @@ CC BY 4.0 attribution for Kyutai's model. As with Kokoro, each piece falls
 back to the CDN if it's missing, re-runs skip finished files, every file is
 checked against `checksums/pocket.sha256`, and `pocket/` is git-ignored.
 
-The French bundle at this revision has no `voices.bin` (the built-in voices),
-so the script skips it. French Pocket TTS may not be able to speak without
-those voices.
+French isn't offered: its model bundle at this revision has no built-in
+voices (`voices.bin`), so it can't speak. French books are read by device
+voices (Kokoro reads English, and the server voice English and Chinese).
 
 ## Self-hosting the natural voice
 

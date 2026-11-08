@@ -40,8 +40,11 @@ test('options work in any order, and unknown ones are refused (L-5)', () => {
   assert.equal(a.code, 0, a.out);
   assert.equal(a.out, b.out);
   assert.match(a.out, /flow_lm_main_int8\.onnx/);
-  // 6 languages x 7 files (French has no voices.bin upstream) + library, runtime and licences.
-  assert.equal(run(REPO, 'fetch-pocket.sh', ['--list', 'all']).out.split('\n').filter(Boolean).length, 50);
+  // 5 languages x 7 files + library, runtime and licences (French isn't offered).
+  assert.equal(run(REPO, 'fetch-pocket.sh', ['--list', 'all']).out.split('\n').filter(Boolean).length, 44);
+  const fr = run(REPO, 'fetch-pocket.sh', ['--list', 'fr']);
+  assert.equal(fr.code, 1);
+  assert.match(fr.out, /French isn't available/);
   assert.equal(run(REPO, 'fetch-kokoro.sh', ['--bogus']).code, 2);
   assert.equal(run(REPO, 'fetch-libs.sh', ['--list', '--no-verify']).code, 0);
 });

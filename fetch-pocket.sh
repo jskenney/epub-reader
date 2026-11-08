@@ -3,8 +3,9 @@
 # loads it from this site instead of cdn.jsdelivr.net and huggingface.co.
 #
 #   ./fetch-pocket.sh                  English only (about 430 MB)
-#   ./fetch-pocket.sh en fr de         the listed languages (French is about 1.25 GB)
-#   ./fetch-pocket.sh all              English, French, German, Italian, Portuguese and Spanish
+#   ./fetch-pocket.sh en de it         the listed languages
+#   ./fetch-pocket.sh all              English, German, Italian, Portuguese and Spanish
+#   (French isn't offered: its model bundle has no built-in voices at this revision, so it can't speak.)
 #   ./fetch-pocket.sh --int8 en        the 8-bit models instead (about 170 MB per language), for a
 #                                      reader with FULL_PRECISION set to false in index.html
 #
@@ -27,9 +28,10 @@ command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 
 bundle_for() {   # language code -> model bundle (keep in sync with POCKET_LANGS in index.html)
   case "$1" in
-    en) echo english_2026-04 ;; fr) echo french_24l ;; de) echo german ;;
+    en) echo english_2026-04 ;; de) echo german ;;
     it) echo italian ;; pt) echo portuguese ;; es) echo spanish ;;
-    *) echo "Unknown language '$1' (use en, fr, de, it, pt, es or all)" >&2; exit 1 ;;
+    fr) echo "French isn't available: its model bundle has no built-in voices at this revision" >&2; exit 1 ;;
+    *) echo "Unknown language '$1' (use en, de, it, pt, es or all)" >&2; exit 1 ;;
   esac
 }
 # Arguments, in any order: language codes (or all), and the options
@@ -47,7 +49,7 @@ for arg in "$@"; do
   esac
 done
 [ ${#langs[@]} -gt 0 ] || langs=(en)
-[ "${langs[0]}" = all ] && langs=(en fr de it pt es)
+[ "${langs[0]}" = all ] && langs=(en de it pt es)
 
 say() { [ "$LIST" = 1 ] || echo "$@"; }
 get() {   # get URL PATH-UNDER-DEST
@@ -95,8 +97,6 @@ for lang in "${langs[@]}"; do
   # the voice-cloning encoder isn't used
   for f in bundle.json tokenizer.model voices.bin text_conditioner$suffix.onnx flow_lm_main$suffix.onnx \
            flow_lm_flow$suffix.onnx mimi_decoder$suffix.onnx; do
-    # The French bundle has no voices.bin at this revision (upstream), so it has no built-in voices.
-    if [ "$b" = french_24l ] && [ "$f" = voices.bin ]; then continue; fi
     get "$HF/$b/$f" "model/$b/$f"
   done
 done

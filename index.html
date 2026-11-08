@@ -2525,7 +2525,7 @@ function ttsUpdateBar(status){
   narr.hidden = narr.disabled = !book?.hasOverlays;
   ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Natural voice (Kokoro)' : 'Natural voice (Kokoro, English only)';
   const po = eng.querySelector('[value="pocket"]');
-  po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Natural voice (Pocket TTS)' : 'Natural voice (Pocket TTS: en, fr, de, it, pt, es)';
+  po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Natural voice (Pocket TTS)' : 'Natural voice (Pocket TTS: en, de, it, pt, es)';
   const so = eng.querySelector('[value="server"]');
   so.hidden = !sv.available; so.disabled = !sv.available || !serverFits();
   so.textContent = serverFits() ? 'Server voice' : 'Server voice (English and Chinese only)';
@@ -2821,7 +2821,8 @@ const POCKET = {
   local: new URL('pocket/', voiceFilesBase()).href
 };
 const POCKET_LANGS = {   // book language -> [model bundle, MB to download (full precision, int8), name]
-  en: ['english_2026-04', [431, 170], 'English'], fr: ['french_24l', [1247, 338], 'French'], de: ['german', [431, 170], 'German'],
+  // (French is left out: its model bundle has no built-in voices at the pinned revision, so it can't speak.)
+  en: ['english_2026-04', [431, 170], 'English'], de: ['german', [431, 170], 'German'],
   it: ['italian', [431, 170], 'Italian'], pt: ['portuguese', [431, 170], 'Portuguese'], es: ['spanish', [431, 170], 'Spanish']
 };
 const pocketMB = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1][FULL_PRECISION ? 0 : 1] || 431;

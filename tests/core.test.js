@@ -83,3 +83,12 @@ test('comics: spreads in two columns, ComicInfo metadata, and earlier sections r
   assert.deepEqual(released, ['released', 'released', 'released']);
   assert.ok((await shown()).slice(0, 2).every(i => i.ok), 'the new section shows');
 });
+
+test('French books are not offered Pocket TTS, which has no French voices (E-12)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/french.epub`, { 'spine:ttsEngine': 'pocket' });
+  await page.click('#ttsBtn');
+  const pocket = await page.$eval('#ttsEngine option[value="pocket"]', o => ({ disabled: o.disabled, text: o.textContent }));
+  assert.deepEqual(pocket, { disabled: true, text: 'Natural voice (Pocket TTS: en, de, it, pt, es)' });
+  assert.equal(await page.inputValue('#ttsEngine'), 'device');
+});

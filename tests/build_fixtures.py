@@ -31,9 +31,9 @@ def png(w, h, rgb):
         chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
-def xhtml(title, body, head=""):
+def xhtml(title, body, head="", lang="en"):
     return f"""<?xml version="1.0" encoding="utf-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="{lang}">
 <head><title>{title}</title>{head}</head><body>{body}</body></html>"""
 
 
@@ -60,7 +60,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
         z.writestr("OEBPS/content.opf", opf)
         z.writestr("OEBPS/nav.xhtml", nav)
         for f, t, body, *head in chapters:
-            z.writestr(f"OEBPS/{f}", xhtml(t, body, head[0] if head else ""))
+            z.writestr(f"OEBPS/{f}", xhtml(t, body, head[0] if head else "", lang))
         for name, data in (extra or {}).items():
             z.writestr(name, data)
 
@@ -131,6 +131,7 @@ def main():
         ("c2.xhtml", "Chapter Two", "<h1>Chapter Two</h1>" + paragraphs("Second", 12) + "<p>He said, “I don’t think so.”</p>"),
         ("c3.xhtml", "Chapter Three", "<h1>Chapter Three</h1>" + paragraphs("Third", 4)),
     ], uid="urn:long")
+    epub(books / "french.epub", "Le Livre", [("c1.xhtml", "Un", "<h1>Un</h1><p>Il était une fois.</p>")], uid="urn:french", lang="fr")
     shutil.copy(books / "long.epub", shelf / "shelf-only.epub")
     shutil.copy(books / "long.epub", books / "50%off.epub")   # a "%" in the name (REVIEW.md M-1)
     with zipfile.ZipFile(books / "long.epub") as z:
