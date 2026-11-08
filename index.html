@@ -1036,10 +1036,12 @@ async function openDocument(buffer, name, kind, { base = null, key, seq } = {}){
   // Give headings ids for the contents (GitHub-style, so Markdown links like [x](#some-heading) work), and
   // send in-document links to the section holding their target.
   const used = new Set([...doc.querySelectorAll('[id]')].map(e => e.id));
+  const next = new Map();   // per heading text, the number to try next (counting from 1 each time was quadratic)
   const slug = text => {
     const b = text.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s/g, '-') || 'section';
-    let id = b, k = 1; while (used.has(id)) id = `${b}-${k++}`;
-    used.add(id); return id;
+    let id = b, k = next.get(b) || 1;
+    while (used.has(id)) id = `${b}-${k++}`;
+    next.set(b, k); used.add(id); return id;
   };
   const where = new Map();
   parts.forEach((part, i) => part.forEach(nd => {
@@ -2278,13 +2280,17 @@ function sectionLink(){
   const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
   if (hits.length < 2) return null;
   let best = null, bestEl = null;
+  // (The layout measured once, and the headings, in document order, only up to the first one past the page:
+  // with thousands of headings, measuring each one on every page turn took seconds.)
+  const g = scrolling() ? null : geom(), third = frame.contentWindow.innerHeight / 3;
   for (const a of hits) {
     const el = doc.getElementById(a.dataset.frag);
     if (!el || (bestEl && !(bestEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))) continue;
     let seen;
-    if (scrolling()) seen = el.getBoundingClientRect().top <= frame.contentWindow.innerHeight / 3;
-    else { const r = doc.createRange(); r.selectNode(el); seen = pageOfRange(r) <= cur.page; }
-    if (seen) { best = a; bestEl = el; }
+    if (!g) seen = el.getBoundingClientRect().top <= third;
+    else { const r = doc.createRange(); r.selectNode(el); seen = pageOfRange(r, false, g) <= cur.page; }
+    if (!seen) break;
+    best = a; bestEl = el;
   }
   return best;
 }
@@ -2756,8 +2762,8 @@ function rangeFor(b, a, z){
   r.setStart(n1, o1); r.setEnd(n2, o2);
   return r;
 }
-function pageOfRange(r, atEnd = false){
-  const g = geom(); if (!g) return cur.page;
+function pageOfRange(r, atEnd = false, g = geom()){   // (g: the layout, when measuring many ranges at once)
+  if (!g) return cur.page;
   const rects = r.getClientRects();
   const rect = (atEnd ? rects[rects.length - 1] : rects[0]) || r.getBoundingClientRect();
   return Math.max(0, Math.min(g.pages - 1, Math.floor((rect.left - g.left + 1) / g.step)));

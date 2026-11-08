@@ -103,6 +103,22 @@ test('"shortcuts": false in reader-config.json starts with single-key shortcuts 
   assert.equal(await page.getAttribute('#keysOpt', 'aria-checked'), 'false');
 });
 
+test('a document with thousands of identical headings opens quickly, each with its own id (M-19)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page);
+  const tmp = require('node:path').join(require('node:os').tmpdir(), `spine-heads-${Date.now()}.md`);
+  require('node:fs').writeFileSync(tmp, '# a\n\ntext\n\n'.repeat(8000));
+  try {
+    const t0 = Date.now();
+    await page.setInputFiles('#fileInput', tmp);
+    await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'a', null, { timeout: 60000 });   // (titled by its first heading)
+    await h.waitForBook(page);
+    assert.ok(Date.now() - t0 < 8000, `opened in ${Date.now() - t0} ms`);
+    const ids = await h.inFrame(page, doc => [...doc.querySelectorAll('h1')].slice(0, 3).map(e => e.id));
+    assert.deepEqual(ids, ['a', 'a-1', 'a-2']);
+  } finally { require('node:fs').rmSync(tmp, { force: true }); }
+});
+
 test('documents open as one continuous page with their headings in the contents', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/notes.md`);
