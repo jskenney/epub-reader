@@ -4,9 +4,11 @@
 #
 #   tests/run.sh                    all tests
 #   tests/run.sh tests/urls.test.js one file
+#   SLOW=1 tests/run.sh             also load the real Kokoro and Pocket TTS models
+#   NETWORK=1 tests/run.sh          also check the CDN version of the reader policy (needs internet access)
 #
 # Needs Python 3, Node 18+ and Playwright with Chromium (cd tests && npm install && npx playwright install chromium).
-# Everything runs against local servers on ports 8790-8793; the browser is blocked from reaching other sites.
+# Everything runs against local servers on ports 8790-8794; the browser is blocked from reaching other sites.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,7 +30,9 @@ python3 tests/server.py --root tests/site --port 8791 --soft404 --csp-from nginx
 # A server that ignores range requests, so books there are downloaded whole (the fallback path).
 python3 tests/server.py --root tests/site --port 8793 --no-range --csp-from nginx.conf.example --csp-skip "$skip" & pids+=($!)
 python3 tests/server.py --root tests/site --port 8792 --log & pids+=($!)
-for port in 8790 8791 8792 8793; do
+# The same site with the CDN version of the reader policy (tests that reach CDNs run only with NETWORK=1).
+python3 tests/server.py --root tests/site --port 8794 --csp-from nginx.conf.example --csp-variant cdn & pids+=($!)
+for port in 8790 8791 8792 8793 8794; do
   for _ in $(seq 1 50); do curl -s -o /dev/null "http://localhost:$port/" && break; sleep 0.1; done
 done
 

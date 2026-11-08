@@ -1,0 +1,24 @@
+# The tests that need the real voice models (REVIEW.md T-4) and internet access (T-5), which the usual run
+# skips: weekly, so upstream changes (a CDN, Hugging Face's download hosts, a model file) show up, and on demand.
+name: Slow tests
+on:
+  schedule:
+    - cron: '17 4 * * 1'   # Mondays, 04:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  slow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Playwright
+        run: cd tests && npm install && npx playwright install --with-deps chromium
+      - name: Self-hosted files (checked against checksums/)
+        run: ./fetch-libs.sh && ./fetch-fonts.sh && ./fetch-kokoro.sh && ./fetch-pocket.sh en
+      - name: Tests, with the real models and the CDN policy
+        run: SLOW=1 NETWORK=1 tests/run.sh

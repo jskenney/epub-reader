@@ -31,6 +31,8 @@ ap.add_argument("--breeze", action="store_true")
 ap.add_argument("--log", action="store_true")
 ap.add_argument("--rtf", type=float, default=4.0, help="mock Breeze speed: seconds of audio per second")
 ap.add_argument("--csp-from", help="send the Content-Security-Policy from this nginx example (its first active add_header)")
+ap.add_argument("--csp-variant", choices=["self", "cdn"], default="self",
+                help="cdn: the commented-out policy for a reader that uses CDNs, instead of the active one")
 ap.add_argument("--no-range", action="store_true", help="ignore Range headers (answer with the whole file)")
 ap.add_argument("--csp-skip", default="", help="comma-separated path prefixes served without it (setups that need CDNs or remote content)")
 args = ap.parse_args()
@@ -51,12 +53,13 @@ def validators(file, path=""):
 POLICY = None
 if args.csp_from:
     import re
+    pattern = r'\s*add_header Content-Security-Policy "([^"]+)"' if args.csp_variant == "self" else r'\s*#\s*add_header Content-Security-Policy "([^"]+)"'
     for line in open(args.csp_from):
-        m = re.match(r'\s*add_header Content-Security-Policy "([^"]+)"', line)   # not commented out
+        m = re.match(pattern, line)   # self: the active one; cdn: the commented-out CDN version
         if m:
             POLICY = m.group(1)
             break
-    assert POLICY, f"no active Content-Security-Policy in {args.csp_from}"
+    assert POLICY, f"no {args.csp_variant} Content-Security-Policy in {args.csp_from}"
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):

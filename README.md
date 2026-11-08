@@ -482,19 +482,25 @@ cd tests && npm install && npx playwright install chromium && cd ..   # once
 tests/run.sh                        # all tests (about a minute)
 tests/run.sh tests/urls.test.js     # one file
 SLOW=1 tests/run.sh                 # also load the real self-hosted Kokoro and Pocket TTS on the CPU
+NETWORK=1 tests/run.sh              # also load everything from the CDNs under the CDN version of the policy
 ```
 
 `run.sh` fetches the libraries and fonts if they're missing, builds a test
 site under `tests/site/` (books, documents, comics and a voice, made by
-`tests/build_fixtures.py`), and starts three local servers (`tests/server.py`):
+`tests/build_fixtures.py`), and starts five local servers (`tests/server.py`):
 the site with a mock Breeze voice server, the same site answering missing files
-with 200 "not found" pages, and an "other site" that records any request a
+with 200 "not found" pages, one ignoring range requests, one sending the CDN
+version of the reader policy, and an "other site" that records any request a
 book makes to it. The browser is blocked from every other site, so the tests
 also check that nothing is fetched from elsewhere. They cover opening books and
 the `/bookshelf/` fallback, `default.epub`, per-folder configs, remote-content
 stripping and links, self-hosting and integrity checks, search, layouts,
 comics, the server voice (streaming, cancelling, preparing ahead, saved audio),
 media controls, the sleep timer and time left.
+
+`.github/workflows/slow.yml` runs the whole suite weekly on GitHub, and on
+demand, with the real models (`SLOW=1`) and the CDNs (`NETWORK=1`), so changes
+upstream (a CDN, Hugging Face's download hosts, a model file) show up.
 
 ## Requirements
 
