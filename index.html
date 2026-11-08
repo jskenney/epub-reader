@@ -1513,7 +1513,7 @@ const cssUrl = u => `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).t
 // or "image" (a url token, url() or src() with a string, or a string inside image-set() or image()).
 function cssRefs(css){
   const toks = cssTokens(css), refs = [], fns = [];
-  let block = 0;
+  let block = 0, late = false;   // late: past the point where @import is allowed (anything but @charset and @layer x;)
   const next = k => { while (toks[k]?.t === 'ws' || toks[k]?.t === 'comment') k++; return k; };
   for (let k = 0; k < toks.length; k++) {
     const tk = toks[k];
@@ -1529,20 +1529,27 @@ function cssRefs(css){
     else if (tk.t === '(') fns.push('(');
     else if (tk.t === ')') fns.pop();
     else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1) || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
-    else if (tk.t === '{') block++;
+    else if (tk.t === '{') { if (block === 0) late = true; block++; }
     else if (tk.t === '}') block = Math.max(0, block - 1);
-    else if (tk.t === 'at' && (tk.v === 'import' || tk.v === 'namespace') && block === 0) {
+    else if (tk.t === 'at' && block === 0 && !['import', 'charset', 'layer'].includes(tk.v)) {
+      late = true;
+      if (tk.v === 'namespace') { let m = k + 1; while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++; k = toks[m]?.t === '{' ? m - 1 : m; }
+    }
+    else if (tk.t === 'at' && tk.v === 'import' && block === 0) {
       // The prelude, to ";" or the end; a "{" makes it a block rule, which @import and @namespace aren't.
       let m = k + 1;
       while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++;
       if (toks[m]?.t === '{') { k = m - 1; continue; }   // (and on from there, not from the next token)
-      if (tk.v === 'import') {
-        const a = next(k + 1), at = toks[a];
-        let ref = at?.t === 'string' || at?.t === 'url' ? at.v : null;
-        if (at?.t === 'function' && at.v === 'url' && toks[next(a + 1)]?.t === 'string') ref = toks[next(a + 1)].v;
-        if (ref != null) refs.push({ s: tk.s, e: toks[m]?.e ?? css.length, ref, kind: 'import' });
+      const a = next(k + 1), at = toks[a];
+      let ref = at?.t === 'string' || at?.t === 'url' ? at.v : null, after = at?.e;
+      if (at?.t === 'function' && at.v === 'url' && toks[next(a + 1)]?.t === 'string') {
+        ref = toks[next(a + 1)].v;
+        const c = next(next(a + 1) + 1); after = toks[c]?.t === ')' ? toks[c].e : toks[next(a + 1)].e;
       }
-      k = m;   // (an @namespace address is a name, not a file: left alone)
+      // The rest of the prelude (layer, supports(), media queries), kept for the pasted sheet; an @import
+      // after other rules is ignored by the browser, so it is dropped rather than pasted in.
+      if (ref != null) refs.push({ s: tk.s, e: toks[m]?.e ?? css.length, ref, kind: 'import', late, cond: css.slice(after, toks[m]?.s ?? css.length) });
+      k = m;
     }
   }
   return refs;
@@ -1559,6 +1566,30 @@ function cssCloseAtEnd(css){
     else if (tk.t === ')' || tk.t === ']' || tk.t === '}') { if (open.at(-1) === tk.t) open.pop(); }
   }
   return css + tail + open.reverse().join('');
+}
+// An imported sheet pasted in place of its @import keeps the rule's conditions: @layer, @supports and @media
+// around it, as the import would have applied it.
+function cssWrapImport(sheet, cond){
+  const toks = cssTokens(cond);
+  let layer = null, supports = null;
+  const rest = [];
+  for (let k = 0; k < toks.length; k++) {
+    const tk = toks[k];
+    if (tk.t === 'function' && (tk.v === 'layer' || tk.v === 'supports')) {
+      let d = 1, j = k + 1;
+      for (; j < toks.length && d; j++) { if (toks[j].t === 'function' || toks[j].t === '(') d++; else if (toks[j].t === ')') d--; }
+      const inner = cond.slice(tk.e, toks[j - 1].t === ')' && !d ? toks[j - 1].s : cond.length).trim();
+      if (tk.v === 'layer') layer = inner; else supports = inner;
+      k = j - 1;
+    } else if (tk.t === 'ident' && tk.v.toLowerCase() === 'layer' && layer === null && !rest.some(t => t.trim())) layer = '';
+    else rest.push(cond.slice(tk.s, tk.e));
+  }
+  const media = rest.join('').trim();
+  let out = sheet;
+  if (media) out = `@media ${media}{\n${out}\n}`;
+  if (supports) out = `@supports (${supports}){\n${out}\n}`;
+  if (layer !== null) out = `@layer${layer ? ' ' + layer : ''}{\n${out}\n}`;
+  return out;
 }
 async function rewriteCss(css, cssPath, depth = 0, again = true){
   css = cssPreprocess(css);
@@ -1577,9 +1608,10 @@ async function rewriteCss(css, cssPath, depth = 0, again = true){
   for (const r of refs) {
     let text = null;   // null: leave it as written
     if (r.kind === 'import') {
-      if (r.local) {
+      if (r.late) text = '';   // (ignored by the browser anyway)
+      else if (r.local) {
         const p = resolve(cssPath, r.clean), t = depth < 4 ? await readText(book.zip, p) : null;
-        text = t ? cssCloseAtEnd(await rewriteCss(t, p, depth + 1)) + '\n' : '';
+        text = t ? cssWrapImport(cssCloseAtEnd(await rewriteCss(t, p, depth + 1)), r.cond) + '\n' : '';
         inlined = true;
       } else if (!ALLOW_REMOTE_CONTENT || !isRemote(r.clean)) text = '';   // another site (or a data: sheet): dropped
     } else if (r.local) {

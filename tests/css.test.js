@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const h = require('./helpers');
 
+test.afterEach(h.closePages);
 test.after(h.close);
 
 // The cleaning functions, with the few things they use from the rest of the page.
@@ -17,7 +18,7 @@ function cleaner(allowRemote = false) {
   const line = name => { const a = src.indexOf(name); return src.slice(a, src.indexOf('\n', a)); };
   const body = [line('const isExternal = '), line('const urlText = '), line('const isRemote = '), src.slice(from, to)].join('\n');
   const files = { 'local.css': '.l{background:url(pic.png)}', 'tail.css': 'a{background:url(', 'tail2.css': 'a{background:u',
-    'tail3.css': 'a{background-image:image-set(', 'open-comment.css': '/* never closed', 'open-string.css': 'a{content:"never closed' };
+    'tail3.css': 'a{background-image:image-set(', 'open-comment.css': '/* never closed', 'open-string.css': 'a{content:"never closed', 'red.css': 'x{color:rgb(255, 0, 0)}' };
   return new Function('ALLOW_REMOTE_CONTENT', 'book', 'resolve', 'readText', 'resourceURL', `${body}\nreturn { rewriteCss, cssTokens, cssRefs, cssPreprocess };`)(
     allowRemote, { zip: null }, (base, ref) => ref, async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`));
 }
@@ -74,6 +75,29 @@ test('everything else is left as written: strings, local files, fragments, data:
   assert.equal(await rewriteCss('@import "local.css"; x{y:url("pic (1).png")}', 'x.css'), '.l{background:url(blob:local/pic.png)}\n x{y:url(blob:local/pic%20%281%29.png)}');
   // With remote content allowed, remote addresses stay.
   assert.equal(await cleaner(true).rewriteCss(`a{b:url(${R}/x.png)}`, 'x.css'), `a{b:url(${R}/x.png)}`);
+});
+
+test("a pasted-in import keeps its conditions, and imports the browser would ignore are dropped (L-35)", async () => {
+  const { rewriteCss } = cleaner();
+  const t = async css => (await rewriteCss(css, 'x.css')).replace(/\s+/g, ' ').trim();
+  assert.equal(await t('@import "red.css" print;'), '@media print{ x{color:rgb(255, 0, 0)} }');
+  assert.equal(await t('@import url("red.css") layer(base) supports(display: grid) screen and (min-width: 10px);'),
+    '@layer base{ @supports (display: grid){ @media screen and (min-width: 10px){ x{color:rgb(255, 0, 0)} } } }');
+  assert.equal(await t('@import "red.css" layer;'), '@layer{ x{color:rgb(255, 0, 0)} }');
+  assert.equal(await t('@import url(red.css) supports(selector(:has(a)));'), '@supports (selector(:has(a))){ x{color:rgb(255, 0, 0)} }');
+  // Allowed before an import: @charset and @layer statements. After anything else, the import is ignored.
+  assert.equal(await t('@charset "utf-8"; @layer a, b; @import "red.css";'), '@charset "utf-8"; @layer a, b; x{color:rgb(255, 0, 0)}');
+  assert.equal(await t('a{b:c} @import "red.css";'), 'a{b:c}');
+  assert.equal(await t('@namespace svg url(http://www.w3.org/2000/svg); @import "red.css";'), '@namespace svg url(http://www.w3.org/2000/svg);');
+  assert.equal(await t('@media screen{} @import "red.css";'), '@media screen{}');
+  // In Chromium: a print-only import doesn't apply on screen; a screen one does.
+  const page = await h.newPage();
+  await page.setContent('<x>x</x>');
+  const color = async css => page.evaluate(t => { document.head.querySelectorAll('style').forEach(e => e.remove());
+    const st = document.createElement('style'); st.textContent = t; document.head.append(st); return getComputedStyle(document.querySelector('x')).color; }, await rewriteCss(css, 'x.css'));
+  assert.notEqual(await color('@import "red.css" print;'), 'rgb(255, 0, 0)');
+  assert.equal(await color('@import "red.css" screen;'), 'rgb(255, 0, 0)');
+  assert.notEqual(await color('a{b:c} @import "red.css";'), 'rgb(255, 0, 0)');
 });
 
 test('the cleaned CSS asks no other site for anything when the browser applies it (L-29, T-10)', async () => {
