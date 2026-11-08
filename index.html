@@ -763,12 +763,12 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
   const text = decodeText(new Uint8Array(buffer));
   let doc, meta = {}, headExtra = '';
   if (kind === 'html') {
-    doc = new DOMParser().parseFromString(text, 'text/html');
+    doc = new DOMParser().parseFromString(withoutDocumentControls(text), 'text/html');
     meta = { title: doc.title.trim(), author: doc.querySelector('meta[name="author" i]')?.content?.trim(), language: doc.documentElement.lang };
     headExtra = [...doc.head.querySelectorAll('style, link[rel~="stylesheet" i]')].map(e => e.outerHTML).join('');
   } else {
     meta = kind === 'markdown' ? await markdownToHtml(text) : textToHtml(text);
-    doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body>${meta.html}</body></html>`, 'text/html');
+    doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body>${withoutDocumentControls(meta.html)}</body></html>`, 'text/html');
     if (kind === 'text') headExtra = TXT_CSS;
   }
   const language = langCode(meta.language);
@@ -1114,28 +1114,40 @@ function resourceURL(path){
   return job;
 }
 const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
+// CSS escapes (\68ttp is "http") decoded, so an address is checked as the browser will read it.
+const cssUnescape = t => t.replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?/gi, (_, h) => String.fromCodePoint(Math.min(parseInt(h, 16), 0x10FFFF) || 0xFFFD))
+  .replace(/\\(.)/g, '$1');
+// image-set() takes plain strings as well as url(): one with any remote entry counts as remote.
+const IMAGE_SET_RE = /(?:-webkit-)?image-set\((?:[^()]|\([^()]*\))*\)/gi;
 async function rewriteCss(css, cssPath, depth = 0){
+  if (!ALLOW_REMOTE_CONTENT) {
+    css = css.replace(IMAGE_SET_RE, all => [...all.matchAll(/(['"])(.*?)\1/g)].some(m => isRemote(cssUnescape(m[2]))) ? 'none' : all);
+  }
   for (const m of [...css.matchAll(/@import\s*(?:url\(\s*)?(['"]?)([^'")\s;]+)\1\s*\)?[^;]*;/gi)]) {
     let inner = '';
-    if (isRemote(m[2]) && ALLOW_REMOTE_CONTENT) continue;   // left as it is: the browser loads it
-    if (depth < 4 && !isExternal(m[2])) {
-      const p = resolve(cssPath, m[2]); const t = await readText(book.zip, p);
+    const ref = cssUnescape(m[2]);
+    if (isRemote(ref) && ALLOW_REMOTE_CONTENT) continue;   // left as it is: the browser loads it
+    if (depth < 4 && !isExternal(ref) && !isRemote(ref)) {
+      const p = resolve(cssPath, ref); const t = await readText(book.zip, p);
       if (t) inner = await rewriteCss(t, p, depth + 1);
     }
     css = css.replace(m[0], () => inner);
   }
   const found = new Map();
   for (const m of css.matchAll(URL_RE)) {
-    const ref = m[2].trim();
+    const ref = cssUnescape(m[2].trim());
     if (!ref || isExternal(ref) || isRemote(ref) || ref.startsWith('#') || found.has(ref)) continue;   // remote ones: see below
     found.set(ref, resourceURL(resolve(cssPath, ref)));
   }
   const done = new Map();
   for (const [k, v] of found) done.set(k, await v);
-  return css.replace(URL_RE, (all, q, ref) => {
-    const u = done.get(ref.trim());
+  return css.replace(URL_RE, (all, q, raw) => {
+    const ref = cssUnescape(raw.trim());
+    const u = done.get(ref);
     if (u) return `url("${u}")`;
-    return !ALLOW_REMOTE_CONTENT && isRemote(ref.trim()) ? 'url("about:blank")' : all;   // no requests to other sites
+    if (ALLOW_REMOTE_CONTENT || ref.startsWith('#') || /^(data|blob):/i.test(ref)) return all;
+    // Another site, or a file the book doesn't have: no image (rather than a request the policy would refuse).
+    return isRemote(ref) || done.has(ref) ? 'none' : all;
   });
 }
 
@@ -1236,7 +1248,7 @@ async function localize(doc, path){
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
   for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path).then(c => { st.textContent = c; }));
-  for (const el of doc.body.querySelectorAll('[style*="url(" i]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
+  for (const el of doc.body.querySelectorAll('[style*="url(" i], [style*="image-set" i]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
@@ -1367,8 +1379,12 @@ function releaseComicImages(shownPath){
     }
   }
 }
+/* <base> and <meta http-equiv> take effect as soon as a document is parsed, even an unseen one made only to
+   read a chapter, and the browser applies the page's security policy to them there (logging alarming
+   messages). The reader never wants them, so they are removed from the text before any parsing. */
+const withoutDocumentControls = t => t.replace(/<base\b[^>]*>/gi, '').replace(/<meta\b[^>]*\bhttp-equiv\b[^>]*>/gi, '');
 async function chapterSource(item){
-  const raw = await readText(book.zip, item.path) || '';
+  const raw = withoutDocumentControls(await readText(book.zip, item.path) || '');
   const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
   return (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
 }

@@ -50,6 +50,8 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
   assert.deepEqual([state.iframes, state.base, state.refresh, state.animations], [0, 0, 0, 0], 'upper-case IFRAME, BASE, META and SVG set are removed');
   assert.match(state.policy, ref.endsWith('/') ? /^default-src 'none'; img-src data: blob: http:\/\/localhost:8790\/reader\/books\/hostile-dir\// : /^default-src 'none'; img-src data: blob:;/);
   assert.deepEqual([state.where, state.still], ['about:srcdoc', true], 'the page is still the book');
+  // The cleaning leaves nothing for the policies to refuse, so the console stays quiet (L-19).
+  assert.deepEqual(page.cspViolations, []);
 });
 
 test('links of every kind: in-book links open chapters, web links open a new tab, the frame never navigates', async () => {
