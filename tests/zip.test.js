@@ -72,3 +72,13 @@ test('comics on a server with range requests open in place', async () => {
   assert.equal(await h.title(page), 'Test Comic');
   assert.equal(await page.evaluate(() => window.wholeLoads), 0);
 });
+
+test('a book with an empty file opens with range requests (H-3)', async () => {
+  for (const base of [h.SITE, h.SOFT]) {
+    const page = await h.newPage();
+    await h.openReader(page, `${base}/reader/index.html?book=books/empty-file.epub`);
+    assert.equal(await h.title(page), 'Empty File');
+    assert.equal(await h.notice(page), '', base);
+    assert.match(await page.evaluate(() => document.querySelector('#page').contentDocument.body.textContent), /Text\./);
+  }
+});

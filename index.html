@@ -566,7 +566,7 @@ async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Ar
     const bytes = async () => {
       const head = await read(local, 30);
       if (u32(head, 0) !== 0x04034b50) throw new Error(`${name}: damaged archive`);
-      const data = await read(local + 30 + u16(head, 26) + u16(head, 28), csize);
+      const data = csize ? await read(local + 30 + u16(head, 26) + u16(head, 28), csize) : new Uint8Array(0);   // an empty file needs no read
       if (method === 0) return data;
       return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
     };
@@ -597,6 +597,7 @@ async function zipFromUrl(url, init = {}){
     const head = new Uint8Array(await r.arrayBuffer());
     if (!isZipBytes(head.buffer)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
     const read = async (o, l) => {
+      if (l <= 0) return new Uint8Array(0);   // "bytes=o-(o-1)" isn't a valid range
       const part = await fetch(url, { headers: { Range: `bytes=${o}-${o + l - 1}` } });
       if (part.status !== 206) throw new Error(`the server stopped answering range requests for ${url}`);
       return new Uint8Array(await part.arrayBuffer());

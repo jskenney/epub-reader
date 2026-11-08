@@ -62,7 +62,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
         for f, t, body, *head in chapters:
             z.writestr(f"OEBPS/{f}", xhtml(t, body, head[0] if head else "", lang))
         for name, data in (extra or {}).items():
-            z.writestr(name, data)
+            z.writestr(zipfile.ZipInfo(name) if data == b"" else name, data)   # empty files stored (0 bytes), as tools do
 
 
 def paragraphs(prefix, n, words=60):
@@ -138,6 +138,9 @@ def main():
         ("c2.xhtml", "Big Two", "<h1>Big Two</h1>" + paragraphs("Big", 3)),
         ("c3.xhtml", "Big Three", '<h1>Big Three</h1><p><img id="big-pic" src="pic.png" alt="pic"/></p>'),
     ], uid="urn:big", extra={"OEBPS/pic.png": png(80, 60, (40, 120, 200)), "OEBPS/unused.bin": os.urandom(5_000_000)})
+    # A book with an empty stylesheet (a zero-length file in the archive) (REVIEW.md H-3).
+    epub(books / "empty-file.epub", "Empty File", [("c1.xhtml", "One", "<h1>One</h1><p>Text.</p>", '<link rel="stylesheet" href="empty.css"/>')],
+         uid="urn:empty-file", extra={"OEBPS/empty.css": b""})
     # Two different books with the same title and no identifier (REVIEW.md L-13).
     for name, n in (("twin-a", 3), ("twin-b", 2)):
         epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)
