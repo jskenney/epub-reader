@@ -55,8 +55,13 @@ order, left to right.
 When `index.html` is served from a web server, a `book` query parameter opens
 a book from the same site on page load:
 
-- `index.html?book=books/moby-dick.epub`: fetches the `.epub` and unzips it
-  in the browser
+- `index.html?book=books/moby-dick.epub`: reads the `.epub` in the browser.
+  When the server answers range requests (nginx, Caddy and most others do),
+  only the parts needed are fetched: the archive's directory, then each
+  chapter, picture or audio clip as it's shown. A large narrated book or
+  comic therefore isn't downloaded or held in memory whole. Otherwise the
+  file is downloaded whole, as before. Uploaded files are read in place the
+  same way.
 - `index.html?book=books/notes.md` (or `.txt`, `.html`): opens that document
 - `index.html?book=books/issue-3.cbz`: opens a comic book
 - `index.html?book=books/moby-dick/`: reads an already-extracted EPUB folder

@@ -65,6 +65,8 @@ const inFrame = (page, fn, arg) => page.evaluate(([src, a]) => {
 
 async function remoteLog() { return (await fetch(`${REMOTE}/__log`)).json(); }
 async function clearRemoteLog() { await fetch(`${REMOTE}/__log`, { method: 'DELETE' }); }
+async function bytesSent(base = SITE) { return (await fetch(`${base}/__bytes`)).json(); }
+async function clearBytes(base = SITE) { await fetch(`${base}/__bytes`, { method: 'DELETE' }); }
 async function breezeLog() { return (await fetch(`${SITE}/__breeze`)).json(); }
 async function clearBreezeLog() { await fetch(`${SITE}/__breeze`, { method: 'DELETE' }); }
 
@@ -79,5 +81,5 @@ async function waitFor(fn, ms = 20000, step = 100) {
   return null;
 }
 
-module.exports = { SITE, SOFT, REMOTE, READER, launch, close, closePages, newPage, openReader, waitForBook, title, notice, inFrame,
+module.exports = { SITE, SOFT, REMOTE, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, inFrame,
   remoteLog, clearRemoteLog, breezeLog, clearBreezeLog, spokenWord, waitFor };

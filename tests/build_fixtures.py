@@ -53,7 +53,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
 <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>{items}</manifest>
 <spine>{spine}</spine></package>"""
     nav = xhtml("Contents", f'<nav epub:type="toc"><ol>{nav_items}</ol></nav>')
-    with zipfile.ZipFile(path, "w") as z:
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:   # compressed, like real EPUBs (mimetype stays stored)
         z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
         z.writestr("META-INF/container.xml", """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
 <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
@@ -132,6 +132,12 @@ def main():
         ("c3.xhtml", "Chapter Three", "<h1>Chapter Three</h1>" + paragraphs("Third", 4)),
     ], uid="urn:long")
     epub(books / "french.epub", "Le Livre", [("c1.xhtml", "Un", "<h1>Un</h1><p>Il était une fois.</p>")], uid="urn:french", lang="fr")
+    # A large book: about 5 MB, mostly a file it never shows, and a picture in chapter 3 (REVIEW.md L-16).
+    epub(books / "big.epub", "The Big Book", [
+        ("c1.xhtml", "Big One", "<h1>Big One</h1>" + paragraphs("Big", 3)),
+        ("c2.xhtml", "Big Two", "<h1>Big Two</h1>" + paragraphs("Big", 3)),
+        ("c3.xhtml", "Big Three", '<h1>Big Three</h1><p><img id="big-pic" src="pic.png" alt="pic"/></p>'),
+    ], uid="urn:big", extra={"OEBPS/pic.png": png(80, 60, (40, 120, 200)), "OEBPS/unused.bin": os.urandom(5_000_000)})
     # Two different books with the same title and no identifier (REVIEW.md L-13).
     for name, n in (("twin-a", 3), ("twin-b", 2)):
         epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)

@@ -14,6 +14,8 @@ import html
 import http.server
 import json
 import math
+import os
+import re
 import struct
 import threading
 import time
@@ -29,10 +31,12 @@ ap.add_argument("--breeze", action="store_true")
 ap.add_argument("--log", action="store_true")
 ap.add_argument("--rtf", type=float, default=4.0, help="mock Breeze speed: seconds of audio per second")
 ap.add_argument("--csp-from", help="send the Content-Security-Policy from this nginx example (its first active add_header)")
+ap.add_argument("--no-range", action="store_true", help="ignore Range headers (answer with the whole file)")
 ap.add_argument("--csp-skip", default="", help="comma-separated path prefixes served without it (setups that need CDNs or remote content)")
 args = ap.parse_args()
 
 seen, breeze_log, busy = [], [], threading.Lock()
+sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 POLICY = None
 if args.csp_from:
     import re
@@ -87,6 +91,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/__bytes":
+            return self.json(200, sent)
         if args.log:
             if path == "/__log":
                 return self.json(200, seen)
@@ -99,9 +105,48 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self.json(200, {"status": "ok"})
             if path.startswith("/tts/"):
                 return self.json(404, {"detail": "Not Found"})
+        file = self.translate_path(self.path)
+        rng = self.headers.get("Range")
+        if rng and not args.no_range and os.path.isfile(file):
+            return self.send_range(file, rng)
         super().do_GET()
 
+    def copyfile(self, source, outputfile):   # count what is sent
+        n = 0
+        while chunk := source.read(65536):
+            outputfile.write(chunk)
+            n += len(chunk)
+        key = self.path.split("?")[0]
+        sent[key] = sent.get(key, 0) + n
+
+    def send_range(self, file, rng):
+        size = os.path.getsize(file)
+        m = re.match(r"bytes=(\d*)-(\d*)$", rng.strip())
+        if not m or (not m.group(1) and not m.group(2)):
+            return self.send_error(416)
+        if m.group(1):
+            start, end = int(m.group(1)), min(int(m.group(2)) if m.group(2) else size - 1, size - 1)
+        else:
+            start, end = max(0, size - int(m.group(2))), size - 1
+        if start > end:
+            return self.send_error(416)
+        with open(file, "rb") as f:
+            f.seek(start)
+            data = f.read(end - start + 1)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(file))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+        self.wfile.write(data)
+        key = self.path.split("?")[0]
+        sent[key] = sent.get(key, 0) + len(data)
+
     def do_DELETE(self):
+        if self.path.startswith("/__bytes"):
+            sent.clear()
+            return self.json(200, {"ok": True})
         (seen if self.path.startswith("/__log") else breeze_log).clear()
         self.json(200, {"ok": True})
 

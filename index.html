@@ -527,6 +527,89 @@ async function readText(src, path){ return src.text(path); }
 
 /* A book source hides where files come from: a zip archive (uploaded file, fetched .epub, sample)
    or an already-extracted EPUB folder on the same web server. */
+/* ---------- reading ZIP archives in place ----------
+   EPUB and CBZ files are ZIP archives. Instead of loading a whole file into memory (a narrated book or a long
+   comic can be hundreds of MB), the reader reads the archive's directory at its end, then each file only when
+   it's needed: from an uploaded file with Blob.slice, and from the site with HTTP range requests. Files are
+   decompressed by the browser (DecompressionStream). The result answers the few JSZip calls the reader makes
+   (files, file(), async()). Anything unusual (no range requests, no DecompressionStream, ZIP64, encryption,
+   an unknown compression method) returns null, and the caller loads the whole file with JSZip instead. */
+const u16 = (b, o) => b[o] | b[o + 1] << 8;
+const u32 = (b, o) => (b[o] | b[o + 1] << 8 | b[o + 2] << 16 | b[o + 3] << 24) >>> 0;
+function bytesToBase64(u8){
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+async function lazyZip(read, size){   // read(offset, length) -> Promise<Uint8Array>
+  if (typeof DecompressionStream !== 'function' || size < 22) return null;
+  const tailStart = Math.max(0, size - 65557), tail = await read(tailStart, size - tailStart);
+  let e = -1;   // the end-of-directory record, searched from the end (a comment can follow it)
+  for (let i = tail.length - 22; i >= 0; i--) if (u32(tail, i) === 0x06054b50) { e = i; break; }
+  if (e < 0) return null;
+  const count = u16(tail, e + 10), cdSize = u32(tail, e + 12), cdOffset = u32(tail, e + 16);
+  if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF || cdOffset + cdSize > size) return null;   // ZIP64
+  const cd = cdOffset >= tailStart ? tail.subarray(cdOffset - tailStart, cdOffset - tailStart + cdSize) : await read(cdOffset, cdSize);
+  if (cd.length < cdSize) return null;
+  const files = {}, utf8 = new TextDecoder(), strict = new TextDecoder('utf-8', { fatal: true }), latin = new TextDecoder('latin1');
+  for (let n = 0, p = 0; n < count; n++) {
+    if (p + 46 > cd.length || u32(cd, p) !== 0x02014b50) return null;
+    const flags = u16(cd, p + 8), method = u16(cd, p + 10), csize = u32(cd, p + 20), usize = u32(cd, p + 24);
+    const nlen = u16(cd, p + 28), xlen = u16(cd, p + 30), clen = u16(cd, p + 32), local = u32(cd, p + 42);
+    const raw = cd.subarray(p + 46, p + 46 + nlen);
+    p += 46 + nlen + xlen + clen;
+    if (flags & 1 || (method !== 0 && method !== 8) || csize === 0xFFFFFFFF || usize === 0xFFFFFFFF || local === 0xFFFFFFFF) return null;
+    let name;
+    if (flags & 0x800) name = utf8.decode(raw);   // marked as UTF-8; otherwise try UTF-8, then Latin-1
+    else { try { name = strict.decode(raw); } catch { name = latin.decode(raw); } }
+    let cache = null;
+    const bytes = async () => {
+      const head = await read(local, 30);
+      if (u32(head, 0) !== 0x04034b50) throw new Error(`${name}: damaged archive`);
+      const data = await read(local + 30 + u16(head, 26) + u16(head, 28), csize);
+      if (method === 0) return data;
+      return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    };
+    files[name] = {
+      name, dir: name.endsWith('/'),
+      async async(type){
+        // Small files (the package, contents, chapters) are often read more than once: keep them.
+        const b = await (usize <= 262144 ? (cache ??= bytes()) : bytes());
+        if (type === 'string' || type === 'text') return utf8.decode(b);
+        if (type === 'base64') return bytesToBase64(b);
+        if (type === 'arraybuffer') return b.slice().buffer;
+        return b;
+      },
+    };
+  }
+  return { files, file: name => files[name] || null, inPlace: true };
+}
+// An uploaded file, read in place.
+const zipFromBlob = blob => lazyZip(async (o, l) => new Uint8Array(await blob.slice(o, o + l).arrayBuffer()), blob.size);
+/* A ZIP on the site: with range requests when the server answers them (only the parts needed are fetched),
+   otherwise downloaded whole. Returns { zip } or { miss: reason } (not there, or not a ZIP: a "not found" page). */
+async function zipFromUrl(url, init = {}){
+  let r;
+  try { r = await fetch(url, { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
+  if (!r.ok) return { miss: String(r.status) };
+  const total = r.status === 206 && Number((r.headers.get('content-range') || '').split('/')[1]);
+  if (total > 0) {
+    const head = new Uint8Array(await r.arrayBuffer());
+    if (!isZipBytes(head.buffer)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
+    const read = async (o, l) => {
+      const part = await fetch(url, { headers: { Range: `bytes=${o}-${o + l - 1}` } });
+      if (part.status !== 206) throw new Error(`the server stopped answering range requests for ${url}`);
+      return new Uint8Array(await part.arrayBuffer());
+    };
+    const zip = await lazyZip(read, total).catch(() => null);
+    if (zip) return { zip };
+    r = await fetch(url, init);   // something it can't read in place: fall back to the whole file
+  } else if (r.status === 206) r = await fetch(url, init);   // a part, but no total size: get the whole file
+  const buf = await r.arrayBuffer();
+  if (!isZipBytes(buf)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
+  return { zip: await JSZip.loadAsync(buf) };
+}
+
 function zipSource(zip){
   const blobs = [];
   return {
@@ -1772,7 +1855,10 @@ async function openFile(file){
   try {
     const kind = docKind(file.name, file.type);
     if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}` });
-    else await openZip(await JSZip.loadAsync(await file.arrayBuffer()), file.name, { key: `spine:pos:cbz:${file.name}:${file.size}` });
+    else {
+      const zip = await zipFromBlob(file).catch(() => null) || await JSZip.loadAsync(await file.arrayBuffer());   // in place when possible
+      await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}` });
+    }
   }
   catch (err) { hideStatus(); showNotice(friendly(err, file.name), 'error'); }
 }
@@ -3822,12 +3908,8 @@ async function loadConfig(){
 async function openDefault(){
   let zip = null;
   try {
-    const r = await fetch(new URL(DEFAULT_BOOK, location.href), { cache: 'no-cache' });
-    const buf = r.ok ? await r.arrayBuffer() : null;
-    if (buf && isZipBytes(buf)) {
-      const z = await JSZip.loadAsync(buf);
-      if (getFile(z, 'META-INF/container.xml')) zip = z;
-    }
+    const found = await zipFromUrl(new URL(DEFAULT_BOOK, location.href), { cache: 'no-cache' });
+    if (found.zip && getFile(found.zip, 'META-INF/container.xml')) zip = found.zip;
   } catch {}
   if (zip) {
     try { await openBook(zipSource(zip), { name: 'default' }); return; }
@@ -3876,12 +3958,9 @@ async function openFromUrl(ref){
         return;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
-        let r = null;
-        try { r = await fetch(u.href); } catch {}
-        if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
-        const buf = await r.arrayBuffer();
-        if (!isZipBytes(buf)) { misses.push(`${u.pathname} (not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''})`); continue; }
-        const zip = await JSZip.loadAsync(buf);
+        const found = await zipFromUrl(u.href);
+        if (found.miss) { misses.push(`${u.pathname} (${found.miss})`); continue; }
+        const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
         await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
         return;
