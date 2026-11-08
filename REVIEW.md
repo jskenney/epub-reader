@@ -51,7 +51,7 @@ second layer. No high or medium items remain open except M-5, which is upstream.
 | [M-2](#m-2-the-not-found-check-for-html-documents-only-works-for-identical-pages) | The "not found" check for HTML documents only works for identical pages | Bug | **Fixed** (`33813a3`) |
 | [M-3](#m-3-sleep-timer-can-stop-right-after-resuming) | Sleep timer can stop right after resuming | Bug | **Fixed** (`33813a3`) |
 | [M-4](#m-4-fetch-fontssh-fails-on-macos) | `fetch-fonts.sh` fails on macOS | Bug | **Fixed** (`770c237`) |
-| [M-5](#m-5-french-pocket-tts-has-no-built-in-voices) | French Pocket TTS has no built-in voices (upstream) | Voices | Open |
+| [M-5](#m-5-french-pocket-tts-has-no-built-in-voices) | French Pocket TTS has no built-in voices (upstream) | Voices | **Fixed** (`590aab6`) |
 | [M-6](#m-6-content-security-policy-for-the-reader-page) | No Content-Security-Policy for the reader page itself | Security | **Fixed** (`2e7a63d`) |
 | [L-1](#l-1-relative-urls-not-in-the-book-request-the-readers-own-site) | Relative URLs not in the book request the reader's own site | Robustness | **Fixed** (`2e5345f`) |
 | [L-2](#l-2-svg-animation-could-set-a-remote-address) | SVG animation could set a remote address (unconfirmed) | Privacy | **Fixed** (`2e5345f`) |
@@ -65,13 +65,13 @@ second layer. No high or medium items remain open except M-5, which is upstream.
 | [L-10](#l-10-zipsources-blob-url-list-keeps-growing) | `zipSource`'s blob URL list keeps growing | Memory | Open |
 | [L-11](#l-11-a-book-element-with-idspine-end-breaks-page-counting) | A book element with `id="spine-end"` breaks page counting | Robustness | Open |
 | [L-12](#l-12-voice-clip-urls-arent-restricted-to-the-voices-folder) | Voice clip URLs aren't restricted to the voices folder | Security | Open |
-| [L-13](#l-13-books-without-an-id-share-reading-positions-by-title) | Books without an ID share reading positions by title | Bug | Open |
-| [L-14](#l-14-a-bad-book-link-falls-back-to-the-sample-not-defaultepub) | A bad `?book=` link falls back to the sample, not `default.epub` | Behaviour | Open |
+| [L-13](#l-13-books-without-an-id-share-reading-positions-by-title) | Books without an ID share reading positions by title | Bug | **Fixed** (`c992d26`) |
+| [L-14](#l-14-a-bad-book-link-falls-back-to-the-sample-not-defaultepub) | A bad `?book=` link falls back to the sample, not `default.epub` | Behaviour | **Fixed** (`41455c8`) |
 | [L-15](#l-15-the-server-voice-cache-key-depends-on-field-order) | The server voice cache key depends on field order | Voices | Open |
-| [L-16](#l-16-the-whole-book-file-is-held-in-memory) | The whole book file is held in memory | Memory | Open |
+| [L-16](#l-16-the-whole-book-file-is-held-in-memory) | The whole book file is held in memory | Memory | **Fixed** (`ef520ac`) |
 | [L-17](#l-17-single-letter-shortcuts-clash-with-screen-readers) | Single-letter shortcuts clash with screen readers | Accessibility | Open |
 | [L-18](#l-18-tts-server-ports-are-open-to-the-network) | TTS server ports are open to the network (server repo) | Security | Open |
-| [L-19](#l-19-parsing-a-book-reports-policy-violations-in-the-console) | Parsing a book reports policy violations in the console | Noise | Open |
+| [L-19](#l-19-parsing-a-book-reports-policy-violations-in-the-console) | Parsing a book reports policy violations in the console | Noise | **Fixed** (`8ead107`) |
 | [T-1](#t-1-the-hostile-book-test-misses-most-leaks) | The hostile-book test misses most leaks | Tests | **Fixed** (`2e5345f`) |
 | [T-2](#t-2-the-soft-404-test-server-always-returns-the-same-page) | The soft-404 test server always returns the same page | Tests | **Fixed** (`33813a3`) |
 | [T-3](#t-3-device-voices-and-publisher-narration-have-no-tests) | Device voices and publisher narration have no tests | Tests | Open |
@@ -91,7 +91,7 @@ second layer. No high or medium items remain open except M-5, which is upstream.
 | [E-9](#e-9-right-to-left-manga) | Right-to-left (manga) page order for comics | Comics | Open |
 | [E-10](#e-10-audiobook-export) | Audiobook export through the server | Audio | Open |
 | [E-11](#e-11-a-settings-panel) | A settings panel in the page | Settings | Open |
-| [E-12](#e-12-hide-french-from-pocket-tts-until-it-works) | Hide French from Pocket TTS until it works | Voices | Open |
+| [E-12](#e-12-hide-french-from-pocket-tts-until-it-works) | Hide French from Pocket TTS until it works | Voices | **Fixed** (`590aab6`) |
 
 ## Status of the first review
 
@@ -218,6 +218,8 @@ split then fails, the script asks Google for an empty family, and `curl -f` abor
 
 ### M-5. French Pocket TTS has no built-in voices
 
+> **Fixed in `590aab6`.** Resolved by E-12: French is no longer offered. It could come back if upstream adds the voices.
+
 *Voices, unconfirmed in the reader.* The French bundle at the pinned revision of `vlapky/pocket-tts-onnx`
 has no `voices.bin` (upstream). `fetch-pocket.sh` now skips it rather than failing. But French Pocket TTS
 probably can't speak, because pocket-tts-js reports "built-in voices unavailable" without that file. It
@@ -316,10 +318,14 @@ control `voices.json`, so the risk is low. **Fix:** only allow paths inside the 
 
 ### L-13. Books without an ID share reading positions by title
 
+> **Fixed in `c992d26`.** EPUBs keep using their identifier. One without an identifier is keyed by a fingerprint of its package file (`spine:pos:opf:…`), and a position saved under the old title key is picked up once. The Information panel says how such a book is kept. Tested with two same-title books without IDs, and with the old key.
+
 Positions are keyed by the book's `uid`, falling back to its title, so two books with no ID and the same
 title share one position. **Fix:** fall back to the file name and size, or a hash of the package file.
 
 ### L-14. A bad `?book=` link falls back to the sample, not `default.epub`
+
+> **Fixed in `41455c8`.** A bad `?book=` link opens the folder's `default.epub` (or the sample), with the notice about the link. Tested.
 
 When a `?book=` link can't be opened, the reader shows the built-in sample. The folder's default book would
 be the better fallback. **Fix:** call `openDefault()` instead of `openSample()` there.
@@ -331,6 +337,8 @@ would make all saved audio be made again. **Fix:** hash only `ref_audio`, `ref_t
 `cfg_scale`.
 
 ### L-16. The whole book file is held in memory
+
+> **Fixed in `ef520ac`.** Archives are read in place: the directory from the end of the file, then each file when needed, through HTTP range requests (books on the site) or `Blob.slice` (uploads), decompressed by the browser. Opening a 5 MB test EPUB fetched about 67 KB. Servers without range support fall back to the whole file. Tested, including narration by hand.
 
 Books opened from a file or a URL are loaded fully into memory (JSZip). That's fine for novels and heavy for
 narrated books with audio. Extracted folders (`?book=dir/`) avoid it. **Fix:** document it (see D-2), or
@@ -348,6 +356,8 @@ choice. Anyone who can reach those ports can use the GPU, and the studio can del
 uploads, with no password. **Fix:** a firewall rule allowing only the proxy host.
 
 ### L-19. Parsing a book reports policy violations in the console
+
+> **Fixed in `8ead107`.** `<base>` and `<meta http-equiv>` are removed from the text before any parsing. Remote CSS addresses become `none` rather than `url(about:blank)` (which the policy refused), CSS escapes are decoded before checking, and `image-set()` with a remote entry counts as remote. The hostile-book tests now require zero policy messages: the cleaning alone stops everything.
 
 Under a strict reader policy, the browser applies that policy to the inert documents the reader makes while
 reading a chapter's file (`DOMParser`). A book with a `<base>` or remote references therefore logs "violates
@@ -452,6 +462,8 @@ A panel in the page for the options now only in `index.html` or `reader-config.j
 audio limit, remote content, shortcuts and so on.
 
 ### E-12. Hide French from Pocket TTS until it works
+
+> **Fixed in `590aab6`.** French is gone from Pocket TTS: `POCKET_LANGS`, the option's label (en, de, it, pt, es), `fetch-pocket.sh` (`fr` explains why; `all` leaves it out) and `checksums/pocket.sha256`. French books use device voices. Tested.
 If M-5 is confirmed, leave French out of Pocket TTS's languages so readers aren't offered a voice that can't
 speak.
 
