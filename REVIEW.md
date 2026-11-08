@@ -28,6 +28,11 @@ three times in a row: 31 tests, with 2 more (real Kokoro and Pocket TTS) passing
 | **D** | Documentation. |
 | **E** | Enhancement: a new feature or improvement. |
 
+**Update 2 (2026-11-08):** E-12 (and so M-5), L-19, L-13, L-14 and L-16 were fixed (commits `590aab6` to
+`ef520ac`). A review of those changes found one regression, H-3 (empty files broke chapters read with range
+requests), fixed in `c5cfe41`, and new items M-7 to M-10, L-20 to L-24 and T-6 to T-8, mostly about the new
+in-place ZIP reader. All 50 tests pass (52 with `SLOW=1`).
+
 ## Summary
 
 The reader is in good shape:
@@ -39,7 +44,7 @@ The reader is in good shape:
 
 The most important items were H-1 and H-2: the remote-content stripping could be bypassed, and uppercase
 XHTML tags got past the sanitizer. Both are now fixed, with a Content-Security-Policy on book pages as a
-second layer. No high or medium items remain open except M-5, which is upstream.
+second layer. Medium items M-7 to M-10, found in the review of the in-place ZIP reader and the position keys, are open.
 
 ## Index
 
@@ -47,12 +52,17 @@ second layer. No high or medium items remain open except M-5, which is upstream.
 |---|---|---|---|
 | [H-1](#h-1-remote-content-stripping-can-be-bypassed) | Remote-content stripping can be bypassed (reproduced) | Security / privacy | **Fixed** (`2e5345f`) |
 | [H-2](#h-2-uppercase-xhtml-tags-get-past-the-sanitizer) | Uppercase XHTML tags get past the sanitizer (reproduced) | Security | **Fixed** (`2e5345f`) |
+| [H-3](#h-3-empty-files-broke-chapters-read-with-range-requests) | Empty files broke chapters read with range requests | Bug (regression from L-16) | **Fixed** (`c5cfe41`) |
 | [M-1](#m-1-a--in-book-leaves-the-reader-stuck-on-loading) | A `%` in `?book=` leaves the reader stuck on "Loading…" (reproduced) | Bug | **Fixed** (`46a112b`) |
 | [M-2](#m-2-the-not-found-check-for-html-documents-only-works-for-identical-pages) | The "not found" check for HTML documents only works for identical pages | Bug | **Fixed** (`33813a3`) |
 | [M-3](#m-3-sleep-timer-can-stop-right-after-resuming) | Sleep timer can stop right after resuming | Bug | **Fixed** (`33813a3`) |
 | [M-4](#m-4-fetch-fontssh-fails-on-macos) | `fetch-fonts.sh` fails on macOS | Bug | **Fixed** (`770c237`) |
 | [M-5](#m-5-french-pocket-tts-has-no-built-in-voices) | French Pocket TTS has no built-in voices (upstream) | Voices | **Fixed** (`590aab6`) |
 | [M-6](#m-6-content-security-policy-for-the-reader-page) | No Content-Security-Policy for the reader page itself | Security | **Fixed** (`2e7a63d`) |
+| [M-7](#m-7-a-failed-read-inside-an-archive-is-remembered-until-reload) | A failed read inside an archive is remembered until reload | Robustness | Open |
+| [M-8](#m-8-range-requests-are-not-tied-to-one-version-of-the-file) | Range requests are not tied to one version of the file | Robustness | Open |
+| [M-9](#m-9-decompression-is-not-checked-against-declared-sizes-and-the-small-file-cache-never-empties) | Decompression is not checked against declared sizes, and the small-file cache never empties | Memory | Open |
+| [M-10](#m-10-editing-a-book-without-an-identifier-loses-its-position) | Editing a book without an identifier loses its position | Bug | Open |
 | [L-1](#l-1-relative-urls-not-in-the-book-request-the-readers-own-site) | Relative URLs not in the book request the reader's own site | Robustness | **Fixed** (`2e5345f`) |
 | [L-2](#l-2-svg-animation-could-set-a-remote-address) | SVG animation could set a remote address (unconfirmed) | Privacy | **Fixed** (`2e5345f`) |
 | [L-3](#l-3-verify-fails-open-without-a-sha-256-tool) | `verify()` fails open without a SHA-256 tool | Fetch scripts | **Fixed** (`770c237`) |
@@ -72,11 +82,19 @@ second layer. No high or medium items remain open except M-5, which is upstream.
 | [L-17](#l-17-single-letter-shortcuts-clash-with-screen-readers) | Single-letter shortcuts clash with screen readers | Accessibility | Open |
 | [L-18](#l-18-tts-server-ports-are-open-to-the-network) | TTS server ports are open to the network (server repo) | Security | Open |
 | [L-19](#l-19-parsing-a-book-reports-policy-violations-in-the-console) | Parsing a book reports policy violations in the console | Noise | **Fixed** (`8ead107`) |
+| [L-20](#l-20-a-few-css-forms-still-get-past-the-cleaning-the-policy-blocks-them) | A few CSS forms still get past the cleaning (the policy blocks them) | Privacy / noise | Open |
+| [L-21](#l-21-replacing-a-missing-css-file-with-none-can-drop-a-whole-declaration) | Replacing a missing CSS file with none can drop a whole declaration | Rendering | Open |
+| [L-22](#l-22-differences-between-the-in-place-reader-and-jszip) | Differences between the in-place reader and JSZip | Compatibility | Open |
+| [L-23](#l-23-two-requests-per-file-when-reading-in-place) | Two requests per file when reading in place | Performance | Open |
+| [L-24](#l-24-the-pre-parse-stripping-misses-some-forms-of-base-and-meta) | The pre-parse stripping misses some forms of base and meta | Noise | Open |
 | [T-1](#t-1-the-hostile-book-test-misses-most-leaks) | The hostile-book test misses most leaks | Tests | **Fixed** (`2e5345f`) |
 | [T-2](#t-2-the-soft-404-test-server-always-returns-the-same-page) | The soft-404 test server always returns the same page | Tests | **Fixed** (`33813a3`) |
 | [T-3](#t-3-device-voices-and-publisher-narration-have-no-tests) | Device voices and publisher narration have no tests | Tests | Open |
 | [T-4](#t-4-real-kokoro-and-pocket-tts-only-run-on-request) | Real Kokoro and Pocket TTS only run on request | Tests | Open |
 | [T-5](#t-5-the-cdn-version-of-the-reader-policy-isnt-tested) | The CDN version of the reader policy isn't tested | Tests | Open |
+| [T-6](#t-6-the-in-place-zip-tests-cover-only-the-normal-cases) | The in-place ZIP tests cover only the normal cases | Tests | Open |
+| [T-7](#t-7-position-key-tests-leave-gaps) | Position-key tests leave gaps | Tests | Open |
+| [T-8](#t-8-the-hostile-test-book-lacks-the-remaining-css-forms) | The hostile test book lacks the remaining CSS forms | Tests | Open |
 | [D-1](#d-1-the-readme-overstates-the-remote-content-protection) | The README overstates the remote-content protection | Docs | **Fixed** (`2e5345f`) |
 | [D-2](#d-2-a-web-server-example-for-the-reader) | A web server example for the reader | Docs | **Fixed** (`2e7a63d`) |
 | [D-3](#d-3-an-upgrade-checklist) | An upgrade checklist for pinned versions | Docs | Open |
@@ -169,6 +187,16 @@ Scripts still can't run, because the frame has no `allow-scripts`. But:
 **Fix:** lowercase element and attribute names when copying XHTML into the page (or serialise through an
 HTML document before sanitizing). The CSP in H-1 adds a second layer.
 
+### H-3. Empty files broke chapters read with range requests
+
+> **Fixed in `c5cfe41`.** Empty files now need no read. The test (a stored empty stylesheet, opened with and without range requests) fails on the previous code.
+
+*Bug, reproduced; a regression from L-16.* A zero-length stored file in a book (an empty stylesheet, a
+directory entry, an empty file in a comic) made the in-place reader ask the server for the invalid range
+`bytes=o-(o-1)`. Servers answer 416, or ignore the header and send the whole file, and the chapter showed
+"Couldn't display …: the server stopped answering range requests". The same book worked without range
+requests.
+
 ## Medium
 
 ### M-1. A `%` in `?book=` leaves the reader stuck on "Loading…"
@@ -238,6 +266,50 @@ where scripts, workers, styles and connections may come from. For example: `scri
 `connect-src 'self'` (plus Hugging Face when not self-hosted).
 
 This is separate from the book-frame CSP in H-1. It belongs in the web server configuration; see D-2.
+
+### M-7. A failed read inside an archive is remembered until reload
+
+*Verified by reading.* The in-place reader keeps small files it has read (`cache ??= bytes()` in
+`lazyZip`). If that read fails (a network blip, or the server answering 200 instead of 206 mid-session), the
+failure is kept too, and that file stays broken until the page is reloaded. Uploaded files are now read
+lazily as well, so moving, deleting or replacing the file on disk while reading makes later reads fail
+(browser behaviour, not tested).
+
+**Fix:** forget a failed read (`cache = bytes().catch(e => { cache = null; throw e; })`), and for uploads,
+explain that the file changed on disk and should be reopened.
+
+### M-8. Range requests are not tied to one version of the file
+
+*Partly reproduced.* Nothing ties later range requests to the first one: no `If-Range` with the file's
+ETag or Last-Modified, and each reply's `Content-Range` and length aren't checked against what was asked.
+The `cache` option passed by `openDefault` applies only to the first request. Replacing a book on the
+server while it's open was reproduced: "OEBPS/pic.png: damaged archive". A stored file could instead come
+back as silently wrong bytes. Mixing cached and fresh parts after an update is possible but untested.
+
+**Fix:** keep the first reply's ETag or Last-Modified and send `If-Range` with every read; check each
+`Content-Range` (start, total) and body length; pass the cache option to every read; on a mismatch, say the
+book changed and reopen it.
+
+### M-9. Decompression is not checked against declared sizes, and the small-file cache never empties
+
+*Verified by reading.* Inflated output isn't compared with the size the archive declares, so a
+"decompression bomb" (a small entry that inflates to gigabytes) can exhaust memory and crash the tab. The
+in-memory cache for files up to 256 KB trusts that declared size and is never emptied, so a comic whose
+pages are under 256 KB keeps every page it has shown, undoing the comic image release. JSZip had no limit
+either, so the bomb isn't new; the cache growth is.
+
+**Fix:** stream the inflate and stop once output exceeds the declared size (plus a margin), reject length
+mismatches, and cache only text files (package, contents, chapters, CSS, SMIL) or use a small LRU.
+
+### M-10. Editing a book without an identifier loses its position
+
+*Verified by reading.* Positions for books without an identifier (L-13) are keyed by a fingerprint of the
+whole package file, so any edit (a metadata change in Calibre, a re-export) changes the key. The reader then
+falls back to the old title key, which is never updated or removed, and can resume at a stale position. Two
+such books with the same title also both pick up that old position once, and old title keys pile up.
+
+**Fix:** remove (or mark) the old title key once it has been carried over, and consider fingerprinting only
+the stable parts of the package (title, creator, manifest hrefs, spine order) rather than its whole text.
 
 ## Low
 
@@ -366,6 +438,53 @@ Nothing is loaded, since inert documents don't fetch and the policy blocks it an
 alarming. **Fix:** strip `<base>` and similar from the source text before parsing, or accept and document the
 noise.
 
+### L-20. A few CSS forms still get past the cleaning (the policy blocks them)
+
+*Reproduced.* These reach the browser, which tries the remote image; the book-page policy refuses it, so
+nothing leaves, but a console message appears (the noise L-19 removed for the known cases):
+- `image-set()` with nested brackets, such as `linear-gradient(red, rgb(0,0,0))` as one entry, which
+  `IMAGE_SET_RE` doesn't match.
+- Escaped function names such as `im\61ge-set(…)` and `u\72l(…)`.
+- A double escape, `"\00005c\00005chost/x.png"`: `cssUnescape` decodes in two passes and sees
+  `\host/x.png`, while the browser reads `\\host/x.png` (another site).
+
+**Fix:** decode escapes in one pass, decode identifiers before matching function names, match `image-set`
+to any depth (or replace any `image-set` containing a string), and add these to the hostile test book (T-8).
+
+### L-21. Replacing a missing CSS file with none can drop a whole declaration
+
+*Reproduced.* `cursor: url(missing.cur), pointer` becomes `none, pointer`, which is invalid, so the whole
+declaration is dropped instead of falling back to `pointer`. Chrome tolerates it in `@font-face src` lists;
+older Safari and Firefox may drop the whole `src`.
+
+**Fix:** use `url("data:,")` for a missing file instead of `none`.
+
+### L-22. Differences between the in-place reader and JSZip
+
+*Verified by reading.*
+- Non-UTF-8 file names: the Info-ZIP Unicode Path field (0x7075) is ignored, so a non-ASCII name from an old
+  archive can resolve differently than with JSZip, and a picture or chapter goes missing.
+- `files` is a plain object: an entry named `__proto__` changes its prototype, and `zip.file('constructor')`
+  returns a function.
+- `zip.file()` returns directory entries; JSZip returns null for them.
+- The end-of-directory search doesn't check that the comment length matches.
+
+**Fix:** `Object.create(null)`, honour 0x7075, return null for directories from `file()`, and check the
+comment length.
+
+### L-23. Two requests per file when reading in place
+
+Each file read with range requests takes two sequential requests (its local header, then its data), which
+slows picture-heavy chapters and comics on high-latency connections. **Fix:** read the header and data in
+one request, using the sizes from the central directory plus a margin for the header's extra field, or read
+neighbouring files together.
+
+### L-24. The pre-parse stripping misses some forms of base and meta
+
+*Verified by reading.* `withoutDocumentControls` uses a regex, so `<meta content="a>b" http-equiv=…>` and
+a prefixed `<h:base>` survive it. The later sanitizer still removes them, so the only effect is a console
+message. **Fix:** a more careful pattern, or accept it.
+
 ## Tests
 
 ### T-1. The hostile-book test misses most leaks
@@ -401,6 +520,27 @@ The tests block every other site, so only the self-hosted policy in `nginx.conf.
 commented CDN version (cdnjs, jsDelivr, Google Fonts, Hugging Face and its download hosts) was written from the
 hosts the reader uses but never run. Hugging Face also changes download hosts from time to time. **Fix:** a test
 mode that allows those CDNs and sends that policy, run occasionally with network access.
+
+### T-6. The in-place ZIP tests cover only the normal cases
+
+`tests/zip.test.js` checks the normal paths (plus empty files, H-3). Missing: directory entries, a comment
+containing the end-record signature, non-UTF-8 names, an inflated size different from the declared one,
+ZIP64, encryption and unknown methods (each should fall back), a probe answered 206 with total `*`, a server
+that answers 206 then 200, a file changed between requests (M-8), and a transient failure then a retry
+(M-7). `tests/server.py`'s range support has no ETag, Last-Modified, `If-Range` or HEAD, and the no-range
+server is also the soft-404 server, which mixes two behaviours. **Fix:** add those cases, and give the test
+server validators and a separate no-range mode.
+
+### T-7. Position-key tests leave gaps
+
+The identifier test in `tests/urls.test.js` uses a fixed 500 ms wait, and nothing checks that the old title
+key is retired or what happens after a book's package file changes (M-10). **Fix:** wait for the saved
+position, and add those cases.
+
+### T-8. The hostile test book lacks the remaining CSS forms
+
+The hostile book has none of the L-20 forms (nested or escaped `image-set()` and `url()`, the double
+escape), so the zero-policy-messages check doesn't cover them. **Fix:** add them.
 
 ## Documentation
 
@@ -469,11 +609,12 @@ speak.
 
 ## Suggested order
 
-Done: H-1, H-2, T-1, D-1, M-1, M-2, T-2, M-3, M-4, L-1 to L-5, M-6 and D-2. What's left, roughly in order:
+Open items, roughly in order:
 
-1. **M-5 / E-12:** confirm French Pocket TTS on a machine with the model, then hide it or move revisions.
-2. **T-5 and L-19:** test the CDN policy; quieten or document the console messages.
-3. **L-12 to L-15:** small behaviour fixes (voice clip URLs, positions for books without an ID, the fallback
-   after a bad link, the voice cache key).
-4. **T-3 and D-3:** tests for device voices and narration, and an upgrade checklist.
-5. **L-17** (shortcuts) and **L-18** (server ports), then the remaining low items and enhancements as wanted.
+1. **M-7, M-8, M-9 with T-6:** make the in-place ZIP reader robust (failed reads, file changes, sizes and
+   memory), with tests for the edge cases.
+2. **M-10 with T-7:** retire old position keys, and make the package fingerprint survive metadata edits.
+3. **L-20, L-21 with T-8:** the remaining CSS forms, and `url("data:,")` for missing files.
+4. **L-22 and L-23:** in-place reader compatibility, and fewer requests.
+5. **T-5:** test the CDN version of the reader policy.
+6. **L-12, L-15, L-17, L-18, T-3, D-3** and the enhancements, as wanted.
