@@ -7,7 +7,7 @@
 #   SLOW=1 tests/run.sh             also load the real Kokoro and Pocket TTS models
 #   NETWORK=1 tests/run.sh          also check the CDN version of the reader policy (needs internet access)
 #
-# Needs Python 3, Node 18+ and Playwright with Chromium (cd tests && npm install && npx playwright install chromium).
+# Needs Python 3, Node 20+ and Playwright with Chromium (cd tests && npm install && npx playwright install chromium).
 # Everything runs against local servers on ports 8790-8794; the browser is blocked from reaching other sites.
 set -euo pipefail
 cd "$(dirname "$0")/.."

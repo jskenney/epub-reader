@@ -3,7 +3,8 @@
 # from this site instead of fonts.googleapis.com and fonts.gstatic.com:
 #
 #   ./fetch-fonts.sh           run from anywhere; files go next to this script (or into LIB_FILES' folder:
-#                              run it there)
+#                              put a copy of this script there, with index.html beside it: it works in
+#                              its own folder)
 #
 # It writes fonts/ui.css (the interface fonts: IBM Plex Sans and Mono, and Literata), one CSS file per reading
 # font in the font menu (fonts/<id>.css, read from FONTS in index.html), and the WOFF2 files they use under

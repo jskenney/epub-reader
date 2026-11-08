@@ -32,7 +32,8 @@ saved position) works as for EPUBs.
   used. `_word_` becomes italic. Files that aren't UTF-8 are read as
   Windows-1252.
 - **Markdown:** rendered with [marked](https://marked.js.org/) (GitHub
-  flavour), loaded from cdnjs only when a Markdown file is opened. YAML front
+  flavour), loaded only when a Markdown file is opened: from `libs/` when
+  self-hosted, otherwise from cdnjs. YAML front
   matter `title`, `author` and `lang` are used. Links to headings
   (`[see](#a-heading)`) work.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
@@ -354,7 +355,7 @@ It fetches about 435 MB into `./kokoro/`:
 | `kokoro/kokoro.web.js` | kokoro-js 1.2.1 |
 | `kokoro/ort/` | ONNX Runtime WebAssembly/WebGPU files (from transformers.js 3.5.1) |
 | `kokoro/model/` | Kokoro-82M-v1.0-ONNX at a pinned revision (the same one the reader asks Hugging Face for): config, tokenizer, `onnx/model.onnx` (fp32, WebGPU) and `onnx/model_quantized.onnx` (q8, CPU) |
-| `kokoro/model/voices/` | the 27 voices the reader offers (read from `index.html`) |
+| `kokoro/model/voices/` | the 28 voices the reader offers (read from `index.html`) |
 | `kokoro/LICENSES/` | licences and a NOTICE listing each component |
 
 The reader checks for these files when you press Download and uses each
@@ -379,8 +380,9 @@ const VOICE_FILES = '/reader/';   // '' (the default) = this page's folder
 ```
 
 Every copy then loads from `/reader/kokoro/` and `/reader/pocket/`, so the
-files are downloaded and cached by the browser once. Run the fetch scripts in
-that folder (they write next to themselves). The browser treats the same
+files are downloaded and cached by the browser once. Put a copy of the fetch
+scripts in that folder, with `checksums/` and `index.html` beside them (each
+script works in its own folder and reads both), and run them there. The browser treats the same
 file under two different paths as two files, which is why sharing one
 folder matters.
 

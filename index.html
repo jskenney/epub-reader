@@ -3373,7 +3373,8 @@ if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narratio
 
 /* ---------- Kokoro natural voice ----------
    kokoro-js runs the Kokoro-82M model in a module Web Worker (built from a blob, so the reader stays one
-   file): WebGPU with the fp32 model where available, otherwise WebAssembly with the 8-bit model. Nothing
+   file): WebGPU where available, otherwise WebAssembly; the full-precision model unless FULL_PRECISION is
+   false (then 8-bit on WebAssembly). Nothing
    is downloaded until the reader asks; the library caches the model in the browser afterwards.
    Sentences are generated one or two ahead and played through Web Audio. Kokoro reports no word
    timings, so the highlighted word is estimated from how far through the sentence's audio playback is. */
@@ -3582,7 +3583,8 @@ function kGenerate(text, opts = {}){
 
 /* ---------- Pocket TTS ----------
    Kyutai's Pocket TTS through pocket-tts-js 0.1.0: its own worker (imported into a small module worker
-   from ./pocket/lib/ or the CDN) runs the int8 ONNX models on onnxruntime-web 1.20 (WebAssembly; threads
+   from ./pocket/lib/ or the CDN) runs the ONNX models (full precision, or int8 with FULL_PRECISION false) on
+   onnxruntime-web 1.20 (WebAssembly; threads
    only when the page is cross-origin isolated). One model bundle per language, each with 8 built-in
    voices. It has no speed control, so speed is applied at playback with pitch preserved. */
 const POCKET = {
