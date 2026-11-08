@@ -3797,6 +3797,8 @@ async function openSample(){
    ?book=dir/a.txt, .md or .html opens that document.
    A relative path is tried first relative to this page, then under BOOKSHELF at the site root
    (?book=books/x/ -> books/x/, then /bookshelf/books/x/). Only books on this same site are accepted. */
+// A file name from an address, decoded; a stray "%" (not a valid escape) is kept as it is.
+const safeDecode = t => { try { return decodeURIComponent(t); } catch { return t; } };
 function bookCandidates(ref){
   const urls = [new URL(ref, location.href)];
   if (!ref.startsWith('/') && !isExternal(ref)) urls.push(new URL(BOOKSHELF + ref.replace(/^(\.\/)+/, ''), location.origin));
@@ -3805,7 +3807,8 @@ function bookCandidates(ref){
 }
 async function openFromUrl(ref){
   showStatus(`Loading ${ref}…`);
-  const name = decodeURIComponent(ref.replace(/\/+$/, '').split('/').pop() || ref).replace(/\.epub$/i, '');
+  // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
+  const name = (ref.replace(/\/+$/, '').split('/').pop() || ref).replace(/\.epub$/i, '');
   try {
     const candidates = bookCandidates(ref);
     if (candidates.some(u => u.origin !== location.origin)) throw new Error('Only books hosted on this same site can be opened from the address.');
@@ -3822,7 +3825,7 @@ async function openFromUrl(ref){
         const buf = await r.arrayBuffer();
         if (kind === 'html' && await soft404(u.href) === new TextDecoder().decode(buf)) { misses.push(`${u.pathname} (the site's "not found" page)`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
-        await openDocument(buf, decodeURIComponent(u.pathname.split('/').pop()), kind,
+        await openDocument(buf, safeDecode(u.pathname.split('/').pop()), kind,
           { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}` });
         return;
       }
@@ -3834,7 +3837,7 @@ async function openFromUrl(ref){
         if (!isZipBytes(buf)) { misses.push(`${u.pathname} (not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''})`); continue; }
         const zip = await JSZip.loadAsync(buf);
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
-        await openZip(zip, decodeURIComponent(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
+        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
         return;
       }
       if (!u.pathname.endsWith('/')) u.pathname += '/';

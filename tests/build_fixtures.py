@@ -132,6 +132,7 @@ def main():
         ("c3.xhtml", "Chapter Three", "<h1>Chapter Three</h1>" + paragraphs("Third", 4)),
     ], uid="urn:long")
     shutil.copy(books / "long.epub", shelf / "shelf-only.epub")
+    shutil.copy(books / "long.epub", books / "50%off.epub")   # a "%" in the name (REVIEW.md M-1)
     with zipfile.ZipFile(books / "long.epub") as z:
         z.extractall(shelf / "shelf-dir")
 

@@ -38,6 +38,18 @@ for (const [label, base] of [['real 404s', h.SITE], ['soft 404s', h.SOFT]]) {
   });
 }
 
+test('a "%" in ?book= neither hangs the reader nor breaks the name (M-1)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/50%25off.epub`);
+  assert.equal(await h.title(page), 'The Long Book');
+  assert.deepEqual(page.errors, []);
+  const odd = await h.newPage();
+  await h.openReader(odd, `${h.READER}?book=books/100%25-missing.epub`);
+  assert.equal(await h.title(odd), 'Four Fables');
+  assert.match(await h.notice(odd), /100%-missing.epub couldn't be opened/);
+  assert.deepEqual(odd.errors, []);
+});
+
 test('books on other sites are refused', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=//example.com/x.epub`);
