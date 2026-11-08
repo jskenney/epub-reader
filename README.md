@@ -61,7 +61,9 @@ a book from the same site on page load:
   chapter, picture or audio clip as it's shown. A large narrated book or
   comic therefore isn't downloaded or held in memory whole. Otherwise the
   file is downloaded whole, as before. Uploaded files are read in place the
-  same way.
+  same way. Each file is checked against the archive's checksum, and if the
+  book is replaced on the server (or on disk) while it's open, the reader
+  says so instead of mixing the two versions.
 - `index.html?book=books/notes.md` (or `.txt`, `.html`): opens that document
 - `index.html?book=books/issue-3.cbz`: opens a comic book
 - `index.html?book=books/moby-dick/`: reads an already-extracted EPUB folder
@@ -231,8 +233,9 @@ This needs a real web server (for example `npx vite` or
   follows your system setting.
 - Remembers your position, text size, line spacing, font and theme. An EPUB's
   position is kept by its identifier, so it resumes wherever the book is opened
-  from; a book without one is kept by a fingerprint of its package file, so
-  books that merely share a title don't share a position.
+  from; a book without one is kept by a fingerprint of its title and chapter
+  files, so books that merely share a title don't share a position, and
+  editing its metadata (author, date, cover) keeps it.
 
 ## Self-hosting the libraries and fonts
 
