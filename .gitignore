@@ -18,3 +18,4 @@ default.epub
 # Test site built by tests/build_fixtures.py, and test dependencies
 /tests/site/
 /tests/node_modules/
+__pycache__/
