@@ -28,9 +28,20 @@ ap.add_argument("--soft404", action="store_true")
 ap.add_argument("--breeze", action="store_true")
 ap.add_argument("--log", action="store_true")
 ap.add_argument("--rtf", type=float, default=4.0, help="mock Breeze speed: seconds of audio per second")
+ap.add_argument("--csp-from", help="send the Content-Security-Policy from this nginx example (its first active add_header)")
+ap.add_argument("--csp-skip", default="", help="comma-separated path prefixes served without it (setups that need CDNs or remote content)")
 args = ap.parse_args()
 
 seen, breeze_log, busy = [], [], threading.Lock()
+POLICY = None
+if args.csp_from:
+    import re
+    for line in open(args.csp_from):
+        m = re.match(r'\s*add_header Content-Security-Policy "([^"]+)"', line)   # not commented out
+        if m:
+            POLICY = m.group(1)
+            break
+    assert POLICY, f"no active Content-Security-Policy in {args.csp_from}"
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -45,6 +56,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
     def end_headers(self):
+        if POLICY and not any(p and self.path.startswith(p) for p in args.csp_skip.split(",")):
+            self.send_header("Content-Security-Policy", POLICY)
+            self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()

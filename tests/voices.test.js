@@ -91,5 +91,6 @@ for (const [engine, folder] of [['kokoro', 'kokoro'], ['pocket', 'pocket']]) {
     await page.click('#ttsDownload').catch(() => {});
     assert.ok(await h.waitFor(() => h.spokenWord(page), 540000, 1000), await page.textContent('#ttsStatus'));
     assert.deepEqual(page.blocked, []);
+    assert.deepEqual(page.cspViolations, [], 'the reader policy in nginx.conf.example must allow the voice to run');
   });
 }

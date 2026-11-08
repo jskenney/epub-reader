@@ -24,7 +24,9 @@ async function newPage({ allow = [], viewport = { width: 1280, height: 800 } } =
   const page = await ctx.newPage();
   page.blocked = [];
   page.errors = [];
+  page.cspViolations = [];   // anything the Content-Security-Policy refused (the site sends nginx.conf.example's)
   page.on('pageerror', e => page.errors.push(e.message));
+  page.on('console', m => { if (/Content Security Policy/i.test(m.text())) page.cspViolations.push(m.text()); });
   await ctx.route('**/*', route => {
     const u = new URL(route.request().url());
     if (u.hostname === 'localhost' || allow.some(h => u.hostname.endsWith(h))) return route.continue();

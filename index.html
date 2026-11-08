@@ -1217,7 +1217,7 @@ function sanitize(doc){
   for (const el of doc.body.querySelectorAll('*')) {
     for (const a of [...el.attributes]) {
       if (/^on/i.test(a.name)) el.removeAttribute(a.name);
-      else if (/^(href|src|xlink:href|action|formaction)$/i.test(a.name) && /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name);
+      else if (/^(href|src|xlink:href|action|formaction)$/i.test(a.name) && /^javascript:/i.test(urlText(a.value))) el.removeAttribute(a.name);
     }
   }
 }

@@ -1,0 +1,45 @@
+# Serving the reader with nginx: put these inside the server { } block of your site. Assumes the reader is at
+# /reader/ (index.html plus the folders the fetch scripts create); change the path to match. The voice server
+# paths (/tts/, /tts-voices/, /tts-studio/) are in jskenney/epub-reader-tts-server's nginx.conf.example.
+
+location /reader/ {
+    # Content-Security-Policy for the reader page (and, since the book frame inherits it, for book pages too):
+    # code, styles, fonts and data only from this site, workers from blob: (the voices), WebAssembly allowed
+    # (the voices), no plugins, nothing may frame the reader. This one is for a fully self-hosted reader
+    # (fetch-libs.sh, fetch-fonts.sh, fetch-kokoro.sh, fetch-pocket.sh run). 'unsafe-inline' is needed for
+    # the reader's own inline script. tests/run.sh sends exactly this policy, so the tests check it works.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
+
+    # If you don't self-host everything (ALLOW_CDN = true, the default), use this policy instead: it adds the
+    # CDNs the reader falls back to (cdnjs, jsDelivr, Google Fonts, and Hugging Face with its download hosts).
+    # With ALLOW_REMOTE_CONTENT = true, also add the sites books may load from to img-src, media-src,
+    # style-src and font-src (or https: to allow any), since this policy applies to book pages too.
+    # add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data: https://fonts.googleapis.com; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob: https://fonts.gstatic.com; connect-src 'self' data: blob: https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
+
+    add_header X-Content-Type-Options nosniff always;   # files must have the right type (see below)
+    add_header Referrer-Policy same-origin always;
+
+    # Types the reader needs that older nginx versions don't know. With nosniff above, a module script (.mjs)
+    # served with the wrong type is refused, and WebAssembly needs application/wasm to compile while loading.
+    location ~* \.mjs$  { types { } default_type text/javascript;  expires 30d; }
+    location ~* \.wasm$ { types { } default_type application/wasm; expires 30d; }
+    location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
+    location ~* \.md$   { types { } default_type "text/markdown; charset=utf-8"; }
+
+    # Self-hosted libraries, fonts and voices don't change at a given version: let browsers keep them. (After
+    # an upgrade, people may need a hard reload once.) index.html, reader-config.json and default.epub are left
+    # to the normal checks, so changes show up at once.
+    location ~ ^/reader/(libs|fonts|kokoro|pocket)/ { expires 30d; }
+
+    # Compress text and WebAssembly (the voice runtimes shrink to about a third). Model files (.onnx, .bin)
+    # barely compress and are served as they are. nginx answers range requests for static files by default,
+    # which browsers use for large audio and resumable downloads.
+    gzip on;
+    gzip_types text/css text/javascript application/javascript application/json application/wasm image/svg+xml text/markdown text/plain;
+}
+
+# Optional: books under /bookshelf/ (see BOOKSHELF in the README) with the same types.
+location /bookshelf/ {
+    location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
+    location ~* \.md$ { types { } default_type "text/markdown; charset=utf-8"; }
+}

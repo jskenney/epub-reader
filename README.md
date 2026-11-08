@@ -313,7 +313,7 @@ script is safe to re-run: finished files are skipped, interrupted
 downloads resume, and every file is checked against
 `checksums/kokoro.sha256`. `kokoro/` is in `.gitignore` because the fp32 model alone
 is larger than GitHub's 100 MB file limit. Serve `.wasm` files as
-`application/wasm`.
+`application/wasm` (see [Serving the reader](#serving-the-reader)).
 
 ### One copy of the voice files for several folders
 
@@ -331,6 +331,40 @@ files are downloaded and cached by the browser once. Run the fetch scripts in
 that folder (they write next to themselves). The browser treats the same
 file under two different paths as two files, which is why sharing one
 folder matters.
+
+## Serving the reader
+
+Any static web server works. [`nginx.conf.example`](nginx.conf.example) is a
+complete nginx setup for the reader at `/reader/`:
+
+- **A Content-Security-Policy for the reader page:** code, styles, fonts and
+  data only from your site, workers from `blob:` and WebAssembly for the voices,
+  nothing else allowed to frame the reader. Book pages inherit it, on top of
+  their own stricter policy.
+  - There are two versions. The active one is for a fully self-hosted reader
+    (all four fetch scripts run). The commented one adds the CDNs, for the
+    default `ALLOW_CDN = true`.
+  - With `ALLOW_REMOTE_CONTENT = true`, also allow the sites books load from.
+  - The test suite sends exactly the active policy from that file, so the
+    tests (including real Kokoro and Pocket TTS with `SLOW=1`) check that it
+    works.
+- **The types the reader needs:** `.mjs` as `text/javascript` (with `nosniff`,
+  a wrong type is refused) and `.wasm` as `application/wasm`.
+- **Long caching** for `libs/`, `fonts/`, `kokoro/` and `pocket/`, and gzip for
+  text and WebAssembly.
+
+For Caddy, the same policy goes in a `header` directive:
+
+```
+handle /reader/* {
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
+	header X-Content-Type-Options nosniff
+	root * /srv/www
+	file_server
+}
+```
+
+Caddy already serves `.mjs` and `.wasm` with the right types.
 
 ## Settings
 
