@@ -41,7 +41,7 @@ seen, breeze_log, busy = [], [], threading.Lock()
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
 head_on = [True]     # GET /__head?on=0 makes HEAD requests answer 405 (and ?on=1 again)
-head_delay = [0.0]   # GET /__head?delay=2 makes HEAD requests wait 2 s before answering (?delay=0 again)
+head_delay = {}      # GET /__head?delay=2&path=x.wav makes HEAD requests for paths ending in x.wav wait 2 s (?delay=0 clears)
 
 
 def validators(file, path=""):
@@ -123,10 +123,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/__head":
             m = re.search(r"delay=([\d.]+)", self.path)
             if m:
-                head_delay[0] = float(m.group(1))
+                p = re.search(r"path=([^&]+)", self.path)
+                if float(m.group(1)) and p: head_delay[p.group(1)] = float(m.group(1))
+                else: head_delay.clear()
             else:
                 head_on[0] = "on=0" not in self.path
-            return self.json(200, {"head": head_on[0], "delay": head_delay[0]})
+            return self.json(200, {"head": head_on[0], "delay": head_delay})
         if args.log:
             if path == "/__log":
                 return self.json(200, seen)
@@ -150,7 +152,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_HEAD(self):
-        time.sleep(head_delay[0])
+        time.sleep(next((d for p, d in head_delay.items() if self.path.split("?")[0].endswith(p)), 0))
         if not head_on[0]:
             self.file_validators = None
             return self.send_error(405)

@@ -180,15 +180,16 @@ test('a voice chosen while its clip check is still running waits for it, so a re
     // second's check runs in the background.
     const later = new Date(Date.now() + 9000);
     fs.utimesSync(second, later, later);
-    await fetch(`${h.SITE}/__head?delay=2`);
+    await fetch(`${h.SITE}/__head?delay=5&path=second.wav`);   // (only the second clip's check is slow)
     await page.evaluate(() => localStorage.setItem('spine:serverVoice', JSON.stringify('narrator')));
     await page.reload(); await h.waitForBook(page);
     await h.clearBreezeLog();
     await page.keyboard.press('r');
-    await page.waitForFunction(() => document.querySelector('#ttsVoice').options.length > 1, null, { timeout: 15000 });
-    await page.keyboard.press(' ');   // pause the first narrator
-    await page.selectOption('#ttsVoice', 'second');
-    await page.keyboard.press(' ');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)), 'the first narrator reads');
+    await page.keyboard.press(' ');                     // pause, choose the second narrator, and start again
+    await page.selectOption('#ttsVoice', 'second');   // from the top of the page (R), where its audio was saved
+    await h.clearBreezeLog();
+    await page.keyboard.press('r');
     // Not the audio saved for the old clip: the passage is made again.
     assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(r => r.text === first && /Another clip/.test(r.ref_text)), 20000),
       'the first passage should be made again with the new clip');
