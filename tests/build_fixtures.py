@@ -288,6 +288,11 @@ def main():
             if i.filename == "OEBPS/c3.xhtml":
                 data = data.replace(b"twin-a part 3", b"twin-a part 3 (revised)")
             zout.writestr(i, data)
+    # Two different books with the same title, file names and cover page, and no identifier (round 5 review).
+    for name in ("cover-x", "cover-y"):
+        epub(books / f"{name}.epub", "Covered", [("cover.xhtml", "Cover", '<p><img src="pic.png" alt="cover"/></p>')]
+             + [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 4)) for i in (1, 2)],
+             uid=None, extra={"OEBPS/pic.png": png(30, 40, (90, 90, 90))})
     # A narrated book (Media Overlays, REVIEW.md T-3): three paragraphs, each a 0.6 s clip of one recording,
     # then a second chapter without narration.
     wav(books / "narration.wav", 1.8)

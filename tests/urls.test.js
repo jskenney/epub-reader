@@ -130,12 +130,12 @@ test("a book without an identifier keeps its position after a metadata edit, or 
   await page.goto(`${h.READER}?book=books/twin-a-edited.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
   assert.deepEqual(await posKeys(page), [key]);
-  // Its last chapter edited (so a new key): found again by title, files and first chapter, the stale key removed.
+  // Its last chapter edited (so a new key): found again by title, files and leading chapters, under its new key.
   await page.goto(`${h.READER}?book=books/twin-a-last.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
   const keysNow = await posKeys(page);
-  assert.equal(keysNow.length, 1, keysNow.join(' '));
-  assert.notEqual(keysNow[0], key);
+  assert.equal(keysNow.length, 2, keysNow.join(' '));
+  assert.ok(keysNow.includes(key), 'the old key is kept: the old file may still be read');
   // The same title and file names but different text: another book, starting at its beginning.
   await page.goto(`${h.READER}?book=books/twin-c.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 1\/3/);
@@ -145,6 +145,17 @@ test("a book without an identifier keeps its position after a metadata edit, or 
   assert.ok((await posKeys(page)).includes('spine:pos:urn:twin-a-given'));
   await page.goto(`${h.READER}?book=books/twin-a.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
+});
+
+test('books sharing a title, file names and cover page, but not their text, keep their own positions (L-31)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/cover-x.epub`);
+  await page.click('#tocList a >> nth=2');
+  await savedAt(page, 2);
+  for (const [book, want] of [['cover-y', /spine 1\/3/], ['cover-x', /spine 3\/3/], ['cover-y', /spine 1\/3/]]) {
+    await page.goto(`${h.READER}?book=books/${book}.epub`); await h.waitForBook(page);
+    assert.match(await page.textContent('#spinePos'), want, book);
+  }
 });
 
 test('books with an identifier still use it, so they resume wherever they are opened from (L-13)', async () => {

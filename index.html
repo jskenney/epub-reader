@@ -1273,17 +1273,25 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   const titleSpine = JSON.stringify([dc('title')[0] || '', spine.map(s => s.href)]);
   const stableKey = 'spine:pos:opf:' + fingerprint(titleSpine.slice(0, -1) + ',' + JSON.stringify(fingerprint(last)) + ']');
   next.key = uid ? 'spine:pos:' + uid : stableKey;
-  // A looser record by title, files and the first chapter's fingerprint: if the last chapter is
-  // edited (a new key), the position is found again as long as the first chapter is unchanged. Books without
-  // an identifier keep it up to date; a book since given one only reads it.
-  next.firstFp = spine.length > 1 ? fingerprint(await readText(zip, spine[0].path).catch(() => '') || '') : fingerprint(last);
-  next.looseKey = 'spine:pos:loose:' + fingerprint(titleSpine + next.firstFp);   // (books differing in the first chapter don't share it)
-  next.writeLoose = !uid;
+  // A looser record by title, files and the text of the leading chapters (as many as it takes to reach 4,000
+  // characters of text, so a cover or title page shared by different books isn't enough; never the last
+  // chapter): if the last chapter is edited (a new key), the position is found again. Books without an
+  // identifier keep it up to date; a book since given one only reads it. A book of one chapter has none.
+  if (spine.length > 1) {
+    let lead = '', chars = 0;
+    for (let k = 0; k < spine.length - 1 && k < 8 && chars < 4000; k++) {
+      const t = await readText(zip, spine[k].path).catch(() => '') || '';
+      lead += fingerprint(t); chars += t.replace(/<[^>]*>/g, '').replace(/\s+/g, '').length;
+    }
+    if (chars >= 1000) {   // (too little text to tell books apart: no loose record)
+      next.looseKey = 'spine:pos:loose:' + fingerprint(titleSpine + lead);
+      next.writeLoose = !uid;
+    }
+  }
   // Positions under earlier keys are moved over once and the old key removed: the fingerprint of the whole
   // package file and the title (earlier versions). A book since given an identifier copies its fingerprint
   // key's position without removing it (a copy without the identifier may still be read).
   next.legacyKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
-  next.ownKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText)];   // only ever this exact book's: safe to clean up
   next.copyKeys = uid ? [stableKey] : [];
   await startBook(next);
 }
@@ -1308,14 +1316,10 @@ async function startBook(next){
     store.set(book.key, v); saved = v;
     break;
   }
-  // The last chapter edited since (so a new key): the looser record, if the first chapter still matches.
+  // The last chapter edited since (so a new key): the looser record. (The old key is left: it may still be
+  // another copy's, as the old file may still be read.)
   const loose = !saved && book.looseKey ? store.get(book.looseKey) : null;
-  if (loose && loose.first === book.firstFp && loose.i < spine.length) {
-    saved = { i: loose.i, f: loose.f };
-    if (book.writeLoose && loose.key && loose.key !== book.key) store.del(loose.key);   // the stale key
-    store.set(book.key, saved);
-  }
-  for (const k of book.ownKeys || []) if (k !== book.key) store.del(k);   // older keys of this exact book
+  if (loose && loose.i < spine.length) { saved = { i: loose.i, f: loose.f }; store.set(book.key, saved); }
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
 }
@@ -1936,7 +1940,7 @@ function savePos(){
   if (!book) return;
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000 };
   store.set(book.key, pos);
-  if (book.writeLoose) store.set(book.looseKey, { ...pos, first: book.firstFp, key: book.key });
+  if (book.writeLoose) store.set(book.looseKey, pos);
 }
 
 let wheelAcc = 0, wheelAt = 0;
