@@ -290,6 +290,10 @@ def main():
             if i.filename == "OEBPS/c3.xhtml":
                 data = data.replace(b"twin-a part 3", b"twin-a part 3 (revised)")
             zout.writestr(i, data)
+    # A stylesheet that imports itself 30 times, linked 50 times (REVIEW.md H-6): must open quickly.
+    epub(books / "css-fanout.epub", "CSS Fanout", [("c1.xhtml", "One", "<h1>Fanout</h1><p class='f'>Text.</p>",
+         '<link rel="stylesheet" href="self.css"/>' * 50)], uid="urn:css-fanout",
+         extra={"OEBPS/self.css": ('@import "self.css";\n' * 30 + "/*" + "x" * 1000 + "*/ .f{color:rgb(1, 2, 3)}").encode()})
     # Two different books with the same title, file names and cover page, and no identifier (round 5 review).
     for name in ("cover-x", "cover-y"):
         epub(books / f"{name}.epub", "Covered", [("cover.xhtml", "Cover", '<p><img src="pic.png" alt="cover"/></p>')]

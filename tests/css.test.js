@@ -18,7 +18,11 @@ function cleaner(allowRemote = false) {
   const line = name => { const a = src.indexOf(name); return src.slice(a, src.indexOf('\n', a)); };
   const body = [line('const isExternal = '), line('const urlText = '), line('const isRemote = '), src.slice(from, to)].join('\n');
   const files = { 'local.css': '.l{background:url(pic.png)}', 'tail.css': 'a{background:url(', 'tail2.css': 'a{background:u',
-    'tail3.css': 'a{background-image:image-set(', 'open-comment.css': '/* never closed', 'open-string.css': 'a{content:"never closed', 'red.css': 'x{color:rgb(255, 0, 0)}' };
+    'tail3.css': 'a{background-image:image-set(', 'open-comment.css': '/* never closed', 'open-string.css': 'a{content:"never closed', 'red.css': 'x{color:rgb(255, 0, 0)}',
+    // H-6: sheets that import themselves or each other many times.
+    'self.css': '@import "self.css";\n'.repeat(30) + '/*' + 'x'.repeat(1000) + '*/ s{color:red}',
+    'f1.css': '@import "f2.css";\n'.repeat(30) + 'a{b:c}', 'f2.css': '@import "f3.css";\n'.repeat(30) + 'a{b:c}',
+    'f3.css': '@import "f4.css";\n'.repeat(30) + 'a{b:c}', 'f4.css': '/*' + 'y'.repeat(1000) + '*/ a{b:c}' };
   return new Function('ALLOW_REMOTE_CONTENT', 'book', 'resolve', 'readText', 'resourceURL', `${body}\nreturn { rewriteCss, cssTokens, cssRefs, cssPreprocess };`)(
     allowRemote, { zip: null }, (base, ref) => ref, async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`));
 }
@@ -75,6 +79,19 @@ test('everything else is left as written: strings, local files, fragments, data:
   assert.equal(await rewriteCss('@import "local.css"; x{y:url("pic (1).png")}', 'x.css'), '.l{background:url(blob:local/pic.png)}\n x{y:url(blob:local/pic%20%281%29.png)}');
   // With remote content allowed, remote addresses stay.
   assert.equal(await cleaner(true).rewriteCss(`a{b:url(${R}/x.png)}`, 'x.css'), `a{b:url(${R}/x.png)}`);
+});
+
+test('stylesheets importing themselves or each other many times stay small and fast (H-6)', async () => {
+  const { rewriteCss } = cleaner();
+  for (const [css, max] of [['@import "self.css";', 4000], ['@import "f1.css";', (4 << 20) + 100000]]) {
+    const t0 = Date.now();
+    const out = await rewriteCss(css, 'x.css');
+    assert.ok(Date.now() - t0 < 3000, `${css}: ${Date.now() - t0} ms`);
+    assert.ok(out.length <= max, `${css}: ${out.length} characters`);
+  }
+  assert.match(await rewriteCss('@import "self.css";', 'x.css'), /s\{color:red\}/, 'the sheet itself is still used, once');
+  // @import in a style attribute means nothing: dropped, not pasted in.
+  assert.equal(await rewriteCss('@import "red.css"; color: blue', 'x.css', { attr: true }), ' color: blue');
 });
 
 test("a pasted-in import keeps its conditions, and imports the browser would ignore are dropped (L-35)", async () => {

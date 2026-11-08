@@ -73,6 +73,16 @@ test('an HTML page: base and meta refresh are removed before parsing, whatever t
   assert.deepEqual(page.cspViolations, [], 'nothing left for the policies to refuse');
 });
 
+test('a stylesheet importing itself many times, linked many times, opens quickly and still applies (H-6)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/css-fanout.epub`);
+  assert.ok(Date.now() - t0 < 15000, `opened in ${Date.now() - t0} ms`);
+  const r = await h.inFrame(page, doc => ({ color: doc.defaultView.getComputedStyle(doc.querySelector('.f')).color, size: doc.documentElement.outerHTML.length }));
+  assert.equal(r.color, 'rgb(1, 2, 3)');
+  assert.ok(r.size < 6e6, `page of ${r.size} characters`);
+});
+
 test('links of every kind: in-book links open chapters, web links open a new tab, the frame never navigates', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/hostile.epub`);

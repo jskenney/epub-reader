@@ -1594,7 +1594,19 @@ function cssWrapImport(sheet, cond){
   if (layer !== null) out = `@layer${layer ? ' ' + layer : ''}{\n${out}\n}`;
   return out;
 }
-async function rewriteCss(css, cssPath, depth = 0, again = true){
+// What one page may paste in from its stylesheets (linked sheets and @imports together): a book whose sheets
+// import each other many times would otherwise grow without limit (N⁴ copies for N self-imports) and freeze the
+// tab. Past the budget, further sheets are left out.
+const CSS_BUDGET = { sheets: 200, chars: 4 << 20 };
+const cssBudget = () => ({ sheets: 0, chars: 0, cache: new Map() });
+function cssSpend(budget, n){
+  if (budget.sheets + 1 > CSS_BUDGET.sheets || budget.chars + n > CSS_BUDGET.chars) return false;
+  budget.sheets++; budget.chars += n; return true;
+}
+// opts: depth (of @import), again (read the joined result once more), budget (the page's), chain (the sheets
+// being pasted, outermost first: an @import of one of them is a cycle, which browsers ignore), attr (a style
+// attribute: @import means nothing there).
+async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssBudget(), chain = [cssPath], attr = false } = {}){
   css = cssPreprocess(css);
   const refs = cssRefs(css);
   const jobs = new Map();   // local files, each fetched once
@@ -1611,10 +1623,19 @@ async function rewriteCss(css, cssPath, depth = 0, again = true){
   for (const r of refs) {
     let text = null;   // null: leave it as written
     if (r.kind === 'import') {
-      if (r.late) text = '';   // (ignored by the browser anyway)
+      if (r.late || attr) text = '';   // (ignored by the browser anyway)
       else if (r.local) {
-        const p = resolve(cssPath, r.clean), t = depth < 4 ? await readText(book.zip, p) : null;
-        text = t ? cssWrapImport(cssCloseAtEnd(await rewriteCss(t, p, depth + 1)), r.cond) + '\n' : '';
+        const p = resolve(cssPath, r.clean);
+        let sheet = null;
+        if (depth < 4 && !chain.includes(p)) {
+          if (!budget.cache.has(p)) {
+            const t = await readText(book.zip, p);
+            budget.cache.set(p, t ? cssCloseAtEnd(await rewriteCss(t, p, { depth: depth + 1, budget, chain: [...chain, p] })) : '');
+          }
+          sheet = budget.cache.get(p);
+          if (sheet && !cssSpend(budget, sheet.length)) sheet = null;   // over the page's budget: left out
+        }
+        text = sheet ? cssWrapImport(sheet, r.cond) + '\n' : '';
         inlined = true;
       } else if (!ALLOW_REMOTE_CONTENT || !isRemote(r.clean)) text = '';   // another site (or a data: sheet): dropped
     } else if (r.local) {
@@ -1627,7 +1648,7 @@ async function rewriteCss(css, cssPath, depth = 0, again = true){
   }
   parts.push(css.slice(at));
   // Sheets pasted together are read as one: read the result again, in case the joins made new addresses.
-  return inlined && again ? rewriteCss(parts.join(''), cssPath, depth, false) : parts.join('');
+  return inlined && again ? rewriteCss(parts.join(''), cssPath, { depth, again: false, budget, chain, attr }) : parts.join('');
 }
 
 /* ---------- building a page ---------- */
@@ -1712,7 +1733,7 @@ function sanitize(doc){
     }
   }
 }
-async function localize(doc, path){
+async function localize(doc, path, budget = cssBudget()){
   const jobs = [];
   const targets = [['img','src'],['image','href'],['image','xlink:href'],['source','src'],['video','src'],['video','poster'],['audio','src'],['track','src']];
   for (const [tag, attr] of targets) {
@@ -1726,8 +1747,8 @@ async function localize(doc, path){
     }
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
-  for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path).then(c => { st.textContent = c; }));
-  for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
+  for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget }).then(c => { st.textContent = c; }));
+  for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true }).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
@@ -1779,7 +1800,7 @@ async function buildPage(src, path){
   for (const a of ['lang', 'xml:lang', 'dir', 'class']) {
     const v = sHtml.getAttribute(a); if (v) out.documentElement.setAttribute(a === 'xml:lang' ? 'lang' : a, v);
   }
-  const head = out.head;
+  const head = out.head, budget = cssBudget();
   head.innerHTML = `<meta charset="utf-8"><link id="${RID.font}" rel="stylesheet" href="${fontHref()}"><style id="${RID.base}"></style>`;
   head.querySelector('#' + RID.base).textContent = baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
@@ -1791,12 +1812,12 @@ async function buildPage(src, path){
         continue;
       }
       const p = resolve(path, href), css = await readText(book.zip, p);
-      if (!css) continue;
-      const st = out.createElement('style'); st.textContent = await rewriteCss(css, p);
+      if (!css || !cssSpend(budget, css.length)) continue;   // (a page linking one big sheet thousands of times)
+      const st = out.createElement('style'); st.textContent = await rewriteCss(css, p, { budget });
       if (n.getAttribute('media')) st.setAttribute('media', n.getAttribute('media'));
       head.append(st);
     } else {
-      const st = out.createElement('style'); st.textContent = await rewriteCss(n.textContent, path); head.append(st);
+      const st = out.createElement('style'); st.textContent = await rewriteCss(n.textContent, path, { budget }); head.append(st);
     }
   }
   const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(); head.append(ov);
@@ -1814,7 +1835,7 @@ async function buildPage(src, path){
   const page = new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
   sanitize(page);
   stripRemote(page);
-  await localize(page, path);
+  await localize(page, path, budget);
   markLinks(page, path);
   if (!ALLOW_REMOTE_CONTENT) {   // and have the browser refuse anything that isn't part of the book
     const csp = page.createElement('meta');
