@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-08, updated after round 5): `index.html` (about 4,400 lines), the fetch
+Review of the repository (2026-11-08, updated after round 6): `index.html` (about 4,400 lines), the fetch
 scripts, `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml` and the test suite in
 `tests/`. Open items keep their IDs from earlier versions of this document; new findings are numbered after the
 highest earlier ID in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -23,8 +23,10 @@ by reading the code only.
     in `5199dda`.
   - **L-32 to L-34:** fixed in `76a92bc`, `f7c6ef9` and `87c0cff`.
   - **What is left:** recorded as L-35 to L-37 and T-11.
+- **Round 6** (`23100cb` to `cd29fca`) added E-13 and E-14 and fixed L-35, L-36 and L-37. No independent review
+  was run for this round.
 
-**Tests.** All 86 tests pass. Five more need `SLOW=1` (the real Kokoro and Pocket TTS models) or `NETWORK=1`
+**Tests.** All 90 tests pass. Five more need `SLOW=1` (the real Kokoro and Pocket TTS models) or `NETWORK=1`
 (the CDNs). The real-model tests passed in this session, after a broken pattern in the Kokoro worker was
 caught and fixed. The `NETWORK=1` tests could not be run here, because this machine has no internet access
 (see T-11). Each fix in round 5 has a test, and most of those tests were run against the code before the fix
@@ -34,7 +36,7 @@ and failed there. The suite now also covers:
 - The CDN version of the reader policy, checked offline by answering CDN requests with local copies.
 - `lazyZip` run in Node on archives built in memory.
 
-**Labels.** Each item has an ID you can ask for by name (for example, "fix L-35 and T-11").
+**Labels.** Each item has an ID you can ask for by name (for example, "fix L-18 and T-11").
 
 | Prefix | Meaning |
 |---|---|
@@ -48,23 +50,14 @@ and failed there. The suite now also covers:
 
 ## Summary
 
-No critical, high or medium items are open. The open items are low:
-- **L-18:** in the server repository.
-- **L-35:** what imported stylesheets lose when they are pasted in.
-- **L-36:** older position keys that accumulate.
-- **L-37:** a short window in which re-recorded voice clips are missed.
-
-Tests: T-11 covers the network and model tests, which run only in the new weekly workflow, which hasn't run
-yet.
+No critical, high or medium items are open. One low item is open, L-18, which is in the server repository.
+T-11 is about tests that only the new weekly workflow runs, and that workflow hasn't run yet.
 
 ## Open items
 
 | ID | Title | Area |
 |---|---|---|
 | [L-18](#l-18-tts-server-ports-are-open-to-the-network) | TTS server ports are open to the network (server repo) | Security |
-| [L-35](#l-35-inlined-stylesheets-lose-their-import-conditions) | Inlined stylesheets lose their `@import` conditions | Rendering |
-| [L-36](#l-36-older-position-keys-accumulate) | Older position keys accumulate | Storage |
-| [L-37](#l-37-a-voice-chosen-before-its-clip-check-finishes) | A voice chosen before its clip check finishes | Voices |
 | [T-11](#t-11-the-network-and-model-tests-only-run-weekly) | The network and model tests only run weekly | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel) | Enhancements | — |
 
@@ -77,39 +70,6 @@ choice. Anyone who can reach those ports can use the GPU without a password. The
 delete voices and upload files of up to 1 GB.
 
 **Fix:** a firewall rule that allows only the proxy host.
-
-### L-35. Inlined stylesheets lose their import conditions
-
-*Read*; this predates round 5. A local `@import` is pasted into the importing sheet.
-- **Conditions dropped.** The rule's media query, `supports()` and `layer()` are lost, so
-  `@import "print.css" print` also applies on screen.
-- **Late imports kept.** Imports after other rules, which browsers ignore, are pasted in too.
-
-Since round 5, each pasted sheet is closed at its end and the result is read again, so nothing can join into a
-new address.
-
-**Fix:** wrap the pasted sheet in `@media …{}`, `@supports …{}` or `@layer …{}` as its conditions say. Drop
-imports that come after other rules.
-
-### L-36. Older position keys accumulate
-
-*Read.* Positions saved under older keys (the whole package file's fingerprint, the title) are moved over once,
-by whichever book with that title opens first. Two cases leave keys behind:
-- **Older keys that weren't moved.** If the current key already has a position, the older keys are never
-  removed. Identical package files share those keys, so deleting them could take another book's position.
-- **A book whose last chapter was edited.** Its old key is kept, since the old file may still be read.
-
-Each key is a few dozen bytes.
-
-**Fix:** an occasional cleanup of `spine:pos:` keys not used for a long time (store a last-read date with
-each).
-
-### L-37. A voice chosen before its clip check finishes
-
-*Read.* When a server voice is chosen, its clip version is checked in the background, and reading can start
-before the check finishes. If the clip was re-recorded since, audio saved for the old clip can play once.
-
-**Fix:** await the check (one request) before the first passage after a voice change.
 
 ## Tests
 
@@ -164,9 +124,8 @@ saved-audio limit, remote content, shortcuts and so on.
 
 ## Suggested order
 
-1. **T-11:** run the slow workflow once by hand.
-2. **L-35 and L-37:** small fixes.
-3. **L-36, L-18** and the enhancements, as wanted.
+1. **T-11:** run the slow workflow once by hand (Actions → Slow tests → Run workflow).
+2. **L-18,** in the server repository, and the enhancements, as wanted.
 
 ## Resolved
 
@@ -224,6 +183,9 @@ From all reviews so far, with the commits that fixed them.
 | L-32 | Whole archives read by JSZip skipped checksums and inflated past their declared sizes (round 5 review) | `76a92bc` |
 | L-33 | Renaming book ids that start with `spine-` missed references to them (round 5 review) | `f7c6ef9` |
 | L-34 | `fetch-fonts.sh --strict` refetched missing files and ran without a list (round 5 review) | `87c0cff` |
+| L-35 | Inlined stylesheets lost their `@import` conditions; imports browsers ignore were pasted in | `b6017ae` |
+| L-36 | Older position keys accumulated; positions not read for `KEEP_POSITIONS_DAYS` are now forgotten | `b66624c` |
+| L-37 | A server voice chosen while its clip check ran could replay audio saved for an old clip | `caf359a`, `cd29fca` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -238,3 +200,5 @@ From all reviews so far, with the commits that fixed them.
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
+| E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
+| E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
