@@ -235,6 +235,23 @@ downloads resume. `kokoro/` is in `.gitignore` because the fp32 model alone
 is larger than GitHub's 100 MB file limit. Serve `.wasm` files as
 `application/wasm`.
 
+### One copy of the voice files for several folders
+
+By default the reader looks for `kokoro/` and `pocket/` next to the page it
+was opened from. If `index.html` is linked (or copied) into several folders,
+for example one per book with its own `default.epub`, set `VOICE_FILES` near
+the top of `index.html` to the site path that holds them:
+
+```js
+const VOICE_FILES = '/reader/';   // '' (the default) = this page's folder
+```
+
+Every copy then loads from `/reader/kokoro/` and `/reader/pocket/`, so the
+files are downloaded and cached by the browser once. Run the fetch scripts in
+that folder (they write next to themselves). The browser treats the same
+file under two different paths as two files, which is why sharing one
+folder matters.
+
 ## Requirements
 
 No build step. The only dependency is JSZip 3.10.1, loaded from cdnjs, plus

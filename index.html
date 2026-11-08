@@ -380,6 +380,10 @@ const FONTS = [
   { id: 'system-sans', name: 'System sans-serif', note: 'device', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' }
 ];
 const OPS = 'http://www.idpf.org/2007/ops';
+// Where the self-hosted voice files (kokoro/ and pocket/, from fetch-kokoro.sh and fetch-pocket.sh) live.
+// '' = the folder this page is in. Set a site path such as '/reader/' when index.html is linked into several
+// folders, so every copy shares one set of files (and the browser downloads and caches them once).
+const VOICE_FILES = '';
 const DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
 const BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
@@ -2406,10 +2410,15 @@ if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narratio
 // Natural voices use the full-precision models (best quality; larger downloads, slower on the CPU).
 // Set to false to use the 8-bit models instead (fetch-pocket.sh --int8 for self-hosting those).
 const FULL_PRECISION = true;
+// The folder VOICE_FILES names, as an absolute URL ending in /; '' or a missing trailing slash work too.
+function voiceFilesBase(){
+  const v = (VOICE_FILES || './').trim();
+  return new URL(v.endsWith('/') ? v : v + '/', location.href);
+}
 const KOKORO = { lib: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js', model: 'onnx-community/Kokoro-82M-v1.0-ONNX',
-  // Self-hosted copies (fetched by fetch-kokoro.sh) in ./kokoro/ next to this page are used first when present:
+  // Self-hosted copies (fetched by fetch-kokoro.sh) in kokoro/ under VOICE_FILES are used first when present:
   //   kokoro/kokoro.web.js, kokoro/ort/ (ONNX Runtime), kokoro/model/ (a mirror of the Hugging Face repo files)
-  local: new URL('kokoro/', location.href).href };
+  local: new URL('kokoro/', voiceFilesBase()).href };
 const KOKORO_VOICES = [   // [id, name, accent, gender, grade]: kokoro-js's overall quality grades
   ['af_heart', 'Heart', 'American', 'female', 'A'], ['af_bella', 'Bella', 'American', 'female', 'A-'],
   ['af_nicole', 'Nicole', 'American', 'female', 'B-'], ['bf_emma', 'Emma', 'British', 'female', 'B-'],
@@ -2561,8 +2570,8 @@ const POCKET = {
   lib: 'https://cdn.jsdelivr.net/npm/pocket-tts-js@0.1.0/src/',
   ort: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist/',
   model: 'https://huggingface.co/vlapky/pocket-tts-onnx/resolve/c469236dbc5f68287fa2fbf175b66de3b80123af/onnx',
-  // Self-hosted copies (fetched by fetch-pocket.sh): pocket/lib/, pocket/ort/, pocket/model/<bundle>/
-  local: new URL('pocket/', location.href).href
+  // Self-hosted copies (fetched by fetch-pocket.sh) under VOICE_FILES: pocket/lib/, pocket/ort/, pocket/model/<bundle>/
+  local: new URL('pocket/', voiceFilesBase()).href
 };
 const POCKET_LANGS = {   // book language -> [model bundle, MB to download (full precision, int8), name]
   en: ['english_2026-04', [431, 170], 'English'], fr: ['french_24l', [1247, 338], 'French'], de: ['german', [431, 170], 'German'],
