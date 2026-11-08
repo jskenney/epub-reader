@@ -137,6 +137,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self.send_range(file, rng)
         super().do_GET()
 
+    def do_HEAD(self):
+        file = self.translate_path(self.path)
+        self.file_validators = validators(file, self.path) if os.path.isfile(file) else None
+        self.validators_sent = False
+        super().do_HEAD()
+
     def copyfile(self, source, outputfile):   # count what is sent
         n = 0
         while chunk := source.read(65536):

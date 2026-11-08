@@ -3268,10 +3268,23 @@ async function svLoad(){
     if (!res || [502, 503, 504].includes(res.r.status) || (res.r.ok && !res.json)) { sv.state = 'idle'; svLost(); return; }
     const { r, json } = res;
     if (!r.ok) throw new Error(r.status === 404 ? 'no voices yet (create one in the voice studio at /tts-studio/)' : `the voice list answered ${r.status}`);
-    const list = json.voices || [];
-    // A voice whose clip is outside the voices folder (another site, or "../" out of it) is left out.
-    sv.voices = list.filter(v => v.id && (v.ref_audio ? v.ref_text && svClipURL(v) : v.instruction));
-    for (const v of list) if (v.ref_audio && !svClipURL(v)) console.warn(`Voice ${v.id}: its clip ${v.ref_audio} isn't in the voices folder, so it is left out`);
+    // A clip outside the voices folder (another site, or "../" out of it) isn't used: the voice falls back to
+    // its instruction if it has one, and is left out otherwise.
+    const list = (json.voices || []).map(v => {
+      if (!v?.ref_audio || svClipURL(v)) return v;
+      console.warn(`Voice ${v.id}: its clip ${v.ref_audio} isn't in the voices folder, so ${v.instruction ? 'its instruction is used instead' : 'it is left out'}`);
+      const { ref_audio, ref_text, ...rest } = v;
+      return rest;
+    });
+    sv.voices = list.filter(v => v?.id && (v.ref_audio ? v.ref_text : v.instruction));
+    // Each clip's version (ETag, or date and size), so saved audio is made again when a clip is re-recorded
+    // under the same name.
+    await Promise.all(sv.voices.filter(v => v.ref_audio).map(async v => {
+      try {
+        const h = (await fetch(svClipURL(v), { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(5000) })).headers;
+        v.clipVersion = h.get('etag') || `${h.get('last-modified') || ''}|${h.get('content-length') || ''}`;
+      } catch { v.clipVersion = ''; }
+    }));
     if (!sv.voices.length) throw new Error('no voices yet (create one in the voice studio at /tts-studio/)');
     sv.state = 'ready';
   } catch (e) { sv.state = 'error'; sv.error = e.message; }
@@ -3299,7 +3312,9 @@ async function svRef(v){
 // reordering or adding other fields in voices.json (a name, a note) keeps it.
 function svVoiceHash(){
   const v = svVoice() || {};
-  return hashText(JSON.stringify([v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.instruction || '', Number(v.cfg_scale ?? 1), Number(v.seed ?? 42)]));
+  // (The values as the form sends them, so "1.0" and "1" are told apart just as the server sees them.)
+  return hashText(JSON.stringify([v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
+    String(v.cfg_scale ?? 1), String(v.seed ?? 42)]));
 }
 function svGenerate(text, opts = {}){
   const run = async () => {

@@ -81,19 +81,27 @@ test('finished audio is saved: after a reload the same passage plays without ask
   assert.ok(first < 2000, `first word after ${first} ms`);
 });
 
-test('server voices: clips outside the voices folder are left out (L-12)', async () => {
+test('server voices: clips outside the voices folder are not used (L-12, L-28)', async () => {
   const page = await h.newPage();
   await h.clearRemoteLog();
   await h.openReader(page, LONG, server);
   await page.keyboard.press('r');
   assert.ok(await h.waitFor(() => h.spokenWord(page)));
-  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator']);
+  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'described']);
+  // The voice with an instruction speaks with it, without the clip from the other site (L-28).
+  await page.selectOption('#ttsVoice', 'described');
+  await h.clearBreezeLog();
+  await page.keyboard.press('r'); await page.keyboard.press('r');
+  const asked = await h.waitFor(async () => (await h.breezeLog()).find(r => !r.ref_bytes), 15000);
+  assert.ok(asked, 'a request without a clip');
+  assert.equal(asked.ref_text, '');
   assert.deepEqual(await h.remoteLog(), []);
 });
 
-test('saved server-voice audio survives reordered or added fields in voices.json, not a changed seed (L-15)', async () => {
+test('saved server-voice audio survives reordered or added fields in voices.json, not a changed seed or clip (L-15, L-28)', async () => {
   const file = path.join(__dirname, 'site', 'tts-voices', 'voices.json');
   const original = fs.readFileSync(file, 'utf8');
+  const clip = path.join(__dirname, 'site', 'tts-voices', 'narrator.wav'), clipTime = fs.statSync(clip).mtime;
   const edit = change => { const j = JSON.parse(original); j.voices[0] = change(j.voices[0]); fs.writeFileSync(file, JSON.stringify(j)); };
   const page = await h.newPage();
   try {
@@ -117,8 +125,14 @@ test('saved server-voice audio survives reordered or added fields in voices.json
     assert.equal(await replay(), false, 'reordered fields: the first passage should come from saved audio');
     edit(v => ({ ...v, seed: 7 }));
     assert.equal(await replay(), true, 'a new seed: the first passage should be made again');
+    // The original settings, but the clip re-recorded under the same name (L-28): made again too.
+    edit(v => v);
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(clip, later, later);
+    assert.equal(await replay(), true, 'a re-recorded clip: the first passage should be made again');
   } finally {
     fs.writeFileSync(file, original);
+    fs.utimesSync(clip, clipTime, clipTime);
   }
 });
 
