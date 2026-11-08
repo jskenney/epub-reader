@@ -6,7 +6,8 @@ const h = require('./helpers');
 test.afterEach(h.closePages);
 test.after(h.close);
 
-const LONG = `${h.READER}?book=books/long.epub`;
+// The sleep timer and time left are off unless a config turns them on (E-12, E-13): this folder's does.
+const LONG = `${h.SITE}/folder-listen/index.html?book=/reader/books/long.epub`;
 const serverVoice = { 'spine:ttsEngine': 'server' };
 async function startReading(page) {
   await page.keyboard.press('r');
@@ -89,6 +90,17 @@ test('sleep timer: "stop at chapter end" stops instead of going on to the next c
   assert.match(status, /stopped at the end of the chapter/);
   assert.match(await page.textContent('#spinePos'), /spine 2\/3/, 'still in chapter two');
   assert.equal(await playing(page), false);
+});
+
+test('by default the read-aloud bar is compact: short voice names, no sleep timer, no time left (E-12, E-13)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, serverVoice);
+  await startReading(page);
+  const names = await page.$$eval('#ttsEngine option:not([hidden])', os => os.map(o => o.textContent));
+  assert.deepEqual(names.filter(n => n !== 'Publisher narration'), ['Device', 'Kokoro', 'Pocket', 'Server']);
+  assert.equal(await page.isVisible('#ttsSleep'), false);
+  await page.waitForTimeout(1500);
+  assert.equal((await page.textContent('#timeLeft')).trim(), '');
 });
 
 test('time left in the chapter and the book', async () => {

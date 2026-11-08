@@ -132,10 +132,10 @@ This needs a real web server (for example `npx vite` or
   active-class styling), pages turn with the audio, reading continues into
   the next chapter, and the same controls apply: click or select to start
   anywhere, Space to pause, previous / next clip, and speed (instant, with
-  pitch preserved). Switch between "Publisher narration" and "Device voice"
+  pitch preserved). Switch between "Publisher narration" and "Device"
   in the read-aloud bar. Narrator and narration length appear under
   Information.
-- Natural voice (Kokoro): choose "Natural voice (Kokoro)" in the read-aloud
+- Natural voice (Kokoro): choose "Kokoro" in the read-aloud
   bar to use the Kokoro-82M model, running entirely in the browser through
   [kokoro-js](https://www.npmjs.com/package/kokoro-js) in a Web Worker.
   Nothing downloads until you press Download: the full-precision model
@@ -150,7 +150,7 @@ This needs a real web server (for example `npx vite` or
   CPU, generation can be slower than real time, which causes pauses between
   sentences. Files load from `./kokoro/` when you self-host them (see below),
   otherwise from cdn.jsdelivr.net and huggingface.co.
-- Natural voice (Pocket TTS): Kyutai's Pocket TTS through
+- Natural voice (Pocket TTS, "Pocket" in the read-aloud bar): Kyutai's Pocket TTS through
   [pocket-tts-js](https://www.npmjs.com/package/pocket-tts-js), running on
   the CPU (WebAssembly) in a Web Worker. Unlike Kokoro it reads English,
   German, Italian, Portuguese and Spanish books, with 8 built-in
@@ -159,7 +159,7 @@ This needs a real web server (for example `npx vite` or
   Download. It has no speed control of
   its own, so the speed setting changes playback instantly with pitch
   preserved. The model is CC BY 4.0 (Kyutai).
-- Server voice: Breeze TTS 2 running on your own NVIDIA GPU behind the same
+- Server voice ("Server" in the read-aloud bar): Breeze TTS 2 running on your own NVIDIA GPU behind the same
   website (English and Chinese). It appears in the read-aloud bar when
   `/tts/health` on the site root answers; voices are reference clips listed
   in `/tts-voices/voices.json`, created and managed in the server's voice
@@ -192,12 +192,14 @@ This needs a real web server (for example `npx vite` or
   author and cover. Browsers only offer these to a page playing audio, so a
   silent clip plays alongside read-aloud. (iPhones and iPads stop device
   voices when the screen locks, whatever the page does.)
-- Sleep timer in the read-aloud bar: stop after 15, 30, 45, 60 or 90 minutes
+- Sleep timer in the read-aloud bar (off unless `SLEEP_TIMER` is turned on):
+  stop after 15, 30, 45, 60 or 90 minutes
   of listening, or at the end of the chapter. It counts down only while
   reading aloud plays, and stops at the end of the sentence or passage being
   read; play carries on from there. The note saying why it stopped stays
   until you play again.
-- Time left, in the footer: "12 min left in chapter · 3 h 10 min in book",
+- Time left, in the footer (off unless `TIME_LEFT` is turned on): "12 min
+  left in chapter · 3 h 10 min in book",
   from your reading speed (learned from how fast you turn pages, starting at
   about 200 words a minute) or, while reading aloud, from the voice's actual
   pace. Phones show the chapter part only.
@@ -430,6 +432,8 @@ marked ✓).
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
 | `ALLOW_REMOTE_CONTENT` ✓ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. |
 | `ALLOW_EXTERNAL_LINKS` ✓ | `true` | `false` turns a book's web and e-mail links into plain text. |
+| `SLEEP_TIMER` ✓ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `TIME_LEFT` ✓ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
 | `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
 | `LOOKAHEAD_SEC` ✓ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |

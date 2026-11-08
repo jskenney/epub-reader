@@ -319,13 +319,13 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         </label>
         <select id="ttsEngine" aria-label="What reads aloud">
           <option value="narration">Publisher narration</option>
-          <option value="device">Device voice</option>
-          <option value="kokoro">Natural voice (Kokoro)</option>
-          <option value="pocket">Natural voice (Pocket TTS)</option>
-          <option value="server" hidden>Server voice</option>
+          <option value="device">Device</option>
+          <option value="kokoro">Kokoro</option>
+          <option value="pocket">Pocket</option>
+          <option value="server" hidden>Server</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
-        <select id="ttsSleep" aria-label="Sleep timer" title="Sleep timer: stop reading after a while (at the end of the sentence or passage being read)">
+        <select id="ttsSleep" hidden aria-label="Sleep timer" title="Sleep timer: stop reading after a while (at the end of the sentence or passage being read)">
           <option value="off">No sleep timer</option>
           <option value="15">Stop in 15 min</option>
           <option value="30">Stop in 30 min</option>
@@ -409,6 +409,11 @@ let ALLOW_REMOTE_CONTENT = false;
 // Links in a book to web pages and e-mail addresses: true opens them in a new tab when clicked; false makes
 // them plain text.
 let ALLOW_EXTERNAL_LINKS = true;
+// Extras that make the read-aloud bar and the footer busier, off unless turned on (here or in
+// reader-config.json): the sleep timer in the read-aloud bar, and the reading time left ("12 min left in chapter
+// · 3 h 5 min in book") in the footer.
+let SLEEP_TIMER = false;
+let TIME_LEFT = false;
 let DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
 let BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
@@ -3034,12 +3039,12 @@ function ttsUpdateBar(status){
   $('#ttsBack').hidden = tts.follow;
   const eng = $('#ttsEngine'), narr = eng.querySelector('[value="narration"]'), ko = eng.querySelector('[value="kokoro"]');
   narr.hidden = narr.disabled = !book?.hasOverlays;
-  ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Natural voice (Kokoro)' : 'Natural voice (Kokoro, English only)';
+  ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Kokoro' : 'Kokoro (English only)';
   const po = eng.querySelector('[value="pocket"]');
-  po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Natural voice (Pocket TTS)' : 'Natural voice (Pocket TTS: en, de, it, pt, es)';
+  po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Pocket' : 'Pocket (en, de, it, pt, es)';
   const so = eng.querySelector('[value="server"]');
   so.hidden = !sv.available; so.disabled = !sv.available || !serverFits();
-  so.textContent = serverFits() ? 'Server voice' : 'Server voice (English and Chinese only)';
+  so.textContent = serverFits() ? 'Server' : 'Server (English and Chinese only)';
   const unusable = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ||
     (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'server' && (!sv.available || !serverFits()));
   eng.value = unusable ? 'device' : tts.engine;
@@ -4245,6 +4250,7 @@ function fmtLeft(sec){
 }
 async function updateTimeLeft(){
   const el = $('#timeLeft');
+  if (!TIME_LEFT) { el.textContent = ''; return; }
   const L = await chapterLengths();
   if (!L || !book || !L[cur.i]) { el.textContent = ''; return; }
   const listening = tts.open && !tts.mo && (tts.playing || n.paused);
@@ -4309,6 +4315,8 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   FULL_PRECISION: ['boolean', v => { FULL_PRECISION = v; }],
   ALLOW_REMOTE_CONTENT: ['boolean', v => { ALLOW_REMOTE_CONTENT = v; }],
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
+  SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
+  TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.max(0, v); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.max(0, v); }],
   NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.max(30, v); }],
@@ -4356,6 +4364,7 @@ async function loadConfig(){
 /* ---------- start ---------- */
 (async () => {
   await loadConfig();
+  $('#ttsSleep').hidden = !SLEEP_TIMER;   // (off: the sleep timer stays "off" and isn't shown)
   await Promise.all([setupFonts(), loadLib('jszip').catch(err => console.warn(err.message))]);
   $('#fontPct').textContent = fontPct + '%';
   setLine(lineH, false);   // applied, not saved: a reader's choice is saved when they make it

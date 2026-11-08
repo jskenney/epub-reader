@@ -137,6 +137,6 @@ test('French books are not offered Pocket TTS, which has no French voices (E-12)
   await h.openReader(page, `${h.READER}?book=books/french.epub`, { 'spine:ttsEngine': 'pocket' });
   await page.click('#ttsBtn');
   const pocket = await page.$eval('#ttsEngine option[value="pocket"]', o => ({ disabled: o.disabled, text: o.textContent }));
-  assert.deepEqual(pocket, { disabled: true, text: 'Natural voice (Pocket TTS: en, de, it, pt, es)' });
+  assert.deepEqual(pocket, { disabled: true, text: 'Pocket (en, de, it, pt, es)' });
   assert.equal(await page.inputValue('#ttsEngine'), 'device');
 });
