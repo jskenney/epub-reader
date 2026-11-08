@@ -3497,7 +3497,12 @@ const pk = { state: 'idle', worker: null, lang: '', voices: [], refs: new Map(),
 const pkReady = () => pk.state === 'ready' && pk.lang === pocketLang();
 const pkVoice = () => pk.voices.includes(pk.voice) ? pk.voice : pk.voices[0];
 function pkWorker(lib){
-  const w = workerFrom(`import ${JSON.stringify(lib + 'worker.js')};`);
+  // A dynamic import(), as Kokoro's worker does: a static import from a blob worker is checked against
+  // worker-src, which the CDN version of the reader policy doesn't open to the CDN (REVIEW.md M-20). Messages
+  // that arrive before the module has set its handler are kept and handed to it; a failed import is thrown
+  // again outside the promise, so the page sees the worker's error event.
+  const w = workerFrom(`const queued = []; self.onmessage = e => queued.push(e.data);
+import(${JSON.stringify(lib + 'worker.js')}).then(() => { for (const data of queued) self.onmessage({ data }); }, e => setTimeout(() => { throw e; }));`);
   w.onmessage = ({ data: m }) => {
     if (m.type === 'progress') { if (m.label && m.total) pk.files[m.label] = { loaded: m.loaded || 0, total: m.total }; pkProgress(); }
     else if (m.type === 'ready') pk.bundle = m.bundle;
