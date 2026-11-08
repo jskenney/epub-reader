@@ -18,6 +18,7 @@ for (const [label, base] of [['real 404s', h.SITE], ['soft 404s', h.SOFT]]) {
       ['books/notes.md', 'Notes'],
       ['books/plain.txt', 'CHAPTER I.'],         // a text file's title is its first heading
       ['books/page.html', 'Web Page'],
+      ['books/shelf-page.html', 'Shelf Page'],         // an HTML document only under /bookshelf/ (M-2)
       ['books/comic.cbz', 'Test Comic'],
     ];
     for (const [ref, want] of cases) {

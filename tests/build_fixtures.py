@@ -183,6 +183,7 @@ def main():
     # Documents.
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
+    (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")
     (books / "page.html").write_text("<!doctype html><html lang='en'><head><title>Web Page</title></head><body><h1>Web Page</h1><p>Hello.</p></body></html>")
 
     # Comics: 90 pages in one folder (three sections of 40) and a ComicInfo.xml.

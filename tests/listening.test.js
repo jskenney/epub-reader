@@ -54,6 +54,23 @@ test('sleep timer: stops at the end of a sentence once the time is up, and can b
   assert.ok(await h.waitFor(() => playing(page), 5000));
 });
 
+test('sleep timer: pausing while it waits for the passage to end turns it off, so play carries on (M-3)', async () => {
+  const page = await h.newPage();
+  await page.clock.install();
+  await h.openReader(page, LONG, serverVoice);
+  await startReading(page);
+  await page.selectOption('#ttsSleep', '15');
+  await page.clock.fastForward('15:05');
+  assert.ok(await h.waitFor(async () => /Stopping after this passage/.test(await page.$eval('#ttsSleep', s => s.selectedOptions[0].textContent)), 5000));
+  await page.keyboard.press(' ');   // pause
+  await page.waitForTimeout(300);
+  assert.equal(await page.inputValue('#ttsSleep'), 'off');
+  await page.clock.fastForward('02:00');
+  await page.keyboard.press(' ');   // play again, more than a minute later
+  await page.waitForTimeout(3000);
+  assert.equal(await playing(page), true, 'reading should carry on');
+});
+
 test('sleep timer: "stop at chapter end" stops instead of going on to the next chapter', async () => {
   const page = await h.newPage();
   await h.openReader(page, LONG, serverVoice);

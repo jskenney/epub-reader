@@ -10,12 +10,14 @@
            hostile book tries to reach)
 """
 import argparse
+import html
 import http.server
 import json
 import math
 import struct
 import threading
 import time
+import uuid
 from email.parser import BytesParser
 from email.policy import default
 
@@ -57,7 +59,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def send_error(self, code, *a, **k):
         if code == 404 and args.soft404:
-            body = b"<!doctype html><title>Not found</title><h1>Sorry</h1><p>Nothing here.</p>"
+            # Like many real sites: the page repeats the address and adds a request id and the time.
+            body = (f"<!doctype html><title>Not found</title><h1>Sorry</h1><p>Nothing at {html.escape(self.path)}.</p>"
+                    f"<p>Request {uuid.uuid4().hex} at {time.strftime('%H:%M:%S')}.</p>").encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(body)))

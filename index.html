@@ -465,17 +465,29 @@ async function realFile(url, kind = 'any'){
     return kind === 'json' ? /^[{[]/.test(t) : t.length > 0;
   } catch { return false; }
 }
-// What this site sends for a file that doesn't exist, when that is a 200 page (null for a real 404).
-// Used to recognise a "not found" page given in place of an HTML document.
-let soft404Page;
-async function soft404(dir){
-  if (soft404Page === undefined) {
+/* Recognising a "not found" page given in place of an HTML document (other kinds of file have structural
+   checks). Each folder is probed once for a file that can't exist; if that comes back as a 200 page, a
+   document whose page matches it is "not found". Pages are compared by signature: the requested path and name,
+   and any word containing a digit (times, request ids), are blanked out, and spacing is ignored, since many
+   "not found" pages repeat the address or add an id. */
+const soft404Probes = new Map();
+function pageSignature(text, url){
+  const u = new URL(url), name = u.pathname.split('/').pop();
+  let t = text;
+  for (const s of [u.href, u.pathname, safeDecode(u.pathname), name, safeDecode(name)]) if (s) t = t.split(s).join(' ');
+  return t.replace(/[\w-]*\d[\w-]*/g, '#').replace(/\s+/g, ' ').trim();
+}
+async function isSoftNotFound(url, text){
+  const dir = new URL('.', url).href;
+  if (!soft404Probes.has(dir)) soft404Probes.set(dir, (async () => {
     try {
-      const r = await fetch(new URL(`spine-missing-${Math.random().toString(36).slice(2)}.html`, dir), { cache: 'no-store' });
-      soft404Page = r.ok ? await r.text() : null;
-    } catch { soft404Page = null; }
-  }
-  return soft404Page;
+      const probe = new URL(`spine-missing-${Math.random().toString(36).slice(2)}.html`, dir);
+      const r = await fetch(probe, { cache: 'no-store' });
+      return r.ok ? pageSignature(await r.text(), probe.href) : null;
+    } catch { return null; }
+  })());
+  const probe = await soft404Probes.get(dir);
+  return probe != null && probe === pageSignature(text, url);
 }
 const textOf = el => (el?.textContent || '').replace(/\s+/g, ' ').trim();
 
@@ -2499,6 +2511,8 @@ function ttsBack(){ tts.follow = true; ttsRefollow(); ttsUpdateBar(); }
 
 function ttsUpdateBar(status){
   updateMedia();
+  // Paused while the sleep timer was waiting for the passage to end: the reader took over, so the timer is done.
+  if (!tts.playing && sleep.due) setSleep('off');
   // A note (such as the sleep timer stopping) stays until reading starts again.
   if (tts.playing) tts.note = '';
   else if (!status && tts.note) status = tts.note;
@@ -3823,7 +3837,7 @@ async function openFromUrl(ref){
         if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
         if (kind !== 'html' && looksHtml(r)) { misses.push(`${u.pathname} (a web page came back instead)`); continue; }
         const buf = await r.arrayBuffer();
-        if (kind === 'html' && await soft404(u.href) === new TextDecoder().decode(buf)) { misses.push(`${u.pathname} (the site's "not found" page)`); continue; }
+        if (kind === 'html' && await isSoftNotFound(u.href, new TextDecoder().decode(buf))) { misses.push(`${u.pathname} (the site's "not found" page)`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(buf, safeDecode(u.pathname.split('/').pop()), kind,
           { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}` });
