@@ -262,6 +262,25 @@ test("an EPUB's pictures are released when no nearby chapter uses them, and come
   assert.ok(await page.waitForFunction(() => document.querySelector('#page').contentDocument.querySelector('img.pic')?.naturalWidth > 0), 'read again when shown again');
 });
 
+test('junk after compressed data, a package path with a leading slash, and paths differing in case or Unicode form (L-42, L-44, L-48)', async () => {
+  for (const base of [h.SITE, h.NORANGE]) {
+    const page = await h.newPage();
+    await h.openReader(page, `${base}/reader/index.html?book=books/junk.epub`);
+    await page.click('#tocList a >> nth=1');
+    await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument?.body?.textContent || ''), null, { timeout: 10000 });
+    assert.equal(await h.notice(page), '', base);
+  }
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/slash.epub`);
+  assert.equal(await h.title(page), 'Leading Slash');
+  await h.openReader(page, `${h.READER}?book=books/case.epub`);
+  assert.equal(await page.locator('#tocList a').count(), 3, 'the chapter stored under its NFD name is found');
+  await h.inFrame(page, doc => doc.querySelector('#to-c2').click());
+  await page.waitForFunction(() => /spine 2\/3/.test(document.querySelector('#spinePos').textContent), null, { timeout: 10000 });
+  await page.click('#tocList a >> nth=2');
+  await page.waitForFunction(() => /Umlaut file/.test(document.querySelector('#page').contentDocument?.body?.textContent || ''), null, { timeout: 10000 });
+});
+
 test('an uploaded book changed on disk while open says so (M-7)', async () => {
   const tmp = path.join(require('node:os').tmpdir(), `spine-upload-${Date.now()}.epub`);
   fs.copyFileSync(BIG, tmp);

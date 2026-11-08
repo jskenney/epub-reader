@@ -37,6 +37,9 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
     policy: doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content || '',
     where: doc.defaultView.location.href,
     still: /Hostile/.test(doc.body.textContent),
+    objectFallback: doc.querySelector('#object-fallback')?.naturalWidth || 0, objects: doc.querySelectorAll('object').length,
+    tableBg: doc.querySelector('#bg-table')?.getAttribute('background') || '', use: doc.querySelector('#sprite-use')?.getAttribute('href') || '',
+    paint: doc.querySelector('#paint')?.getAttribute('fill') || '',
     injected: doc.querySelectorAll('#injected').length, afterStyle: !!doc.querySelector('#after-style'),
     shadow: [!!doc.querySelector('#shadow-host')?.shadowRoot, doc.querySelectorAll('template').length],
     strUrl: doc.defaultView.getComputedStyle(doc.querySelector('#str-url'), '::before').content,
@@ -56,6 +59,12 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
   assert.deepEqual([state.where, state.still], ['about:srcdoc', true], 'the page is still the book');
   // A missing or remote cursor image falls back to the next cursor, rather than dropping the declaration (L-21).
   assert.deepEqual(state.cursors.map(c => c.replace(/^url\("[^"]*"\), /, '')), ['pointer', 'pointer', 'pointer']);
+  // L-40: an <object> gives way to its fallback; background attributes and <use> sprites are localized; remote
+  // paint is removed.
+  assert.ok(state.objectFallback > 0 && state.objects === 0, 'the object fallback picture shows');
+  assert.match(state.tableBg, ref.endsWith('/') ? /hostile-dir\/OEBPS\/pic\.png$/ : /^blob:/);
+  assert.match(state.use, ref.endsWith('/') ? /pic\.png#frag$/ : /^blob:.*#frag$/);
+  assert.doesNotMatch(state.paint, /localhost:8792|paint\.svg/);
   assert.deepEqual([state.injected, state.afterStyle], [0, true], "an imported sheet can't close a body <style> and add markup (M-13)");
   assert.deepEqual(state.shadow, [false, 0], 'declarative shadow DOM is removed with its template (H-7)');
   assert.match(state.strUrl, /^"see url\([^"]*\) "$/, 'a url( inside a string must not end the string');
@@ -73,6 +82,10 @@ test('an HTML page: base and meta refresh are removed before parsing, whatever t
   assert.match(state.text, /once froze the page/);
   assert.match(state.text, /Custom element kept\.[\s\S]*Don't stop here\./);
   assert.deepEqual([state.custom, state.base, state.refresh, state.where], [1, 0, 0, 'about:srcdoc']);
+  // L-38: a control character before a web address doesn't make it an in-book link; L-39: "#100%" didn't stop
+  // the document opening (it opened).
+  const links = await h.inFrame(page, doc => { const a = doc.querySelector('#c0-link'); return { target: a.getAttribute('target'), inBook: a.hasAttribute('data-spine-path') }; });
+  assert.deepEqual(links, { target: '_blank', inBook: false });
   assert.deepEqual(await h.remoteLog(), []);
   assert.deepEqual(page.cspViolations, [], 'nothing left for the policies to refuse');
 });
@@ -85,6 +98,20 @@ test('a stylesheet importing itself many times, linked many times, opens quickly
   const r = await h.inFrame(page, doc => ({ color: doc.defaultView.getComputedStyle(doc.querySelector('.f')).color, size: doc.documentElement.outerHTML.length }));
   assert.equal(r.color, 'rgb(1, 2, 3)');
   assert.ok(r.size < 6e6, `page of ${r.size} characters`);
+});
+
+test('middle-clicking an in-book link opens nothing, and its address only names a place in the page (L-38)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/hostile.epub`);
+  const href = await h.inFrame(page, doc => doc.querySelector('#ping-link').getAttribute('href'));
+  assert.match(href, /^#/);
+  let opened = 0;
+  page.context().on('page', () => opened++);
+  const box = await page.evaluate(() => { const f = document.querySelector('#page').getBoundingClientRect(), r = document.querySelector('#page').contentDocument.querySelector('#ping-link').getBoundingClientRect(); return { x: f.left + r.left + 3, y: f.top + r.top + 3 }; });
+  await page.mouse.click(box.x, box.y, { button: 'middle' });
+  await page.waitForTimeout(800);
+  assert.equal(opened, 0);
+  assert.match(await page.textContent('#spinePos'), /spine 1\//, 'and the reader stays where it is');
 });
 
 test('links of every kind: in-book links open chapters, web links open a new tab, the frame never navigates', async () => {

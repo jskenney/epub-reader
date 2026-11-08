@@ -535,11 +535,15 @@ function fragOf(href){
   const i = href.indexOf('#'); if (i < 0) return '';
   try { return decodeURIComponent(href.slice(i + 1)); } catch { return href.slice(i + 1); }
 }
+// (A leading "/" is dropped, and a name that differs only in case or Unicode form, as macOS archivers write
+// them, is found too: L-44, L-48.)
+const pathKey = p => p.normalize('NFC').toLowerCase();
 function getFile(zip, path){
+  path = path.replace(/^\/+/, '');
   let f = zip.file(path);
   if (!f) {
-    const low = path.toLowerCase();
-    const name = Object.keys(zip.files).find(n => n.toLowerCase() === low);
+    const low = pathKey(path);
+    const name = Object.keys(zip.files).find(n => pathKey(n) === low);
     if (name) f = zip.file(name);
   }
   return f && f._data?.compressedContent ? checkedEntry(zip, f) : f;
@@ -605,7 +609,11 @@ async function inflate(data, expected, name){
   const parts = [];
   let n = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    let step;
+    // Extra bytes after the compressed data: browsers reject them, JSZip and zip tools ignore them. Once exactly
+    // the declared size has come out, the output is kept (the checksum still checks it): L-42.
+    try { step = await reader.read(); } catch (e) { if (n === expected) break; throw e; }
+    const { done, value } = step;
     if (done) break;
     n += value.length;
     if (n > expected) { reader.cancel().catch(() => {}); throw new Error(`${name}: damaged archive (larger than it says)`); }
@@ -719,6 +727,12 @@ const zipFromBlob = blob => lazyZip(async (o, l) => {
    otherwise downloaded whole. Every part is tied to the version of the file first seen (If-Range with its
    ETag or Last-Modified) and checked against what was asked, so a book replaced on the server while it's open
    is reported instead of read as a mix of two files. Returns { zip } or { miss: reason }. */
+// A whole ZIP downloaded, read by JSZip.
+async function wholeFile(r){
+  const buf = await r.arrayBuffer();
+  if (!isZipBytes(buf)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
+  return { zip: await JSZip.loadAsync(buf) };
+}
 async function zipFromUrl(url, init = {}){
   let r;
   try { r = await fetch(url, { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
@@ -726,7 +740,11 @@ async function zipFromUrl(url, init = {}){
   const first = r.status === 206 && /^bytes 0-\d+\/(\d+)$/.exec(r.headers.get('content-range') || '');
   const total = first ? Number(first[1]) : 0;
   if (total > 0) {
-    const head = new Uint8Array(await r.arrayBuffer());
+    let head;
+    // (A server that compresses the whole file and serves ranges of the compressed bytes: this can't be read;
+    // the whole file is fetched instead: L-47.)
+    try { head = new Uint8Array(await r.arrayBuffer()); } catch { head = null; }
+    if (!head) return wholeFile(await fetch(url, init));
     if (!isZipBytes(head.buffer)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
     // The version first seen. If-Range needs a strong ETag or a date; every reply's validators are also compared
     // with these, kind with kind (a weak ETag still changes when the file does).
@@ -764,13 +782,12 @@ async function zipFromUrl(url, init = {}){
     if (zip) return { zip };
     r = await fetch(url, init);   // something it can't read in place: fall back to the whole file
   } else if (r.status === 206) r = await fetch(url, init);   // a part, but no total size: get the whole file
-  const buf = await r.arrayBuffer();
-  if (!isZipBytes(buf)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
-  return { zip: await JSZip.loadAsync(buf) };
+  return wholeFile(r);
 }
 
 function zipSource(zip){
   const blobs = new Set();
+  let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
   return {
     kind: 'zip',
     async text(p){ const f = getFile(zip, p); return f ? clean(await f.async('string')) : null; },
@@ -779,10 +796,11 @@ function zipSource(zip){
       const f = getFile(zip, p); if (!f) return null;
       if (type.startsWith('font/')) return `data:${type};base64,` + await f.async('base64');
       const u = URL.createObjectURL(new Blob([await f.async('uint8array')], { type }));
+      if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
     },
     revoke(u){ URL.revokeObjectURL(u); blobs.delete(u); },
-    dispose(){ blobs.forEach(u => URL.revokeObjectURL(u)); blobs.clear(); }
+    dispose(){ disposed = true; blobs.forEach(u => URL.revokeObjectURL(u)); blobs.clear(); }
   };
 }
 function dirSource(base){
@@ -939,7 +957,7 @@ function textToHtml(raw){
     return lines.length === 1 && /[A-Z]/.test(first) && !/[a-z]/.test(first) && first.length <= 50 && first.split(/\s+/).length <= 8 && !/[,;!?]$/.test(first);
   };
   const inline = s => escHtml(s).replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
-  const blocks = t.split(/\n[ \t]*\n+/).map(b => b.replace(/\s+$/, '')).filter(b => b.trim());
+  const blocks = t.split(/\n[ \t]*\n+/).map(b => b.trimEnd()).filter(b => b.trim());   // (trimEnd: a regex here is quadratic on long runs of spaces)
   const items = blocks.map(b => {
     const lines = b.split('\n').filter(l => l.trim());
     if (isHeading(lines)) {
@@ -1055,7 +1073,7 @@ async function openDocument(buffer, name, kind, { base = null, key, seq } = {}){
     if (nd.nodeType !== 1) return;
     for (const a of [nd, ...nd.querySelectorAll('a[href^="#"]')]) {
       if (a.localName !== 'a' || !a.getAttribute('href')?.startsWith('#')) continue;
-      const id = decodeURIComponent(a.getAttribute('href').slice(1));
+      const id = safeDecode(a.getAttribute('href').slice(1));   // (a stray "%" mustn't stop the document opening: L-39)
       if (where.has(id)) a.setAttribute('href', `${path(where.get(id))}#${encodeURIComponent(id)}`);
     }
   }));
@@ -1266,7 +1284,7 @@ async function openBook(zip, { sample = false, name = '', seq } = {}){
     ? "There's no META-INF/container.xml in that folder, so it isn't an extracted EPUB (or the path is wrong)."
     : "This file isn't an EPUB: it has no META-INF/container.xml.");
   const cDoc = parseDoc(cText, 'application/xml');
-  const opfPath = cDoc?.getElementsByTagNameNS('*', 'rootfile')[0]?.getAttribute('full-path');
+  const opfPath = cDoc?.getElementsByTagNameNS('*', 'rootfile')[0]?.getAttribute('full-path')?.replace(/^\/+/, '');   // (L-44)
   if (!opfPath) throw new Error("container.xml doesn't point to a package (.opf) file.");
   const oText = await readText(zip, opfPath);
   if (!oText) throw new Error(`The package file ${opfPath} is missing from the archive.`);
@@ -1752,6 +1770,9 @@ a,a *{color:${t.ribbon} !important}` : ''}`;
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
   // it into a live shadow root, links and all. Templates show nothing on their own, so nothing is lost.)
+  // An <object> gives way to its fallback content (EPUB 3 puts a picture there for readers without the object;
+  // the book policy blocks the object itself): L-40.
+  doc.querySelectorAll('object').forEach(o => o.replaceWith(...[...o.childNodes].filter(n => n.localName !== 'param')));
   doc.querySelectorAll('script,object,embed,iframe,frame,frameset,base,meta[http-equiv],template').forEach(e => e.remove());
   for (const el of doc.body.querySelectorAll('*')) {
     for (const a of [...el.attributes]) {
@@ -1762,26 +1783,39 @@ function sanitize(doc){
 }
 async function localize(doc, path, budget = cssBudget()){
   const jobs = [];
-  const targets = [['img','src'],['image','href'],['image','xlink:href'],['source','src'],['video','src'],['video','poster'],['audio','src'],['track','src']];
+  // (Also input type=image, SVG <use> sprites and <feImage>, and old background attributes: L-40.)
+  const targets = [['img','src'],['image','href'],['image','xlink:href'],['source','src'],['video','src'],['video','poster'],['audio','src'],['track','src'],
+    ['input','src'],['use','href'],['use','xlink:href'],['feImage','href'],['feImage','xlink:href'],
+    ['body','background'],['table','background'],['tr','background'],['td','background'],['th','background']];
   for (const [tag, attr] of targets) {
     for (const el of doc.getElementsByTagName(tag)) {
       const v = urlText(el.getAttribute(attr));
       if (!v || v.startsWith('#')) continue;
       if (isRemote(v)) { if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); continue; }
       if (isExternal(v)) continue;   // data: and blob:
-      // A file the book doesn't have is removed rather than left to resolve against this site.
-      jobs.push(resourceURL(resolve(path, v), path).then(u => { if (u) el.setAttribute(attr, u); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
+      // A file the book doesn't have is removed rather than left to resolve against this site. (A fragment, as in
+      // sprite.svg#icon, is kept on the file's new address.)
+      const frag = v.includes('#') ? v.slice(v.indexOf('#')) : '';
+      jobs.push(resourceURL(resolve(path, v), path).then(u => { if (u) el.setAttribute(attr, u + frag); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
     }
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
   for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget, owner: path }).then(c => { st.textContent = styleText(c); }));
+  // SVG paint and effect attributes take url() as CSS does.
+  for (const el of doc.body.querySelectorAll('[fill*="(" i],[stroke*="(" i],[filter*="(" i],[mask*="(" i],[clip-path*="(" i],[marker-start*="(" i],[marker-mid*="(" i],[marker-end*="(" i]')) {
+    for (const a of ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end']) {
+      const v = el.getAttribute(a);
+      if (v?.includes('(')) jobs.push(rewriteCss(v, path, { budget, attr: true, owner: path }).then(c => el.setAttribute(a, c)));
+    }
+  }
   for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true, owner: path }).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
 // A reference to another site. Browsers drop tabs and newlines inside URLs and read "//host" (and backslash
 // forms) as another site too, so those count; data: and blob: are part of the page itself.
-const urlText = v => String(v ?? '').replace(/[\t\n\r]/g, '').trim();
+// (Browsers drop control characters and spaces at either end too, so "\x01http://…" is a web address: L-38.)
+const urlText = v => String(v ?? '').replace(/[\t\n\r]/g, '').replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
 const isRemote = v => { const t = urlText(v); return /^[\\/]{2}/.test(t) || (isExternal(t) && !/^(data|blob):/i.test(t)); };
 // With ALLOW_REMOTE_CONTENT off: take out everything in the page that would fetch from another site.
 function stripRemote(doc){
@@ -1815,7 +1849,14 @@ function markLinks(doc, path){
       else drop();
     }
     else if (isExternal(h)) drop();
-    else { a.setAttribute('data-spine-path', h.startsWith('#') ? path : resolve(path, h)); a.setAttribute('data-spine-frag', fragOf(h)); }
+    else {
+      a.setAttribute('data-spine-path', h.startsWith('#') ? path : resolve(path, h)); a.setAttribute('data-spine-frag', fragOf(h));
+      // The address itself only names a place in the page: "open in new tab" can't reach a file of the reader's
+      // site (the link is followed by its data attributes).
+      const local = '#' + (h.includes('#') ? h.slice(h.indexOf('#') + 1) : '');
+      if (a.hasAttribute('href')) a.setAttribute('href', local);
+      if (a.hasAttributeNS(XLINK, 'href')) a.setAttributeNS(XLINK, 'xlink:href', local);
+    }
   }
 }
 
@@ -2089,6 +2130,8 @@ function onWheel(e){
 function wireFrame(){
   const doc = frame.contentDocument; if (!doc) return;
   doc.addEventListener('click', onFrameClick);
+  // Middle-click opens links in a new tab without a click event: only web links meant to (target=_blank) may.
+  doc.addEventListener('auxclick', e => { const l = e.target.closest?.('a, area'); if (l && l.getAttribute('target') !== '_blank') e.preventDefault(); });
   doc.addEventListener('keydown', onKey);
   doc.addEventListener('wheel', onWheel, { passive: false });
   doc.addEventListener('dragenter', onDragEnter);
@@ -2153,7 +2196,8 @@ function onFrameClick(e){
   goTo(a.getAttribute('data-spine-path'), a.getAttribute('data-spine-frag'));
 }
 function goTo(path, frag = ''){
-  const idx = book.spine.findIndex(s => s.path === path);
+  let idx = book.spine.findIndex(s => s.path === path);
+  if (idx < 0) idx = book.spine.findIndex(s => pathKey(s.path) === pathKey(path));   // (case or Unicode form: L-48)
   if (idx < 0) { showNotice(`That link points to ${path}, which isn't part of the book's reading order.`, 'error'); return; }
   if (idx === cur.i && cur.shown && frame.contentDocument) { position(frag, 0); return; }
   renderChapter(idx, { frag });   // (also a chapter that failed to load: choosing it again tries again)
@@ -4118,7 +4162,8 @@ function fold(t){
     if (c < '\x80') { o += c === '\n' || c === '\t' || c === '\r' ? ' ' : c.toLowerCase(); continue; }
     let f = foldMap.get(c);
     if (f === undefined) {
-      f = /[‘’‛′]/.test(c) ? "'" : /[“”‟″]/.test(c) ? '"' : /\s/.test(c) ? ' ' : c.normalize('NFD')[0].toLowerCase();
+      // (Soft hyphens and zero-width characters become one marker, which the search lets through anywhere.)
+      f = /[\u00AD\u200B-\u200D\u2060\uFEFF]/.test(c) ? '\u00AD' : /[‘’‛′]/.test(c) ? "'" : /[“”‟″]/.test(c) ? '"' : /\s/.test(c) ? ' ' : c.normalize('NFD')[0].toLowerCase();
       if (f.length !== 1) f = c;
       foldMap.set(c, f);
     }
@@ -4151,6 +4196,22 @@ function searchIndex(){
   })();
   return b.search;
 }
+// The search pattern for a query: its words folded like the text, soft hyphens and zero-width characters
+// allowed between any two letters, and ligatures (ﬁ, ﬂ, …) allowed for their letters (REVIEW.md L-45).
+const LIGATURES = [['ffi', 'ﬃ'], ['ffl', 'ﬄ'], ['ff', 'ﬀ'], ['fi', 'ﬁ'], ['fl', 'ﬂ'], ['st', 'ﬆﬅ']];
+function searchPattern(q){
+  const esc = c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const words = fold(q.trim()).replace(/\u00AD/g, '').split(/ +/).map(w => {
+    const parts = [];
+    for (let i = 0; i < w.length;) {
+      const lig = LIGATURES.find(([letters]) => w.startsWith(letters, i));
+      if (lig) { parts.push(`(?:${[...lig[0]].map(esc).join('\u00AD*')}|[${lig[1]}])`); i += lig[0].length; }
+      else parts.push(esc(w[i++]));
+    }
+    return parts.join('\u00AD*');
+  });
+  return new RegExp(words.join('\\s+'), 'g');
+}
 function searchStatus(t){ $('#searchStatus').textContent = t; }
 function searchOpen(){
   if (!book) return;
@@ -4167,8 +4228,7 @@ async function searchRun(q){
   const chapters = await searchIndex();
   if (token !== search.token || !book) return;
   if (!chapters.some(c => c.some(x => x.text.trim()))) { searchStatus('No text to search in this book'); $('#searchResults').replaceChildren(); return; }
-  const words = fold(q.trim()).split(/ +/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const re = new RegExp(words.join('\\s+'), 'g');
+  const re = searchPattern(q);
   let more = false;
   outer: for (let i = 0; i < chapters.length; i++) {
     chapters[i].forEach((x, k) => {

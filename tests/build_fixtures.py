@@ -76,6 +76,7 @@ def raw_zip(path, entries, comment=b""):
             c = zlib.compressobj(9, zlib.DEFLATED, -15); comp = c.compress(data) + c.flush()
         else:
             comp = data
+        comp += e.get("junk", b"")   # bytes after the compressed data (some tools leave them)
         method = e.get("method", 8 if e.get("deflate") else 0)
         crc, flags = e.get("crc", zlib.crc32(data) & 0xFFFFFFFF), e.get("flags", 0)
         usize = e.get("usize", len(data))
@@ -245,6 +246,33 @@ def main():
             e["flags"] = 0x800
             e["cextra"] = struct.pack("<HHBI", 0x7075, 5 + 9, 1, zlib.crc32(e["name"]) & 0xFFFFFFFF) + b"OEBPS/zzz"
     raw_zip(books / "bad-upath.epub", entries)
+    # Two stray bytes after one chapter's compressed data (REVIEW.md L-42): read, as JSZip and zip tools do.
+    epub(books / "junk.epub", "Junk Bytes", base, uid="urn:junk")
+    entries = zip_entries(books / "junk.epub")
+    for e in entries:
+        if e["name"] == b"OEBPS/c2.xhtml":
+            e["junk"] = b"\0\0"
+    raw_zip(books / "junk.epub", entries)
+    # A package path written with a leading slash (L-44).
+    with zipfile.ZipFile(books / "dirs.epub") as zin, zipfile.ZipFile(books / "slash.epub", "w", zipfile.ZIP_DEFLATED) as zout:
+        for i in zin.infolist():
+            d = zin.read(i)
+            if i.filename == "META-INF/container.xml":
+                d = d.replace(b'full-path="OEBPS/content.opf"', b'full-path="/OEBPS/content.opf"')
+            if i.filename == "OEBPS/content.opf":
+                d = d.replace(b"Directory Entries", b"Leading Slash")
+            zout.writestr(i, d)
+    # Links and file names that differ from the manifest in case and Unicode form (L-48): a link to C2.XHTML for
+    # c2.xhtml, and a chapter stored under its NFD name (as macOS archivers write it) while the manifest is NFC.
+    import unicodedata
+    uname = "kapitel-\u00e4.xhtml"
+    epub(books / "case.epub", "Case And Form", [("c1.xhtml", "One", '<h1>One</h1><p><a id="to-c2" href="C2.XHTML">to two</a></p>'),
+         ("c2.xhtml", "Two", "<h1>Two</h1><p>Second.</p>"), (uname, "Three", "<h1>Three</h1><p>Umlaut file.</p>")], uid="urn:case")
+    entries = zip_entries(books / "case.epub")
+    for e in entries:
+        if e["name"] == ("OEBPS/" + uname).encode():
+            e["name"] = unicodedata.normalize("NFD", "OEBPS/" + uname).encode(); e["flags"] = 0x800
+    raw_zip(books / "case.epub", entries)
     # A chapter with a wrong checksum, as some archivers write (L-30): read from an upload, refused over HTTP.
     epub(books / "bad-crc.epub", "Bad Checksum", base, uid="urn:bad-crc")
     entries = zip_entries(books / "bad-crc.epub")
@@ -349,6 +377,9 @@ def main():
 <area id="area-out" shape="rect" coords="20,0,40,30" href="https://example.com/area" alt="out"/></map>
 <p class="x">Styled from the head.</p><p style="font-family: Remote">Remote font.</p>
 <style>@import "inject.css";</style><p id="after-style">After the body style.</p>
+<p><object data="missing-object.svg" type="image/svg+xml"><param name="x" value="y"/><img id="object-fallback" src="pic.png" alt="fallback"/></object></p>
+<table id="bg-table" background="pic.png"><tr><td>cell</td></tr></table>
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><use id="sprite-use" href="pic.png#frag"/><rect id="paint" width="5" height="5" fill="url({REMOTE}/paint.svg#g) red"/></svg>
 <div id="shadow-host"><template shadowrootmode="open"><a id="shadow-link" href="https://example.com/shadow">Shadow link</a></template></div>
 <p id="str-url">A url( inside a CSS string stays text.</p>
 <p class="ws2">After a url( with many spaces.</p><p class="lc">Line continuation inside an address.</p><p class="cm">Quote in a comment.</p><p class="cm2">Comment in url(.</p>
@@ -404,6 +435,7 @@ def main():
 <META HTTP-EQUIV="refresh" CONTENT="1;url={REMOTE}/upper">
 <meta name="http-equiv" content="kept">
 </head><body><h1>Controls</h1><base-card>Custom element kept.</base-card><p>Don't stop here.</p>
+<p><a id="c0-link" href="&#1;{REMOTE}/c0">control character first</a> <a id="pct-frag" href="#100%">percent fragment</a></p>
 <p>An unclosed tag that once froze the page follows.</p><base""" + " = a" * 40 + "\n")
     with zipfile.ZipFile(books / "hostile.epub") as z:   # also as an extracted folder: its files come from the site
         z.extractall(books / "hostile-dir")
