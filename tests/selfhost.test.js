@@ -15,7 +15,7 @@ test('with libs/ and fonts/ fetched, nothing is loaded from other sites', async 
     assert.notEqual(await h.title(page), 'Spine Reader', `${book} should open`);
     assert.deepEqual(page.blocked, [], `${book || 'the sample'} reached other sites`);
     const fonts = await page.evaluate(() => [document.querySelector('#uiFonts').href,
-      document.querySelector('#page').contentDocument.getElementById('spine-font').href]);
+      document.querySelector('#page').contentDocument.querySelector('[id^="spine-font-"]').href]);
     assert.match(fonts[0], /\/reader\/fonts\/ui\.css$/);
     assert.match(fonts[1], /\/reader\/fonts\/literata\.css$/);
   }
