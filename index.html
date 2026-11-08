@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Spine Reader</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<!-- The interface fonts: fonts/ui.css when self-hosted (fetch-fonts.sh), otherwise Google Fonts; set at start-up. -->
+<link id="uiFonts" rel="stylesheet" href="data:text/css,">
 <style>
 /* Layout: one-screen reading app. Top bar, contents rail on the left, the page as the one framed object, a segmented spine ribbon along the bottom. */
 :root{
@@ -357,7 +356,6 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <div class="drop" id="drop" hidden><div>Drop the book to open it</div></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (() => {
 const $ = s => document.querySelector(s);
@@ -383,9 +381,23 @@ const OPS = 'http://www.idpf.org/2007/ops';
 // Where the self-hosted voice files (kokoro/ and pocket/, from fetch-kokoro.sh and fetch-pocket.sh) live.
 // '' = the folder this page is in. Set a site path such as '/reader/' when index.html is linked into several
 // folders, so every copy shares one set of files (and the browser downloads and caches them once).
-const VOICE_FILES = '';
-const DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
-const BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
+let VOICE_FILES = '';
+// Where the self-hosted libraries and fonts (libs/ and fonts/, from fetch-libs.sh and fetch-fonts.sh) live.
+// '' = the folder this page is in; like VOICE_FILES, a site path such as '/reader/' shares one copy.
+let LIB_FILES = '';
+// Code, models and fonts the reader can't find on this site are loaded from CDNs (cdnjs, jsDelivr,
+// Hugging Face, Google Fonts). false never uses them: everything must be self-hosted with the fetch scripts
+// (missing fonts fall back to the device's own).
+let ALLOW_CDN = true;
+// Book pages can name files on other sites (images, media, stylesheets, fonts), which would let a book
+// track when it is read. false removes them, along with <link> elements in the text, autoplay and link pings;
+// true lets books load them. Pictures and styles inside the book itself are never affected.
+let ALLOW_REMOTE_CONTENT = false;
+// Links in a book to web pages and e-mail addresses: true opens them in a new tab when clicked; false makes
+// them plain text.
+let ALLOW_EXTERNAL_LINKS = true;
+let DEFAULT_BOOK = 'default.epub';  // opened (when it's a valid EPUB) if the address has no ?book=, next to this page
+let BOOKSHELF = '/bookshelf/'; // site-root folder searched for ?book= paths not found next to this page
 const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css:'text/css',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
   gif:'image/gif',svg:'image/svg+xml',webp:'image/webp',ttf:'font/ttf',otf:'font/otf',woff:'font/woff',woff2:'font/woff2',
   mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'video/mp4',ogg:'audio/ogg',webm:'video/webm'};
@@ -411,6 +423,48 @@ const ext = p => (p.split('.').pop() || '').toLowerCase();
 const clean = t => (t || '').replace(/^﻿/, '');
 const isExternal = h => /^[a-z][a-z0-9+.\-]*:/i.test(h);
 const kids = (el, name) => el ? [...el.children].filter(c => c.localName === name) : [];
+
+/* Real files and "not found" pages. Some sites answer a missing file with an HTML page and status 200,
+   so a successful status isn't enough: these look at what actually came back. */
+const looksHtml = r => /text\/html/i.test(r.headers.get('content-type') || '');
+const isZipBytes = buf => {   // "PK\3\4": a ZIP archive (EPUB, CBZ)
+  const b = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  return b.length === 4 && b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04;
+};
+async function firstBytes(r, n){
+  const reader = r.body.getReader();
+  let out = new Uint8Array(0);
+  while (out.length < n) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const m = new Uint8Array(out.length + value.length); m.set(out); m.set(value, out.length); out = m;
+  }
+  reader.cancel().catch(() => {});
+  return out;
+}
+// Is there a real file at url (not an error or "not found" page)? kind 'json' also requires JSON. Only the
+// first bytes are read, so it is cheap even for large files.
+async function realFile(url, kind = 'any'){
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok || looksHtml(r)) { r.body?.cancel().catch(() => {}); return false; }
+    const t = new TextDecoder().decode(await firstBytes(r, 256)).replace(/^\uFEFF/, '').trimStart();
+    if (/^<(!doctype|html|head|body|\?xml|!--)/i.test(t)) return false;
+    return kind === 'json' ? /^[{[]/.test(t) : t.length > 0;
+  } catch { return false; }
+}
+// What this site sends for a file that doesn't exist, when that is a 200 page (null for a real 404).
+// Used to recognise a "not found" page given in place of an HTML document.
+let soft404Page;
+async function soft404(dir){
+  if (soft404Page === undefined) {
+    try {
+      const r = await fetch(new URL(`spine-missing-${Math.random().toString(36).slice(2)}.html`, dir), { cache: 'no-store' });
+      soft404Page = r.ok ? await r.text() : null;
+    } catch { soft404Page = null; }
+  }
+  return soft404Page;
+}
 const textOf = el => (el?.textContent || '').replace(/\s+/g, ' ').trim();
 
 function resolve(base, href){
@@ -538,12 +592,34 @@ function decodeText(bytes){
   try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
 }
 const escHtml = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function loadScript(src){
+/* Libraries: loaded from libs/ under LIB_FILES (fetch-libs.sh) when there, otherwise from cdnjs. Both copies
+   must match the pinned hash (Subresource Integrity), so a changed or wrong file (or a "not found" page) is
+   refused rather than run. fetch-libs.sh checks the same hashes. */
+const LIBS = {
+  jszip: { file: 'libs/jszip.min.js', cdn: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
+  marked: { file: 'libs/marked.min.js', cdn: MARKED_URL,
+    integrity: 'sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+' },
+};
+function loadScript(src, integrity){
   return new Promise((res, rej) => {
-    const el = document.createElement('script'); el.src = src;
-    el.onload = res; el.onerror = () => rej(new Error(`the Markdown library couldn't be loaded from ${new URL(src).host}`));
+    const el = document.createElement('script');
+    if (integrity) { el.integrity = integrity; el.crossOrigin = 'anonymous'; }
+    el.src = src;
+    el.onload = res; el.onerror = () => { el.remove(); rej(new Error(`couldn't load ${src}`)); };
     document.head.append(el);
   });
+}
+const libsLoaded = {};
+function loadLib(name){
+  const lib = LIBS[name];
+  return libsLoaded[name] ??= (async () => {
+    try { return await loadScript(new URL(lib.file, folderBase(LIB_FILES)).href, lib.integrity); }
+    catch {}
+    if (!ALLOW_CDN) throw new Error(`libs/${lib.file.split('/').pop()} isn't on this site (run fetch-libs.sh); ALLOW_CDN is off`);
+    try { return await loadScript(lib.cdn, lib.integrity); }
+    catch { throw new Error(`the ${name} library couldn't be loaded from ${new URL(lib.cdn).host}`); }
+  })().catch(e => { delete libsLoaded[name]; throw e; });
 }
 const LANG_NAMES = { english: 'en', french: 'fr', german: 'de', spanish: 'es', italian: 'it', portuguese: 'pt', dutch: 'nl', chinese: 'zh',
   japanese: 'ja', russian: 'ru', latin: 'la', swedish: 'sv', danish: 'da', norwegian: 'no', finnish: 'fi', polish: 'pl', greek: 'el' };
@@ -616,7 +692,7 @@ async function markdownToHtml(md){
     }
     md = md.slice(fm[0].length);
   }
-  if (!window.marked) await loadScript(MARKED_URL);
+  if (!window.marked) await loadLib('marked');
   return { html: window.marked.parse(md, { gfm: true }), ...meta };
 }
 
@@ -735,7 +811,7 @@ async function openDocument(buffer, name, kind, { base = null, key } = {}){
    folders), each image filling one column: so the two-column layout shows a two-page spread, the
    single-column layout one page, and the scroll layout a continuous strip. */
 const COMIC_IMG = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
-const COMIC_PART = 40;
+let COMIC_PART = 40;
 const comicPages = zip => Object.values(zip.files).filter(f => !f.dir && COMIC_IMG.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name));
 async function openComic(zip, name, { key } = {}){
   showStatus('Opening comic…');
@@ -1008,6 +1084,7 @@ const URL_RE = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 async function rewriteCss(css, cssPath, depth = 0){
   for (const m of [...css.matchAll(/@import\s+(?:url\(\s*)?(['"]?)([^'")\s;]+)\1\s*\)?[^;]*;/g)]) {
     let inner = '';
+    if (isRemote(m[2]) && ALLOW_REMOTE_CONTENT) continue;   // left as it is: the browser loads it
     if (depth < 4 && !isExternal(m[2])) {
       const p = resolve(cssPath, m[2]); const t = await readText(book.zip, p);
       if (t) inner = await rewriteCss(t, p, depth + 1);
@@ -1017,12 +1094,16 @@ async function rewriteCss(css, cssPath, depth = 0){
   const found = new Map();
   for (const m of css.matchAll(URL_RE)) {
     const ref = m[2].trim();
-    if (!ref || isExternal(ref) || ref.startsWith('#') || found.has(ref)) continue;
+    if (!ref || isExternal(ref) || ref.startsWith('#') || found.has(ref)) continue;   // remote ones: see below
     found.set(ref, resourceURL(resolve(cssPath, ref)));
   }
   const done = new Map();
   for (const [k, v] of found) done.set(k, await v);
-  return css.replace(URL_RE, (all, q, ref) => { const u = done.get(ref.trim()); return u ? `url("${u}")` : all; });
+  return css.replace(URL_RE, (all, q, ref) => {
+    const u = done.get(ref.trim());
+    if (u) return `url("${u}")`;
+    return !ALLOW_REMOTE_CONTENT && isRemote(ref.trim()) ? 'url("about:blank")' : all;   // no requests to other sites
+  });
 }
 
 /* ---------- building a page ---------- */
@@ -1122,11 +1203,38 @@ async function localize(doc, path){
   for (const el of doc.body.querySelectorAll('[style*="url("]')) jobs.push(rewriteCss(el.getAttribute('style'), path).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
+const XLINK = 'http://www.w3.org/1999/xlink';
+const isRemote = v => isExternal(v) && !/^(data|blob):/i.test(v);   // data: and blob: are part of the page
+// With ALLOW_REMOTE_CONTENT off: take out everything in the page that would fetch from another site.
+function stripRemote(doc){
+  if (ALLOW_REMOTE_CONTENT) return;
+  const attrs = [['img', 'src'], ['source', 'src'], ['video', 'src'], ['video', 'poster'], ['audio', 'src'], ['track', 'src'],
+    ['input', 'src'], ['image', 'href'], ['use', 'href'], ['feImage', 'href'], ['*', 'background']];
+  for (const [tag, attr] of attrs) {
+    for (const el of doc.querySelectorAll(`${tag}[${attr}]`)) if (isRemote(el.getAttribute(attr).trim())) el.removeAttribute(attr);
+  }
+  for (const el of doc.querySelectorAll('image, use, feImage')) {   // SVG's older xlink:href
+    const v = el.getAttributeNS(XLINK, 'href');
+    if (v && isRemote(v.trim())) el.removeAttributeNS(XLINK, 'href');
+  }
+  doc.body.querySelectorAll('link').forEach(el => el.remove());
+  doc.querySelectorAll('[autoplay]').forEach(el => el.removeAttribute('autoplay'));
+  doc.querySelectorAll('[ping]').forEach(el => el.removeAttribute('ping'));
+}
+// Links, including SVG links (href or xlink:href) and image-map areas: links within the book open there;
+// web and e-mail links open in a new tab (or become plain text with ALLOW_EXTERNAL_LINKS off); anything else
+// loses its target. Nothing is left that could navigate the page frame itself.
 function markLinks(doc, path){
-  for (const a of doc.querySelectorAll('a[href]')) {
-    const h = a.getAttribute('href').trim();
-    if (/^(https?|mailto|tel):/i.test(h)) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); }
-    else if (isExternal(h)) a.removeAttribute('href');
+  for (const a of doc.querySelectorAll('a, area')) {
+    const raw = a.getAttribute('href') ?? a.getAttributeNS(XLINK, 'href');
+    if (raw == null) continue;
+    const h = raw.trim();
+    const drop = () => { a.removeAttribute('href'); a.removeAttributeNS(XLINK, 'href'); };
+    if (/^(https?|mailto|tel):/i.test(h)) {
+      if (ALLOW_EXTERNAL_LINKS) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
+      else drop();
+    }
+    else if (isExternal(h)) drop();
     else { a.setAttribute('data-spine-path', h.startsWith('#') ? path : resolve(path, h)); a.setAttribute('data-spine-frag', fragOf(h)); }
   }
 }
@@ -1145,7 +1253,11 @@ async function buildPage(src, path){
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
     if (n.localName === 'link') {
       const rel = n.getAttribute('rel') || '', href = n.getAttribute('href');
-      if (!/stylesheet/i.test(rel) || /alternate/i.test(rel) || !href || isExternal(href)) continue;
+      if (!/stylesheet/i.test(rel) || /alternate/i.test(rel) || !href) continue;
+      if (isExternal(href)) {   // a stylesheet on another site
+        if (ALLOW_REMOTE_CONTENT && /^https?:/i.test(href)) { const l = out.createElement('link'); l.rel = 'stylesheet'; l.href = href; head.append(l); }
+        continue;
+      }
       const p = resolve(path, href), css = await readText(book.zip, p);
       if (!css) continue;
       const st = out.createElement('style'); st.textContent = await rewriteCss(css, p);
@@ -1165,6 +1277,7 @@ async function buildPage(src, path){
   const end = out.createElement('span'); end.id = 'spine-end'; flow.append(end);
   clip.append(flow); out.body.append(clip);
   sanitize(out);
+  stripRemote(out);
   await localize(out, path);
   markLinks(out, path);
   return '<!doctype html>\n' + out.documentElement.outerHTML;
@@ -1339,7 +1452,11 @@ function setFs(on){
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isFs()) setFs(false); });
 function onFrameClick(e){
-  const a = e.target.closest?.('a[data-spine-path]');
+  const link = e.target.closest?.('a, area');
+  // Only marked links do anything: in-book links go through goTo, web links open in a new tab. Anything else
+  // (a link without a usable target) mustn't navigate the page frame away from the book.
+  if (link && !link.hasAttribute('data-spine-path') && link.getAttribute('target') !== '_blank') e.preventDefault();
+  const a = link?.hasAttribute('data-spine-path') ? link : null;
   if (!a) { ttsClickStart(e); return; }
   e.preventDefault();
   goTo(a.getAttribute('data-spine-path'), a.getAttribute('data-spine-frag'));
@@ -1531,7 +1648,7 @@ function showNotice(msg, kind){
 function hideNotice(){ $('#notice').hidden = true; }
 function friendly(err, name){
   const m = String(err?.message || err);
-  if (/central directory|zip/i.test(m) && !/EPUB/.test(m)) return `${name} couldn't be read as a ZIP archive. EPUB files are ZIP archives, so this probably isn't an EPUB.`;
+  if (/central directory|zip/i.test(m) && !/EPUB|^Nothing was found/.test(m)) return `${name} couldn't be read as a ZIP archive. EPUB files are ZIP archives, so this probably isn't an EPUB.`;
   return `${name} couldn't be opened. ${m}`;
 }
 
@@ -1587,10 +1704,10 @@ $('#tocBtn').addEventListener('click', () => setToc(!tocIsOpen()));
 narrow.addEventListener('change', () => setToc(!narrow.matches));
 
 // Cycle the layout, keeping the reader's place (as a fraction of the section) across the change.
-function setLayout(next){
+function setLayout(next, save = true){
   if (book && frame.contentDocument) cur.f = fraction();
   layout = next;
-  store.set('spine:layout', layout);
+  if (save) store.set('spine:layout', layout);
   const b = $('#layoutBtn');
   b.dataset.layout = layout;
   const following = { two: 'one', one: 'scroll', scroll: 'two' }[layout];
@@ -1600,12 +1717,12 @@ function setLayout(next){
   updateProgress();
 }
 $('#layoutBtn').addEventListener('click', () => setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]));
-function setWidth(step){
+function setWidth(step, save = true){
   widthStep = Math.max(0, Math.min(WIDTHS.length - 1, step));
   $('#widthVal').textContent = WIDTHS[widthStep][0];
   $('#narrower').disabled = widthStep === 0;
   $('#wider').disabled = widthStep === WIDTHS.length - 1;
-  store.set('spine:width', widthStep);
+  if (save) store.set('spine:width', widthStep);
   restyleFrame();
 }
 $('#narrower').addEventListener('click', () => setWidth(widthStep - 1));
@@ -1616,12 +1733,12 @@ function setFont(p){
   store.set('spine:font', fontPct);
   restyleFrame();
 }
-function setLine(v){
+function setLine(v, save = true){
   lineH = Math.round(Math.max(1.0, Math.min(2.6, v)) * 100) / 100;
   $('#lineVal').textContent = lineH.toFixed(2);
   $('#tighter').disabled = lineH <= 1.0;
   $('#looser').disabled = lineH >= 2.6;
-  store.set('spine:line', lineH);
+  if (save) store.set('spine:line', lineH);
   restyleFrame();
 }
 $('#tighter').addEventListener('click', () => setLine(lineH - 0.15));
@@ -1636,16 +1753,33 @@ darkMq.addEventListener('change', () => { restyleFrame(); syncThemeBtn(); });
 let fontFace = FONTS.some(f => f.id === store.get('spine:face')) ? store.get('spine:face') : 'book';
 const face = () => FONTS.find(f => f.id === fontFace) || FONTS[0];
 const faceStack = () => face().stack;
-const fontHref = () => face().css ? GF(face().css) : FONT_URL;
+/* Fonts: fonts/<id>.css under LIB_FILES when self-hosted (fetch-fonts.sh writes ui.css plus one file per
+   reading font), otherwise Google Fonts (unless ALLOW_CDN is off: then the device's fonts). */
+let fontsLocal = false;
+const fontsBase = () => new URL('fonts/', folderBase(LIB_FILES)).href;
+const NO_CSS = 'data:text/css,';
+function fontCss(f){
+  const id = f.css ? f.id : 'literata';   // the book's own font falls back to Literata
+  if (fontsLocal) return fontsBase() + id + '.css';
+  if (!ALLOW_CDN) return NO_CSS;
+  return f.css ? GF(f.css) : FONT_URL;
+}
+const fontHref = () => fontCss(face());
+const UI_FONTS = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap';
+async function setupFonts(){
+  fontsLocal = await realFile(fontsBase() + 'ui.css');
+  $('#uiFonts').href = fontsLocal ? fontsBase() + 'ui.css' : ALLOW_CDN ? UI_FONTS : NO_CSS;
+}
 const menuOpen = () => !$('#fontMenu').hidden;
 let previewsLoaded = false;
 function loadPreviews(){
   if (previewsLoaded) return; previewsLoaded = true;
+  const add = href => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.append(l); };
+  if (fontsLocal) { for (const f of FONTS.filter(f => f.css)) add(fontCss(f)); return; }
+  if (!ALLOW_CDN) return;
   const fams = FONTS.filter(f => f.css).map(f => 'family=' + f.css.split(':')[0]).join('&');
   const chars = [...new Set(FONTS.map(f => f.name).join('') + 'Aa')].join('');
-  const l = document.createElement('link'); l.rel = 'stylesheet';
-  l.href = `https://fonts.googleapis.com/css2?${fams}&display=swap&text=${encodeURIComponent(chars)}`;
-  document.head.append(l);
+  add(`https://fonts.googleapis.com/css2?${fams}&display=swap&text=${encodeURIComponent(chars)}`);
 }
 function buildFontMenu(){
   const menu = $('#fontMenu');
@@ -2409,13 +2543,17 @@ if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narratio
    timings, so the highlighted word is estimated from how far through the sentence's audio playback is. */
 // Natural voices use the full-precision models (best quality; larger downloads, slower on the CPU).
 // Set to false to use the 8-bit models instead (fetch-pocket.sh --int8 for self-hosting those).
-const FULL_PRECISION = true;
-// The folder VOICE_FILES names, as an absolute URL ending in /; '' or a missing trailing slash work too.
-function voiceFilesBase(){
-  const v = (VOICE_FILES || './').trim();
+let FULL_PRECISION = true;
+// A folder setting (VOICE_FILES, LIB_FILES) as an absolute URL ending in /; '' or a missing trailing slash work too.
+function folderBase(setting){
+  const v = (setting || './').trim();
   return new URL(v.endsWith('/') ? v : v + '/', location.href);
 }
+const voiceFilesBase = () => folderBase(VOICE_FILES);
 const KOKORO = { lib: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js', model: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+  // The model repository revision used (as fetch-kokoro.sh does): kokoro-js asks for "main", which the
+  // worker redirects here, so an upstream change can't alter or break the voice.
+  revision: '1939ad2a8e416c0acfeecc08a694d14ef25f2231',
   // Self-hosted copies (fetched by fetch-kokoro.sh) in kokoro/ under VOICE_FILES are used first when present:
   //   kokoro/kokoro.web.js, kokoro/ort/ (ONNX Runtime), kokoro/model/ (a mirror of the Hugging Face repo files)
   local: new URL('kokoro/', voiceFilesBase()).href };
@@ -2440,12 +2578,21 @@ let tts = null, queue = Promise.resolve();
 self.onmessage = e => { const m = e.data; queue = queue.then(() => handle(m)); };
 // Requests for the model repo (config, tokenizer, ONNX weights, voices) try the self-hosted mirror
 // first and fall back to Hugging Face for anything it doesn't have.
-function preferLocal(remote, local) {
+function preferLocal(remote, local, pinned, noCdn) {
   const net = self.fetch.bind(self);
   self.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url.startsWith(remote)) {
-      try { const r = await net(local + url.slice(remote.length), init); if (r.ok) return r; } catch (e) {}
+      const rest = url.slice(remote.length);
+      // A "not found" page served with status 200 isn't the file: use the original then.
+      if (local) {
+        try { const r = await net(local + rest, init); if (r.ok && !(r.headers.get('content-type') || '').toLowerCase().includes('text/html')) return r; } catch (e) {}
+      }
+      if (noCdn) return new Response('not self-hosted', { status: 404 });
+      return net(pinned + rest, init);   // the pinned revision, not whatever "main" is now
+    }
+    if (noCdn && /^https?:/.test(url) && new URL(url).origin !== self.location.origin && !url.startsWith('blob:')) {
+      return new Response('ALLOW_CDN is off', { status: 404 });
     }
     return net(input, init);
   };
@@ -2453,7 +2600,7 @@ function preferLocal(remote, local) {
 async function handle(m) {
   try {
     if (m.type === 'load') {
-      if (m.modelBase) preferLocal('https://huggingface.co/' + m.model + '/resolve/main/', m.modelBase);
+      preferLocal('https://huggingface.co/' + m.model + '/resolve/main/', m.modelBase, 'https://huggingface.co/' + m.model + '/resolve/' + m.revision + '/', m.noCdn);
       const { KokoroTTS, env } = await import(m.lib);
       if (m.ort) env.wasmPaths = m.ort;
       tts = await KokoroTTS.from_pretrained(m.model, { dtype: m.dtype, device: m.device,
@@ -2500,19 +2647,23 @@ function kProgress(p){
 // Which self-hosted pieces exist (each falls back to its CDN independently).
 async function kLocalFiles(){
   const base = KOKORO.local;
-  const has = async f => { try { return (await fetch(base + f, { method: 'HEAD', cache: 'no-store' })).ok; } catch { return false; } };
-  const [lib, ort, model] = await Promise.all([has('kokoro.web.js'), has('ort/ort-wasm-simd-threaded.jsep.mjs'), has('model/config.json')]);
-  k.local = lib || ort || model;
+  const [lib, ort, model] = await Promise.all([realFile(base + 'kokoro.web.js'), realFile(base + 'ort/ort-wasm-simd-threaded.jsep.mjs'),
+    realFile(base + 'model/config.json', 'json')]);
+  k.local = lib || ort || model; k.localLib = lib;
   return { lib: lib ? base + 'kokoro.web.js' : KOKORO.lib, ort: ort ? base + 'ort/' : null, modelBase: model ? base + 'model/' : null };
 }
 async function kLoad(){
   if (k.state === 'loading' || k.state === 'ready') return;
   k.state = 'loading'; k.files = {}; k.progressText = ''; ttsUpdateBar();
   const files = await kLocalFiles();
+  if (!ALLOW_CDN && !(k.localLib && files.ort && files.modelBase)) {
+    k.state = 'error'; k.error = 'the self-hosted Kokoro files are missing (run fetch-kokoro.sh); ALLOW_CDN is off';
+    ttsUpdateBar(); return;
+  }
   const attempt = (device, dtype) => new Promise((res, rej) => {
     k.worker?.terminate(); k.worker = kWorker();
     k.onLoad = { res, rej };
-    k.worker.postMessage({ type: 'load', model: KOKORO.model, device, dtype, ...files });
+    k.worker.postMessage({ type: 'load', model: KOKORO.model, revision: KOKORO.revision, noCdn: !ALLOW_CDN, device, dtype, ...files });
   });
   try {
     try { await attempt(k.gpu ? 'webgpu' : 'wasm', FULL_PRECISION ? 'fp32' : k.gpu ? 'fp32' : 'q8'); k.device = k.gpu ? 'webgpu' : 'wasm'; }
@@ -2611,9 +2762,13 @@ async function pkLoad(){
   const lang = pocketLang();
   if (!lang || pk.state === 'loading' || pkReady()) return;
   pk.state = 'loading'; pk.files = {}; pk.progressText = ''; ttsUpdateBar();
-  const has = async f => { try { return (await fetch(POCKET.local + f, { method: 'HEAD', cache: 'no-store' })).ok; } catch { return false; } };
-  const [lib, ort, model] = await Promise.all([has('lib/worker.js'), has('ort/ort.min.mjs'), has(`model/${lang}/bundle.json`)]);
+  const [lib, ort, model] = await Promise.all([realFile(POCKET.local + 'lib/worker.js'), realFile(POCKET.local + 'ort/ort.min.mjs'),
+    realFile(POCKET.local + `model/${lang}/bundle.json`, 'json')]);
   pk.local = lib || ort || model;
+  if (!ALLOW_CDN && !(lib && ort && model)) {
+    pk.state = 'error'; pk.error = 'the self-hosted Pocket TTS files are missing (run fetch-pocket.sh); ALLOW_CDN is off';
+    ttsUpdateBar(); return;
+  }
   try {
     pk.worker?.terminate(); pk.pending.clear(); pk.refs.clear(); pk.queue = Promise.resolve();
     pk.worker = pkWorker(lib ? POCKET.local + 'lib/' : POCKET.lib);
@@ -2657,7 +2812,7 @@ function pkGenerate(text, opts = {}){
    its transcript, sent with every request so the voice stays the same from paragraph to paragraph.
    The API runs one request at a time and answers 409 while busy, so requests are queued here and
    retried. It has no speed control: speed is applied at playback with pitch preserved. */
-const TTS_SERVER = { api: new URL('/tts/', location.href).href, voices: new URL('/tts-voices/', location.href).href };
+let TTS_SERVER = { api: new URL('/tts/', location.href).href, voices: new URL('/tts-voices/', location.href).href };   // reader-config.json: {"api": "/tts/", "voices": "/tts-voices/"}
 const sv = { state: 'idle', available: null, checkedAt: 0, voices: [], refs: new Map(), queue: Promise.resolve(), error: '', progressText: '',
   wantPlay: false, voice: store.get('spine:serverVoice') || '' };
 const serverFits = () => /^(en|zh)\b/i.test(bookLang());
@@ -2833,7 +2988,7 @@ function wavBlob(data, rate){
    a reread or reopening a book plays them at once instead of making them again. Least recently used
    passages are dropped beyond SAVED_AUDIO_MB. Everything here fails quietly: without storage the voices
    just make the audio again. */
-const SAVED_AUDIO_MB = 500;
+let SAVED_AUDIO_MB = 500;
 const clipStore = (() => {
   let dbp = null, saves = 0;
   const open = () => dbp ??= new Promise(res => {
@@ -2928,7 +3083,7 @@ function nSynth(ne, text){
 }
 // Keep about NCACHE_SEC of finished audio in memory, most recently used first (saved audio backs the rest).
 // Unfinished passages are never dropped here: jumps cancel those.
-const NCACHE_SEC = 900;
+let NCACHE_SEC = 900;
 function nTrim(){
   let total = 0;
   for (const [key, e] of [...n.cache].reverse()) {
@@ -2945,7 +3100,7 @@ function nCancelStale(keepKey){
 // Natural voices read whole paragraphs where possible (better phrasing than sentence by sentence):
 // a span runs from (ci, pos) through the following sentences of the same block, up to a length the
 // model handles in one go. Sentences stay the unit for highlighting, skipping and resuming.
-const SPAN_MAX = { kokoro: 350, pocket: 600, server: 600 };
+let SPAN_MAX = { kokoro: 350, pocket: 600, server: 600 };
 function nSpan(ne, ci, pos, single = false, chunks = ttsChunks()){
   const c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket : SPAN_MAX.server;
   let cj = ci;
@@ -2964,7 +3119,7 @@ async function chapterChunks(i){
    it, so it is never slowed down) until about LOOKAHEAD_SEC of audio is ready, carrying on into the next
    chapters so chapter breaks don't pause. Started again with every passage; finished passages are found in
    the cache at once, so it quickly picks up where it left off. nStop() ends it. */
-const LOOKAHEAD_SEC = 120;
+let LOOKAHEAD_SEC = 120;
 async function nLookAhead(ne, span, current){
   const id = ++n.ahead;
   const live = () => id === n.ahead && tts.open && neuralEngine() === ne;
@@ -3126,7 +3281,7 @@ function nStop(){
    is kept as (chapter, block, offset), so after the chapter renders the same block in the frame gives its
    DOM range: matches in the chapter are highlighted, the chosen one more strongly, and the page turns to it. */
 const SEARCH_SKIP = 'script,style,noscript,template,[hidden],#spine-end';
-const SEARCH_MAX = 500;
+let SEARCH_MAX = 500;
 const search = { q: '', hits: [], cur: -1, token: 0, timer: 0, shown: false };
 const foldMap = new Map();
 // Fold text one UTF-16 unit at a time (so offsets stay the same): lower case, no accents, plain quotes, plain spaces.
@@ -3280,21 +3435,89 @@ $('#searchResults').addEventListener('click', e => {
   if (narrow.matches) setToc(false);
 });
 
-/* ---------- start ---------- */
-$('#fontPct').textContent = fontPct + '%';
-setLine(lineH);
-setWidth(widthStep);
-setLayout(layout);
-{ const t = store.get('spine:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
-syncThemeBtn();
-setToc(!narrow.matches);
-if (!window.JSZip) {
-  $('#bookTitle').textContent = 'Spine Reader';
-  showNotice("The ZIP library didn't load, so EPUB files can't be opened. Check your connection and reload the page.", 'error');
-} else {
-  const ref = new URLSearchParams(location.search).get('book');
-  (ref ? openFromUrl(ref) : openDefault());
+/* ---------- per-folder settings: reader-config.json ----------
+   An optional JSON file next to the page overrides the settings constants for that folder (useful when
+   index.html is linked into several folders), and can choose the defaults readers start with until they
+   pick their own (theme, layout, text width, font, text size, line spacing, read-aloud engine). Unknown or
+   invalid entries are ignored with a console warning; a missing file, or a "not found" page, is no config. */
+const CONFIG_FILE = 'reader-config.json';
+const CONFIG_SETTINGS = {   // name: [type, apply]
+  DEFAULT_BOOK: ['string', v => { DEFAULT_BOOK = v; }],
+  BOOKSHELF: ['string', v => { BOOKSHELF = v.endsWith('/') ? v : v + '/'; }],
+  VOICE_FILES: ['string', v => { VOICE_FILES = v; }],
+  LIB_FILES: ['string', v => { LIB_FILES = v; }],
+  ALLOW_CDN: ['boolean', v => { ALLOW_CDN = v; }],
+  TTS_SERVER: ['object', v => {
+    if (typeof v.api !== 'string' || typeof v.voices !== 'string') throw new Error('needs "api" and "voices" paths');
+    TTS_SERVER = { api: new URL(v.api, location.href).href, voices: new URL(v.voices, location.href).href };
+  }],
+  FULL_PRECISION: ['boolean', v => { FULL_PRECISION = v; }],
+  ALLOW_REMOTE_CONTENT: ['boolean', v => { ALLOW_REMOTE_CONTENT = v; }],
+  ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
+  LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.max(0, v); }],
+  SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.max(0, v); }],
+  NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.max(30, v); }],
+  SPAN_MAX: ['object', v => { SPAN_MAX = { ...SPAN_MAX, ...Object.fromEntries(Object.entries(v).filter(([k, n]) => k in SPAN_MAX && n > 20)) }; }],
+  SEARCH_MAX: ['number', v => { SEARCH_MAX = Math.max(1, v); }],
+  COMIC_PART: ['number', v => { COMIC_PART = Math.max(2, Math.round(v / 2) * 2); }],
+};
+const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
+  theme: ['spine:theme', v => v === 'light' || v === 'dark', v => document.documentElement.setAttribute('data-theme', v)],
+  layout: ['spine:layout', v => v in LAYOUTS, v => { layout = v; }],
+  width: ['spine:width', v => WIDTHS.some(w => w[0].toLowerCase() === String(v).toLowerCase()), v => { widthStep = WIDTHS.findIndex(w => w[0].toLowerCase() === v.toLowerCase()); }],
+  font: ['spine:face', v => FONTS.some(f => f.id === v), v => { fontFace = v; }],
+  fontSize: ['spine:font', v => typeof v === 'number' && v >= 60 && v <= 250, v => { fontPct = v; }],
+  lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 3, v => { lineH = v; }],
+  readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'server'].includes(v), v => { tts.engine = v; }],
+};
+let readerConfig = null;   // the folder's config as loaded, for reference
+async function loadConfig(){
+  let cfg = null;
+  try {
+    const r = await fetch(new URL(CONFIG_FILE, location.href), { cache: 'no-cache' });
+    if (r.ok && !looksHtml(r)) cfg = JSON.parse(await r.text());
+  } catch (err) { if (!(err instanceof TypeError)) console.warn(`${CONFIG_FILE} isn't valid JSON, so it was ignored:`, err.message); }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return;
+  readerConfig = cfg;
+  for (const [key, value] of Object.entries(cfg)) {
+    try {
+      if (CONFIG_SETTINGS[key]) {
+        const [type, apply] = CONFIG_SETTINGS[key];
+        if (typeof value !== type || value === null) throw new Error(`should be a ${type}`);
+        apply(value);
+      } else if (CONFIG_DEFAULTS[key]) {
+        const [stored, ok, apply] = CONFIG_DEFAULTS[key];
+        if (!ok(value)) throw new Error('not one of the allowed values');
+        if (store.get(stored) == null) apply(value);   // the reader's own choice wins
+      } else throw new Error('unknown setting');
+    } catch (err) { console.warn(`${CONFIG_FILE}: ${key} ignored (${err.message})`); }
+  }
+  // Settings other values are worked out from.
+  KOKORO.local = new URL('kokoro/', voiceFilesBase()).href;
+  POCKET.local = new URL('pocket/', voiceFilesBase()).href;
 }
+
+/* ---------- start ---------- */
+(async () => {
+  await loadConfig();
+  await Promise.all([setupFonts(), loadLib('jszip').catch(err => console.warn(err.message))]);
+  $('#fontPct').textContent = fontPct + '%';
+  setLine(lineH, false);   // applied, not saved: a reader's choice is saved when they make it
+  setWidth(widthStep, false);
+  setLayout(layout, false);
+  syncFontMenu();
+  { const t = store.get('spine:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
+  syncThemeBtn();
+  setToc(!narrow.matches);
+  if (!window.JSZip) {
+    $('#bookTitle').textContent = 'Spine Reader';
+    showNotice(ALLOW_CDN ? "The ZIP library didn't load, so EPUB files can't be opened. Check your connection and reload the page."
+      : "The ZIP library isn't on this site (libs/jszip.min.js, from fetch-libs.sh), so EPUB files can't be opened.", 'error');
+  } else {
+    const ref = new URLSearchParams(location.search).get('book');
+    await (ref ? openFromUrl(ref) : openDefault());
+  }
+})();
 /* Without ?book=, a default.epub next to this page opens if there is one; otherwise the built-in sample.
    A missing file may still come back as 200 (a site's "not found" page), so the reply has to be a real
    EPUB: a ZIP with a META-INF/container.xml. Anything else falls back to the sample quietly. */
@@ -3303,8 +3526,7 @@ async function openDefault(){
   try {
     const r = await fetch(new URL(DEFAULT_BOOK, location.href), { cache: 'no-cache' });
     const buf = r.ok ? await r.arrayBuffer() : null;
-    const b = buf && new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
-    if (b?.length === 4 && b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) {   // "PK\3\4": a ZIP
+    if (buf && isZipBytes(buf)) {
       const z = await JSZip.loadAsync(buf);
       if (getFile(z, 'META-INF/container.xml')) zip = z;
     }
@@ -3338,12 +3560,17 @@ async function openFromUrl(ref){
     const misses = [];
     for (const u of candidates) {
       const kind = docKind(u.pathname);
+      // Each candidate must really be the book: a "not found" page served with status 200 counts as a miss,
+      // so the next location is tried.
       if (kind) {
         let r = null;
         try { r = await fetch(u.href); } catch {}
         if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
+        if (kind !== 'html' && looksHtml(r)) { misses.push(`${u.pathname} (a web page came back instead)`); continue; }
+        const buf = await r.arrayBuffer();
+        if (kind === 'html' && await soft404(u.href) === new TextDecoder().decode(buf)) { misses.push(`${u.pathname} (the site's "not found" page)`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
-        await openDocument(await r.arrayBuffer(), decodeURIComponent(u.pathname.split('/').pop()), kind,
+        await openDocument(buf, decodeURIComponent(u.pathname.split('/').pop()), kind,
           { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}` });
         return;
       }
@@ -3351,12 +3578,19 @@ async function openFromUrl(ref){
         let r = null;
         try { r = await fetch(u.href); } catch {}
         if (!r?.ok) { misses.push(`${u.pathname} (${r ? r.status : 'network error'})`); continue; }
-        await openZip(await JSZip.loadAsync(await r.arrayBuffer()), decodeURIComponent(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
+        const buf = await r.arrayBuffer();
+        if (!isZipBytes(buf)) { misses.push(`${u.pathname} (not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''})`); continue; }
+        const zip = await JSZip.loadAsync(buf);
+        if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
+        await openZip(zip, decodeURIComponent(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}` });
         return;
       }
       if (!u.pathname.endsWith('/')) u.pathname += '/';
       const src = dirSource(u.href);
-      if (!(await src.text('META-INF/container.xml'))) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
+      const container = await src.text('META-INF/container.xml');
+      if (!container || !parseDoc(container, 'application/xml')?.getElementsByTagNameNS('*', 'rootfile')[0]) {
+        misses.push(`${u.pathname} (no META-INF/container.xml)`); continue;
+      }
       await openBook(src, { name });
       return;
     }

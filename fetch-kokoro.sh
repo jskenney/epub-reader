@@ -5,23 +5,29 @@
 #   ./fetch-kokoro.sh            run from anywhere; files go next to this script
 #
 # Safe to re-run: finished files are skipped and interrupted downloads resume. Total is about 450 MB.
+# Every file is checked against checksums/kokoro.sha256; any that don't match are removed (run it again).
 # The reader uses whichever of these files exist and falls back to the CDNs for the rest.
 set -euo pipefail
 cd "$(dirname "$0")"
+LIST=0; if [ "${1:-}" = --list ]; then LIST=1; shift; fi   # --list: print URL and path of each file, download nothing (tools/make-checksums.py)
 
 KOKORO_JS=1.2.1      # must match KOKORO.lib in index.html
 TRANSFORMERS=3.5.1   # transformers.js version bundled in kokoro-js 1.2.1; its dist/ holds the ONNX Runtime files it loads
 PHONEMIZER=1.2.1     # bundled in kokoro-js 1.2.1 (licence only)
 MODEL=onnx-community/Kokoro-82M-v1.0-ONNX
+REV=1939ad2a8e416c0acfeecc08a694d14ef25f2231     # model revision: must match KOKORO.revision in index.html
 DEST=kokoro
 
 JSD=https://cdn.jsdelivr.net/npm
-HF=https://huggingface.co/$MODEL/resolve/main
+HF=https://huggingface.co/$MODEL/resolve/$REV
 
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 
-get() {   # get URL PATH-UNDER-kokoro/
+say() { [ "$LIST" = 1 ] || echo "$@"; }
+get() {   # get URL PATH-UNDER-DEST
   local url=$1 out=$DEST/$2
+  if [ "$LIST" = 1 ]; then printf '%s	%s
+' "$url" "$out"; return; fi
   if [ -s "$out" ]; then echo "  have   $2"; return; fi
   mkdir -p "$(dirname "$out")"
   echo "  fetch  $2"
@@ -29,30 +35,51 @@ get() {   # get URL PATH-UNDER-kokoro/
   mv "$out.part" "$out"
 }
 
-echo "Library"
+# Check every downloaded file against the pinned SHA-256 list in checksums/ (committed with this script).
+# Files that don't match are removed, so running the script again downloads them afresh.
+verify() {
+  local sums=checksums/$1.sha256 bad=0 hash path tool
+  [ -f "$sums" ] || { echo "No $sums, so the files weren't verified" >&2; return; }
+  if command -v sha256sum >/dev/null; then tool=(sha256sum); elif command -v shasum >/dev/null; then tool=(shasum -a 256)
+  else echo "Neither sha256sum nor shasum found, so the files weren't verified" >&2; return; fi
+  echo "Checking files against $sums"
+  while read -r hash path; do
+    [ -f "$path" ] || continue
+    if [ "$("${tool[@]}" "$path" | cut -d' ' -f1)" != "$hash" ]; then echo "  BAD    $path (removed)"; rm -f "$path"; bad=1; fi
+  done < "$sums"
+  while IFS= read -r path; do
+    grep -qF "  $path" "$sums" || echo "  note   $path has no pinned checksum"
+  done < <(find "$DEST" -type f ! -name NOTICE.txt ! -name '*.part' | sort)
+  if [ "$bad" = 1 ]; then echo "Some files didn't match their checksums and were removed; run this script again." >&2; exit 1; fi
+  echo "All files match their checksums."
+}
+
+say "Library"
 get "$JSD/kokoro-js@$KOKORO_JS/dist/kokoro.web.js"                                   kokoro.web.js
 
-echo "ONNX Runtime (WebAssembly + WebGPU)"
+say "ONNX Runtime (WebAssembly + WebGPU)"
 get "$JSD/@huggingface/transformers@$TRANSFORMERS/dist/ort-wasm-simd-threaded.jsep.mjs"  ort/ort-wasm-simd-threaded.jsep.mjs
 get "$JSD/@huggingface/transformers@$TRANSFORMERS/dist/ort-wasm-simd-threaded.jsep.wasm" ort/ort-wasm-simd-threaded.jsep.wasm
 
-echo "Model ($MODEL)"
+say "Model ($MODEL)"
 for f in config.json tokenizer.json tokenizer_config.json \
          onnx/model.onnx onnx/model_quantized.onnx; do   # fp32 for WebGPU, q8 for the CPU
   get "$HF/$f" "model/$f"
 done
 
-echo "Voices"
+say "Voices"
 # The voice ids the reader offers, read from KOKORO_VOICES in index.html so the two stay in sync.
 voices=$(grep -o "\['[ab][fm]_[a-z]*'" index.html | tr -d "['" | sort -u)
 [ -n "$voices" ] || { echo "Couldn't find the voice list in index.html" >&2; exit 1; }
 for v in $voices; do get "$HF/voices/$v.bin" "model/voices/$v.bin"; done
 
-echo "Licences"
+say "Licences"
 get "$JSD/kokoro-js@$KOKORO_JS/LICENSE"                 LICENSES/kokoro-js.txt
 get "$JSD/@huggingface/transformers@$TRANSFORMERS/LICENSE" LICENSES/transformers.js.txt
 get "$JSD/phonemizer@$PHONEMIZER/LICENSE"               LICENSES/phonemizer.txt
 get "$HF/README.md"                                      LICENSES/Kokoro-82M-v1.0-ONNX-model-card.md
+[ "$LIST" = 1 ] && exit 0
+verify kokoro
 cat > "$DEST/LICENSES/NOTICE.txt" <<NOTICE
 Self-hosted copies of the files the reader's natural voice uses, fetched by fetch-kokoro.sh.
 
@@ -60,7 +87,7 @@ kokoro-js $KOKORO_JS (kokoro.web.js)  Apache-2.0        https://www.npmjs.com/pa
   bundles transformers.js $TRANSFORMERS     Apache-2.0  https://github.com/huggingface/transformers.js
   bundles phonemizer $PHONEMIZER            Apache-2.0 as published; built from eSpeak NG, which is GPL-3.0
 ONNX Runtime Web (ort/)              MIT               https://github.com/microsoft/onnxruntime
-Kokoro-82M v1.0 ONNX (model/)        Apache-2.0        https://huggingface.co/$MODEL
+Kokoro-82M v1.0 ONNX (model/)        Apache-2.0        https://huggingface.co/$MODEL (revision $REV)
 NOTICE
 
 echo

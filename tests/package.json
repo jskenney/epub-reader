@@ -1,0 +1,7 @@
+{
+  "name": "spine-reader-tests",
+  "private": true,
+  "description": "Browser tests for the reader (see run.sh)",
+  "scripts": { "test": "./run.sh" },
+  "devDependencies": { "playwright": "1.63.0" }
+}

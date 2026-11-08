@@ -9,9 +9,11 @@
 #                                      reader with FULL_PRECISION set to false in index.html
 #
 # Safe to re-run: finished files are skipped and interrupted downloads resume.
+# Every file is checked against checksums/pocket.sha256; any that don't match are removed (run it again).
 # The reader uses whichever of these files exist and falls back to the CDNs for the rest.
 set -euo pipefail
 cd "$(dirname "$0")"
+LIST=0; if [ "${1:-}" = --list ]; then LIST=1; shift; fi   # --list: print URL and path of each file, download nothing (tools/make-checksums.py)
 
 POCKET_JS=0.1.0                                         # must match POCKET.lib in index.html
 ORT=1.20.0                                              # must match POCKET.ort in index.html
@@ -36,8 +38,11 @@ if [ "${1:-}" = --int8 ]; then suffix=_int8; shift; fi
 langs=("$@"); [ ${#langs[@]} -gt 0 ] || langs=(en)
 [ "${langs[0]}" = all ] && langs=(en fr de it pt es)
 
-get() {   # get URL PATH-UNDER-pocket/
+say() { [ "$LIST" = 1 ] || echo "$@"; }
+get() {   # get URL PATH-UNDER-DEST
   local url=$1 out=$DEST/$2
+  if [ "$LIST" = 1 ]; then printf '%s	%s
+' "$url" "$out"; return; fi
   if [ -s "$out" ]; then echo "  have   $2"; return; fi
   mkdir -p "$(dirname "$out")"
   echo "  fetch  $2"
@@ -45,27 +50,50 @@ get() {   # get URL PATH-UNDER-pocket/
   mv "$out.part" "$out"
 }
 
-echo "Library (pocket-tts-js $POCKET_JS)"
+# Check every downloaded file against the pinned SHA-256 list in checksums/ (committed with this script).
+# Files that don't match are removed, so running the script again downloads them afresh.
+verify() {
+  local sums=checksums/$1.sha256 bad=0 hash path tool
+  [ -f "$sums" ] || { echo "No $sums, so the files weren't verified" >&2; return; }
+  if command -v sha256sum >/dev/null; then tool=(sha256sum); elif command -v shasum >/dev/null; then tool=(shasum -a 256)
+  else echo "Neither sha256sum nor shasum found, so the files weren't verified" >&2; return; fi
+  echo "Checking files against $sums"
+  while read -r hash path; do
+    [ -f "$path" ] || continue
+    if [ "$("${tool[@]}" "$path" | cut -d' ' -f1)" != "$hash" ]; then echo "  BAD    $path (removed)"; rm -f "$path"; bad=1; fi
+  done < "$sums"
+  while IFS= read -r path; do
+    grep -qF "  $path" "$sums" || echo "  note   $path has no pinned checksum"
+  done < <(find "$DEST" -type f ! -name NOTICE.txt ! -name '*.part' | sort)
+  if [ "$bad" = 1 ]; then echo "Some files didn't match their checksums and were removed; run this script again." >&2; exit 1; fi
+  echo "All files match their checksums."
+}
+
+say "Library (pocket-tts-js $POCKET_JS)"
 for f in worker.js binary.js tokenizer.js; do get "$JSD/pocket-tts-js@$POCKET_JS/src/$f" "lib/$f"; done
 
-echo "ONNX Runtime Web $ORT"
+say "ONNX Runtime Web $ORT"
 for f in ort.min.mjs ort-wasm-simd-threaded.mjs ort-wasm-simd-threaded.wasm; do get "$JSD/onnxruntime-web@$ORT/dist/$f" "ort/$f"; done
 
 for lang in "${langs[@]}"; do
   b=$(bundle_for "$lang")
-  echo "Model: $b"
+  say "Model: $b"
   # the four models (full precision, or 8-bit with --int8) plus the built-in voices;
   # the voice-cloning encoder isn't used
   for f in bundle.json tokenizer.model voices.bin text_conditioner$suffix.onnx flow_lm_main$suffix.onnx \
            flow_lm_flow$suffix.onnx mimi_decoder$suffix.onnx; do
+    # The French bundle has no voices.bin at this revision (upstream), so it has no built-in voices.
+    if [ "$b" = french_24l ] && [ "$f" = voices.bin ]; then continue; fi
     get "$HF/$b/$f" "model/$b/$f"
   done
 done
 
-echo "Licences"
+say "Licences"
 get "$JSD/pocket-tts-js@$POCKET_JS/LICENSE"  LICENSES/pocket-tts-js.txt
 get "$HF/LICENSE"                            LICENSES/pocket-tts-model-LICENSE.txt
 get "https://huggingface.co/$REPO/resolve/$REV/README.md" LICENSES/pocket-tts-onnx-model-card.md
+[ "$LIST" = 1 ] && exit 0
+verify pocket
 cat > "$DEST/LICENSES/NOTICE.txt" <<NOTICE
 Self-hosted copies of the files the reader's Pocket TTS voice uses, fetched by fetch-pocket.sh.
 

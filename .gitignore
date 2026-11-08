@@ -2,6 +2,10 @@
 /kokoro/
 /pocket/
 
+# Self-hosted libraries and fonts, fetched by fetch-libs.sh and fetch-fonts.sh
+/libs/
+/fonts/
+
 # Server voice clips from older setups (they now live on the TTS server; see epub-reader-tts-server)
 /tts-voices/
 
@@ -10,3 +14,7 @@ default.epub
 
 # Interrupted or in-progress downloads
 *.part
+
+# Test site built by tests/build_fixtures.py, and test dependencies
+/tests/site/
+/tests/node_modules/
