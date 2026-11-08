@@ -3,8 +3,8 @@
 # this site instead of cdnjs:
 #
 #   ./fetch-libs.sh            run from anywhere; files go next to this script (or into LIB_FILES' folder:
-#                              put a copy of this script there, with checksums/ and index.html beside it:
-#                              it works in its own folder)
+#                              put a copy of this script there, with checksums/ beside it: it works in its
+#                              own folder)
 #
 # JSZip opens EPUB and comic files; marked renders Markdown. The reader checks both copies against the same
 # pinned hashes (Subresource Integrity), and this script checks them against checksums/libs.sha256.

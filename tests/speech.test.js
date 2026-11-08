@@ -172,3 +172,18 @@ test('narration paused: a click after the last narrated paragraph stays in the c
   await page.waitForTimeout(1000);
   assert.match(await page.textContent('#spinePos'), /spine 1\/2/);
 });
+
+test('the read-aloud status is announced, and again after the bar is closed and reopened (L-68)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-novoice/index.html?book=/reader/books/long.epub`, { 'spine:ttsEngine': 'kokoro' });
+  await page.keyboard.press('r');
+  await page.click('#ttsDownload').catch(() => {});
+  const said = () => page.evaluate(() => document.querySelector('#ttsAnnounce').textContent);
+  const first = await h.waitFor(async () => { const t = await said(); return /missing|failed/.test(t) && t; }, 15000);
+  assert.ok(first, 'the error is announced');
+  assert.equal(first, await page.textContent('#ttsStatus'));
+  await page.click('#ttsClose');
+  assert.equal(await said(), '');
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(async () => (await said()) === first, 10000), 'announced again on reopening');
+});

@@ -3279,10 +3279,12 @@ function ttsUpdateBar(status){
     else { status = `${neural.name}: one-time ${neural.size()} download`; dl = 'Download'; }
   }
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
-  // Screen readers hear a status when it changes in kind, not each step of a download ("12%", "13%", …): the
-  // live region gets the text only when it differs apart from its numbers (REVIEW.md L-68).
-  const kind = (status || '').replace(/[\d.,]+/g, '#');
-  if (kind !== tts.announced) { tts.announced = kind; $('#ttsAnnounce').textContent = status || ''; }
+  // Screen readers hear every status (errors, offers, notes), but a download's progress only at each quarter,
+  // not every step ("12%", "13%", …): REVIEW.md L-68.
+  const pct = /(\d+)%/.exec(status || '');
+  const kind = pct ? (status.replace(/\d+%/, '') + Math.floor(+pct[1] / 25)) : (status || '');
+  if (!tts.open) { tts.announced = null; $('#ttsAnnounce').textContent = ''; }   // (closed: nothing to say, and afresh when it opens)
+  else if (kind !== tts.announced) { tts.announced = kind; $('#ttsAnnounce').textContent = status || ''; }
   $('#ttsDownload').hidden = !dl; $('#ttsDownload').textContent = dl;
   $('#ttsVoice').hidden = !!tts.mo;
   $('#ttsSaved').hidden = !(!tts.mo && neuralEngine());
@@ -3379,7 +3381,8 @@ if (!synth) $('#ttsBtn').title = "Read aloud (only books with publisher narratio
    Sentences are generated one or two ahead and played through Web Audio. Kokoro reports no word
    timings, so the highlighted word is estimated from how far through the sentence's audio playback is. */
 // Natural voices use the full-precision models (best quality; larger downloads, slower on the CPU).
-// Set to false to use the 8-bit models instead (fetch-pocket.sh --int8 for self-hosting those).
+// Set to false to use the 8-bit models instead: Pocket TTS always, Kokoro on WebAssembly only (WebGPU keeps the
+// full-precision model). fetch-pocket.sh --int8 self-hosts Pocket's.
 let FULL_PRECISION = true;
 // A folder setting (VOICE_FILES, LIB_FILES) as an absolute URL ending in /; '' or a missing trailing slash work too.
 function folderBase(setting){

@@ -37,9 +37,10 @@ location ^~ /reader/ {
 
     # Compress text and WebAssembly (the voice runtimes shrink to about a third). Model files (.onnx, .bin)
     # barely compress and are served as they are. nginx answers range requests for static files by default,
-    # which the reader uses to read books in place (and browsers for large audio), but not for a file it
-    # compresses on the fly: that is sent whole. So books (.epub, .cbz: application/zip), audio and models must
-    # stay out of gzip_types; the reader never asks for ranges of the types listed here.
+    # which the reader uses to read books in place (and browsers for large audio). A file nginx compresses on
+    # the fly is sent whole instead, but browsers ask for ranges with "Accept-Encoding: identity", so only
+    # other clients would be affected; books, audio and models are left out of gzip_types anyway, since they
+    # barely compress.
     gzip on;
     gzip_types text/css text/javascript application/javascript application/json application/wasm image/svg+xml text/markdown text/plain;
 }

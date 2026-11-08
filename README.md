@@ -354,7 +354,7 @@ It fetches about 435 MB into `./kokoro/`:
 |---|---|
 | `kokoro/kokoro.web.js` | kokoro-js 1.2.1 |
 | `kokoro/ort/` | ONNX Runtime WebAssembly/WebGPU files (from transformers.js 3.5.1) |
-| `kokoro/model/` | Kokoro-82M-v1.0-ONNX at a pinned revision (the same one the reader asks Hugging Face for): config, tokenizer, `onnx/model.onnx` (fp32, WebGPU) and `onnx/model_quantized.onnx` (q8, CPU) |
+| `kokoro/model/` | Kokoro-82M-v1.0-ONNX at a pinned revision (the same one the reader asks Hugging Face for): config, tokenizer, `onnx/model.onnx` (fp32: used by default, and always on WebGPU) and `onnx/model_quantized.onnx` (q8: on the CPU when `FULL_PRECISION` is false) |
 | `kokoro/model/voices/` | the 28 voices the reader offers (read from `index.html`) |
 | `kokoro/LICENSES/` | licences and a NOTICE listing each component |
 
@@ -381,8 +381,9 @@ const VOICE_FILES = '/reader/';   // '' (the default) = this page's folder
 
 Every copy then loads from `/reader/kokoro/` and `/reader/pocket/`, so the
 files are downloaded and cached by the browser once. Put a copy of the fetch
-scripts in that folder, with `checksums/` and `index.html` beside them (each
-script works in its own folder and reads both), and run them there. The browser treats the same
+scripts in that folder and run them there: each works in its own folder, and
+reads `checksums/` beside it (`fetch-kokoro.sh` also reads the voice list from
+`index.html`, and `fetch-fonts.sh` reads only `index.html`). The browser treats the same
 file under two different paths as two files, which is why sharing one
 folder matters.
 
@@ -447,7 +448,7 @@ marked ✓).
 | `TIME_LEFT` ✓ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `KEEP_POSITIONS_DAYS` ✓ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day). `0` keeps them forever. |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
-| `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models (`./fetch-pocket.sh --int8` when self-hosting). |
+| `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. |
 | `LOOKAHEAD_SEC` ✓ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
 | `SAVED_AUDIO_MB` ✓ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
