@@ -1341,6 +1341,9 @@ const isStale = seq => seq != null && seq !== openSeq;
 async function startBook(next){
   if (isStale(next.seq)) { next.src?.dispose?.(); return; }
   if (book) book.src.dispose();
+  // The narration audio belongs to the book it came from: a new book with the same audio path must not play
+  // the previous book's recording (REVIEW.md M-17).
+  moAudio.pause(); delete moAudio.dataset.path; moAudio.removeAttribute('src'); moAudio.load();
   book = next;
   pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
   const spine = book.spine;
@@ -2918,12 +2921,13 @@ async function moGo(i, { speak = tts.playing, keepFollow = false } = {}){
   moMark(i); ttsUpdateBar();
   if (!speak) { moAudio.pause(); return; }
   const par = m.pars[i];
-  const url = await book.src.url(par.audio, typeOf(par.audio));
-  if (token !== tts.token) return;
-  if (!url) { tts.playing = false; ttsUpdateBar(); showNotice(`The narration audio ${par.audio} is missing from the book.`, 'error'); return; }
-  if (moAudio.dataset.path !== par.audio) {
+  if (moAudio.dataset.path !== par.audio) {   // (the audio file is read only when it changes)
+    const url = await book.src.url(par.audio, typeOf(par.audio));
+    if (token !== tts.token) return;
+    if (!url) { tts.playing = false; ttsUpdateBar(); showNotice(`The narration audio ${par.audio} is missing from the book.`, 'error'); return; }
     moAudio.src = url; moAudio.dataset.path = par.audio;
     await new Promise(r => { moAudio.addEventListener('loadedmetadata', r, { once: true }); moAudio.addEventListener('error', r, { once: true }); });
+    if (moAudio.error) delete moAudio.dataset.path;   // a file that failed is tried afresh next time
     if (token !== tts.token) return;
   }
   if (Math.abs(moAudio.currentTime - par.begin) > 0.08) moAudio.currentTime = par.begin;

@@ -79,3 +79,23 @@ test("publisher narration: each paragraph is marked with the book's class while 
   assert.ok(await h.waitFor(async () => /spine 2\/2/.test(await page.textContent('#spinePos')), 15000), 'on to the next chapter');
   assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('.now-reading').length), 0);
 });
+
+test("a second narrated book with the same audio path plays its own recording, not the first one's (M-17)", async () => {
+  const page = await h.newPage();
+  // Keep a reference to every Audio element the page makes, to see which recording narration plays.
+  await page.addInitScript(() => { const A = window.Audio; window.__audios = []; window.Audio = function (...a) { const x = new A(...a); window.__audios.push(x); return x; }; window.Audio.prototype = A.prototype; });
+  await h.openReader(page, `${h.READER}?book=books/narrated.epub`);
+  await page.keyboard.press('r');
+  await h.waitFor(() => h.inFrame(page, doc => !!doc.querySelector('.now-reading')), 10000, 50);
+  await page.keyboard.press(' ');
+  await page.setInputFiles('#fileInput', require('node:path').join(__dirname, 'site', 'reader', 'books', 'narrated-b.epub'));
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Narrated Book B', null, { timeout: 15000 });
+  await h.waitForBook(page);
+  await page.keyboard.press('r');
+  const duration = await h.waitFor(() => page.evaluate(() => {
+    // (Not the silent clip that keeps media controls showing: the one playing the book's narration.)
+    const a = window.__audios.find(x => !x.paused && x.duration > 0.5 && Math.abs(x.duration - 10) > 0.5);
+    return a ? a.duration : 0;
+  }), 10000, 100);
+  assert.ok(Math.abs(duration - 6) < 0.3, `narration plays a ${duration} s recording (B's is 6 s, A's 1.8 s)`);
+});
