@@ -3882,6 +3882,12 @@ async function nLookAhead(ne, span, current){
 }
 async function nSpeak(c, ci, pos, token, { single = false, jump = false } = {}){
   const ne = neuralEngine();
+  // The chosen server voice's clip version is part of the saved-audio key: wait for its check if one is
+  // running (one request, after a voice change), so audio saved for a re-recorded clip isn't played.
+  if (ne === NEURAL.server && svVoice()?.ref_audio) {
+    const check = svClipChecks.get(svClipURL(svVoice()));
+    if (check) { await svClipVersion(svVoice()); if (token !== tts.token) return; }
+  }
   let span;
   if (jump) {
     // Start quickly: just the current sentence, unless the whole paragraph is already made or being made.

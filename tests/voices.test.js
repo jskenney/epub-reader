@@ -87,7 +87,7 @@ test('server voices: clips outside the voices folder are not used (L-12, L-28)',
   await h.openReader(page, LONG, server);
   await page.keyboard.press('r');
   assert.ok(await h.waitFor(() => h.spokenWord(page)));
-  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'described']);
+  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second', 'described']);
   // The voice with an instruction speaks with it, without the clip from the other site (L-28).
   await page.selectOption('#ttsVoice', 'described');
   await h.clearBreezeLog();
@@ -162,6 +162,37 @@ test('a refused HEAD request keeps the clip version last seen, so saved audio is
     assert.ok(!(await h.breezeLog()).map(r => r.text).includes(first), 'the first passage should come from saved audio');
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:clipVersions') || '{}')), versions);
   } finally { await fetch(`${h.SITE}/__head?on=1`); fs.utimesSync(clip, clipTime, clipTime); }
+});
+
+test('a voice chosen while its clip check is still running waits for it, so a re-recorded clip is not missed (L-37)', async () => {
+  const second = path.join(__dirname, 'site', 'tts-voices', 'second.wav'), was = fs.statSync(second).mtime;
+  const page = await h.newPage();
+  try {
+    // Second narrator's audio saved, under its clip's current version.
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, { ...server, 'spine:serverVoice': 'second' });
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    await h.waitFor(async () => (await h.breezeLog()).filter(r => !r.aborted).length >= 1, 20000);
+    await page.waitForTimeout(1000);
+    const first = (await h.breezeLog()).filter(r => !r.aborted)[0].text;
+    // Its clip re-recorded; slow HEAD replies; the reader reopened with the first narrator chosen, so the
+    // second's check runs in the background.
+    const later = new Date(Date.now() + 9000);
+    fs.utimesSync(second, later, later);
+    await fetch(`${h.SITE}/__head?delay=2`);
+    await page.evaluate(() => localStorage.setItem('spine:serverVoice', JSON.stringify('narrator')));
+    await page.reload(); await h.waitForBook(page);
+    await h.clearBreezeLog();
+    await page.keyboard.press('r');
+    await page.waitForFunction(() => document.querySelector('#ttsVoice').options.length > 1, null, { timeout: 15000 });
+    await page.keyboard.press(' ');   // pause the first narrator
+    await page.selectOption('#ttsVoice', 'second');
+    await page.keyboard.press(' ');
+    // Not the audio saved for the old clip: the passage is made again.
+    assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(r => r.text === first && /Another clip/.test(r.ref_text)), 20000),
+      'the first passage should be made again with the new clip');
+  } finally { await fetch(`${h.SITE}/__head?delay=0`); fs.utimesSync(second, was, was); }
 });
 
 const slow = !process.env.SLOW && 'set SLOW=1 to run (loads real models on the CPU)';
