@@ -416,7 +416,8 @@ const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css
 
 const store = {
   get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
-  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k){ try { localStorage.removeItem(k); } catch {} }
 };
 
 let book = null;
@@ -1220,10 +1221,15 @@ async function openBook(zip, { sample = false, name = '' } = {}){
   next.hasOverlays = spine.some(s => s.overlay);
   next.coverId = md ? [...md.getElementsByTagNameNS('*', 'meta')].find(m => m.getAttribute('name') === 'cover')?.getAttribute('content') || '' : '';
   // Where the reading position is kept: by the book's identifier, so a book resumes wherever it is opened
-  // from. A book without one is keyed by a fingerprint of its package file, which differs between books
-  // even when their titles match (earlier versions used the title: that position is picked up once).
-  next.key = 'spine:pos:' + (uid || 'opf:' + fingerprint(oText));
-  next.legacyKey = uid ? null : 'spine:pos:' + next.title;
+  // from. A book without one is keyed by a fingerprint of its title and reading order (the spine's files),
+  // which differs between books even when their titles match, and survives metadata edits (a new author,
+  // date or cover in Calibre) that leave the chapters alone.
+  const stableKey = 'spine:pos:opf:' + fingerprint(JSON.stringify([next.title, spine.map(s => s.href)]));
+  next.key = uid ? 'spine:pos:' + uid : stableKey;
+  // Positions under earlier keys are moved over once and the old key removed: the fingerprint of the
+  // whole package file and the title (earlier versions), or, for a book that has since been given an
+  // identifier, its fingerprint key.
+  next.legacyKeys = uid ? [stableKey] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
   await startBook(next);
 }
 // Make a prepared book the current one: show its metadata and contents and open it where the reader left off.
@@ -1237,7 +1243,12 @@ async function startBook(next){
   if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, comic (.cbz), text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
   else hideNotice();
 
-  const saved = store.get(book.key) ?? (book.legacyKey ? store.get(book.legacyKey) : null);
+  let saved = store.get(book.key);
+  for (const k of saved ? [] : book.legacyKeys || []) {
+    if (k === book.key || (saved = store.get(k)) == null) continue;
+    store.set(book.key, saved); store.del(k);
+    break;
+  }
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
 }
@@ -1858,7 +1869,7 @@ function renderMeta(){
     ...(book.format
       ? [['Format', book.format], ...(book.comic ? [['Pages', plural(book.pageCount, 'page')]] : []), ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
       : [['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
-         ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid || 'none (the position is kept by the package file)']])
+         ['Package', book.opfPath], ['Showing', '', 'curFile'], ['ID', book.uid || 'none (the position is kept by the title and chapter files)']])
   ].filter(([, v, id]) => v || id);
   $('#infoList').replaceChildren(...rows.flatMap(([k, v, id]) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');

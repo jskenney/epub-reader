@@ -90,23 +90,57 @@ test('books without an identifier keep separate positions even with the same tit
   await page.goto(`${h.READER}?book=books/twin-a.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
   await page.keyboard.press('i');
-  assert.match(await page.textContent('#infoSection'), /none \(the position is kept by the package file\)/);
+  assert.match(await page.textContent('#infoSection'), /none \(the position is kept by the title and chapter files\)/);
 });
 
-test('a position saved under the old title key is picked up once (L-13)', async () => {
+// Where the position is saved, once the reader has saved it (T-7: no fixed waits).
+const savedAt = (page, i) => page.waitForFunction(i => Object.entries(localStorage).find(([k, v]) => k.startsWith('spine:pos:') && JSON.parse(v)?.i === i)?.[0], i)
+  .then(hd => hd.jsonValue());
+const posKeys = page => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('spine:pos:')).sort());
+
+test('a position under an older key is moved over once, and the old key removed (L-13, M-10)', async () => {
+  // The title key (the first versions) ...
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/twin-a.epub`, { 'spine:pos:Twin Title': { i: 1, f: 0 } });
   assert.match(await page.textContent('#spinePos'), /spine 2\/3/);
-  const moved = await page.evaluate(() => Object.keys(localStorage).some(k => /^spine:pos:opf:/.test(k)));
-  assert.ok(moved, 'the position is saved under the new key');
+  const keys = await posKeys(page);
+  assert.equal(keys.length, 1, keys.join(' '));
+  assert.match(keys[0], /^spine:pos:opf:/, 'moved to the new key, and the title key removed');
+  // ... so a second book with that title doesn't pick it up too.
+  await page.goto(`${h.READER}?book=books/twin-b.epub`); await h.waitForBook(page);
+  assert.match(await page.textContent('#spinePos'), /spine 1\/2/);
+  // The fingerprint of the whole package file (the previous version).
+  const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const fingerprint = new Function(`${src.slice(src.indexOf('function fingerprint('), src.indexOf('const isExternal'))}; return fingerprint;`)();
+  const opf = require('node:child_process').execFileSync('unzip', ['-p', path.join(__dirname, 'site', 'reader', 'books', 'twin-a.epub'), 'OEBPS/content.opf'], { encoding: 'utf8' });
+  const page2 = await h.newPage();
+  await h.openReader(page2, `${h.READER}?book=books/twin-a.epub`, { [`spine:pos:opf:${fingerprint(opf)}`]: { i: 2, f: 0 } });
+  assert.match(await page2.textContent('#spinePos'), /spine 3\/3/);
+  const keys2 = await posKeys(page2);
+  assert.equal(keys2.length, 1, keys2.join(' '));
+  assert.notEqual(keys2[0], `spine:pos:opf:${fingerprint(opf)}`);
+});
+
+test("a book without an identifier keeps its position after a metadata edit, or after being given one (M-10)", async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/twin-a.epub`);
+  await page.click('#tocList a >> nth=2');
+  const key = await savedAt(page, 2);
+  // A new author, a date and a cover: same title and chapters, so the same key.
+  await page.goto(`${h.READER}?book=books/twin-a-edited.epub`); await h.waitForBook(page);
+  assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
+  assert.deepEqual(await posKeys(page), [key]);
+  // Given an identifier: the position moves to it.
+  await page.goto(`${h.READER}?book=books/twin-a-uid.epub`); await h.waitForBook(page);
+  assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
+  assert.deepEqual(await posKeys(page), ['spine:pos:urn:twin-a-given']);
 });
 
 test('books with an identifier still use it, so they resume wherever they are opened from (L-13)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
   await page.click('#tocList a >> nth=1');
-  await page.waitForTimeout(500);
-  assert.ok(await page.evaluate(() => localStorage.getItem('spine:pos:urn:long') !== null));
+  assert.equal(await savedAt(page, 1), 'spine:pos:urn:long');
   await page.goto(`${h.READER}?book=books/shelf-only.epub`); await h.waitForBook(page);   // a copy of the same book
   assert.match(await page.textContent('#spinePos'), /spine 2\/3/);
 });

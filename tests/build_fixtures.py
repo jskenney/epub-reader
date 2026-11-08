@@ -225,6 +225,23 @@ def main():
     # Two different books with the same title and no identifier (REVIEW.md L-13).
     for name, n in (("twin-a", 3), ("twin-b", 2)):
         epub(books / f"{name}.epub", "Twin Title", [(f"c{i}.xhtml", f"{name} {i}", f"<h1>{name} part {i}</h1>" + paragraphs(name, 2)) for i in range(1, n + 1)], uid=None)
+    # Twin A after a metadata edit (new author, a date, a cover), and after being given an identifier (M-10).
+    def edited(src, dst, change, extra=None):
+        with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+            for i in zin.infolist():
+                data = zin.read(i)
+                if i.filename == "OEBPS/content.opf":
+                    data = change(data.decode()).encode()
+                zout.writestr(i, data)
+            for k, v in (extra or {}).items():
+                zout.writestr(k, v)
+    edited(books / "twin-a.epub", books / "twin-a-edited.epub",
+           lambda o: o.replace("<dc:creator>Test Author</dc:creator>", "<dc:creator>Another Author</dc:creator><dc:date>2020-01-01</dc:date>")
+                      .replace("</manifest>", '<item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest>'),
+           {"OEBPS/cover.png": png(30, 40, (10, 90, 160))})
+    edited(books / "twin-a.epub", books / "twin-a-uid.epub",
+           lambda o: o.replace('version="3.0">', 'version="3.0" unique-identifier="uid">')
+                      .replace('<dc:title>', '<dc:identifier id="uid">urn:twin-a-given</dc:identifier><dc:title>'))
     shutil.copy(books / "long.epub", shelf / "shelf-only.epub")
     shutil.copy(books / "long.epub", books / "50%off.epub")   # a "%" in the name (REVIEW.md M-1)
     with zipfile.ZipFile(books / "long.epub") as z:
