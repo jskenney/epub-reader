@@ -26,6 +26,9 @@ by reading the code only.
 - **Round 6** (`23100cb` to `cd29fca`) added E-13 and E-14 and fixed L-35, L-36 and L-37. No independent review
   was run for this round.
 
+L-18 (the TTS server's ports being open to the network) was removed: it belongs to the TTS server's
+repository, not the reader. Its ID isn't reused.
+
 **Tests.** All 90 tests pass. Five more need `SLOW=1` (the real Kokoro and Pocket TTS models) or `NETWORK=1`
 (the CDNs). The real-model tests passed in this session, after a broken pattern in the Kokoro worker was
 caught and fixed. The `NETWORK=1` tests could not be run here, because this machine has no internet access
@@ -36,7 +39,7 @@ and failed there. The suite now also covers:
 - The CDN version of the reader policy, checked offline by answering CDN requests with local copies.
 - `lazyZip` run in Node on archives built in memory.
 
-**Labels.** Each item has an ID you can ask for by name (for example, "fix L-18 and T-11").
+**Labels.** Each item has an ID you can ask for by name (for example, "fix T-11").
 
 | Prefix | Meaning |
 |---|---|
@@ -50,26 +53,15 @@ and failed there. The suite now also covers:
 
 ## Summary
 
-No critical, high or medium items are open. One low item is open, L-18, which is in the server repository.
+No critical, high, medium or low items are open.
 T-11 is about tests that only the new weekly workflow runs, and that workflow hasn't run yet.
 
 ## Open items
 
 | ID | Title | Area |
 |---|---|---|
-| [L-18](#l-18-tts-server-ports-are-open-to-the-network) | TTS server ports are open to the network (server repo) | Security |
 | [T-11](#t-11-the-network-and-model-tests-only-run-weekly) | The network and model tests only run weekly | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel) | Enhancements | — |
-
-## Low
-
-### L-18. TTS server ports are open to the network
-
-*In jskenney/epub-reader-tts-server.* Breeze (port 7860) and the studio (7861) listen on all interfaces, by
-choice. Anyone who can reach those ports can use the GPU without a password. The studio also lets them
-delete voices and upload files of up to 1 GB.
-
-**Fix:** a firewall rule that allows only the proxy host.
 
 ## Tests
 
@@ -125,7 +117,7 @@ saved-audio limit, remote content, shortcuts and so on.
 ## Suggested order
 
 1. **T-11:** run the slow workflow once by hand (Actions → Slow tests → Run workflow).
-2. **L-18,** in the server repository, and the enhancements, as wanted.
+2. The enhancements, as wanted.
 
 ## Resolved
 
