@@ -63,6 +63,7 @@ fetch() {
   css=$(curl -fsSL --retry 3 -A "$UA" "$url")
   for font in $(printf '%s\n' "$css" | grep -o 'https://fonts\.gstatic\.com/[^)]*' | sort -u); do
     file=files/${font#https://fonts.gstatic.com/s/}
+    case "/$file/" in */../*|*/./*) echo "  $font: a path that leaves fonts/files/ (refused)" >&2; exit 1 ;; esac
     out=$DEST/$file
     if [ -n "$KNOWN" ] && ! printf '%s\n' "$KNOWN" | grep -qxF "$file"; then
       echo "  $file isn't in fonts/SHA256SUMS: Google serves a different file now (--strict: stopping)" >&2; exit 1

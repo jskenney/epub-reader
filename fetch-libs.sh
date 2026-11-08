@@ -37,8 +37,15 @@ get() {   # get URL PATH-UNDER-DEST
   if [ -s "$out" ]; then echo "  have   $2"; return; fi
   mkdir -p "$(dirname "$out")"
   echo "  fetch  $2"
-  curl -fL --retry 3 --retry-delay 2 -C - --progress-bar -o "$out.part" "$url"
-  mv "$out.part" "$out"
+  # A partial download is resumed only if it came from the same address (after a version change it starts
+  # afresh), and from the beginning if the server can't resume (curl's exit code 33).
+  if [ -f "$out.part" ] && [ "$(cat "$out.part.url" 2>/dev/null)" != "$url" ]; then rm -f "$out.part"; fi
+  printf '%s\n' "$url" > "$out.part.url"
+  local rc=0
+  curl -fL --retry 3 --retry-delay 2 -C - --progress-bar -o "$out.part" "$url" || rc=$?
+  if [ "$rc" = 33 ]; then rm -f "$out.part"; rc=0; curl -fL --retry 3 --retry-delay 2 --progress-bar -o "$out.part" "$url" || rc=$?; fi
+  [ "$rc" = 0 ] || { echo "  failed $2 (curl exit $rc; run the script again to resume)" >&2; exit 1; }
+  mv "$out.part" "$out"; rm -f "$out.part.url"
 }
 
 # Check every downloaded file against the pinned SHA-256 list in checksums/ (committed with this script).
@@ -57,7 +64,7 @@ verify() {
   done < "$sums"
   while IFS= read -r path; do   # lines are "<64 hex digits>  <path>": compare whole paths
     awk -v p="$path" 'substr($0, 67) == p { found = 1 } END { exit !found }' "$sums" || echo "  note   $path has no pinned checksum"
-  done < <(find "$DEST" -type f ! -name NOTICE.txt ! -name '*.part' | sort)
+  done < <(find "$DEST" -type f ! -name NOTICE.txt ! -name '*.part' ! -name '*.part.url' | sort)
   if [ "$bad" = 1 ]; then echo "Some files didn't match their checksums and were removed; run this script again." >&2; exit 1; fi
   echo "All files match their checksums."
 }

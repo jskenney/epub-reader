@@ -1,8 +1,12 @@
 # Serving the reader with nginx: put these inside the server { } block of your site. Assumes the reader is at
 # /reader/ (index.html plus the folders the fetch scripts create); change the path to match. The voice server
 # paths (/tts/, /tts-voices/, /tts-studio/) are in jskenney/epub-reader-tts-server's nginx.conf.example.
+# Folders with their own link to index.html (see "Per-folder settings" in the README) need the same headers:
+# repeat this block for each, or put them under /reader/.
 
-location /reader/ {
+# ^~: regular-expression locations elsewhere in the server (for example one for \.(js|css|html)$) don't take
+# over these files, which would drop the headers below.
+location ^~ /reader/ {
     # Content-Security-Policy for the reader page (and, since the book frame inherits it, for book pages too):
     # code, styles, fonts and data only from this site, workers from blob: (the voices), WebAssembly allowed
     # (the voices), no plugins, nothing may frame the reader. This one is for a fully self-hosted reader
@@ -21,15 +25,15 @@ location /reader/ {
 
     # Types the reader needs that older nginx versions don't know. With nosniff above, a module script (.mjs)
     # served with the wrong type is refused, and WebAssembly needs application/wasm to compile while loading.
-    location ~* \.mjs$  { types { } default_type text/javascript;  expires 30d; }
-    location ~* \.wasm$ { types { } default_type application/wasm; expires 30d; }
+    location ~* \.mjs$  { types { } default_type text/javascript; }
+    location ~* \.wasm$ { types { } default_type application/wasm; }
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
     location ~* \.md$   { types { } default_type "text/markdown; charset=utf-8"; }
 
-    # Self-hosted libraries, fonts and voices don't change at a given version: let browsers keep them. (After
-    # an upgrade, people may need a hard reload once.) index.html, reader-config.json and default.epub are left
-    # to the normal checks, so changes show up at once.
-    location ~ ^/reader/(libs|fonts|kokoro|pocket)/ { expires 30d; }
+    # Browsers keep every file but check it is still current each time (an unchanged file is a short 304 reply),
+    # so a new index.html, config, library or model is used at once. (Keeping libraries for days without checking
+    # would let an old copy meet a new index.html, whose integrity hash then refuses it.)
+    add_header Cache-Control "no-cache" always;
 
     # Compress text and WebAssembly (the voice runtimes shrink to about a third). Model files (.onnx, .bin)
     # barely compress and are served as they are. nginx answers range requests for static files by default,
@@ -39,7 +43,7 @@ location /reader/ {
 }
 
 # Optional: books under /bookshelf/ (see BOOKSHELF in the README) with the same types.
-location /bookshelf/ {
+location ^~ /bookshelf/ {
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
     location ~* \.md$ { types { } default_type "text/markdown; charset=utf-8"; }
 }

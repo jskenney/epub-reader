@@ -313,7 +313,9 @@ To upgrade one:
 4. For a new model revision, check that every voice and language still works (the French Pocket TTS bundle
    once had no voices at a revision), and update `POCKET_LANGS` sizes if the files changed.
 5. Fonts aren't pinned: rerun `./fetch-fonts.sh` after changing `FONTS` in `index.html`.
-6. Run the tests (`tests/run.sh`, and `SLOW=1 tests/run.sh` for the voice models), and commit
+6. If your server caches `libs/`, `kokoro/` or `pocket/` for long without checking (nginx.conf.example
+   doesn't), returning readers need a hard reload once, or the old library fails the new hash.
+7. Run the tests (`tests/run.sh`, and `SLOW=1 tests/run.sh` for the voice models), and commit
    `index.html`, the script and `checksums/` together.
 
 ## Self-hosting Pocket TTS
@@ -400,8 +402,15 @@ complete nginx setup for the reader at `/reader/`:
     works.
 - **The types the reader needs:** `.mjs` as `text/javascript` (with `nosniff`,
   a wrong type is refused) and `.wasm` as `application/wasm`.
-- **Long caching** for `libs/`, `fonts/`, `kokoro/` and `pocket/`, and gzip for
-  text and WebAssembly.
+- **Caching that checks first** (`Cache-Control: no-cache`): browsers keep every
+  file but ask whether it changed (an unchanged file is a short 304), so a new
+  `index.html`, library or model is used at once. Long caching without checks
+  would let an old library meet a new `index.html`, whose integrity hash then
+  refuses it.
+- **`location ^~ /reader/`,** so regular-expression locations elsewhere in your
+  server can't take over the reader's files (and drop these headers). Folders
+  with their own link to `index.html` need the same block.
+- gzip for text and WebAssembly.
 
 For Caddy, the same policy goes in a `header` directive:
 

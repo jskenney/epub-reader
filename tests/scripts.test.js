@@ -87,6 +87,39 @@ test('downloads are checked, and the check fails closed (L-3, L-4)', { skip: !li
   fs.rmSync(bin, { recursive: true, force: true });
 });
 
+test("fetch scripts: a stale partial download from another address starts afresh; a server that can't resume restarts it (L-58)", { skip: !libsFetched && 'libs/ not fetched' }, () => {
+  const dir = sandbox();
+  fs.rmSync(path.join(dir, 'libs', 'marked.min.js'));
+  fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part'), 'stale bytes from an older version');
+  fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part.url'), 'https://cdnjs.cloudflare.com/ajax/libs/marked/1.0.0/marked.min.js\n');
+  // A curl that logs its calls, can't resume (exit 33, as for a server ignoring ranges), and otherwise "downloads"
+  // the real file (appending to what is there, as -C - would).
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-bin-')), log = path.join(bin, 'log');
+  stub(bin, 'curl', `#!/bin/sh
+echo "$*" >> "${log}"
+out=""; prev=""; for a; do [ "$prev" = "-o" ] && out=$a; prev=$a; done
+case " $* " in *" -C "*) [ -s "$out" ] && exit 33 ;; esac
+cat "${REPO}/\${out%.part}" >> "$out"
+`);
+  const r = run(dir, 'fetch-libs.sh', [], { PATH: `${bin}:${process.env.PATH}` });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /All files match their checksums/);
+  assert.equal(fs.existsSync(path.join(dir, 'libs', 'marked.min.js.part.url')), false);
+  const calls = fs.readFileSync(log, 'utf8').split('\n').filter(l => l.includes('marked.min.js'));
+  assert.equal(calls.length, 1, 'the stale partial file (another address) was dropped, so one fresh download: ' + calls.join(' | '));
+  // A partial file from the same address, on a server that can't resume: started again from the beginning.
+  fs.rmSync(path.join(dir, 'libs', 'marked.min.js'));
+  fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part'), 'partial');
+  fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part.url'), 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js\n');
+  fs.writeFileSync(log, '');
+  const r2 = run(dir, 'fetch-libs.sh', [], { PATH: `${bin}:${process.env.PATH}` });
+  assert.equal(r2.code, 0, r2.out);
+  const calls2 = fs.readFileSync(log, 'utf8').split('\n').filter(l => l.includes('marked.min.js'));
+  assert.deepEqual(calls2.map(c => / -C /.test(` ${c} `)), [true, false], calls2.join(' | '));
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(bin, { recursive: true, force: true });
+});
+
 const fontsFetched = fs.existsSync(path.join(REPO, 'fonts', 'SHA256SUMS'));
 test('fetch-fonts.sh --strict fails on a changed file or a font file not in the list, replacing nothing (L-6)', { skip: !fontsFetched && 'fonts/ not fetched' }, () => {
   const dir = sandbox();
