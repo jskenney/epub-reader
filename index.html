@@ -3188,7 +3188,9 @@ async function svLoad(){
     const { r, json } = res;
     if (!r.ok) throw new Error(r.status === 404 ? 'no voices yet (create one in the voice studio at /tts-studio/)' : `the voice list answered ${r.status}`);
     const list = json.voices || [];
-    sv.voices = list.filter(v => v.id && (v.ref_audio ? v.ref_text : v.instruction));
+    // A voice whose clip is outside the voices folder (another site, or "../" out of it) is left out.
+    sv.voices = list.filter(v => v.id && (v.ref_audio ? v.ref_text && svClipURL(v) : v.instruction));
+    for (const v of list) if (v.ref_audio && !svClipURL(v)) console.warn(`Voice ${v.id}: its clip ${v.ref_audio} isn't in the voices folder, so it is left out`);
     if (!sv.voices.length) throw new Error('no voices yet (create one in the voice studio at /tts-studio/)');
     sv.state = 'ready';
   } catch (e) { sv.state = 'error'; sv.error = e.message; }
@@ -3196,12 +3198,27 @@ async function svLoad(){
 }
 // The model reads "(sigh)" and "[laugh]" as performed vocal events; a book's parentheses should be read.
 const svText = t => t.replace(/\s*[(\[]\s*/g, ' — ').replace(/\s*[)\]]\s*/g, ' — ').replace(/(\s—)+/g, ' —').replace(/^\s*—\s*|\s*—\s*$/g, '').trim();
+// A voice clip's address, only if it is inside the voices folder (URL() has already resolved "..", "%2e%2e").
+function svClipURL(v){
+  try {
+    const u = new URL(v.ref_audio, TTS_SERVER.voices);
+    return u.href.startsWith(TTS_SERVER.voices) && !/%2f|%5c/i.test(u.pathname) ? u.href : null;
+  } catch { return null; }
+}
 async function svRef(v){
-  if (!sv.refs.has(v.ref_audio)) sv.refs.set(v.ref_audio, fetch(new URL(v.ref_audio, TTS_SERVER.voices)).then(r => {
+  const url = svClipURL(v);
+  if (!url) throw new Error(`the voice clip ${v.ref_audio} isn't in the voices folder`);
+  if (!sv.refs.has(v.ref_audio)) sv.refs.set(v.ref_audio, fetch(url).then(r => {
     if (!r.ok) throw new Error(`the voice clip ${v.ref_audio} answered ${r.status}`);
     return r.blob();
   }));
   return sv.refs.get(v.ref_audio).catch(e => { sv.refs.delete(v.ref_audio); throw e; });
+}
+// What saved audio is keyed by: only what changes the sound (with the same defaults svGenerate sends), so
+// reordering or adding other fields in voices.json (a name, a note) keeps it.
+function svVoiceHash(){
+  const v = svVoice() || {};
+  return hashText(JSON.stringify([v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.instruction || '', Number(v.cfg_scale ?? 1), Number(v.seed ?? 42)]));
 }
 function svGenerate(text, opts = {}){
   const run = async () => {
@@ -3278,7 +3295,7 @@ const NEURAL = {
     agreed: () => !!store.get(`spine:agreed:pocket:${pocketLang()}:${FULL_PRECISION ? 'fp32' : 'int8'}`),
     generate: pkGenerate, key: () => `pocket|${FULL_PRECISION ? 'fp32' : 'int8'}|${pk.lang}|${pkVoice()}` },
   server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
-    generate: svGenerate, key: () => `server|${svVoice()?.id}|${hashText(JSON.stringify(svVoice() || {}))}` }
+    generate: svGenerate, key: () => `server|${svVoice()?.id}|${svVoiceHash()}` }
 };
 function neuralEngine(){
   if (tts.engine === 'kokoro' && kokoroFits()) return NEURAL.kokoro;

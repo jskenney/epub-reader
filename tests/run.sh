@@ -6,7 +6,7 @@
 #   tests/run.sh tests/urls.test.js one file
 #
 # Needs Python 3, Node 18+ and Playwright with Chromium (cd tests && npm install && npx playwright install chromium).
-# Everything runs against local servers on ports 8790-8792; the browser is blocked from reaching other sites.
+# Everything runs against local servers on ports 8790-8793; the browser is blocked from reaching other sites.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

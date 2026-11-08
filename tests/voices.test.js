@@ -81,6 +81,47 @@ test('finished audio is saved: after a reload the same passage plays without ask
   assert.ok(first < 2000, `first word after ${first} ms`);
 });
 
+test('server voices: clips outside the voices folder are left out (L-12)', async () => {
+  const page = await h.newPage();
+  await h.clearRemoteLog();
+  await h.openReader(page, LONG, server);
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(page)));
+  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator']);
+  assert.deepEqual(await h.remoteLog(), []);
+});
+
+test('saved server-voice audio survives reordered or added fields in voices.json, not a changed seed (L-15)', async () => {
+  const file = path.join(__dirname, 'site', 'tts-voices', 'voices.json');
+  const original = fs.readFileSync(file, 'utf8');
+  const edit = change => { const j = JSON.parse(original); j.voices[0] = change(j.voices[0]); fs.writeFileSync(file, JSON.stringify(j)); };
+  const page = await h.newPage();
+  try {
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, server);
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    await h.waitFor(async () => (await h.breezeLog()).filter(r => !r.aborted).length >= 2, 20000);
+    await page.waitForTimeout(1000);
+    const first = (await h.breezeLog()).filter(r => !r.aborted)[0].text;
+    const replay = async () => {
+      await page.reload();
+      await h.waitForBook(page);
+      await h.clearBreezeLog();
+      await page.keyboard.press('r');
+      assert.ok(await h.waitFor(() => h.spokenWord(page), 10000));
+      await page.waitForTimeout(500);
+      return (await h.breezeLog()).map(r => r.text).includes(first);
+    };
+    edit(v => ({ note: 'added later', ...Object.fromEntries(Object.entries(v).reverse()) }));
+    assert.equal(await replay(), false, 'reordered fields: the first passage should come from saved audio');
+    edit(v => ({ ...v, seed: 7 }));
+    assert.equal(await replay(), true, 'a new seed: the first passage should be made again');
+  } finally {
+    fs.writeFileSync(file, original);
+  }
+});
+
 const slow = !process.env.SLOW && 'set SLOW=1 to run (loads real models on the CPU)';
 for (const [engine, folder] of [['kokoro', 'kokoro'], ['pocket', 'pocket']]) {
   const missing = !fs.existsSync(path.join(__dirname, '..', folder)) && `${folder}/ not fetched`;

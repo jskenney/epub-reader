@@ -295,7 +295,12 @@ def main():
     # A server voice for the mock Breeze API.
     wav(SITE / "tts-voices" / "narrator.wav", 2.0)
     (SITE / "tts-voices" / "voices.json").write_text(json.dumps({"voices": [
-        {"id": "narrator", "name": "Test narrator", "ref_audio": "narrator.wav", "ref_text": "A test clip.", "seed": 42, "cfg_scale": 1.0}]}))
+        {"id": "narrator", "name": "Test narrator", "ref_audio": "narrator.wav", "ref_text": "A test clip.", "seed": 42, "cfg_scale": 1.0},
+        # Clips outside the voices folder (REVIEW.md L-12): left out of the list.
+        {"id": "elsewhere", "name": "Other site", "ref_audio": f"{REMOTE}/clip.wav", "ref_text": "x"},
+        {"id": "up", "name": "Up a folder", "ref_audio": "../reader/books/clip.wav", "ref_text": "x"},
+        {"id": "encoded", "name": "Encoded dots", "ref_audio": "%2e%2e/reader/clip.wav", "ref_text": "x"},
+        {"id": "rooted", "name": "From the root", "ref_audio": "/clip.wav", "ref_text": "x"}]}))
     print(f"Built {SITE}")
 
 
