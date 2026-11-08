@@ -1385,9 +1385,11 @@ const cssNameChar = c => cssNameStart(c) || (c >= '0' && c <= '9') || c === '-';
 // Tokens as { t: type, s: start, e: end, v: value }. Types: ws, comment, string, bad-string, url, bad-url,
 // function, ident, at, hash, number, ( ) [ ] { } , : ; and delim. Values of names, strings and urls are
 // decoded; function and at-rule names are lower-cased.
-function cssTokens(css){
+// The text as the browser's tokenizer sees it (CSS Syntax 3.3): CR LF, CR and FF are newlines, NUL is U+FFFD.
+const cssPreprocess = css => css.replace(/\r\n?|\f/g, '\n').replace(/\0/g, '\uFFFD');
+function cssTokens(css){   // css: preprocessed
   const n = css.length, out = [];
-  const validEscape = j => css[j] === '\\' && j + 1 < n && css[j + 1] !== '\n' && css[j + 1] !== '\r' && css[j + 1] !== '\f';
+  const validEscape = j => css[j] === '\\' && css[j + 1] !== '\n';   // (at the very end too: it stands for U+FFFD)
   const escape = j => {   // j: just after the backslash; returns [text, next]
     if (!cssHex(css[j])) return [css[j] ?? '�', j + 1];
     let k = j;
@@ -1405,20 +1407,20 @@ function cssTokens(css){
       else return [v, j];
     }
   };
-  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
+  const NUM = /[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?/y;   // ("1." is the number 1 and a ".")
   const numberStarts = j => { NUM.lastIndex = j; return NUM.test(css) && !(css[j] === '.' && !/\d/.test(css[j + 1] || '')); };
   let i = 0;
   while (i < n) {
     const s = i, c = css[i];
     const push = (t, v) => out.push({ t, s, e: i, v });
-    if (c === '/' && css[i + 1] === '*') { const e = css.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; push('comment'); }
+    if (c === '/' && css[i + 1] === '*') { const e = css.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; push('comment'); out.at(-1).open = e < 0; }
     else if (cssWs(c)) { while (i < n && cssWs(css[i])) i++; push('ws'); }
     else if (c === '"' || c === "'") {
-      let v = '', t = 'string';
+      let v = '', t = 'string', open = true;
       for (i++; ; ) {
         if (i >= n) break;
         const d = css[i];
-        if (d === c) { i++; break; }
+        if (d === c) { i++; open = false; break; }
         if (d === '\n' || d === '\r' || d === '\f') { t = 'bad-string'; break; }   // (the newline isn't part of it)
         if (d === '\\') {
           if (i + 1 >= n) { i++; continue; }
@@ -1428,7 +1430,7 @@ function cssTokens(css){
         }
         v += d; i++;
       }
-      push(t, v);
+      push(t, v); out.at(-1).open = open && t === 'string';   // (ended by the end of the sheet)
     }
     else if (c === '#' && (cssNameChar(css[i + 1]) || validEscape(i + 1))) { const [v, k] = name(i + 1); i = k; push('hash', v); }
     else if ('()[]{},:;'.includes(c)) { i++; push(c); }
@@ -1448,14 +1450,14 @@ function cssTokens(css){
       while (cssWs(css[j])) j++;
       if (v.toLowerCase() !== 'url' || css[j] === '"' || css[j] === "'") { push('function', v.toLowerCase()); continue; }
       // An unquoted url( ... ): its contents are the address, up to ")".
-      let u = '', t = 'url';
+      let u = '', t = 'url', open = true;
       for (i = j; ; ) {
         if (i >= n) break;
         const d = css[i];
-        if (d === ')') { i++; break; }
+        if (d === ')') { i++; open = false; break; }
         if (cssWs(d)) {
           while (cssWs(css[i])) i++;
-          if (i >= n || css[i] === ')') { if (i < n) i++; break; }
+          if (i >= n || css[i] === ')') { if (i < n) { i++; open = false; } break; }
           t = 'bad-url'; continue;
         }
         if (t === 'bad-url') { i += validEscape(i) ? 2 : 1; continue; }   // skipped to ")" (escapes don't end it)
@@ -1466,7 +1468,7 @@ function cssTokens(css){
         }
         u += d; i++;
       }
-      push(t, t === 'url' ? u : undefined);
+      push(t, t === 'url' ? u : undefined); out.at(-1).open = open;
     }
     else { i++; push('delim'); }
   }
@@ -1489,7 +1491,8 @@ function cssRefs(css){
     else if (tk.t === 'function') {
       if (tk.v === 'url' || tk.v === 'src') {
         const m = next(k + 1), q = next(m + 1);
-        if (toks[m]?.t === 'string' && toks[q]?.t === ')') { refs.push({ s: tk.s, e: toks[q].e, ref: toks[m].v, kind: 'image' }); k = q; continue; }
+        // (a missing ")" at the end of the sheet is fine: the browser closes it there)
+        if (toks[m]?.t === 'string' && (toks[q]?.t === ')' || q >= toks.length)) { refs.push({ s: tk.s, e: toks[q]?.e ?? css.length, ref: toks[m].v, kind: 'image' }); k = q; continue; }
       }
       fns.push(tk.v);
     }
@@ -1502,7 +1505,7 @@ function cssRefs(css){
       // The prelude, to ";" or the end; a "{" makes it a block rule, which @import and @namespace aren't.
       let m = k + 1;
       while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++;
-      if (toks[m]?.t === '{') continue;
+      if (toks[m]?.t === '{') { k = m - 1; continue; }   // (and on from there, not from the next token)
       if (tk.v === 'import') {
         const a = next(k + 1), at = toks[a];
         let ref = at?.t === 'string' || at?.t === 'url' ? at.v : null;
@@ -1514,7 +1517,21 @@ function cssRefs(css){
   }
   return refs;
 }
-async function rewriteCss(css, cssPath, depth = 0){
+// The end of a stylesheet closes whatever is open in it (a comment, a string, a url, brackets and blocks):
+// written out, so an imported sheet pasted into another can't run on into the rest of it.
+function cssCloseAtEnd(css){
+  const toks = cssTokens(css), last = toks.at(-1), open = [];
+  let tail = '';
+  // (After a final "\" a space first, so the closer isn't escaped.)
+  if (last?.open) tail += (last.t !== 'comment' && css.endsWith('\\') ? ' ' : '') + (last.t === 'comment' ? '*/' : last.t === 'string' ? css[last.s] : ')');
+  for (const tk of toks) {
+    if (tk.t === 'function' || tk.t === '(') open.push(')'); else if (tk.t === '[') open.push(']'); else if (tk.t === '{') open.push('}');
+    else if (tk.t === ')' || tk.t === ']' || tk.t === '}') { if (open.at(-1) === tk.t) open.pop(); }
+  }
+  return css + tail + open.reverse().join('');
+}
+async function rewriteCss(css, cssPath, depth = 0, again = true){
+  css = cssPreprocess(css);
   const refs = cssRefs(css);
   const jobs = new Map();   // local files, each fetched once
   for (const r of refs) {
@@ -1526,13 +1543,14 @@ async function rewriteCss(css, cssPath, depth = 0){
   const done = new Map();
   for (const [k, v] of jobs) done.set(k, await v);
   const parts = [];
-  let at = 0;
+  let at = 0, inlined = false;
   for (const r of refs) {
     let text = null;   // null: leave it as written
     if (r.kind === 'import') {
       if (r.local) {
         const p = resolve(cssPath, r.clean), t = depth < 4 ? await readText(book.zip, p) : null;
-        text = t ? await rewriteCss(t, p, depth + 1) : '';
+        text = t ? cssCloseAtEnd(await rewriteCss(t, p, depth + 1)) + '\n' : '';
+        inlined = true;
       } else if (!ALLOW_REMOTE_CONTENT || !isRemote(r.clean)) text = '';   // another site (or a data: sheet): dropped
     } else if (r.local) {
       const u = done.get(r.clean);
@@ -1543,7 +1561,8 @@ async function rewriteCss(css, cssPath, depth = 0){
     at = r.e;
   }
   parts.push(css.slice(at));
-  return parts.join('');
+  // Sheets pasted together are read as one: read the result again, in case the joins made new addresses.
+  return inlined && again ? rewriteCss(parts.join(''), cssPath, depth, false) : parts.join('');
 }
 
 /* ---------- building a page ---------- */
