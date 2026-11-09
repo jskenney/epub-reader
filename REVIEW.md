@@ -82,14 +82,14 @@ the interface; the scripts, tests and documents), of `08d645a`. Fixed in `0def7a
 - **Medium:** M-43 to M-51. Two were holes in the cleaner (M-43, M-44) that the book page's own policy still
   held: nothing reached another site.
 - **Low, tests, documentation:** L-130 to L-148, T-22 to T-26, D-8 and D-9.
-L-138 and L-149 are open (one unverified in Firefox, one rare). H-12 and two of the lows were checked by reading.
+L-138 and L-149 were fixed after it, with T-14, in `2baae6a`. H-12 and two of the lows were checked by reading.
 L-18 (a TTS server issue) was removed in round 6 as belonging to that server's repository. The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 162 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 167 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -119,8 +119,8 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 ## Summary
 
 No critical, high or medium items are open. The open items are:
-- **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report), L-138 and L-149.
-- **Tests:** T-11 (the weekly workflow hasn't run yet), T-14, T-16 and T-20.
+- **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
+- **Tests:** T-11 (the weekly workflow hasn't run yet), T-16 and T-20 (in part).
 - **Enhancements:** E-1 to E-9, E-11 and E-15.
 
 ## Open items
@@ -128,10 +128,7 @@ No critical, high or medium items are open. The open items are:
 | ID | Title | Kind |
 |---|---|---|
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
-| [L-138](#l-138-mathml-links-in-firefox) | MathML links in Firefox | Low |
-| [L-149](#l-149-archives-with-data-before-them) | Archives with data before them | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
-| [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-round-11-test-gaps) | Round 11 test gaps | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
@@ -143,17 +140,6 @@ No critical, high or medium items are open. The open items are:
 *Read.* AAC encoders put 1024 to 2112 samples of delay at the start, and the file doesn't mark them, so each file
 starts with 20 to 45 ms of silence and chapter marks fall that much early. Harmless for speech; WebCodecs
 doesn't report the delay, so an `elst` would have to guess it.
-
-### L-138. MathML links in Firefox
-
-*Unverified* (no Firefox here). Firefox may still turn an `href` on MathML elements into a link, and the reader's
-link handling covers only `a` and `area`, so a book might navigate its own frame there. **Fix:** remove `href`
-from MathML elements in the sanitizer.
-
-### L-149. Archives with data before them
-
-*Read.* The in-place ZIP reader doesn't allow for data before the archive (self-extracting archives), which JSZip
-does; such a book is downloaded whole instead, or fails. Rare for EPUBs.
 
 ## Tests
 
@@ -168,13 +154,6 @@ Updated.
 
 **Fix:** run it once by hand (Actions → Slow tests → Run workflow).
 
-### T-14. The hostile-book tests only run behind the reader's own policy
-
-*Read; checked by hand.* `security.test.js` runs on the port that sends nginx.conf.example's reader policy,
-which alone blocks every request to the other sites, so the "nothing reached another site" checks can't fail.
-The common setup (any static server, no such header) isn't tested. The reviewer ran the hostile books without
-the reader policy and nothing leaked. **Fix:** also run them on a port without the policy.
-
 ### T-16. Coverage gaps
 
 *Read.* Not tested:
@@ -186,15 +165,11 @@ the reader policy and nothing leaked. **Fix:** also run them on a port without t
 
 ### T-20. Round 11 test gaps
 
-*Read.*
-- Passing over picture pages and then reading a later text chapter isn't tested (it works when tried by hand).
-- The M-23 test checks the page shown, not the saved position.
-- The M-27 test names port 8790; the T-18 checks run right after loading, so a refused request logged later
-  is missed.
-- L-75 (giving up on a stalled stream) and L-100 have no test: they would take minutes of waiting, or a setting
-  for tests.
-- Also untested: L-90 (fallback pages keep their pictures), L-91 and L-103 (the range probe), L-93 (narration at
-  the end of the text), L-94 and L-96 (the sleep timer).
+*Read.* Still untested (the rest was covered in round 15):
+- L-75 and L-100 (giving up on a stalled stream): they would take minutes of waiting, or a setting for tests.
+- L-90 (fallback pages keep their pictures), L-91 and L-103 (the range probe), L-93 (narration at the end of the
+  text), L-94 and L-96 (the sleep timer).
+- The T-18 checks run right after loading, so a refused request logged later is missed.
 
 ## Enhancements
 
@@ -457,6 +432,8 @@ From all reviews so far, with the commits that fixed them.
 | L-146 | A one-file export held every chapter's page for its whole length | `ce5efe6` |
 | L-147 | Cancel's blocking confirm() could stall the export's timers | `ce5efe6` |
 | L-148 | `fetch-pocket.sh` checked the languages only after downloading | `ce5efe6` |
+| L-138 | `href` on MathML elements (links in Firefox) | `2baae6a` |
+| L-149 | Archives with data before them weren't read in place | `2baae6a` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -479,6 +456,7 @@ From all reviews so far, with the commits that fixed them.
 | T-24 | The export tests left a timer and download listeners behind (85 s idle, a possible clash) | `ce5efe6` |
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-14 | The hostile-book tests only ran behind the reader's own policy | `2baae6a` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
