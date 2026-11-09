@@ -488,6 +488,9 @@ async function firstBytes(r, n){
 }
 // Is there a real file at url (not an error or "not found" page)? kind 'json' also requires JSON. Only the
 // first bytes are read, so it is cheap even for large files.
+// Every one of a folder's files is there (a download that stopped partway, or files of the other precision,
+// don't count as a self-hosted copy: REVIEW.md M-27).
+async function allReal(base, names){ return (await Promise.all(names.map(n => realFile(base + n, n.endsWith('.json') ? 'json' : 'any')))).every(Boolean); }
 async function realFile(url, kind = 'any'){
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -3584,8 +3587,9 @@ function kProgress(p){
 // Which self-hosted pieces exist (each falls back to its CDN independently).
 async function kLocalFiles(){
   const base = KOKORO.local;
-  const [lib, ort, model] = await Promise.all([realFile(base + 'kokoro.web.js'), realFile(base + 'ort/ort-wasm-simd-threaded.jsep.mjs'),
-    realFile(base + 'model/config.json', 'json')]);
+  const [lib, ort, model] = await Promise.all([realFile(base + 'kokoro.web.js'),
+    allReal(base + 'ort/', ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm']),
+    realFile(base + 'model/config.json', 'json')]);   // (the model's files fall back one by one: preferLocal)
   k.local = lib || ort || model; k.localLib = lib;
   return { lib: lib ? base + 'kokoro.web.js' : KOKORO.lib, ort: ort ? base + 'ort/' : null, modelBase: model ? base + 'model/' : null };
 }
@@ -3706,8 +3710,13 @@ async function pkLoad(){
   const lang = pocketLang();
   if (!lang || pk.state === 'loading' || pkReady()) return;
   pk.state = 'loading'; pk.files = {}; pk.progressText = ''; ttsUpdateBar();
-  const [lib, ort, model] = await Promise.all([realFile(POCKET.local + 'lib/worker.js'), realFile(POCKET.local + 'ort/ort.min.mjs'),
-    realFile(POCKET.local + `model/${lang}/bundle.json`, 'json')]);
+  // Each folder is used from this site only when all its files are there (the model's in the precision in
+  // use), otherwise from its CDN.
+  const q = FULL_PRECISION ? '' : '_int8';
+  const [lib, ort, model] = await Promise.all([allReal(POCKET.local + 'lib/', ['worker.js', 'binary.js', 'tokenizer.js']),
+    allReal(POCKET.local + 'ort/', ['ort.min.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']),
+    allReal(POCKET.local + `model/${lang}/`, ['bundle.json', 'tokenizer.model', 'voices.bin',
+      ...['text_conditioner', 'flow_lm_main', 'flow_lm_flow', 'mimi_decoder'].map(f => f + q + '.onnx')])]);
   pk.local = lib || ort || model;
   if (!ALLOW_CDN && !(lib && ort && model)) {
     pk.state = 'error'; pk.error = 'the self-hosted Pocket TTS files are missing (run fetch-pocket.sh); ALLOW_CDN is off';

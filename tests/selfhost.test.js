@@ -60,3 +60,14 @@ test('Kokoro model files come from the pinned revision', { skip: !fs.existsSync(
   assert.ok(hf, 'the model should be requested from Hugging Face');
   assert.ok(hf.every(u => u.includes('/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/')), hf.join('\n'));
 });
+
+test('a self-hosted Pocket TTS model missing files of the precision in use comes from the CDN; complete folders from this site (M-27)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-pocket-partial/index.html`, { 'spine:ttsEngine': 'pocket' });
+  await page.keyboard.press('r');
+  await page.click('#ttsDownload').catch(() => {});
+  const status = await h.waitFor(async () => { const t = await page.textContent('#ttsStatus'); return /stand-in/.test(t) && t; }, 15000);
+  assert.ok(status, await page.textContent('#ttsStatus'));
+  assert.match(status, /model https:\/\/huggingface\.co\/vlapky\/pocket-tts-onnx\//, 'the model from the CDN');
+  assert.match(status, /ort http:\/\/localhost:8790\/pocket-partial\/pocket\/ort\//, 'the complete runtime folder from this site');
+});

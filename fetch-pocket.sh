@@ -11,7 +11,8 @@
 #
 # Safe to re-run: finished files are skipped and interrupted downloads resume.
 # Every file is checked against checksums/pocket.sha256; any that don't match are removed (run it again).
-# The reader uses whichever of these files exist and falls back to the CDNs for the rest.
+# The reader uses each folder here (lib/, ort/, model/<bundle>/) only when all its files are there, the
+# model's in the precision it uses, and takes the rest from the CDNs.
 set -euo pipefail
 cd "$(dirname "$0")"
 

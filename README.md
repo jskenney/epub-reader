@@ -333,9 +333,12 @@ This fills `./pocket/` with pocket-tts-js 0.1.0 (`lib/`), ONNX Runtime Web
 1.20.0 (`ort/`), the full-precision model bundle and voices for each language
 (`model/<bundle>/`, pinned to a fixed revision of
 `vlapky/pocket-tts-onnx`), and `LICENSES/` with a NOTICE that includes the
-CC BY 4.0 attribution for Kyutai's model. As with Kokoro, each piece falls
-back to the CDN if it's missing, re-runs skip finished files, every file is
-checked against `checksums/pocket.sha256`, and `pocket/` is git-ignored.
+CC BY 4.0 attribution for Kyutai's model. Each folder (`lib/`, `ort/`, a
+language's `model/<bundle>/`) is used from your site only when all its files
+are there (the model's in the precision `FULL_PRECISION` picks), and otherwise
+comes from the CDN, so a download that stopped partway doesn't break the voice.
+Re-runs skip finished files, every file is checked against
+`checksums/pocket.sha256`, and `pocket/` is git-ignored.
 
 French isn't offered: its model bundle at this revision has no built-in
 voices (`voices.bin`), so it can't speak. French books are read by device

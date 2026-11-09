@@ -167,6 +167,22 @@ def main():
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
+    # Self-hosted Pocket TTS with every library and runtime file but only the 8-bit model files (REVIEW.md
+    # M-27): the full-precision model must come from the CDN. The stand-in worker answers "init" with an error
+    # that names the addresses it was given.
+    (SITE / "folder-pocket-partial").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-pocket-partial" / "index.html")
+    (SITE / "folder-pocket-partial" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "VOICE_FILES": "/pocket-partial/"}))
+    pp = SITE / "pocket-partial" / "pocket"
+    for f in ("lib/binary.js", "lib/tokenizer.js", "ort/ort.min.mjs", "ort/ort-wasm-simd-threaded.mjs", "ort/ort-wasm-simd-threaded.wasm"):
+        (pp / f).parent.mkdir(parents=True, exist_ok=True); (pp / f).write_text("// stand-in\n")
+    (pp / "lib/worker.js").write_text("self.onmessage = e => { const m = e.data; self.postMessage({ type: 'error', id: m.id, "
+                                      "error: 'stand-in: model ' + m.payload.modelBaseUrl + ' ort ' + m.payload.ortBaseUrl }); };\n")
+    model = pp / "model" / "english_2026-04"
+    model.mkdir(parents=True)
+    (model / "bundle.json").write_text('{"bundle_name": "english_2026-04"}')
+    for f in ("tokenizer.model", "voices.bin", "text_conditioner_int8.onnx", "flow_lm_main_int8.onnx", "flow_lm_flow_int8.onnx", "mimi_decoder_int8.onnx"):
+        (model / f).write_bytes(b"stand-in")
     # A folder whose default list is set in its config, ending in a text file (DEFAULT_BOOK as a list).
     (SITE / "folder-list").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-list" / "index.html")
