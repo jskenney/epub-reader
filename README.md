@@ -194,6 +194,21 @@ This needs a real web server (for example `npx vite` or
   author and cover. Browsers only offer these to a page playing audio, so a
   silent clip plays alongside read-aloud. (iPhones and iPads stop device
   voices when the screen locks, whatever the page does.)
+- Audiobook export: the headphones button in the read-aloud bar makes `.m4b`
+  audiobooks with the natural voice chosen (Kokoro, Pocket or Server; the
+  device voice can't be recorded). Tick the chapters you want (All / None,
+  shift-click for a range; the cover and contents pages start unticked), then
+  choose one file with a chapter marker at each, or a file per chapter
+  (`01 - Title.m4b`, with track numbers, so audiobook apps group them). Files
+  are AAC at 64 kbps (about 29 MB an hour), tagged with the title, author and
+  cover. Chrome and Edge ask where to save and write as they go; other
+  browsers download each file when it's finished (with a "Download all as a
+  ZIP" button for a file per chapter). Passages already read aloud, or made in
+  an earlier export, are reused from the saved audio, so a cancelled export
+  picks up quickly. It needs the browser's AAC encoder (WebCodecs): Chrome,
+  Edge and Safari have one; Firefox doesn't. Reading aloud waits while an
+  export runs, and the dialog can be closed meanwhile (the button shows it is
+  still working).
 - Sleep timer in the read-aloud bar (off unless `SLEEP_TIMER` is turned on):
   stop after 15, 30, 45, 60 or 90 minutes
   of listening, or at the end of the chapter. It counts down only while
@@ -521,7 +536,10 @@ also check that nothing is fetched from elsewhere. They cover opening books and
 the `/bookshelf/` fallback, the default book (`default.epub`, `default.md`), per-folder configs, remote-content
 stripping and links, self-hosting and integrity checks, search, layouts,
 comics, the server voice (streaming, cancelling, preparing ahead, saved audio),
-media controls, the sleep timer and time left.
+media controls, the sleep timer, time left and audiobook export. The export
+tests need `ffmpeg` and `ffprobe` (they're skipped without them): the test
+browser has no AAC encoder, so a stand-in hands out real AAC frames made by
+ffmpeg, and the `.m4b` files are checked and decoded with ffprobe and ffmpeg.
 
 `.github/workflows/slow.yml` runs the whole suite weekly on GitHub, and on
 demand, with the real models (`SLOW=1`) and the CDNs (`NETWORK=1`), so changes
