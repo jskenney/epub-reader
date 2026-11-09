@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 12): `index.html` (about 4,700 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 14): `index.html` (about 5,900 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -39,7 +39,7 @@ were found. What was fixed (`7a0abfb` to `961118e`):
 - **Low items that kept a book or a voice from working:** L-72, L-73, L-75 and L-80 to L-83.
 - **Tests:** T-18. **Documentation:** D-6.
 
-The other low items, T-19 and D-7 are open below.
+The other low items, T-19 and D-7 were left open then (all since resolved).
 
 Two more independent reviewers then went over those commits: one on the loading changes, one on the read-aloud
 changes and the new tests. They found two medium regressions and a few low gaps, fixed in `c28c12d` and
@@ -47,7 +47,7 @@ changes and the new tests. They found two medium regressions and a few low gaps,
 - **M-28:** the new decoding (M-26) trusted a stale declared encoding over text that is valid UTF-8.
 - **M-29:** the new look-ahead (M-23) took a chapter that failed to load once as having no text, and skipped it.
 - **L-90 to L-97:** smaller gaps in the same changes (see Resolved).
-The rest is open: L-98, L-99 and T-20.
+L-98, L-99 and T-20 were left open (L-98 and L-99 since resolved).
 
 A third review, of `c28c12d` and `1ba12ab`, found two more medium regressions, fixed in `d82fa29` with tests that
 fail on the code before it:
@@ -62,7 +62,7 @@ on the code before it:
 - **M-32:** after M-31, paging couldn't get past a chapter that can't be shown.
 - **L-104 to L-106:** smaller gaps (see Resolved).
 
-L-107 and L-108 are open. `847488f` itself hasn't had an independent review: this round was limited to four
+L-107 and L-108 were left open (since resolved). `847488f` itself hasn't had an independent review: this round was limited to four
 passes of review and fixes.
 
 Round 12 built E-10, audiobook export (`1b3516b`, `de3a70d`, `179e3bf`). Two independent reviewers then went over
@@ -73,16 +73,25 @@ reader. Their findings were reproduced and fixed in `9d10dc0` and `ed1aa5e`, wit
 - **M-33 to M-42, L-109 to L-129** (see Resolved).
 Round 13 (`ed36ce1` to `4d65017`) fixed the open low items that could be fixed (L-74, L-76 to L-79, L-84 to L-89,
 L-98, L-99, L-107, L-108, L-113, L-119, L-129), and T-13, T-15, T-17, T-19 and D-7, each with a test where it can
-have one. T-15's suggestion to bind the test server to 127.0.0.1 was left out, as for the voice server. The tests drive the export with a stand-in AAC encoder (the test
+have one. T-15's suggestion to bind the test server to 127.0.0.1 was left out, as for the voice server.
+
+Round 14 was another full review by three independent reviewers (books and pages; reading aloud, the export and
+the interface; the scripts, tests and documents), of `08d645a`. Fixed in `0def7a5` and `ce5efe6`:
+- **High:** H-12 (a Pocket export hung for good when a book in another language opened) and H-13 (a voice away
+  for 15 seconds stopped an hours-long export; shorter outages left sentences silent).
+- **Medium:** M-43 to M-51. Two were holes in the cleaner (M-43, M-44) that the book page's own policy still
+  held: nothing reached another site.
+- **Low, tests, documentation:** L-130 to L-148, T-22 to T-26, D-8 and D-9.
+L-138 and L-149 are open (one unverified in Firefox, one rare). H-12 and two of the lows were checked by reading.
+L-18 (a TTS server issue) was removed in round 6 as belonging to that server's repository. The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 152 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
-self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
-changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
-has a test that fails on the code before it.
+**Tests.** All 162 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
+that fail on the code before them, except where an item says it was checked by reading.
 
 Most fixes in rounds 7 and 8 have a test, and those tests fail on the code before the fix. Some were checked
 by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
@@ -110,7 +119,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 ## Summary
 
 No critical, high or medium items are open. The open items are:
-- **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
+- **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report), L-138 and L-149.
 - **Tests:** T-11 (the weekly workflow hasn't run yet), T-14, T-16 and T-20.
 - **Enhancements:** E-1 to E-9, E-11 and E-15.
 
@@ -119,6 +128,8 @@ No critical, high or medium items are open. The open items are:
 | ID | Title | Kind |
 |---|---|---|
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
+| [L-138](#l-138-mathml-links-in-firefox) | MathML links in Firefox | Low |
+| [L-149](#l-149-archives-with-data-before-them) | Archives with data before them | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
@@ -132,6 +143,17 @@ No critical, high or medium items are open. The open items are:
 *Read.* AAC encoders put 1024 to 2112 samples of delay at the start, and the file doesn't mark them, so each file
 starts with 20 to 45 ms of silence and chapter marks fall that much early. Harmless for speech; WebCodecs
 doesn't report the delay, so an `elst` would have to guess it.
+
+### L-138. MathML links in Firefox
+
+*Unverified* (no Firefox here). Firefox may still turn an `href` on MathML elements into a link, and the reader's
+link handling covers only `a` and `area`, so a book might navigate its own frame there. **Fix:** remove `href`
+from MathML elements in the sanitizer.
+
+### L-149. Archives with data before them
+
+*Read.* The in-place ZIP reader doesn't allow for data before the archive (self-extracting archives), which JSZip
+does; such a book is downloaded whole instead, or fails. Rare for EPUBs.
 
 ## Tests
 
@@ -237,6 +259,8 @@ From all reviews so far, with the commits that fixed them.
 | H-9 | A font pasted in as `data:` into every style naming it made pages of hundreds of MB (round 8 review) | `84bc895` |
 | H-10 | Apple's players showed no chapters: a QuickTime chapter track as well as Nero markers | `de3a70d` |
 | H-11 | Without a save picker a long book was held in memory as about a million small arrays | `9d10dc0` |
+| H-12 | A Pocket export hung for good (and locked reading aloud) when a book in another Pocket language opened | `ce5efe6` |
+| H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | M-1 | A `%` in `?book=` left the reader stuck on "Loading…" | `46a112b` |
 | M-2 | The "not found" check for HTML documents only worked for identical pages | `33813a3` |
 | M-3 | The sleep timer could stop right after resuming | `33813a3` |
@@ -279,6 +303,15 @@ From all reviews so far, with the commits that fixed them.
 | M-40 | The reader's keys (pages, R, T, L, Space) worked behind the export dialog | `ed1aa5e` |
 | M-41 | The ZIP offer and final status were lost when the dialog was reopened | `ed1aa5e` |
 | M-42 | The wake lock wasn't taken again after the tab had been hidden | `ed1aa5e` |
+| M-43 | Markup appearing only on reading back (mutation) kept uncleaned styles, srcset and relative addresses (the book policy held) | `0def7a5` |
+| M-44 | `var()` inside `image-set()` let an address past the CSS cleaner (the book policy held) | `0def7a5` |
+| M-45 | XHTML files named `.html` were parsed as HTML, so self-closed tags swallowed what followed | `0def7a5` |
+| M-46 | A newly opened book whose first chapter failed left the last book's page in the frame | `0def7a5` |
+| M-47 | The importing sheet's own `@namespace` was lost, and the namespace fix changed text in strings | `0def7a5` |
+| M-48 | Opening another book cancelled an export without asking | `ce5efe6` |
+| M-49 | A file of silence could be saved as "kept", even over a complete one | `ce5efe6` |
+| M-50 | A chapter that couldn't be read was shown as "no text", unticked and silently left out | `ce5efe6` |
+| M-51 | On narrow screens, search lost its focus to the contents, so typing fired shortcuts | `ce5efe6` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -406,6 +439,24 @@ From all reviews so far, with the commits that fixed them.
 | L-113 | A cancelled single-file export left an empty file (removed now where the browser allows) | `0189fa5` |
 | L-119 | Contents entries out of order within a file | `ed36ce1` |
 | L-129 | A background tab slowed the voice's retries (now timed on a worker) | `ed36ce1` |
+| L-130 | One damaged picture or font blanked the whole chapter | `0def7a5` |
+| L-131 | A page turn while a chapter loaded skipped the next chapter | `0def7a5` |
+| L-132 | The soft-404 signature's pattern was quadratic on long words | `0def7a5` |
+| L-133 | A hoisted remote `@import` without `;` took the next rules with it | `0def7a5` |
+| L-134 | Search kept a chapter that failed once as empty | `0def7a5` |
+| L-135 | Folder books: "not found" pages taken as files; de-obfuscated font copies never released | `0def7a5` |
+| L-136 | Spine items that are neither pages nor pictures (audio, PDF) were decoded as text | `0def7a5` |
+| L-137 | JSZip's inherited names ("constructor"), and obfuscated fonts matched by exact name only | `0def7a5` |
+| L-139 | Escape in the search box on narrow screens also closed the contents | `ce5efe6` |
+| L-140 | The export dialog kept another book's chapter list | `ce5efe6` |
+| L-141 | A new file from the save picker was left empty when an export failed before writing | `ce5efe6` |
+| L-142 | A voice still loading started reading in a newly opened book | `ce5efe6` |
+| L-143 | The saved audio kept for a stopped export was trimmed before it could be reused | `ce5efe6` |
+| L-144 | The server voice left an abort listener behind for every request | `ce5efe6` |
+| L-145 | A stalled or dropped stream was taken as the text's fault | `ce5efe6` |
+| L-146 | A one-file export held every chapter's page for its whole length | `ce5efe6` |
+| L-147 | Cancel's blocking confirm() could stall the export's timers | `ce5efe6` |
+| L-148 | `fetch-pocket.sh` checked the languages only after downloading | `ce5efe6` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -423,6 +474,11 @@ From all reviews so far, with the commits that fixed them.
 | T-15 | Test housekeeping: temporary folders, failed servers and busy ports, curl | `4d65017` |
 | T-17 | Workflow upkeep: Node 22, npm ci, cached models | `4d65017` |
 | T-19 | Two script tests matched anywhere in the page; TRANSFORMERS unchecked | `4d65017` |
+| T-22 | The pause test passed with pause broken | `ce5efe6` |
+| T-23 | The L-113 test couldn't tell a new file from one chosen to be replaced | `ce5efe6` |
+| T-24 | The export tests left a timer and download listeners behind (85 s idle, a possible clash) | `ce5efe6` |
+| T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
+| T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
@@ -430,6 +486,8 @@ From all reviews so far, with the commits that fixed them.
 | D-5 | Inaccurate sentences from D-4 and L-69: the gzip note, which files each fetch script reads, FULL_PRECISION on WebGPU (round 9 review) | `7a86a5f` |
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
+| D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-9 | REVIEW.md: stale round, line count, test counts and "open" sentences; L-18's removal unexplained | this update |
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
