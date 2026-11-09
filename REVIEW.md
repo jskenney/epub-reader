@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 11): `index.html` (about 4,700 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 12): `index.html` (about 4,700 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -65,10 +65,19 @@ on the code before it:
 L-107 and L-108 are open. `847488f` itself hasn't had an independent review: this round was limited to four
 passes of review and fixes.
 
+Round 12 built E-10, audiobook export (`1b3516b`, `de3a70d`, `179e3bf`). Two independent reviewers then went over
+it: one on the files it writes and the encoding, one on the dialog, the flow and how it fits the rest of the
+reader. Their findings were reproduced and fixed in `9d10dc0` and `ed1aa5e`, with tests:
+- **C-1:** any file of more than about 22 minutes failed to save once all its audio had been made.
+- **H-10, H-11:** no chapters in Apple's players; a long book held in memory as a million small arrays.
+- **M-33 to M-42, L-109 to L-129** (see Resolved).
+L-110, L-113, L-119 and L-129 are open in part. The tests drive the export with a stand-in AAC encoder (the test
+browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 130 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 142 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
 changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
 has a test that fails on the code before it.
@@ -88,7 +97,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 | Prefix | Meaning |
 |---|---|
-| **C** | Critical: code running where it shouldn't, data loss, or the reader unusable. *None found.* |
+| **C** | Critical: code running where it shouldn't, data loss, or the reader unusable. |
 | **H** | High: a security or privacy protection that doesn't hold, or a serious bug. |
 | **M** | Medium: a real bug or gap that affects people in normal use. |
 | **L** | Low: minor, rare, or defence in depth. |
@@ -99,11 +108,11 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 ## Summary
 
 No critical, high or medium items are open. The open items are:
-- **Low:** L-74, L-76 to L-79, L-84 to L-89, L-98, L-99, L-107 and L-108. None keeps a book or a voice from
-  working.
+- **Low:** L-74, L-76 to L-79, L-84 to L-89, L-98, L-99, L-107, L-108, L-110, L-113, L-119 and L-129. None keeps
+  a book, a voice or an export from working.
 - **Tests:** T-11 (the weekly workflow hasn't run yet), T-13 to T-17, T-19 and T-20.
 - **Documentation:** D-7.
-- **Enhancements:** E-1 to E-11 and E-15.
+- **Enhancements:** E-1 to E-9, E-11 and E-15.
 
 ## Open items
 
@@ -121,6 +130,10 @@ No critical, high or medium items are open. The open items are:
 | [L-99](#l-99-two-small-read-aloud-races) | Two small read-aloud races | Low |
 | [L-107](#l-107-reading-aloud-forgets-its-place-after-a-chapter-fails) | Reading aloud forgets its place after a chapter fails | Low |
 | [L-108](#l-108-a-few-bad-bytes-in-mostly-utf-8-text) | A few bad bytes in mostly UTF-8 text | Low |
+| [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
+| [L-113](#l-113-a-cancelled-single-file-export-leaves-an-empty-file) | A cancelled single-file export leaves an empty file | Low |
+| [L-119](#l-119-table-of-contents-entries-out-of-order-within-a-file) | Table of contents entries out of order within a file | Low |
+| [L-129](#l-129-a-background-tab-slows-retries) | A background tab slows retries | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-13](#t-13-a-self-hosting-test-needs-internet-but-isnt-gated) | A self-hosting test needs internet but isn't gated | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
@@ -130,7 +143,7 @@ No critical, high or medium items are open. The open items are:
 | [T-19](#t-19-two-script-tests-match-anywhere-in-the-page) | Two script tests match anywhere in the page | Tests |
 | [T-20](#t-20-round-11-test-gaps) | Round 11 test gaps | Tests |
 | [D-7](#d-7-documentation-nits) | Documentation nits | Docs |
-| [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
 ## Low
 
@@ -220,6 +233,29 @@ was being read. **Fix:** keep the read-aloud place and put it back when the page
 loose file, or a stale declared encoding), so all its accented letters are wrong, where it used to show one
 replacement character. **Fix, if wanted:** use the fallback only when invalid sequences are more than a small
 share of the non-ASCII bytes.
+
+### L-110. No edit list for the encoder's delay
+
+*Read.* AAC encoders put 1024 to 2112 samples of delay at the start, and the file doesn't mark them, so each file
+starts with 20 to 45 ms of silence and chapter marks fall that much early. Harmless for speech; WebCodecs
+doesn't report the delay, so an `elst` would have to guess it.
+
+### L-113. A cancelled single-file export leaves an empty file
+
+*Read.* With the save picker (Chrome, Edge), the browser creates the chosen file when it is picked; a cancelled
+export leaves it empty (a file per chapter in a folder removes its unfinished file). **Fix:** none from the page,
+which has no handle to the folder; the message could say so.
+
+### L-119. Table of contents entries out of order within a file
+
+*Reproduced.* An entry listed before an earlier heading in the same file makes an empty unit (now left out with a
+note) and the other unit reads both parts. **Fix:** order the entries in a file by where their headings are.
+
+### L-129. A background tab slows retries
+
+*Read.* The server voice's retries while busy (409) wait with timers, which Chrome slows to once a minute in a
+hidden tab, so an export in a background tab can slow down. (The encoder's back-pressure now waits on its own
+event.) **Fix:** keep the tab visible, or retry on a worker's timer.
 
 ## Tests
 
@@ -332,58 +368,6 @@ A web app manifest and service worker, so the reader can be installed and open s
 ### E-9. Right-to-left manga
 Use ComicInfo's `Manga` value to show comic pages right to left, including spreads.
 
-### E-10. Audiobook export
-
-Export chosen chapters as an audiobook in `.m4b` (AAC in MP4, with chapter markers), with any of the natural
-voices: Kokoro, Pocket TTS or the server voice. All three return raw samples through the same `generate()` call,
-so one export path serves them all; the server is simply the fastest. The device voice can't be exported:
-`speechSynthesis` plays straight to the speakers and gives the page no access to the audio.
-
-**Choosing chapters.** An "Export audiobook" dialog lists the chapters with checkboxes, All / None, and
-shift-click to select a range.
-- Each row shows an estimated length, from the word count (as "time left" does).
-- Units follow the table of contents, not the book's files: each entry runs from its heading to the next one,
-  since a file can hold several chapters and a chapter can span files.
-- Untitled front matter (cover, copyright) starts unticked; everything else starts ticked.
-- A summary line updates as you tick, for example "12 chapters · about 6 h 40 min · about 190 MB", with a
-  generation-time estimate for the selected voice.
-
-**Output.** Either:
-- **one file:** a single `.m4b` with a chapter marker at each chosen chapter, or
-- **a file per chapter:** `NN - Title.m4b`, each with the same album, author and cover tags, a track number and
-  its own chapter marker, so audiobook apps group them as one book.
-
-Both use AAC at 64 kbps mono (about 29 MB per hour), at 1× speed (players have their own speed control).
-
-**Saving.**
-- **One file:** where the browser has a save picker (Chrome, Edge), the file is written to disk as it is
-  encoded. Elsewhere the encoded file is kept in memory and downloaded at the end.
-- **A file per chapter:** where the browser has a folder picker (Chrome, Edge), each file is written as its
-  chapter finishes, so a cancelled run keeps the finished chapters. Elsewhere each file is downloaded
-  separately as it finishes (the browser may ask once to allow several downloads). If the browser blocks them,
-  a fallback offers the finished files as one ZIP of `.m4b` files (stored, not compressed).
-
-**During the run.**
-- A progress bar shows the current chapter and the time remaining, with Pause and Cancel.
-- Generated passages go into the saved-audio cache, so a cancelled or interrupted run resumes where it stopped,
-  and passages already listened to are reused at once.
-- The screen is kept awake (Wake Lock) while exporting.
-- Reading aloud is paused for the duration, since both would use the same voice engine.
-
-**Limits.**
-- Encoding uses the browser's WebCodecs `AudioEncoder`. The dialog checks for AAC support when it opens. Where
-  it's missing (Firefox today, and some Safari versions), the menu item is disabled with a note that export
-  needs Chrome, Edge or Safari. There is no fallback format.
-- With the device voice selected, the item is disabled with a note that export needs Kokoro, Pocket TTS or the
-  server voice.
-
-**Work.**
-- A small MP4 writer in `index.html` (AAC frames, Nero-style `chpl` chapters, title, author and cover tags):
-  about 300 to 400 lines, no new dependencies.
-- The dialog, per-chapter text and the export loop reuse the reader's existing code.
-- **Tests:** check the output with `ffprobe` (chapter count, titles, duration), and run one short end-to-end
-  export with the server voice.
-
 ### E-11. A settings panel
 A panel in the page for the options that are now only in `index.html` or `reader-config.json`: look-ahead,
 saved-audio limit, remote content, shortcuts and so on.
@@ -408,6 +392,7 @@ From all reviews so far, with the commits that fixed them.
 
 | ID | Title | Fixed in |
 |---|---|---|
+| C-1 | An export of more than about 22 minutes failed to save after all its audio was made (frame sizes spread into a call) | `9d10dc0` |
 | H-1 | Remote-content stripping could be bypassed; book pages now get a Content-Security-Policy | `2e5345f` |
 | H-2 | Uppercase XHTML tags got past the sanitizer | `2e5345f` |
 | H-3 | Empty files broke chapters read with range requests | `c5cfe41` |
@@ -417,6 +402,8 @@ From all reviews so far, with the commits that fixed them.
 | H-7 | Declarative shadow DOM skipped every cleaning step, so a link could navigate the book frame | `160a734` |
 | H-8 | Markup reading back differently once serialized (mutation) brought back uncleaned content (round 8 review) | `84bc895` |
 | H-9 | A font pasted in as `data:` into every style naming it made pages of hundreds of MB (round 8 review) | `84bc895` |
+| H-10 | Apple's players showed no chapters: a QuickTime chapter track as well as Nero markers | `de3a70d` |
+| H-11 | Without a save picker a long book was held in memory as about a million small arrays | `9d10dc0` |
 | M-1 | A `%` in `?book=` left the reader stuck on "Loading…" | `46a112b` |
 | M-2 | The "not found" check for HTML documents only worked for identical pages | `33813a3` |
 | M-3 | The sleep timer could stop right after resuming | `33813a3` |
@@ -449,6 +436,16 @@ From all reviews so far, with the commits that fixed them.
 | M-30 | A server's `charset=utf-8` overrode the Windows-1252 fallback for old files opened by link (round 11, third review) | `d82fa29` |
 | M-31 | Reading aloud into a chapter that couldn't be loaded stayed "playing" and saved the failed chapter as the position (round 11, third review) | `d82fa29` |
 | M-32 | After M-31, paging couldn't get past a chapter that can't be shown (round 11, fourth review) | `847488f` |
+| M-33 | A chosen chapter with no text made an invalid `.m4b` (now left out, and such chapters start unticked) | `9d10dc0`, `ed1aa5e` |
+| M-34 | The saved audio couldn't hold a long export, so starting again didn't reuse it and other books' audio was dropped | `9d10dc0` |
+| M-35 | One failed passage stopped the whole export and threw the file away | `9d10dc0`, `ed1aa5e` |
+| M-36 | Export while the voice was still loading failed with a false error | `ed1aa5e` |
+| M-37 | Export started a voice's large download without asking | `ed1aa5e` |
+| M-38 | Closing the dialog while the voice loaded didn't stop the export starting later | `ed1aa5e` |
+| M-39 | Opening another book while the voice loaded exported it under the first book's chapters | `ed1aa5e` |
+| M-40 | The reader's keys (pages, R, T, L, Space) worked behind the export dialog | `ed1aa5e` |
+| M-41 | The ZIP offer and final status were lost when the dialog was reopened | `ed1aa5e` |
+| M-42 | The wake lock wasn't taken again after the tab had been hidden | `ed1aa5e` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -541,6 +538,23 @@ From all reviews so far, with the commits that fixed them.
 | L-104 | After a failed chapter, a resize meanwhile could leave the page shown and the saved position apart | `847488f` |
 | L-105 | Encoding labels were checked before being normalised, so some server labels hid the file's own declaration | `847488f` |
 | L-106 | `x-user-defined` was honoured (private-use characters) instead of read as Windows-1252, as HTML does | `847488f` |
+| L-109 | Nero chapter markers stop at 255 (the QuickTime chapter track holds them all) | `de3a70d` |
+| L-111 | Resampling 24 kHz audio for the encoder was linear; now the browser's filtered resampler | `9d10dc0` |
+| L-112 | Audio frames and the encoder weren't closed, and an encoder error could be hidden by a later one | `9d10dc0` |
+| L-114 | One file write per audio frame; now about 1 MB at a time | `9d10dc0` |
+| L-115 | The server voice's clip version wasn't checked before export used its saved audio | `9d10dc0` |
+| L-116 | An encoder description given as a DataView was read as empty | `9d10dc0` |
+| L-117 | The ZIP fallback would wrap past 4 GB (refused now) and copied every file in memory | `9d10dc0` |
+| L-118 | A table of contents entry whose heading isn't there made units overlap | `ed1aa5e` |
+| L-120 | Empty "Opening pages" rows, and equal estimates for every chapter of a single-file book | `ed1aa5e` |
+| L-121 | Shift-click on a chapter's title didn't select a range | `ed1aa5e` |
+| L-122 | Focus fell to the page when Export or Pause was hidden | `ed1aa5e` |
+| L-123 | Cancelling, opening another book or closing the tab dropped a long export without asking | `ed1aa5e` |
+| L-124 | "About X left" counted time paused | `ed1aa5e` |
+| L-125 | Accessibility details in the dialog (progress label, full titles, the note tied to Export) | `ed1aa5e` |
+| L-126 | A misleading voice note could show while exporting | `ed1aa5e` |
+| L-127 | Non-linear items (notes) were read into the chapter before them | `ed1aa5e` |
+| L-128 | Estimates ignored Kokoro's speed and mixed voices' making times | `ed1aa5e` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -564,3 +578,4 @@ From all reviews so far, with the commits that fixed them.
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
 | E-16 | Default book: `default.epub`, else `default.md` (an ordered `DEFAULT_BOOK` list, with "not found" page checks) | `a29374c` |
+| E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
