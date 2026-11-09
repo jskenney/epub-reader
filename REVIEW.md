@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 18): `index.html` (about 5,900 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 19): `index.html` (about 6,100 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -106,6 +106,17 @@ low items left in that review, and the CSS cleaner holding under an adversarial 
 review-and-fix loops stopped there (six of the ten allowed). The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
+Round 19 added E-17 (`2c7386b`, `895bafa`): `.opus` and `.mp3` as well as `.m4b`, with the formats this
+browser can't make greyed out. It came after a user report that every Chrome and Edge said it couldn't make AAC
+(M-60, fixed in `06e77ed`). Two independent reviewers then went over it: one on the files written (Ogg pages,
+Opus headers and tags, ID3 frames, lamejs output), checked with ffprobe, mutagen, an Ogg page parser and an ID3
+frame dumper; one on the dialog, the export flow and the lamejs loading. Neither found critical or high items.
+What they found was fixed in `8af5e59` and `0a4902b`, each with a test that fails on the code before it except
+where marked *read*:
+- **Medium:** M-61 (long MP3 chapter titles dropped by ffmpeg-based players), M-62 (a different format made while
+  the chosen one was being checked), M-63 (more than 255 MP3 chapters).
+- **Low:** L-174 to L-183. **Tests:** T-27.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -141,7 +152,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Tests:** T-11 (the weekly workflow hasn't run yet), T-16 and T-20 (in part).
-- **Enhancements:** E-1 to E-9, E-11, E-15 and E-17 (being built).
+- **Enhancements:** E-1 to E-9, E-11 and E-15.
 
 ## Open items
 
@@ -151,7 +162,7 @@ No critical, high or medium items are open. The open items are:
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books), [E-17](#e-17-audiobook-formats-opus-and-mp3-as-well-as-m4b) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
 ## Low
 
@@ -233,22 +244,6 @@ saved-audio limit, remote content, shortcuts and so on.
 Pre-paginated (fixed-layout) EPUBs are shown reflowed in columns, and `linear="no"` items are read in order with
 the rest (which the spec allows). Laying out fixed-layout pages as pages (and optionally skipping non-linear
 items) would suit comics-style and picture books.
-
-### E-17. Audiobook formats: `.opus` and `.mp3` as well as `.m4b`
-
-(Filed as E-17: E-16 is the default-book list from round 10.) AAC `.m4b` stays the default, but some browsers
-can't make AAC (Chrome on Linux has no AAC encoder). The export dialog offers three formats, with those this
-browser can't make greyed out and the reason shown:
-- **`.m4b` (AAC)**, the default: WebCodecs' AAC encoder (Chrome and Edge on Windows and macOS, Safari).
-- **`.opus` (Opus in Ogg)**: WebCodecs' Opus encoder, which every Chromium has, Linux included. Chapters as
-  Ogg chapter comments (`CHAPTER001=…`, `CHAPTER001NAME=…`), title, author, album, track and cover
-  (`METADATA_BLOCK_PICTURE`). About 32 kbps mono. Played by VLC, mpv, foobar2000 and several Android audiobook
-  players; not by Apple's apps.
-- **`.mp3` (MP3)**: encoded by lamejs (LAME in JavaScript, LGPL, about 150 KB, self-hosted by fetch-libs.sh or
-  from cdnjs, checked against a pinned hash), so it works in any browser, on plain `http://` too. ID3v2.4 tags
-  with chapters (`CHAP`/`CTOC`), title, author, album, track and cover. 64 kbps mono. Played almost everywhere;
-  chapter support varies by player.
-The choice is remembered. If AAC isn't available, the first format that is gets chosen, with a note why.
 
 ## Suggested order
 
@@ -337,6 +332,10 @@ From all reviews so far, with the commits that fixed them.
 | M-57 | The wait limit counted only its sleeps, so a hung server could stall an export for an hour | `f38b008` |
 | M-58 | A voice server that was only busy (409) had its sentences left silent | `a2dabfe` |
 | M-59 | In the scroll layout, restoring after a failed chapter threw (an option hid `fraction()`), leaving read-aloud "playing" | `a2dabfe` |
+| M-60 | Every Chrome and Edge said it couldn't make AAC (user report): only 64 kbps mono was tried, Windows' encoder takes 96 kbps and up, Chrome on Linux has none; now a ladder of settings and a message that says why | `06e77ed` |
+| M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
+| M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
+| M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -508,6 +507,16 @@ From all reviews so far, with the commits that fixed them.
 | L-171 | The `attr()` check read raw text: an attribute named `data-url` was blocked, and a comment, an escape or a fallback string fooled it | `1f4e9d8`, `44f1b2d` |
 | L-172 | The non-page note showed "()" for an untyped item | `44f1b2d` |
 | L-173 | Pocket's worker errors weren't checked against the current worker, and unreadable messages weren't handled | `44f1b2d` |
+| L-174 | `.opus` books with more than 999 chapters got wrong titles (`CHAPTER1000NAME` read as chapter 100); chapters now stop at 999 | `8af5e59` |
+| L-175 | ID3v2.4 UTF-8 tags may not show in Windows Explorer or older iTunes (*read*); now ID3v2.3 | `8af5e59` |
+| L-176 | The `.m4b` bitrate said 64 kbps when the encoder chose its own; now 0 (unknown) | `8af5e59` |
+| L-177 | `.opus` track as `TRACKNUMBER=2/7`; now `TRACKNUMBER` and `TRACKTOTAL` | `8af5e59` |
+| L-178 | `.opus` files ended with the encoder's padding (about 13 ms); the last granule is now trimmed (RFC 7845) | `8af5e59` |
+| L-179 | A failed lamejs load greyed out MP3 until the page was reloaded; comments said it loaded only for MP3 exports | `0a4902b` |
+| L-180 | A saved format this version doesn't know broke the dialog | `0a4902b` |
+| L-181 | `libs/LICENSES/lamejs.txt` was LAME's licence FAQ, not the LGPL; fetch-libs.sh now saves the LGPL-3.0 text (with the GPL) | `0a4902b` |
+| L-182 | Stale messages: the export button said `.m4b`; formats being checked were greyed out; a note for a format that can't be made; the AAC size estimate used the wrong setting (*read*) | `0a4902b` |
+| L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -530,6 +539,7 @@ From all reviews so far, with the commits that fixed them.
 | T-24 | The export tests left a timer and download listeners behind (85 s idle, a possible clash) | `ce5efe6` |
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-27 | E-17 test gaps: the checking window, `.opus` and `.mp3` through the file picker, the MP3 retry; Node tests of both writers with real ffmpeg frames (lamejs from cdnjs is covered by the SRI check only) | `8af5e59`, `0a4902b` |
 | T-14 | The hostile-book tests only ran behind the reader's own policy | `2baae6a` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
@@ -545,3 +555,4 @@ From all reviews so far, with the commits that fixed them.
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
 | E-16 | Default book: `default.epub`, else `default.md` (an ordered `DEFAULT_BOOK` list, with "not found" page checks) | `a29374c` |
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
+| E-17 | Audiobook formats: `.opus` (Opus in Ogg, chapter comments) and `.mp3` (lamejs, ID3 chapters) as well as `.m4b`; those this browser can't make greyed out with the reason | `2c7386b`, `895bafa`, `8af5e59`, `0a4902b` |
