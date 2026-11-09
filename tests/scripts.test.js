@@ -186,6 +186,7 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
   const block = name => page.slice(page.indexOf(`const ${name} = {`), page.indexOf('};', page.indexOf(`const ${name} = {`)));
   assert.equal(def(/jszip: \{ file: 'libs\/jszip\.min\.js', cdn: '[^']*\/jszip\/([^/]+)\/jszip\.min\.js'/), v(libs, 'JSZIP'), 'JSZIP');
   assert.equal(def(/^const MARKED_URL = '[^']*\/marked\/([^/]+)\/marked\.min\.js';/m), v(libs, 'MARKED'), 'MARKED');
+  assert.equal(def(/lamejs: \{ file: 'libs\/lame\.min\.js', cdn: '[^']*\/lamejs\/([^/]+)\/lame\.min\.js'/), v(libs, 'LAMEJS'), 'LAMEJS');
   assert.equal(block('KOKORO').match(/lib: '[^']*kokoro-js@([^/]+)\//)?.[1], v(kokoro, 'KOKORO_JS'), 'KOKORO_JS');
   assert.equal(block('KOKORO').match(/revision: '([^']+)'/)?.[1], v(kokoro, 'REV'), 'Kokoro REV');
   assert.equal(block('POCKET').match(/lib: '[^']*pocket-tts-js@([^/]+)\//)?.[1], v(pocket, 'POCKET_JS'), 'POCKET_JS');
@@ -199,7 +200,7 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
 test('the Subresource Integrity hashes in LIBS match the files in libs/, each its own (T-9, T-19)', { skip: !libsFetched && 'libs/ not fetched' }, () => {
   const page = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const libs = Object.fromEntries([...page.matchAll(/(\w+): \{ file: 'libs\/([^']+)'[^}]*?integrity: '([^']+)'/g)].map(m => [m[2], m[3]]));
-  assert.deepEqual(Object.keys(libs).sort(), ['jszip.min.js', 'marked.min.js']);
+  assert.deepEqual(Object.keys(libs).sort(), ['jszip.min.js', 'lame.min.js', 'marked.min.js']);
   for (const file of Object.keys(libs)) {
     const want = 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(__dirname, '..', 'libs', file))).digest('base64');
     assert.equal(libs[file], want, file);

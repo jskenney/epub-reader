@@ -6,8 +6,9 @@
 #                              put a copy of this script there, with checksums/ beside it: it works in its
 #                              own folder)
 #
-# JSZip opens EPUB and comic files; marked renders Markdown. The reader checks both copies against the same
-# pinned hashes (Subresource Integrity), and this script checks them against checksums/libs.sha256.
+# JSZip opens EPUB and comic files; marked renders Markdown; lamejs encodes MP3 audiobooks. The reader checks
+# every copy against the same pinned hashes (Subresource Integrity), and this script checks them against
+# checksums/libs.sha256.
 set -euo pipefail
 cd "$(dirname "$0")"
 # Options, in any order:
@@ -24,6 +25,7 @@ done
 
 JSZIP=3.10.1     # must match LIBS.jszip in index.html
 MARKED=15.0.12   # must match MARKED_URL in index.html
+LAMEJS=1.2.1     # must match LIBS.lamejs in index.html
 GOT=()
 DEST=libs
 CDNJS=https://cdnjs.cloudflare.com/ajax/libs
@@ -80,10 +82,12 @@ verify() {
 say "Libraries"
 get "$CDNJS/jszip/$JSZIP/jszip.min.js"     jszip.min.js
 get "$CDNJS/marked/$MARKED/marked.min.js"  marked.min.js
+get "$CDNJS/lamejs/$LAMEJS/lame.min.js"    lame.min.js
 
 say "Licences"
 get "$JSD/jszip@$JSZIP/LICENSE.markdown"   LICENSES/jszip.md
 get "$JSD/marked@$MARKED/LICENSE.md"       LICENSES/marked.md
+get "$JSD/lamejs@$LAMEJS/LICENSE"          LICENSES/lamejs.txt
 [ "$LIST" = 1 ] && exit 0
 verify libs
 cat > "$DEST/LICENSES/NOTICE.txt" <<NOTICE
@@ -91,6 +95,7 @@ Self-hosted copies of the reader's libraries, fetched by fetch-libs.sh.
 
 JSZip $JSZIP (jszip.min.js)    MIT or GPL-3.0 (your choice)   https://stuk.github.io/jszip/
 marked $MARKED (marked.min.js) MIT                            https://marked.js.org/
+lamejs $LAMEJS (lame.min.js)   LGPL-3.0 (from LAME, LGPL)       https://github.com/zhuker/lamejs
 NOTICE
 
 echo

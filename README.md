@@ -194,26 +194,37 @@ This needs a real web server (for example `npx vite` or
   author and cover. Browsers only offer these to a page playing audio, so a
   silent clip plays alongside read-aloud. (iPhones and iPads stop device
   voices when the screen locks, whatever the page does.)
-- Audiobook export: the headphones button in the read-aloud bar makes `.m4b`
+- Audiobook export: the headphones button in the read-aloud bar makes
   audiobooks with the natural voice chosen (Kokoro, Pocket or Server; the
   device voice can't be recorded). Tick the chapters you want (All / None,
   shift-click for a range; the cover and contents pages start unticked), then
   choose one file with a chapter marker at each, or a file per chapter
-  (`01 - Title.m4b`, with track numbers, so audiobook apps group them). Files
-  are AAC at 64 kbps (about 29 MB an hour), tagged with the title, author and
-  cover. Chrome and Edge ask where to save and write as they go; other
+  (`01 - Title.m4b`, with track numbers, so audiobook apps group them). Three
+  formats, each with chapters, title, author, track and cover; those the
+  browser can't make are greyed out, with the reason:
+  - `.m4b` (AAC, the default): plays in Apple Books, most audiobook apps and
+    VLC. It needs the browser's AAC encoder (WebCodecs): Chrome and Edge on
+    Windows and macOS, and Safari, have one; Chrome on Linux and Firefox
+    don't. 64 kbps (about 29 MB an hour; on Windows 96 kbps, as its encoder
+    takes no less).
+  - `.opus` (Opus in Ogg): VLC, mpv, foobar2000 and several Android
+    audiobook apps play it, Apple's apps don't. Every Chromium can make it,
+    Linux included. 32 kbps (about 14 MB an hour), which suits speech.
+  - `.mp3`: plays almost everywhere, though not every player shows the
+    chapters. Encoded in the page by lamejs (LGPL; self-hosted by
+    `fetch-libs.sh`, or from cdnjs), so it works in any browser. 64 kbps.
+
+  AAC and Opus use WebCodecs, which browsers only offer to secure pages: serve
+  the reader over `https://` (or open it as `localhost`). The choice is
+  remembered. Chrome and Edge ask where to save and write as they go; other
   browsers download each file when it's finished (with a "Download all as a
   ZIP" button for a file per chapter). Passages made in an earlier export, or
   already read aloud (with Kokoro, only those heard at 1×, as its speed is part
   of the audio), are reused from the saved audio, so a cancelled export picks up
   quickly. If the voice goes away (a server restarting, say), the export waits
-  for it for up to five minutes; a sentence the voice can't say is left silent. It needs the browser's AAC encoder (WebCodecs), which
-  browsers only offer to secure pages: serve the reader over `https://` (or open
-  it as `localhost`). Chrome and Edge on Windows and macOS, and Safari, have one
-  (on Windows it takes 96 kbps and up, so files are a little larger there);
-  Chrome on Linux and Firefox don't. The export dialog says which it is. Reading aloud waits while an
-  export runs, and the dialog can be closed meanwhile (the button shows it is
-  still working).
+  for it for up to five minutes; a sentence the voice can't say is left silent.
+  Reading aloud waits while an export runs, and the dialog can be closed
+  meanwhile (the button shows it is still working).
 - Sleep timer in the read-aloud bar (off unless `SLEEP_TIMER` is turned on):
   stop after 15, 30, 45, 60 or 90 minutes
   of listening, or at the end of the chapter. It counts down only while
@@ -319,6 +330,7 @@ Library versions and model revisions are pinned in two places each, which must a
 | --- | --- | --- |
 | JSZip | `LIBS.jszip.cdn` | `JSZIP` in `fetch-libs.sh` |
 | marked | `MARKED_URL` | `MARKED` in `fetch-libs.sh` |
+| lamejs | `LIBS.lamejs.cdn` | `LAMEJS` in `fetch-libs.sh` |
 | kokoro-js | `KOKORO.lib` | `KOKORO_JS` in `fetch-kokoro.sh` (and `TRANSFORMERS`, the transformers.js it bundles) |
 | Kokoro model | `KOKORO.revision` | `REV` in `fetch-kokoro.sh` |
 | pocket-tts-js | `POCKET.lib` | `POCKET_JS` in `fetch-pocket.sh` |
@@ -556,7 +568,7 @@ upstream (a CDN, Hugging Face's download hosts, a model file) show up.
 
 ## Requirements
 
-No build step. The libraries (JSZip, and marked for Markdown) and fonts come
+No build step. The libraries (JSZip, marked for Markdown, lamejs for MP3 audiobooks) and fonts come
 from `libs/` and `fonts/` when self-hosted, otherwise from cdnjs and Google
 Fonts (with system font fallbacks).
 
@@ -570,7 +582,7 @@ their own licences, which the scripts save beside them (a `LICENSES/` folder
 with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/` and `pocket/`;
 a `NOTICE.txt` in `fonts/`):
 
-- JSZip: MIT or GPLv3 (your choice); marked: MIT.
+- JSZip: MIT or GPLv3 (your choice); marked: MIT; lamejs: LGPL (from LAME).
 - The fonts (IBM Plex Sans and Mono, Literata and the reading fonts): SIL Open
   Font License 1.1.
 - Kokoro-82M and kokoro-js: Apache-2.0 (kokoro-js bundles a phonemizer built

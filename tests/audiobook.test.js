@@ -62,7 +62,7 @@ async function openExport(page, url = ABC, settings = { 'spine:ttsEngine': 'serv
   await page.waitForTimeout(500);
   await page.keyboard.press(' ');   // (pause: export is started from the bar)
   await page.click('#ttsExport');
-  await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured);
+  await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
 }
 async function exportAll(page, mode, count) {
   await page.check(`input[name="abMode"][value="${mode}"]`);
@@ -137,13 +137,18 @@ test('a file per chapter: numbered files with track numbers; a ZIP of them is of
   assert.deepEqual(await h.breezeLog(), []);
 });
 
-test('the device voice, or a browser without AAC, explains why export is not possible (E-10)', async () => {
+test('the device voice explains why export is not possible; without AAC, .m4b is greyed out and another format chosen (E-10, E-17)', async () => {
   const page = await h.newPage();
   await h.openReader(page, ABC, { 'spine:ttsEngine': 'server' });
   await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
   await page.click('#ttsExport');
-  assert.match(await page.textContent('#abNote'), /no AAC encoder/);
-  assert.equal(await page.isDisabled('#abStart'), true);
+  await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
+  // (The test browser has no AAC encoder, as Chrome on Linux: Opus, which it has, is chosen.)
+  assert.equal(await page.isDisabled('input[name="abFormat"][value="aac"]'), true);
+  assert.equal(await page.isChecked('input[name="abFormat"][value="opus"]'), true);
+  assert.equal(await page.isDisabled('input[name="abFormat"][value="mp3"]'), false);
+  assert.match(await page.textContent('#abFmtNote'), /\.m4b \(AAC\): this browser has no AAC encoder/);
+  assert.equal(await page.isDisabled('#abStart'), false);
   await page.click('#abCancel');
   await page.selectOption('#ttsEngine', 'device');
   await page.click('#ttsExport');
@@ -311,6 +316,7 @@ test('a voice not yet downloaded: the dialog offers the download, and Export wai
   await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
   await page.selectOption('#ttsEngine', 'pocket');
   await page.click('#ttsExport');
+  await page.waitForFunction(() => document.querySelector('#abDialog').dataset.formats);
   assert.match(await page.textContent('#abNote'), /needs a one-time .* download/);
   assert.equal(await page.isVisible('#abLoad'), true);
   assert.equal(await page.isDisabled('#abStart'), true);
@@ -372,7 +378,7 @@ test('a chapter that can\'t be read says so, stays ticked, and is reported; open
   await page.goto(`${h.READER}?book=books/short-lines.epub`); await h.waitForBook(page);
   await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
   await page.click('#ttsExport');
-  await page.waitForFunction(() => document.querySelector('#abList').dataset.measured);
+  await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
   await page.click('#abStart');
   await page.waitForFunction(() => !document.querySelector('#abPause').hidden);
   let asked = '';
@@ -462,9 +468,54 @@ test('the dialog says why there is no encoder: a page that isn\'t secure, or non
   const page = await h.newPage();
   await page.addInitScript(() => { Object.defineProperty(window, 'isSecureContext', { value: false }); delete window.AudioEncoder; });
   await openExport(page);
-  assert.match(await page.textContent('#abNote'), /secure page: open it with https:\/\//);
+  // (Not a secure page: no AAC or Opus, which need WebCodecs; MP3, in JavaScript, still works.)
+  assert.match(await page.textContent('#abFmtNote'), /\.m4b \(AAC\): it needs the reader on a secure page.*\.opus \(Opus\): it needs the reader on a secure page/);
+  assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
   const none = await h.newPage();
   await none.addInitScript(() => { window.AudioEncoder = class { static async isConfigSupported() { return { supported: false }; } }; });
+  await none.route('**/libs/lame.min.js', r => r.abort());
+  await none.route('**/cdnjs.cloudflare.com/**', r => r.abort());
   await openExport(none);
-  assert.match(await none.textContent('#abNote'), /no AAC encoder.*Chrome on Linux has none/);
+  assert.match(await none.textContent('#abNote'), /No audiobook format can be made in this browser: \.m4b \(AAC\): this browser has no AAC encoder \(Chrome on Linux has none\); \.opus \(Opus\): this browser can't encode Opus; \.mp3 \(MP3\): the MP3 encoder couldn't be loaded/);
+  assert.equal(await none.isDisabled('#abStart'), true);
+});
+
+test('.opus: chapters, title, author and cover in Ogg comments; it decodes (E-17)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  const page = await h.newPage();   // (the test browser's own Opus encoder)
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });   // (downloads)
+  await openExport(page);
+  await page.check('input[name="abFormat"][value="opus"]');
+  const [file] = await exportAll(page, 'one', 1);
+  assert.equal(path.basename(file), 'ABC.opus');
+  const p = probe(file);
+  assert.equal(p.streams[0].codec_name, 'opus');
+  assert.deepEqual(p.chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+  assert.ok(Number(p.chapters[2].start_time) > Number(p.chapters[1].start_time) && Number(p.chapters[1].start_time) > 0);
+  const tags = Object.fromEntries(Object.entries(p.streams[0].tags || {}).concat(Object.entries(p.format.tags || {})).map(([k, v]) => [k.toLowerCase(), v]));
+  assert.equal(tags.title, 'ABC'); assert.equal(tags.artist, 'Test Author');
+  assert.ok(Number(p.format.duration) > 2);
+  assert.equal(decodes(file), '');
+});
+
+test('.mp3: chapters, title, author in ID3 tags; a file per chapter with track numbers; it decodes (E-17)', { skip: noFfmpeg, timeout: 180000 }, async () => {
+  const page = await h.newPage();   // (lamejs, from libs/)
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });   // (downloads)
+  await openExport(page);
+  await page.check('input[name="abFormat"][value="mp3"]');
+  const [file] = await exportAll(page, 'one', 1);
+  assert.equal(path.basename(file), 'ABC.mp3');
+  const p = probe(file);
+  assert.equal(p.streams.find(s => s.codec_type === 'audio').codec_name, 'mp3');
+  assert.deepEqual(p.chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+  assert.equal(p.format.tags.title, 'ABC'); assert.equal(p.format.tags.artist, 'Test Author');
+  assert.equal(decodes(file), '');
+  const each = await exportAll(page, 'each', 3);
+  assert.deepEqual(each.map(f => path.basename(f)), ['01 - Alpha.mp3', '02 - Bravo.mp3', '03 - Charlie.mp3']);
+  assert.equal(probe(each[1]).format.tags.track, '2/3');
+  // The choice is remembered.
+  await page.reload(); await h.waitForBook(page);
+  await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
+  await page.click('#ttsExport');
+  await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
+  assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
 });

@@ -175,6 +175,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .ab-tools .ab-muted{margin-left:auto}
 .ab-actions{justify-content:flex-end}
 .ab-mode{border:0;padding:0;margin:0;gap:18px}
+.ab-legend{float:left;padding:0;margin-right:4px;color:var(--muted);font-size:12.5px}
+.ab-mode label.ab-off{color:var(--muted);opacity:.7;cursor:not-allowed}
 .ab-note{background:var(--warn-soft);padding:8px 10px;border-radius:6px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 #abProgress{width:100%;accent-color:var(--ribbon)}
 #ttsExport.busy{color:var(--ribbon);border-color:var(--ribbon)}
@@ -400,6 +402,12 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     <div id="abPick" class="ab-col">
       <div class="ab-tools"><button type="button" class="btn" id="abAll">All</button><button type="button" class="btn" id="abNone">None</button><span class="ab-muted" id="abVoice"></span></div>
       <ul class="ab-list" id="abList" aria-label="Chapters"></ul>
+      <fieldset class="ab-mode"><legend class="ab-legend">Format</legend>
+        <label><input type="radio" name="abFormat" value="aac"> .m4b (AAC)</label>
+        <label><input type="radio" name="abFormat" value="opus"> .opus (Opus)</label>
+        <label><input type="radio" name="abFormat" value="mp3"> .mp3 (MP3)</label>
+      </fieldset>
+      <p class="ab-muted" id="abFmtNote"></p>
       <fieldset class="ab-mode"><legend class="sr-only">Files</legend>
         <label><input type="radio" name="abMode" value="one" checked> One file</label>
         <label><input type="radio" name="abMode" value="each"> A file per chapter</label>
@@ -1113,6 +1121,9 @@ const LIBS = {
     integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
   marked: { file: 'libs/marked.min.js', cdn: MARKED_URL,
     integrity: 'sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+' },
+  // MP3 audiobooks (E-17): LAME in JavaScript, loaded only when an MP3 export is chosen.
+  lamejs: { file: 'libs/lame.min.js', cdn: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js',
+    integrity: 'sha384-xuasJXVcyv3hZq0eYpelEkBC8l4yufatZXDsKuyCU2rqfhDCb+ftuE/mSfZAteiK' },
 };
 function loadScript(src, integrity){
   return new Promise((res, rej) => {
@@ -4858,7 +4869,7 @@ function abM4b(sink){
 }
 // Where an .m4b goes: kept in memory, or written to a file chosen with a picker. In memory, the parts are
 // turned into Blobs every 16 MB or so, which the browser can keep out of the page's memory (on disk).
-function abMemorySink(){
+function abMemorySink(type = 'audio/mp4'){
   const head = [], blobs = []; let pend = [], pendBytes = 0;
   return {
     write: async b => {
@@ -4866,7 +4877,9 @@ function abMemorySink(){
       pend.push(b); pendBytes += b.length;
       if (pendBytes >= 16 * AB_WRITE) { blobs.push(new Blob(pend)); pend = []; pendBytes = 0; }
     },
-    finish: async (at, mdat, secs) => ({ blob: new Blob([head[0], mdat, ...blobs, ...pend], { type: 'audio/mp4' }), secs })
+    // (The part written again at the end: at 0 the first, the tags of an .mp3; else the second, an .m4b's mdat
+    // header or an .opus file's tags.)
+    finish: async (at, bytes, secs) => ({ blob: new Blob(at === 0 ? [bytes, head[1], ...blobs, ...pend] : [head[0], bytes, ...blobs, ...pend], { type }), secs })
   };
 }
 function abFileSink(writable, handle){
@@ -4874,6 +4887,156 @@ function abFileSink(writable, handle){
     finish: async (at, mdat, secs) => { await writable.write({ type: 'write', position: at, data: mdat }); await writable.close(); return { secs }; },
     // (The file the save picker made, removed if nothing was finished in it, where the browser allows: L-113.)
     abort: async () => { await writable.abort?.().catch(() => {}); if (handle) await handle.remove?.().catch(() => {}); } };
+}
+
+// --- Other formats (REVIEW.md E-17): Opus in Ogg (.opus) and MP3. Their tags come first in the file, before the
+// chapter times are known, so they are made the size the planned chapters need (plan.titles), written then, and
+// written again with the real times at the end (padded to the same size: chapters left out make them shorter).
+const abLE = (n, size) => { const b = new Uint8Array(size); for (let i = 0; i < size; i++) { b[i] = n % 256; n = Math.floor(n / 256); } return b; };
+const abClock = sec => { const ms = Math.max(0, Math.round(sec * 1000)), h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
+  return `${String(Math.min(h, 99)).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`; };
+let oggCrcTable = null;
+function oggCrc(b){
+  if (!oggCrcTable) { oggCrcTable = new Uint32Array(256); for (let i = 0; i < 256; i++) { let r = i << 24; for (let k = 0; k < 8; k++) r = r & 0x80000000 ? (r << 1) ^ 0x04c11db7 : r << 1; oggCrcTable[i] = r >>> 0; } }
+  let c = 0; for (let i = 0; i < b.length; i++) c = ((c << 8) ^ oggCrcTable[((c >>> 24) ^ b[i]) & 255]) >>> 0;
+  return c;
+}
+/* Ogg pages for packets: a page holds up to 255 lacing values (a packet of n bytes takes n/255+1 of them); a
+   packet may run on into the next page (flag 1). granule: the position at the end of the last packet that ends on
+   the page, or -1 when none does. */
+function oggPages(serial, seqStart, packets, { bos = false, eos = false } = {}){
+  const pages = []; let seq = seqStart, segs = [], body = [], granule = -1, cont = false;
+  const flush = last => {
+    const head = abCat([abAscii('OggS'), Uint8Array.of(0, (cont ? 1 : 0) | (bos && !pages.length ? 2 : 0) | (last && eos ? 4 : 0)),
+      granule < 0 ? new Uint8Array(8).fill(255) : abLE(granule, 8), abLE(serial, 4), abLE(seq++, 4), new Uint8Array(4), Uint8Array.of(segs.length), Uint8Array.from(segs)]);
+    const page = abCat([head, ...body]);
+    new DataView(page.buffer).setUint32(22, oggCrc(page), true);
+    pages.push(page); segs = []; body = []; granule = -1; cont = false;
+  };
+  packets.forEach((p, k) => {
+    for (let at = 0; ;) {
+      if (segs.length === 255) { flush(false); cont = true; }   // (the packet goes on in the next page)
+      const n = Math.min(255, p.data.length - at);
+      segs.push(n); body.push(p.data.subarray(at, at + n)); at += n;
+      if (n < 255) { granule = p.granule; break; }   // (a lacing value under 255 ends the packet; 0 after an exact multiple)
+    }
+    if (segs.length === 255 && k < packets.length - 1) flush(false);
+  });
+  flush(true);
+  return { pages: abCat(pages), seq };
+}
+// A FLAC picture block (the cover, for METADATA_BLOCK_PICTURE in Ogg comments).
+const abFlacPicture = cover => abCat([abNum(3, 4), abNum(cover.type.length, 4), abAscii(cover.type), abNum(0, 4), abNum(0, 4), abNum(0, 4), abNum(0, 4), abNum(0, 4), abNum(cover.bytes.length, 4), cover.bytes]);
+function abBase64(bytes){ let s = ''; for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode(...bytes.subarray(i, i + 32768)); return btoa(s); }
+/* An .opus file: OpusHead, OpusTags (title, artist, album, track, cover, and the chapters as CHAPTERnnn and
+   CHAPTERnnnNAME), then the Opus packets from the browser's encoder, a second or so to a page. Positions are in
+   48 kHz samples, as Opus always counts. */
+function abOgg(sink, plan){
+  const serial = (Math.random() * 2 ** 31) >>> 0, PRESKIP = 312;   // (the encoder's start-up delay, libopus's at 48 kHz)
+  let rate = 48000, channels = 1, granule = 0, seq = 0, pend = [], pendBytes = 0, chain = Promise.resolve(), started = false, count = 0, tagsAt = 0, tagsLen = 0;
+  const tags = (chapters, size) => {
+    const c = [`TITLE=${plan.title}`, `ALBUM=${plan.album}`, 'GENRE=Audiobook', ...(plan.artist ? [`ARTIST=${plan.artist}`] : []), ...(plan.track ? [`TRACKNUMBER=${plan.track[0]}/${plan.track[1]}`] : []),
+      ...chapters.flatMap((ch, k) => { const n = String(k + 1).padStart(3, '0'); return [`CHAPTER${n}=${abClock(ch.start)}`, `CHAPTER${n}NAME=${ch.title}`]; }),
+      ...(plan.cover ? [`METADATA_BLOCK_PICTURE=${abBase64(abFlacPicture(plan.cover))}`] : [])].map(t => abText(t));
+    const vendor = abText('Spine Reader');
+    let body = abCat([abAscii('OpusTags'), abLE(vendor.length, 4), vendor, abLE(c.length, 4), ...c.flatMap(t => [abLE(t.length, 4), t])]);
+    if (size != null) body = abCat([body, new Uint8Array(Math.max(0, size - body.length))]);   // (zeros after the comments are padding)
+    return body;
+  };
+  const head = () => abCat([abAscii('OpusHead'), Uint8Array.of(1, channels), abLE(PRESKIP, 2), abLE(rate, 4), abLE(0, 2), Uint8Array.of(0)]);
+  const begin = () => {
+    if (started) return; started = true;
+    const h = oggPages(serial, 0, [{ data: head(), granule: 0 }], { bos: true });
+    const planned = tags(plan.titles.map(title => ({ title, start: 0 })));
+    tagsLen = planned.length;
+    const t = oggPages(serial, h.seq, [{ data: planned, granule: 0 }]);
+    seq = t.seq; tagsAt = h.pages.length;
+    chain = chain.then(() => sink.write(h.pages)).then(() => sink.write(t.pages));
+  };
+  // A page of a second or so; the last packet is kept back, so the final page (marked as the end) always has one.
+  const flush = (eos = false) => {
+    const take = eos ? pend : pend.slice(0, -1);
+    if (!take.length) return chain;
+    pend = eos ? [] : pend.slice(-1); pendBytes = pend.reduce((a, p) => a + p.data.length, 0);
+    const out = oggPages(serial, seq, take, { eos });
+    seq = out.seq;
+    return chain = chain.then(() => sink.write(out.pages));
+  };
+  return {
+    timescale: 48000,
+    setFormat(r, d, ch = 1){ rate = r; channels = ch; begin(); },
+    add(frame, dur){
+      begin();
+      granule += dur; count++;
+      pend.push({ data: frame, granule }); pendBytes += frame.length;
+      return pend.length > 50 ? flush() : chain;
+    },
+    async finish(meta){
+      begin();
+      if (!count) throw new Error('no audio was made');
+      await flush(true); await chain;
+      // The tags again, with the real chapter times, the same size.
+      const t = oggPages(serial, 1, [{ data: tags(meta.chapters, tagsLen), granule: 0 }]);
+      return sink.finish(tagsAt, t.pages, Math.max(0, granule - PRESKIP) / 48000);
+    }
+  };
+}
+/* An .mp3 file: an ID3v2.4 tag (title, artist, album, track, cover, and the chapters as CHAP frames listed by a
+   CTOC frame), then MP3 frames from lamejs. */
+function abMp3(sink, plan){
+  let chain = Promise.resolve(), started = false, bytes = 0, tagLen = 0, secs = 0;
+  const syncsafe = n => Uint8Array.of(n >> 21 & 127, n >> 14 & 127, n >> 7 & 127, n & 127);
+  const frame = (id, body) => abCat([abAscii(id), syncsafe(body.length), abNum(0, 2), body]);
+  const text = (id, t) => frame(id, abCat([Uint8Array.of(3), abText(t)]));   // (3: UTF-8)
+  const tag = (chapters, total, size) => {
+    const ids = chapters.map((_, k) => `ch${k + 1}`);
+    const frames = [text('TIT2', plan.title), text('TALB', plan.album), text('TCON', 'Audiobook'),
+      ...(plan.artist ? [text('TPE1', plan.artist)] : []), ...(plan.track ? [text('TRCK', `${plan.track[0]}/${plan.track[1]}`)] : []),
+      ...(plan.cover ? [frame('APIC', abCat([Uint8Array.of(3), abAscii(plan.cover.type), Uint8Array.of(0, 3, 0), plan.cover.bytes]))] : []),
+      ...(chapters.length ? [frame('CTOC', abCat([abAscii('toc'), Uint8Array.of(0, 3, ids.length), ...ids.map(id => abCat([abAscii(id), Uint8Array.of(0)]))]))] : []),
+      ...chapters.map((ch, k) => frame('CHAP', abCat([abAscii(ids[k]), Uint8Array.of(0),
+        abNum(Math.round(ch.start * 1000), 4), abNum(Math.round((chapters[k + 1]?.start ?? total) * 1000), 4), abNum(0xFFFFFFFF, 4), abNum(0xFFFFFFFF, 4),
+        text('TIT2', ch.title)])))];
+    let body = abCat(frames);
+    if (size != null) body = abCat([body, new Uint8Array(Math.max(0, size - 10 - body.length))]);   // (zeros after the frames are padding)
+    return abCat([abAscii('ID3'), Uint8Array.of(4, 0, 0), syncsafe(body.length), body]);
+  };
+  const begin = () => {
+    if (started) return; started = true;
+    const planned = tag(plan.titles.map(title => ({ title, start: 0 })), 0);
+    tagLen = planned.length;
+    chain = chain.then(() => sink.write(planned)).then(() => sink.write(new Uint8Array(0)));   // (the second "head" part: nothing)
+  };
+  return {
+    add(data, s){ begin(); bytes += data.length; secs = s; if (!data.length) return chain; return chain = chain.then(() => sink.write(data)); },
+    async finish(meta){
+      begin(); await chain;
+      if (!bytes) throw new Error('no audio was made');
+      return sink.finish(0, tag(meta.chapters, secs, tagLen), secs);
+    }
+  };
+}
+// MP3 encoding with lamejs (loaded when an MP3 export starts): samples in, MP3 frames out to the writer, mono at
+// 64 kbps, at the voice's own rate (24 kHz for the voices here).
+function abMp3Encoder(mp3){
+  let enc = null, rate = 0, at = 0;
+  return {
+    get seconds(){ return rate ? at / rate : 0; },
+    async push(data, srcRate){
+      if (!enc) { rate = [48000, 44100, 32000, 24000, 22050, 16000].includes(srcRate) ? srcRate : 24000; enc = new window.lamejs.Mp3Encoder(1, rate, 64); }
+      const d = await abResample(data, srcRate, rate);
+      for (let i = 0; i < d.length; i += 1152 * 20) {
+        const part = d.subarray(i, i + 1152 * 20), pcm = new Int16Array(part.length);
+        for (let k = 0; k < part.length; k++) pcm[k] = Math.max(-1, Math.min(1, part[k])) * 0x7fff;
+        at += part.length;
+        await mp3.add(enc.encodeBuffer(pcm), at / rate);
+        if ((i / 1152) % 200 === 0) await new Promise(r => setTimeout(r));   // (lamejs is synchronous: let the page breathe)
+      }
+    },
+    silence(sec, srcRate){ return this.push(new Float32Array(Math.round(sec * (rate || srcRate))), rate || srcRate); },
+    async finish(){ if (enc) await mp3.add(enc.flush(), at / rate); },
+    abort(){ enc = null; }
+  };
 }
 
 // --- AAC encoding (WebCodecs). What the browser's encoder takes, worked out once: for each sample rate the first
@@ -4894,6 +5057,40 @@ async function abAacRates(){
   ab.rates = out.map(c => c.sampleRate);
   return ab.configs = out;
 }
+// The formats an audiobook can be made in (E-17), and which of them this browser can make (worked out once).
+const AB_FORMATS = {
+  aac: { ext: 'm4b', mime: 'audio/mp4', label: '.m4b (AAC)', players: 'Apple Books, most audiobook apps, VLC.' },
+  opus: { ext: 'opus', mime: 'audio/ogg', label: '.opus (Opus)', players: 'VLC, mpv, foobar2000 and several Android audiobook apps; not Apple\'s apps.' },
+  mp3: { ext: 'mp3', mime: 'audio/mpeg', label: '.mp3 (MP3)', players: 'almost every player; not all of them show the chapters.' }
+};
+async function abFormatCheck(){
+  await abAacRates();
+  if (!ab.opusConfigs) {
+    const out = [];
+    if (window.isSecureContext && window.AudioEncoder) for (const sampleRate of [24000, 48000]) {
+      const c = { codec: 'opus', sampleRate, numberOfChannels: 1, bitrate: 32000 };
+      try { if ((await AudioEncoder.isConfigSupported(c)).supported) out.push(c); } catch {}
+    }
+    ab.opusConfigs = out;
+  }
+  if (ab.mp3 == null) {
+    try { await loadLib('lamejs'); ab.mp3 = !!window.lamejs?.Mp3Encoder; ab.mp3Why = ab.mp3 ? '' : "the MP3 encoder didn't start"; }
+    catch (e) { ab.mp3 = false; ab.mp3Why = e.message; }
+  }
+}
+// Why a format can't be made here, or '' when it can.
+function abFormatWhy(f){
+  if ((f === 'aac' && !ab.configs) || (f === 'opus' && !ab.opusConfigs)) return 'checking…';
+  if (f === 'aac') return ab.configs?.length ? '' : { insecure: 'it needs the reader on a secure page (https:// or localhost)', webcodecs: "this browser doesn't let pages encode audio" }[ab.aacWhy] || 'this browser has no AAC encoder (Chrome on Linux has none)';
+  if (f === 'opus') return ab.opusConfigs?.length ? '' : !window.isSecureContext ? 'it needs the reader on a secure page (https:// or localhost)' : "this browser can't encode Opus";
+  return ab.mp3 ? '' : ab.mp3 == null ? 'checking…' : `the MP3 encoder couldn't be loaded (${ab.mp3Why})`;
+}
+// The format chosen: the reader's last choice if it can be made here, else the first that can (AAC first).
+function abFormat(){
+  const want = ab.formatChoice || store.get('spine:abFormat') || 'aac';
+  return !abFormatWhy(want) ? want : ['aac', 'opus', 'mp3'].find(f => !abFormatWhy(f)) || want;
+}
+const abKbps = f => f === 'aac' ? Math.round((ab.configs?.[0]?.bitrate || AB_KBPS * 1000) / 1000) : f === 'opus' ? 32 : 64;
 // Samples at one rate to another: by the browser's own resampler (filtered, so no images or aliasing),
 // or failing that, straight lines between samples.
 async function abResample(data, from, to){
@@ -4921,8 +5118,9 @@ function abEncoder(m4b, configs){
       output: (chunk, meta) => {
         if (meta?.decoderConfig) m4b.setFormat(rate, meta.decoderConfig.description, channels, config.bitrate);
         const b = new Uint8Array(chunk.byteLength); chunk.copyTo(b);
-        const dur = chunk.duration ? Math.round(chunk.duration * rate / 1e6) : 1024;
-        pending = m4b.add(b, dur || 1024).catch(e => { failed ??= e; });
+        const ts = m4b.timescale || rate, frame = m4b.timescale ? 960 : 1024;   // (Opus counts in 48 kHz samples, 20 ms frames)
+        const dur = chunk.duration ? Math.round(chunk.duration * ts / 1e6) : frame;
+        pending = m4b.add(b, dur || frame).catch(e => { failed ??= e; });
       },
       error: e => { failed ??= e; }
     });
@@ -5159,7 +5357,8 @@ async function abSay(ne, chunks, ci, keyBase, snap){
     return { span, pieces };
   }
 }
-async function abRun(units, mode, target){
+async function abRun(units, mode, target, format = 'aac'){
+  const fmt = AB_FORMATS[format];
   const ne = neuralEngine(), b = book, rates = await abAacRates();   // (the encoder settings that work)
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
   const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice() };
@@ -5197,7 +5396,7 @@ async function abRun(units, mode, target){
       const firstPart = await nextPart();
       if (!firstPart) continue;
       const parts = [firstPart];   // (the first; the rest come from nextPart as they're reached)
-      const name = mode === 'one' ? `${abName(b.title)}.m4b` : `${String(units.indexOf(parts[0].u) + 1).padStart(width, '0')} - ${abName(parts[0].u.title)}.m4b`;
+      const name = mode === 'one' ? `${abName(b.title)}.${fmt.ext}` : `${String(units.indexOf(parts[0].u) + 1).padStart(width, '0')} - ${abName(parts[0].u.title)}.${fmt.ext}`;
       let sink, made = false, existed = false, fileSecs = 0;
       // (A new file the picker made is removed at the end if nothing was finished in it: freshTarget. A file chosen
       // to be replaced stays as it was.)
@@ -5206,15 +5405,20 @@ async function abRun(units, mode, target){
         existed = true; try { await target.getFileHandle(name); } catch { existed = false; }
         sink = abFileSink(await (await target.getFileHandle(name, { create: true })).createWritable());
         if (!existed) { const abort = sink.abort; sink.abort = async () => { await abort(); try { await target.removeEntry(name); } catch {} }; }   // (no empty file left behind)
-      } else sink = abMemorySink();
-      const m4b = abM4b(sink), enc = abEncoder(m4b, rates), chapters = [];
+      } else sink = abMemorySink(fmt.mime);
+      // The file's writer and encoder for the format chosen; .opus and .mp3 write their tags first, sized for the
+      // chapters planned (those left out later are padding).
+      const track = mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length];
+      const plan = { title: mode === 'one' ? b.title : parts[0].u.title, album: b.title, artist: meta.artist, cover, track, titles: [parts[0].u, ...queue].map(u => u.title) };
+      const m4b = format === 'aac' ? abM4b(sink) : format === 'opus' ? abOgg(sink, plan) : abMp3(sink, plan);
+      const enc = format === 'mp3' ? abMp3Encoder(m4b) : abEncoder(m4b, format === 'opus' ? ab.opusConfigs : rates), chapters = [];
       let failedInRow = 0;
       // What's made of this file so far, kept when the export has to stop: only if it has some speech in it, and
       // never in place of a file that was already in the folder (round 13 review).
       const keepPart = async () => { if (fileSecs > 0 && !existed && !(mode === 'one' && target && !freshTarget)) { ab.partial = true; try { await finish(); } catch {} } };
       const finish = async () => {
         await enc.finish();
-        const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : parts[0].u.title, chapters, track: mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length] });
+        const out = await m4b.finish({ ...meta, title: plan.title, chapters, track });
         made = true;
         ab.files.push({ name, blob: out.blob || null });
         if (out.blob && (mode === 'one' || !target)) abDownload(out.blob, name);
@@ -5277,10 +5481,8 @@ function abState(){
   const ne = neuralEngine();
   if (tts.engine === 'device' || tts.engine === 'narration' || !ne)
     return { text: 'Audiobooks are made with a natural voice: choose Kokoro, Pocket or Server in the read-aloud bar.' };
-  if (!ab.configs?.length) return { text: {
-    insecure: 'Audiobooks need the reader on a secure page: open it with https:// (or as localhost). Browsers only let secure pages use their audio encoder.',
-    webcodecs: "This browser doesn't let web pages encode audio (WebCodecs). Use a current Chrome, Edge or Safari.",
-  }[ab.aacWhy] || "This browser has no AAC encoder, which .m4b files need. Chrome on Linux has none; Chrome and Edge on Windows or macOS, and Safari, do." };
+  if (abFormatWhy(abFormat())) return { text: ['aac', 'opus', 'mp3'].some(f => abFormatWhy(f) === 'checking…') ? 'Checking which formats this browser can make…'
+    : `No audiobook format can be made in this browser: ${['aac', 'opus', 'mp3'].map(f => `${AB_FORMATS[f].label}: ${abFormatWhy(f)}`).join('; ')}.` };
   if (!ne.ready()) {
     if (ne.st.state === 'loading') return { text: `Loading the voice… ${ne.st.progressText || ''}`.trim() };
     if (ne.st.state === 'error') return { text: `The voice couldn't be loaded${ne.st.error ? ': ' + ne.st.error : ''}.`, download: true, label: 'Try again' };
@@ -5331,7 +5533,7 @@ async function abSummary(){
     if (len) len.textContent = u.unreadable ? "couldn't be read" : u.chars === 0 ? 'no text' : lengths || u.chars != null ? (abSecs(c) >= 30 ? formatDuration(abSecs(c)) : '<1 min') : '';
     if (u.pick) { chars += c; picked++; }
   });
-  const kbps = Math.round((ab.configs?.[0]?.bitrate || AB_KBPS * 1000) / 1000);   // (the bitrate the encoder takes: 96 kbps and up on Windows)
+  const kbps = abKbps(abFormat());   // (the format's bitrate: AAC takes 96 kbps and up on Windows)
   const secs = abSecs(chars), mb = secs * kbps / 8 / 1024, ratio = ab.gen[neuralEngine()?.name];
   const make = ratio ? ` · making it takes about ${formatDuration(secs * ratio) || '1 min'}` : '';
   let text = picked ? `${plural(picked, 'chapter')} · about ${formatDuration(secs) || '1 min'} · about ${mb < 1 ? '1' : Math.round(mb)} MB${make}` : 'No chapters chosen.';
@@ -5352,6 +5554,16 @@ function abSync(){
   $('#abPause').hidden = !ab.running; $('#abPause').textContent = ab.paused ? 'Resume' : 'Pause';
   $('#abCancel').textContent = ab.running ? (ab.confirming ? 'Click again to stop' : 'Cancel export') : 'Close';
   $('#abStart').hidden = ab.running;
+  // The formats: those this browser can't make greyed out, with the reason; a note on where the chosen one plays.
+  const chosen = abFormat();
+  for (const input of $('#abForm').querySelectorAll('input[name="abFormat"]')) {
+    const why = abFormatWhy(input.value);
+    input.disabled = !!why || ab.running; input.checked = input.value === chosen;
+    input.closest('label').title = why ? `Not available: ${why}` : '';
+    input.closest('label').classList.toggle('ab-off', !!why);
+  }
+  const off = ['aac', 'opus', 'mp3'].filter(f => abFormatWhy(f) && abFormatWhy(f) !== 'checking…').map(f => `${AB_FORMATS[f].label}: ${abFormatWhy(f)}`);
+  $('#abFmtNote').textContent = `Plays in ${AB_FORMATS[chosen].players}` + (off.length ? ` Not available here: ${off.join('; ')}.` : '');
   const v = neuralEngine();
   $('#abVoice').textContent = ab.running ? ab.voiceLabel : v ? `Voice: ${$('#ttsEngine').selectedOptions[0]?.textContent} · ${$('#ttsVoice').selectedOptions[0]?.textContent || ''}` : '';
   $('#ttsExport').classList.toggle('busy', ab.running);
@@ -5370,7 +5582,8 @@ function abShow(info){
 }
 async function abOpen(){
   if (!book) return;
-  await abAacRates();
+  // (The dialog opens at once; which formats this browser can make is filled in when the check is done.)
+  abFormatCheck().then(() => { $('#abDialog').dataset.formats = 'checked'; if ($('#abDialog').open) abSummary(); });
   if (!ab.running && (!ab.units.length || ab.book !== book)) {
     ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; delete $('#abList').dataset.measured;
     $('#abDone').replaceChildren(); $('#abDone').hidden = true;
@@ -5396,15 +5609,15 @@ function abZipOffer(){
   done.hidden = !done.childElementCount;
 }
 async function abStart(){
-  const b = book, units = ab.units.filter(u => u.pick), mode = $('#abForm').elements.abMode.value;
+  const b = book, units = ab.units.filter(u => u.pick), mode = $('#abForm').elements.abMode.value, format = abFormat(), fmt = AB_FORMATS[format];
   if (!units.length || abState().text || ab.book !== b) return;
   // A file or folder to write to, where the browser can (asked first: it needs the click).
   let target = null;
   try {
-    if (mode === 'one' && window.showSaveFilePicker) target = await showSaveFilePicker({ suggestedName: `${abName(b.title)}.m4b`, types: [{ description: 'Audiobook', accept: { 'audio/mp4': ['.m4b'] } }] });
+    if (mode === 'one' && window.showSaveFilePicker) target = await showSaveFilePicker({ suggestedName: `${abName(b.title)}.${fmt.ext}`, types: [{ description: 'Audiobook', accept: { [fmt.mime]: [`.${fmt.ext}`] } }] });
     else if (mode !== 'one' && window.showDirectoryPicker) target = await showDirectoryPicker({ mode: 'readwrite' });
   } catch (e) { if (e?.name === 'AbortError') return; target = null; }
-  if (book !== b || ab.running || abState().text) return;   // (another book, or the voice went, while choosing)
+  if (book !== b || ab.running || abState().text || abFormatWhy(format)) return;   // (another book, or the voice went, while choosing)
   if (tts.playing) await ttsTogglePlay();   // reading aloud waits: both would use the voice
   nStop();
   clearTimeout(ab.confirmTimer);
@@ -5416,7 +5629,7 @@ async function abStart(){
   $('#abPause').focus();
   let msg = '', ok = false;
   try {
-    await abRun(units, mode, target); ok = true;
+    await abRun(units, mode, target, format); ok = true;
     msg = (mode === 'one' ? 'The audiobook is ready.' : `${plural(ab.files.length, 'file')} ready.`)
       + (ab.skipped.length ? ` Left out, with no text to read: ${ab.skipped.join(', ')}.` : '')
       + (ab.unreadable.length ? ` Left out, as they couldn't be read: ${ab.unreadable.join(', ')}.` : '')
@@ -5458,6 +5671,10 @@ for (const [id, v] of [['#abAll', true], ['#abNone', false]]) $(id).addEventList
 });
 $('#abLoad').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = false; if (ne.st.state === 'error') ne.st.state = 'idle'; ne.load(); } abSync(); });
 $('#abStart').addEventListener('click', abStart);
+$('#abForm').addEventListener('change', e => {
+  if (e.target.name !== 'abFormat') return;
+  ab.formatChoice = e.target.value; store.set('spine:abFormat', e.target.value); abSummary();
+});
 $('#abPause').addEventListener('click', () => {
   ab.paused = !ab.paused;
   if (ab.paused) ab.pausedAt = performance.now();
