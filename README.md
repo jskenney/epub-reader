@@ -310,8 +310,8 @@ To upgrade one:
 2. Run `python3 tools/make-checksums.py libs` (or `kokoro`, `pocket`) to rewrite its list in
    `checksums/`. For a library, it also prints the new `sha384-…` hash: put it in `integrity` in `LIBS`,
    or the browser refuses the new file.
-3. Run the fetch script again (`./fetch-libs.sh`, …): the old files fail the new checksums and are
-   downloaded again.
+3. Run the fetch script twice (`./fetch-libs.sh`, …): the first run finds the old files, which fail the
+   new checksums and are removed (it ends with "run this script again"); the second downloads the new ones.
 4. For a new model revision, check that every voice and language still works (the French Pocket TTS bundle
    once had no voices at a revision), and update `POCKET_LANGS` sizes if the files changed.
 5. Fonts aren't pinned: rerun `./fetch-fonts.sh` after changing `FONTS` in `index.html`.
@@ -425,6 +425,9 @@ For Caddy, the same policy goes in a `header` directive:
 handle /reader/* {
 	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
 	header X-Content-Type-Options nosniff
+	header Referrer-Policy same-origin
+	# Revalidate every file (cheap with ETags): a cached old library would fail a new index.html's hash.
+	header Cache-Control "no-cache"
 	root * /srv/www
 	file_server
 }
