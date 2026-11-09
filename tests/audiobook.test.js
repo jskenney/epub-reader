@@ -204,3 +204,34 @@ test('with the browser\'s pickers, files are written as they are made, one or on
   for (const f of each) assert.equal(decodes(f), '');
   assert.equal(await page.isVisible('#abDone button'), false, 'no ZIP offer: the files are already in the folder');
 });
+
+test('pause, resume, closing the dialog while it works, and cancel (E-10)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/long.epub`);
+  assert.match(await page.textContent('#abSummary'), /making it takes about/, 'an estimate from the voice heard so far');
+  await page.click('#abNone'); await page.check('#abList input >> nth=0');
+  await h.clearBreezeLog();
+  const downloads = []; page.on('download', d => downloads.push(d.suggestedFilename()));
+  await page.click('#abStart');
+  await h.waitFor(async () => (await h.breezeLog()).length >= 1, 10000, 50);
+  await page.click('#abPause');
+  assert.equal(await page.textContent('#abPause'), 'Resume');
+  await page.waitForTimeout(1500);
+  const n1 = (await h.breezeLog()).length;
+  await page.waitForTimeout(2000);
+  assert.ok((await h.breezeLog()).length <= n1 + 1, 'nothing more is made while paused');
+  await page.keyboard.press('Escape');   // closing the dialog: the export carries on
+  assert.equal(await page.evaluate(() => document.querySelector('#abDialog').open), false);
+  assert.equal(await page.evaluate(() => document.querySelector('#ttsExport').classList.contains('busy')), true);
+  await page.click('#ttsPlay');   // reading aloud waits meanwhile
+  assert.match(await h.notice(page), /waits while the audiobook is being made/);
+  await page.click('#ttsExport');
+  await page.click('#abPause');   // resume
+  await h.waitFor(async () => (await h.breezeLog()).length > n1 + 1, 15000);
+  await page.click('#abCancel');
+  await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
+  assert.deepEqual(downloads, [], 'nothing is saved from a cancelled single file');
+  assert.equal(await page.isDisabled('#abStart'), false, 'ready to start again');
+});

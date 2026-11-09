@@ -4192,6 +4192,7 @@ function nSynth(ne, text){
     });
     const dur = r.data.length / r.rate, blob = wavBlob(r.data, r.rate);
     kSpeedCheck(r.genSec / dur, ne);
+    ab.genRatio = (ab.genRatio ?? r.genSec / dur) * 0.7 + (r.genSec / dur) * 0.3;   // (for the export dialog's estimate)
     n.secPerWeight = n.secPerWeight * 0.6 + (dur / textWeights(text)[text.length]) * 0.4;   // learn the speaking rate
     clipStore.put(key, blob, dur);   // (saved even if cancelled meanwhile: its key matches what it was made with)
     // Cancelled while it was being made (Kokoro can't be interrupted): no URL, which nothing would revoke (L-51).
