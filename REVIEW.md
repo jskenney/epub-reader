@@ -151,7 +151,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
-- **Tests:** T-11 (the weekly workflow hasn't run yet), T-16 and T-20 (in part).
+- **Tests:** T-16 and T-20 (in part).
 - **Enhancements:** E-1 to E-9, E-11 and E-15.
 
 ## Open items
@@ -159,7 +159,6 @@ No critical, high or medium items are open. The open items are:
 | ID | Title | Kind |
 |---|---|---|
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
-| [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
@@ -173,17 +172,6 @@ starts with 20 to 45 ms of silence and chapter marks fall that much early. Harml
 doesn't report the delay, so an `elst` would have to guess it.
 
 ## Tests
-
-### T-11. The weekly workflow hasn't run yet
-
-Updated.
-- **The tests it runs do pass here:** `SLOW=1 NETWORK=1` (the real models, self-hosted and from the CDNs, under
-  both reader policies).
-- **T-12 is fixed,** so the scripts test also passes as a non-root user, as on a GitHub runner.
-- **Not run yet:** `.github/workflows/slow.yml` itself.
-- **Scheduled runs can lapse:** GitHub disables scheduled workflows after 60 days without activity.
-
-**Fix:** run it once by hand (Actions → Slow tests → Run workflow).
 
 ### T-16. Coverage gaps
 
@@ -247,9 +235,8 @@ items) would suit comics-style and picture books.
 
 ## Suggested order
 
-1. **T-11:** run the workflow once by hand (Actions → Slow tests → Run workflow).
-2. **T-14, T-16, T-20:** test coverage.
-3. The enhancements, as wanted.
+1. **T-16, T-20:** test coverage.
+2. The enhancements, as wanted.
 
 ## Resolved
 
@@ -538,6 +525,7 @@ From all reviews so far, with the commits that fixed them.
 | T-23 | The L-113 test couldn't tell a new file from one chosen to be replaced | `ce5efe6` |
 | T-24 | The export tests left a timer and download listeners behind (85 s idle, a possible clash) | `ce5efe6` |
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
+| T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
 | T-27 | E-17 test gaps: the checking window, `.opus` and `.mp3` through the file picker, the MP3 retry; Node tests of both writers with real ffmpeg frames (lamejs from cdnjs is covered by the SRI check only) | `8af5e59`, `0a4902b` |
 | T-14 | The hostile-book tests only ran behind the reader's own policy | `2baae6a` |
