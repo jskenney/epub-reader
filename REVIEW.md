@@ -57,10 +57,18 @@ fail on the code before it:
   the failed chapter as the position while the page still showed the one before.
 - **L-100 to L-103:** smaller gaps (see Resolved).
 
+A fourth and last review, of `d82fa29`, found one more medium regression, fixed in `847488f` with tests that fail
+on the code before it:
+- **M-32:** after M-31, paging couldn't get past a chapter that can't be shown.
+- **L-104 to L-106:** smaller gaps (see Resolved).
+
+L-107 and L-108 are open. `847488f` itself hasn't had an independent review: this round was limited to four
+passes of review and fixes.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 128 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 130 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
 changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
 has a test that fails on the code before it.
@@ -91,7 +99,8 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 ## Summary
 
 No critical, high or medium items are open. The open items are:
-- **Low:** L-74, L-76 to L-79, L-84 to L-89, L-98 and L-99. None keeps a book or a voice from working.
+- **Low:** L-74, L-76 to L-79, L-84 to L-89, L-98, L-99, L-107 and L-108. None keeps a book or a voice from
+  working.
 - **Tests:** T-11 (the weekly workflow hasn't run yet), T-13 to T-17, T-19 and T-20.
 - **Documentation:** D-7.
 - **Enhancements:** E-1 to E-11 and E-15.
@@ -110,6 +119,8 @@ No critical, high or medium items are open. The open items are:
 | [L-89](#l-89-the-checksum-check-passes-files-the-list-doesnt-name) | The checksum check passes files the list doesn't name | Low |
 | [L-98](#l-98-every-chapter-looked-at-is-kept-in-memory) | Every chapter looked at is kept in memory | Low |
 | [L-99](#l-99-two-small-read-aloud-races) | Two small read-aloud races | Low |
+| [L-107](#l-107-reading-aloud-forgets-its-place-after-a-chapter-fails) | Reading aloud forgets its place after a chapter fails | Low |
+| [L-108](#l-108-a-few-bad-bytes-in-mostly-utf-8-text) | A few bad bytes in mostly UTF-8 text | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-13](#t-13-a-self-hosting-test-needs-internet-but-isnt-gated) | A self-hosting test needs internet but isn't gated | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
@@ -144,9 +155,8 @@ phrases worse. **Fix:** record only errors from a server that answered.
 
 ### L-78. The position ribbon from the keyboard
 
-*Read.* Enter on the focused ribbon in the last chapter re-renders that chapter from its start. The ribbon is
-`role="progressbar"` but can be focused and clicked, with no keyboard way back. **Fix:** ignore Enter in the
-last chapter; consider `role="slider"` with arrow keys.
+*Read.* The ribbon is `role="progressbar"` but can be focused and clicked, with no keyboard way back. (Enter in
+the last chapter no longer re-renders it: `847488f`.) **Fix:** consider `role="slider"` with arrow keys.
 
 ### L-79. The narrow-screen contents has no focus handling
 
@@ -197,6 +207,19 @@ the few nearest chapters.
 *Reproduced / read.* Pause and Play while the reader is looking past picture pages replays the last passage
 before going on. And R pressed just as another book opens (while the server voice is checked) starts reading in
 the new book. **Fix:** check the token and the book after each wait.
+
+### L-107. Reading aloud forgets its place after a chapter fails
+
+*Reproduced.* Listening, then choosing a chapter that can't be shown (from the contents or a link) stops
+reading, and the page before stays shown; Play then starts from the top of that page, not the sentence that
+was being read. **Fix:** keep the read-aloud place and put it back when the page is restored.
+
+### L-108. A few bad bytes in mostly UTF-8 text
+
+*Read.* A file that is UTF-8 apart from a stray byte or two is now read in its fallback (Windows-1252 for a
+loose file, or a stale declared encoding), so all its accented letters are wrong, where it used to show one
+replacement character. **Fix, if wanted:** use the fallback only when invalid sequences are more than a small
+share of the non-ASCII bytes.
 
 ## Tests
 
@@ -425,6 +448,7 @@ From all reviews so far, with the commits that fixed them.
 | M-29 | The new look-ahead (M-23) took a chapter that failed to load once as having no text, and skipped it (round 11 review) | `1ba12ab` |
 | M-30 | A server's `charset=utf-8` overrode the Windows-1252 fallback for old files opened by link (round 11, third review) | `d82fa29` |
 | M-31 | Reading aloud into a chapter that couldn't be loaded stayed "playing" and saved the failed chapter as the position (round 11, third review) | `d82fa29` |
+| M-32 | After M-31, paging couldn't get past a chapter that can't be shown (round 11, fourth review) | `847488f` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -514,6 +538,9 @@ From all reviews so far, with the commits that fixed them.
 | L-101 | Encoding aliases (`csISO2022JP`) weren't recognised for the 7-bit ISO-2022-JP exception | `d82fa29` |
 | L-102 | An error while splitting a looked-ahead chapter into sentences was kept and stalled reading | `d82fa29` |
 | L-103 | The range probe (L-91) could fail on a voice folder on another site whose server doesn't allow the header | `d82fa29` |
+| L-104 | After a failed chapter, a resize meanwhile could leave the page shown and the saved position apart | `847488f` |
+| L-105 | Encoding labels were checked before being normalised, so some server labels hid the file's own declaration | `847488f` |
+| L-106 | `x-user-defined` was honoured (private-use characters) instead of read as Windows-1252, as HTML does | `847488f` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
