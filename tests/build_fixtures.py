@@ -65,7 +65,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
             z.writestr(zipfile.ZipInfo(name) if data == b"" else name, data)   # empty files stored (0 bytes), as tools do
 
 
-def epub_items(path, title, items, spine, files, uid):
+def epub_items(path, title, items, spine, files, uid, nav=None):
     """An EPUB with a hand-written manifest: items [(id, href, media-type, extra attributes)], spine [id],
     files {path under OEBPS/: bytes or text}."""
     manifest = "".join(f'<item id="{i}" href="{h}" media-type="{t}" {x}/>' for i, h, t, x in items)
@@ -80,7 +80,8 @@ def epub_items(path, title, items, spine, files, uid):
         z.writestr("META-INF/container.xml", """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
 <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
         z.writestr("OEBPS/content.opf", opf)
-        z.writestr("OEBPS/nav.xhtml", xhtml("Contents", '<nav epub:type="toc"><ol><li><a href="nav.xhtml">Contents</a></li></ol></nav>'))
+        links = "".join(f'<li><a href="{h}">{t}</a></li>' for h, t in (nav or [("nav.xhtml", "Contents")]))
+        z.writestr("OEBPS/nav.xhtml", xhtml("Contents", f'<nav epub:type="toc"><ol>{links}</ol></nav>'))
         for name, data in files.items():
             z.writestr("OEBPS/" + name, data)
 
@@ -247,6 +248,11 @@ def main():
     # An old Windows-1252 Markdown file that mentions a UTF-8 <meta> (not sniffed in Markdown: round 11 review).
     (books / "latin-tips.md").write_bytes('# Old\n\nWrite `<meta charset="utf-8">` in new pages. Café crème brûlée.\n'.encode("cp1252"))
     (books / "tips.md").write_text('# Tips\n\nWrite `<meta charset="windows-1252">` only if you mean it: café – “quoted”.\n', encoding="utf-8")
+    # Contents entries listed out of order within one file, and one whose heading isn't there (L-119, L-118).
+    epub_items(books / "toc-order.epub", "Toc Order", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "c2"], {
+        "c1.xhtml": xhtml("C1", '<h2 id="a">First</h2><p>First part text.</p><h2 id="b">Second</h2><p>Second part text.</p>'),
+        "c2.xhtml": xhtml("C2", '<p>Third part text.</p>'),
+    }, "urn:toc-order", nav=[("c1.xhtml#b", "Second"), ("c1.xhtml#a", "First"), ("c2.xhtml#nowhere", "Third")])
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
     (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))

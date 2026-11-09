@@ -299,3 +299,16 @@ test('a voice not yet downloaded: the dialog offers the download, and Export wai
   assert.equal(await page.textContent('#spinePos'), before, 'no page turned behind the dialog');
   assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), null, 'no theme change');
 });
+
+test('contents entries out of order within a file are put in the order of their headings (L-119)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await h.clearBreezeLog();
+  await openExport(page, `${h.READER}?book=books/toc-order.epub`);
+  assert.deepEqual(await page.$$eval('#abList li:not([hidden]) .ab-t', els => els.map(e => e.textContent)), ['First', 'Second', 'Third']);
+  const [file] = await exportAll(page, 'one', 1);
+  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['First', 'Second', 'Third']);
+  const said = (await h.breezeLog()).map(r => r.text);
+  for (const t of ['First part text.', 'Second part text.', 'Third part text.']) assert.equal(said.filter(x => x.includes(t)).length, 1, `${t} once: ${JSON.stringify(said)}`);
+});

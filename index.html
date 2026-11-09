@@ -378,7 +378,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </button>
     <div class="where">
       <div class="loc"><span id="chapLabel"></span><span class="mono"><span id="spinePos"></span><span class="pct-part"> · <span id="pct">0%</span></span><span id="timeLeft"></span></span></div>
-      <div class="ribbon" id="ribbon" role="progressbar" aria-label="Position in book" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" title="Click to jump to a section"><div id="ribbonFill"></div></div>
+      <div class="ribbon" id="ribbon"  role="slider" aria-label="Position in book" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" title="Click to jump to a section"><div id="ribbonFill"></div></div>
     </div>
     <button class="btn" id="nextBtn" title="Next page (Right arrow)">
       <span class="hide-sm">Next</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
@@ -2224,6 +2224,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
       cur = prev; cur.failed = new Set([...(prev.failed || []), i]);
       if (scrolling()) cur.f = fraction(); else position('', cur.f);
       updateChrome(); savePos();
+      ttsRestore();
     }
     if (tts.awaitChapter || tts.playing) { tts.awaitChapter = false; tts.playing = false; ++tts.token; ttsUpdateBar(); }
   }
@@ -2278,7 +2279,12 @@ function relayout(){ if (book && cur.f != null) { position('', cur.f); ttsRefoll
 // time gets one now, so it is kept that long from today.
 function sweepPositions(){
   const now = Date.now();
-  if (!(KEEP_POSITIONS_DAYS > 0) || now - (store.get('spine:posSweep') || 0) < 86400000) return;
+  // The sweep covers the whole site, so it uses the longest time any folder's setting has asked for (0, "keep
+  // forever", included), rather than whichever folder's page happens to run it (REVIEW.md L-77).
+  const seen = store.get('spine:keepDays');
+  const days = KEEP_POSITIONS_DAYS === 0 || seen === 0 ? 0 : Math.max(KEEP_POSITIONS_DAYS, typeof seen === 'number' ? seen : 0);
+  if (days !== seen) store.set('spine:keepDays', days);
+  if (!(days > 0) || now - (store.get('spine:posSweep') || 0) < 86400000) return;
   store.set('spine:posSweep', now);
   let keys = [];
   try { keys = Object.keys(localStorage).filter(k => k.startsWith('spine:pos:')); } catch { return; }
@@ -2286,7 +2292,7 @@ function sweepPositions(){
     const v = store.get(k);
     if (!v || typeof v !== 'object') continue;
     if (!(v.t > 0)) store.set(k, { ...v, t: now });
-    else if (now - v.t > KEEP_POSITIONS_DAYS * 86400000) store.del(k);
+    else if (now - v.t > days * 86400000) store.del(k);
   }
 }
 function savePos(){
@@ -2308,6 +2314,7 @@ function onWheel(e){
 function wireFrame(){
   const doc = frame.contentDocument; if (!doc) return;
   doc.addEventListener('click', onFrameClick);
+  doc.addEventListener('pointerdown', () => { if (narrow.matches && tocIsOpen()) setToc(false); });   // (L-79)
   // Middle-click opens links in a new tab without a click event: only web links meant to (target=_blank) may.
   doc.addEventListener('auxclick', e => { const l = e.target.closest?.('a, area'); if (l && l.getAttribute('target') !== '_blank') e.preventDefault(); });
   doc.addEventListener('keydown', onKey);
@@ -2424,6 +2431,7 @@ function pagePrev(){
 }
 function onKey(e){
   if ($('#abDialog').open) return;   // (the export dialog is modal: the reader's keys wait)
+  if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs()) { e.preventDefault(); setToc(false); $('#tocBtn').focus(); return; }
   const tag = (e.target.tagName || '').toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox') { e.preventDefault(); searchOpen(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -2613,8 +2621,15 @@ $('#ribbon').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect();
   renderChapter(Math.floor(((e.clientX - r.left) / r.width) * book.spine.length));
 });
+// The ribbon as a slider over the sections: arrows step a section, Home and End go to the first and last
+// (REVIEW.md L-78). (Kept from the page-turning keys.)
 $('#ribbon').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && nextChapter() < book.spine.length) renderChapter(nextChapter());
+  if (!book) return;
+  const last = book.spine.length - 1;
+  const to = { ArrowRight: nextChapter(), ArrowUp: nextChapter(), Enter: nextChapter(), ArrowLeft: prevChapter(), ArrowDown: prevChapter(), Home: 0, End: last }[e.key];
+  if (to == null) return;
+  e.preventDefault(); e.stopPropagation();
+  if (to >= 0 && to <= last && to !== cur.i) renderChapter(to);
 });
 $('#tocList').addEventListener('click', e => {
   const a = e.target.closest('a[data-path]'); if (!a) return;
@@ -2624,7 +2639,14 @@ $('#tocList').addEventListener('click', e => {
 });
 function setToc(open){
   const t = $('#toc');
-  if (narrow.matches) { t.classList.toggle('open', open); t.classList.remove('collapsed'); }
+  if (narrow.matches) {
+    // The contents over the page on a narrow screen: focus goes into it, and back to its button when it closes
+    // (Escape, or a tap on the page, closes it: REVIEW.md L-79).
+    const was = t.classList.contains('open');
+    t.classList.toggle('open', open); t.classList.remove('collapsed');
+    if (open && !was) requestAnimationFrame(() => ($('#tocList a[aria-current]') || $('#tocList a'))?.focus({ preventScroll: false }));
+    if (!open && was && t.contains(document.activeElement)) $('#tocBtn').focus();
+  }
   else { t.classList.toggle('collapsed', !open); t.classList.remove('open'); }
   $('#tocBtn').setAttribute('aria-expanded', String(open));
 }
@@ -3049,7 +3071,7 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepF
   if (ci >= chunks.length) { if (speak) ttsEndOfChapter(); return; }
   const c = chunks[Math.max(0, ci)]; ci = Math.max(0, ci);
   pos = wordStartAt(c.b, Math.max(c.s, Math.min(c.e - 1, pos ?? c.s)), c.s, c.e);
-  tts.ci = ci; tts.pos = pos; if (!keepFollow) tts.follow = true;
+  tts.ci = ci; tts.pos = pos; tts.atEnd = null; if (!keepFollow) tts.follow = true;
   const token = ++tts.token;
   synth?.cancel(); nStop();
   hl('tts-word');
@@ -3093,6 +3115,7 @@ async function ttsEndOfChapter(){
     setSleep('off'); tts.note = 'Sleep timer: stopped at the end of the chapter'; ttsUpdateBar();
   };
   if (tts.playing && sleep.mode === 'chapter') { stopHere(); return; }
+  tts.atEnd = tts.doc;   // (paused while looking, Play goes on looking rather than read the last sentence again)
   // On to the next chapter with something to read. Pages with nothing (pictures only) are passed over without
   // being shown, so reading past the last text doesn't turn every page to the end and save that as the
   // position (REVIEW.md M-23). A chapter that couldn't be read counts as having text, so it is shown and its
@@ -3308,9 +3331,11 @@ async function ttsReadHere(){
   if (ab.running) { showNotice('Reading aloud waits while the audiobook is being made.', 'info'); return; }
   if (book?.comic) { showNotice('Comics have no text to read aloud.', 'info'); return; }
   if (!book || !ttsOpen()) return;
-  // (After each wait: the bar may have been closed meanwhile, and then nothing may start: REVIEW.md M-18.)
-  if (tts.engine === 'server') { await svProbe(); if (!tts.open) return; }
-  await ttsEnsureMode(); if (!tts.open) return;
+  // (After each wait: the bar may have been closed, or another book opened, and then nothing may start:
+  // REVIEW.md M-18, L-99.)
+  const opened = book;
+  if (tts.engine === 'server') { await svProbe(); if (!tts.open || book !== opened) return; }
+  await ttsEnsureMode(); if (!tts.open || book !== opened) return;
   ttsUpdateBar();
   const [a, b] = ttsStartPoint();
   tts.playing = true;
@@ -3350,6 +3375,7 @@ async function ttsTogglePlay(){
   await ttsEnsureMode();
   if (!tts.open || !tts.playing) return;   // closed or paused meanwhile
   if (tts.mo) { hadMo ? moGo(tts.mo.i, { resume: true }) : moGo(moPageStart()); return; }
+  if (tts.atEnd && tts.atEnd === tts.doc && tts.doc === frame.contentDocument) { ttsEndOfChapter(); return; }
   if (tts.doc !== frame.contentDocument || !tts.chunks) { const [ci, pos] = ttsPageStart(); ttsGo(ci, pos); }
   else ttsGo(tts.ci, tts.pos);
 }
@@ -3386,8 +3412,22 @@ async function ttsSetEngine(engine){
 }
 
 // Hooks used by the rest of the reader.
-function ttsBeforeRender(){ if (!tts.open) return; ttsStopAudio(); ttsClearHL(); tts.chunks = null; tts.mo = null; }
+function ttsBeforeRender(){
+  if (!tts.open) return;
+  tts.kept = { doc: tts.doc, chunks: tts.chunks, mo: tts.mo, ci: tts.ci, pos: tts.pos };   // (for ttsRestore)
+  ttsStopAudio(); ttsClearHL(); tts.chunks = null; tts.mo = null;
+}
+// The chapter asked for couldn't be shown and the page before stays: so does the place reading aloud had there,
+// so Play goes on from the sentence it was at (REVIEW.md L-107).
+function ttsRestore(){
+  const k = tts.kept; tts.kept = null;
+  if (!k || k.doc !== frame.contentDocument) return;
+  Object.assign(tts, { doc: k.doc, chunks: k.chunks, mo: k.mo, ci: k.ci, pos: k.pos });
+  if (tts.open && tts.chunks?.[tts.ci]) { const c = tts.chunks[tts.ci]; hl('tts-sentence', rangeFor(c.b, Math.max(c.s, Math.min(tts.pos, c.e - 1)), c.e)); }
+  ttsUpdateBar();
+}
 async function ttsAfterRender(){
+  tts.kept = null;
   if (!tts.open) return;
   tts.chunks = null; tts.ci = 0; tts.pos = 0;
   const doc = frame.contentDocument;
@@ -3446,7 +3486,8 @@ function ttsUpdateBar(status){
   if (!status && neural && !neural.ready()) {
     const st = neural.st;
     if (neural.auto && st.state === 'idle') { neural.load(); status = 'Connecting to the voice server…'; }   // nothing to download
-    else if (st.state === 'idle' && neural.agreed()) { neural.load(); status = 'Loading natural voice…'; }   // downloaded before: don't ask again
+    // Downloaded before: don't ask again (also Pocket TTS ready for another language: REVIEW.md L-74).
+    else if ((st.state === 'idle' || (st === pk && st.state === 'ready')) && neural.agreed()) { neural.load(); status = 'Loading natural voice…'; }
     else if (st.state === 'loading') status = st.progressText || 'Loading natural voice…';
     else if (st.state === 'error') { status = `Natural voice failed: ${st.error}`; dl = 'Try again'; }
     else { status = `${neural.name}: one-time ${neural.size()} download`; dl = 'Download'; }
@@ -3650,6 +3691,22 @@ const kokoroFits = () => /^en\b/i.test(bookLang());
 
 // A module worker from source text. Its blob URL is revoked once the worker has started (its first message)
 // or failed, rather than left for the life of the page.
+// An error from the voice being unavailable for a moment (not from the text asked for).
+const transientError = msg => Object.assign(new Error(msg), { transient: true });
+// A wait that a background tab doesn't stretch: timers there run on a worker, which browsers don't slow as much
+// (REVIEW.md L-129).
+let bgTimer = null, bgWaits = new Map(), bgNext = 0;
+function bgSleep(ms){
+  if (document.visibilityState === 'visible') return new Promise(r => setTimeout(r, ms));
+  try {
+    if (!bgTimer) {
+      bgTimer = new Worker(URL.createObjectURL(new Blob(['onmessage = e => setTimeout(() => postMessage(e.data.id), e.data.ms);'], { type: 'text/javascript' })));
+      bgTimer.onmessage = e => { bgWaits.get(e.data)?.(); bgWaits.delete(e.data); };
+    }
+    const id = ++bgNext;
+    return new Promise(r => { bgWaits.set(id, r); bgTimer.postMessage({ id, ms }); });
+  } catch { return new Promise(r => setTimeout(r, ms)); }
+}
 function workerFrom(source){
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
   const w = new Worker(url, { type: 'module' });
@@ -3672,7 +3729,7 @@ function kWorker(){
   // The worker failing after it loaded (it crashed, or ran out of memory): its passages fail rather than wait
   // forever, and the voice loads afresh next time (REVIEW.md L-53).
   w.onerror = w.onmessageerror = e => {
-    const err = new Error(e.message || (e.type === 'messageerror' ? "a message from the worker couldn't be read" : 'the worker failed to start'));
+    const err = transientError(e.message || (e.type === 'messageerror' ? "a message from the worker couldn't be read" : 'the worker failed to start'));
     k.onLoad?.rej(err);
     if (k.worker !== w) return;
     for (const job of k.pending.values()) job.rej(err);
@@ -3798,7 +3855,7 @@ import(${JSON.stringify(lib + 'worker.js')}).then(() => { for (const data of que
       if (m.type === 'result') job?.res(m.result); else job?.rej(new Error(m.error));
     }
   };
-  w.onerror = e => { for (const j of pk.pending.values()) j.rej(new Error(e.message || 'the worker failed to start')); pk.pending.clear(); };
+  w.onerror = e => { for (const j of pk.pending.values()) j.rej(transientError(e.message || 'the worker failed to start')); pk.pending.clear(); };
   return w;
 }
 function pkRequest(type, payload){
@@ -4006,20 +4063,21 @@ function svGenerate(text, opts = {}){
       const ctl = new AbortController(), giveUp = setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000);
       const stop = () => ctl.abort(); opts.signal?.addEventListener('abort', stop, { once: true });   // (removed below)
       try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form, signal: ctl.signal }); }
-      catch (e) { if (opts.signal?.aborted) throw staleError(); svLost(); throw new Error('the voice server isn\'t responding'); }
+      catch (e) { if (opts.signal?.aborted) throw staleError(); svLost(); throw transientError('the voice server isn\'t responding'); }
       finally { clearTimeout(giveUp); }
       // (Kept for the stream while it plays; dropped when this attempt is retried or ends.)
       const unlisten = () => opts.signal?.removeEventListener('abort', stop);
       // Gateway errors or an HTML page instead of audio: the server behind the proxy is gone.
       if ([502, 503, 504].includes(r.status) || (r.ok && /html/i.test(r.headers.get('content-type') || ''))) {
-        svLost(); throw new Error('the voice server isn\'t responding');
+        svLost(); throw transientError('the voice server isn\'t responding');
       }
       // Busy with another request, often one just cancelled that the server hasn't let go of yet: retry
       // soon, then less often.
-      if (r.status === 409 && attempt < 40) { unlisten(); await new Promise(res => setTimeout(res, Math.min(1500, 150 * 2 ** attempt))); if (opts.signal?.aborted) throw staleError(); continue; }
+      if (r.status === 409 && attempt < 40) { unlisten(); await bgSleep(Math.min(1500, 150 * 2 ** attempt)); if (opts.signal?.aborted) throw staleError(); continue; }
       if (!r.ok) {
         let detail = ''; try { detail = (await r.json()).detail; } catch {}
-        throw new Error(`the voice server answered ${r.status}${detail ? ': ' + detail : ''}`);
+        const err = new Error(`the voice server answered ${r.status}${detail ? ': ' + detail : ''}`);
+        throw r.status === 409 || r.status >= 500 ? Object.assign(err, { transient: true }) : err;
       }
       const rate = Number(r.headers.get('X-Sample-Rate')) || 24000;
       // Read the audio as it streams in (16-bit samples, which can be split across network chunks).
@@ -4207,7 +4265,9 @@ function nSynth(ne, text){
   });
   e.job.catch(err => {
     if (n.cache.get(key) === e) n.cache.delete(key);
-    if (!err?.stale) n.failed.add(key);   // don't ask for a failed passage again
+    // Don't ask for a failed passage again (read it sentence by sentence instead), unless the failure was the
+    // voice being away or busy for a moment rather than this text (REVIEW.md L-76).
+    if (!err?.stale && !err?.transient) n.failed.add(key);
     for (const l of e.listeners) l.fail?.(err);
   });
   n.cache.set(key, e);
@@ -4248,7 +4308,11 @@ async function chapterChunks(i){
   if (n.chapBook !== book) { n.chap = new Map(); n.chapBook = book; }
   // (A chapter that couldn't be read is null, and not kept, so it is tried again: round 11 review.)
   const map = n.chap;
-  if (!map.has(i)) map.set(i, chapterDoc(i).then(d => chunksOf(d).chunks).catch(() => { map.delete(i); return null; }));
+  if (!map.has(i)) {
+    map.set(i, chapterDoc(i).then(d => chunksOf(d).chunks).catch(() => { map.delete(i); return null; }));
+    // (Only the chapters used most recently are kept, with their detached pages: REVIEW.md L-98.)
+    for (const key of map.keys()) { if (map.size <= 8) break; if (key !== i) map.delete(key); }
+  } else { const v = map.get(i); map.delete(i); map.set(i, v); }
   return map.get(i);
 }
 /* Look-ahead: after the passage being spoken, keep making the following passages one at a time (behind
@@ -4671,12 +4735,32 @@ function abBuildUnits(){
     units.push({ ...e });
   }
   if (!units.length || units[0].i > 0 || units[0].frag) units.unshift({ title: 'Opening pages', i: 0, frag: '', depth: 0, front: true });
-  units.forEach((u, k) => {
-    const nx = units[k + 1];
-    u.end = nx ? { i: nx.i, frag: nx.frag } : { i: book.spine.length, frag: '' };
-    u.pick = !u.front && !/^(cover|title( page)?|copyright( page)?|(table of )?contents|imprint|colophon)$/i.test(u.title);
-  });
+  abSetEnds(units);
+  units.forEach(u => { u.pick = !u.front && !/^(cover|title( page)?|copyright( page)?|(table of )?contents|imprint|colophon)$/i.test(u.title); });
   return units;
+}
+// Each unit runs to where the next begins.
+function abSetEnds(units){
+  units.forEach((u, k) => { const nx = units[k + 1]; u.end = nx ? { i: nx.i, frag: nx.frag } : { i: book.spine.length, frag: '' }; });
+}
+// Entries pointing into the same file, put in the order of their headings there (a contents page may list
+// them otherwise: REVIEW.md L-119). Entries whose heading isn't there keep their place after the one before.
+async function abOrderUnits(){
+  const byFile = new Map();
+  ab.units.forEach((u, k) => { if (!byFile.has(u.i)) byFile.set(u.i, []); byFile.get(u.i).push(k); });
+  let changed = false;
+  for (const [i, slots] of byFile) {
+    if (slots.filter(k => ab.units[k].frag).length < 2) continue;
+    let doc; try { doc = await chapterDoc(i); } catch { continue; }
+    const order = new Map(); let n = 0;
+    for (const el of doc.querySelectorAll('[id]')) if (!order.has(el.id)) order.set(el.id, n++);
+    let lastKey = -1;
+    const keyed = slots.map(k => { const u = ab.units[k]; const key = !u.frag ? -1 : order.get(u.frag) ?? lastKey; lastKey = key; return { u, key }; });
+    const sorted = [...keyed].sort((a, b) => a.key - b.key);   // (stable: ties keep their order)
+    if (sorted.some((x, j) => x !== keyed[j])) { changed = true; slots.forEach((k, j) => { ab.units[k] = sorted[j].u; }); }
+  }
+  if (changed) { abSetEnds(ab.units); ab.units.forEach(u => { u.chars = undefined; }); }
+  return changed;
 }
 // Is a sentence at or after the element with this id (a heading the table of contents points to)?
 function abAfter(c, frag){
@@ -4784,7 +4868,7 @@ async function abSay(ne, chunks, ci, keyBase, snap){
       catch (e) {
         if (ab.cancel || e?.stale) throw abCancelled();
         if (attempt >= 2) throw e;
-        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        await bgSleep(1500 * (attempt + 1));
       }
     }
   };
@@ -4918,6 +5002,7 @@ const abChars = (u, lengths) => u.chars ?? abUnitChars(u, lengths);
 // lengths, shared evenly between the units in a file). Units found to have none start unticked.
 async function abMeasure(){
   const b = book, token = ab.measure = (ab.measure || 0) + 1;
+  if (ab.ordered !== b) { await abOrderUnits(); if (book !== b || token !== ab.measure) return; ab.ordered = b; }
   for (const u of ab.units) {
     if (u.chars != null) continue;
     let count = 0;

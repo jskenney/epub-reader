@@ -187,3 +187,24 @@ test('the read-aloud status is announced, and again after the bar is closed and 
   await page.keyboard.press('r');
   assert.ok(await h.waitFor(async () => (await said()) === first, 10000), 'announced again on reopening');
 });
+
+test('the position ribbon is a slider: arrows step a section, Home and End (L-78); narrow contents take focus and close on Escape (L-79)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  assert.equal(await page.getAttribute('#ribbon', 'role'), 'slider');
+  await page.focus('#ribbon');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => /spine 2\//.test(document.querySelector('#spinePos').textContent));
+  await page.keyboard.press('End');
+  await page.waitForFunction(() => /spine 3\//.test(document.querySelector('#spinePos').textContent));
+  await page.keyboard.press('End');   // (already at the end: nothing happens, not back to its start)
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => /spine 1\//.test(document.querySelector('#spinePos').textContent));
+  const narrow = await h.newPage({ viewport: { width: 600, height: 800 } });
+  await h.openReader(narrow, `${h.READER}?book=books/long.epub`);
+  await narrow.click('#tocBtn');
+  await narrow.waitForFunction(() => document.activeElement?.closest('#tocList'));
+  await narrow.keyboard.press('Escape');
+  assert.equal(await narrow.evaluate(() => document.querySelector('#toc').classList.contains('open')), false);
+  assert.equal(await narrow.evaluate(() => document.activeElement?.id), 'tocBtn');
+});

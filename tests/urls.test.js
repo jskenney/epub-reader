@@ -111,7 +111,8 @@ test('books without an identifier keep separate positions even with the same tit
 });
 
 // Where the position is saved, once the reader has saved it (T-7: no fixed waits).
-const savedAt = (page, i) => page.waitForFunction(i => Object.entries(localStorage).find(([k, v]) => k.startsWith('spine:pos:') && JSON.parse(v)?.i === i)?.[0], i)
+// (The book's own key, not its looser record: localStorage lists keys in no fixed order.)
+const savedAt = (page, i) => page.waitForFunction(i => Object.entries(localStorage).find(([k, v]) => k.startsWith('spine:pos:') && !k.startsWith('spine:pos:loose:') && JSON.parse(v)?.i === i)?.[0], i)
   .then(hd => hd.jsonValue());
 const posKeys = page => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('spine:pos:') && !k.startsWith('spine:pos:loose:')).sort());
 
@@ -257,4 +258,12 @@ test('an empty DEFAULT_BOOK in a config is refused rather than opening the reade
   const page = await h.newPage();
   await h.openReader(page, `${h.SITE}/folder-emptydefault/index.html`);
   assert.equal(await h.title(page), 'Four Fables');
+});
+
+test('another folder asked to keep positions forever (or longer): the site-wide sweep keeps them (L-77)', async () => {
+  const page = await h.newPage();
+  const day = 86400000, now = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:pos:opf:stale': { i: 1, f: 0, t: now - 800 * day }, 'spine:keepDays': 0 });
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('spine:pos:opf:stale')));
+  assert.equal(kept?.i, 1, 'kept: a folder said 0 (forever)');
 });

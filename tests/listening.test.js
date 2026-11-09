@@ -205,3 +205,37 @@ test('reading aloud into a chapter that can\'t be loaded stops on the chapter be
   const pos = await page.evaluate(() => Object.entries(localStorage).filter(([k]) => k.startsWith('spine:pos:')).map(([, v]) => JSON.parse(v).i));
   assert.deepEqual(pos, [0]);
 });
+
+test('a voice server busy or away for a moment doesn\'t make passages read sentence by sentence for good (L-76)', async () => {
+  const page = await h.newPage();
+  // The first request for paragraph 1's passage finds the server away for a moment (a gateway error).
+  let failed = 0;
+  await page.route('**/tts/v1/audio/speech', route => !failed && /First paragraph 1\./.test(route.request().postDataBuffer()?.toString('latin1') || '')
+    ? (failed++, route.fulfill({ status: 503, body: 'busy' })) : route.continue());
+  await h.clearBreezeLog();
+  await h.openReader(page, LONG, serverVoice);
+  await page.keyboard.press('r');
+  await h.waitFor(() => failed, 20000, 50);
+  await page.waitForTimeout(1000);
+  await h.clearBreezeLog();
+  await page.keyboard.press('Escape'); await page.click('#ttsClose');
+  await page.keyboard.press('r');   // the voice is back: read again from the top of the page
+  const p1 = await h.waitFor(async () => (await h.breezeLog()).find(r => r.text.startsWith('First paragraph 1.')), 20000);
+  assert.ok(p1, JSON.stringify((await h.breezeLog()).map(r => r.text.slice(0, 30))));
+  assert.ok(p1.text.length > 60, `a whole passage, not one sentence: "${p1.text}"`);
+});
+
+test('choosing a chapter that can\'t be shown keeps the place reading aloud had on the page before (L-107)', async () => {
+  const page = await h.newPage();
+  await page.route('**/shelf-dir/OEBPS/c2.xhtml', route => route.abort());
+  await h.openReader(page, `${h.READER}?book=books/shelf-dir/`, serverVoice);
+  await startReading(page);
+  await page.frameLocator('#page').locator('p', { hasText: 'First paragraph 3.' }).click({ position: { x: 5, y: 5 } });
+  await h.waitFor(async () => (await h.spokenWord(page)) && (await page.evaluate(() => [...document.querySelector('#page').contentWindow.CSS.highlights.get('tts-sentence')][0].toString())).startsWith('First paragraph 3.'), 10000);
+  await page.keyboard.press(' ');   // pause
+  await page.click('#tocList a >> nth=1');   // Chapter Two: can't be loaded
+  await page.waitForFunction(() => /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''));
+  await page.click('#ttsPlay');
+  const at = await h.waitFor(async () => { const w = await h.spokenWord(page); if (!w) return null; return page.evaluate(() => [...document.querySelector('#page').contentWindow.CSS.highlights.get('tts-sentence')][0].toString()); }, 10000);
+  assert.ok(at && !at.startsWith('Chapter One') && !at.startsWith('First paragraph 1.'), `goes on from where it was, not the top of the page: "${at}"`);
+});
