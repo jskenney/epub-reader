@@ -21,7 +21,7 @@ jobs:
       - name: Playwright, and ffmpeg for the audiobook export tests
         run: cd tests && npm ci && npx playwright install --with-deps chromium && sudo apt-get install -y ffmpeg
       # The models (about 900 MB) kept between runs, keyed on their pinned checksums: a new pin downloads afresh.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             kokoro
