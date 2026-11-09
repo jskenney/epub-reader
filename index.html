@@ -1776,6 +1776,7 @@ const cssUrl = u => `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).t
 const cssEndRule = t => /;\s*$/.test(t) ? t : cssCloseAtEnd(t) + ';';   // (closed first: an open string or bracket would take the ";")
 const IMAGE_STRING_FNS = /^(-webkit-)?image-set$|^image$|^src$|^url$/;
 const SUBSTITUTIONS = /^(var|env|if|attr|inherit|first-valid)$/;
+const ATTR_ADDRESS = /\burl\b|<\s*image\s*>/i;
 function cssRefs(css){
   const toks = cssTokens(css), refs = [], fns = [];
   let block = 0, late = false;   // late: past the point where @import is allowed (anything but @charset and @layer x;)
@@ -1804,6 +1805,9 @@ function cssRefs(css){
     else if (tk.t === '(') fns.push({ v: '(', s: tk.s, img: fns.at(-1)?.img });
     else if (tk.t === ')') {
       const f = fns.pop();
+      // attr() typed as an address takes it from an HTML attribute, out of this cleaner's sight: blocked wherever
+      // it is (browsers don't fetch these yet; loop 5 review). attr() of other types is left alone.
+      if (f?.v === 'attr' && ATTR_ADDRESS.test(css.slice(f.s, tk.e))) f.bad = true;
       if (f?.bad) { while (refs.length && refs.at(-1).s >= f.s) refs.pop(); refs.push({ s: f.s, e: tk.e, ref: '', kind: 'blocked' }); }
     }
     else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1)?.v || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
@@ -1836,7 +1840,7 @@ function cssRefs(css){
   }
   // A function still open at the end of the sheet is closed there by the browser: one to be blocked is blocked
   // to the end (loop 4 review).
-  const open = fns.find(f => f.bad);
+  const open = fns.find(f => f.bad || (f.v === 'attr' && ATTR_ADDRESS.test(css.slice(f.s))));
   if (open) { while (refs.length && refs.at(-1).s >= open.s) refs.pop(); refs.push({ s: open.s, e: css.length, ref: '', kind: 'blocked' }); }
   return refs;
 }

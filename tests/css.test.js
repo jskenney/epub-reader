@@ -53,6 +53,8 @@ const LEAKS = [
   `p{background-image:image-set(if(else:"${R}/32.png") 1x)}`, `p{background-image:src("${R}/33.png" type("image/png"))}`,
   `p{background-image:image-set(env(--nope, "${R}/34.png") 1x)}`, `p{background-image:url("${R}/35.png" env(--e,))}`,
 ];
+// attr() typed as an address (from an HTML attribute the cleaner never sees): blocked (loop 5 review).
+const ATTRS = ['p{background-image:attr(data-bg type(<url>))}', 'p{cursor:attr(data-c url), auto}', 'p{background:attr(data-i type(<image>))'];
 
 // Imports whose text, pasted into the importing sheet, would join with it into a new address (or run on).
 const JOINS = [`@import "tail.css";${R}/27.png)}`, `@import "tail2.css";rl(${R}/28.png)}`, `@import "tail3.css";"${R}/29.png" 1x)}`,
@@ -165,4 +167,11 @@ test('a fragment in a CSS url is kept (L-84); a remote import after a pasted one
   const ns = await rewriteCss('@import "plain.css"; @import "ns.css"; p{}', 'x.css');
   assert.match(ns, /^@namespace svg url\(http:\/\/www\.w3\.org\/2000\/svg\);/, ns);
   assert.match(ns, /svg\|rect\{fill:red\}/);
+});
+
+test('attr() typed as an address is blocked; other attr() is left alone (loop 5 review)', async () => {
+  const { rewriteCss } = cleaner();
+  for (const css of ATTRS) assert.doesNotMatch(await rewriteCss(css, 'x.css'), /attr\(/, css);
+  for (const css of ['p::after{content:attr(title)}', 'p{width:attr(data-w type(<length>))}'])
+    assert.equal(await rewriteCss(css, 'x.css'), css);
 });
