@@ -384,3 +384,36 @@ test('a chapter that can\'t be read says so, stays ticked, and is reported; open
   assert.equal(await h.title(page), 'Short Lines');
   assert.equal(await page.evaluate(() => document.querySelector('#ttsExport').classList.contains('busy')), true, 'still exporting');
 });
+
+test('a server that is well but answers 500 for one text: that sentence is left silent soon, the export goes on (loop 4 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.addInitScript(() => { window.SPINE_TEST = { abWaitSec: 60 }; });   // (long: it mustn't be what ends it)
+  await page.route('**/tts/v1/audio/speech', route => /Bravo/.test(spoken(route)) ? fail500(route, 'model error') : route.continue());
+  await openExport(page);
+  const t0 = Date.now();
+  const [file] = await exportAll(page, 'one', 1);
+  assert.ok(Date.now() - t0 < 40000, `took ${Date.now() - t0} ms`);
+  assert.match(await page.textContent('#abNow'), /ready\. 1 sentence the voice couldn't say is silent\./);
+  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+});
+
+test('Cancel ends an export at once, while the voice never answers or while it waits for the voice (loop 4 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/short-lines.epub`);
+  let mode = 'hang';
+  await page.route('**/tts/v1/audio/speech', route => mode === 'hang' ? undefined : fail500(route, 'gone', 502));
+  for (const m of ['hang', 'gone']) {
+    mode = m;
+    await page.click('#abStart');
+    await page.waitForTimeout(m === 'gone' ? 3000 : 1500);   // (waiting for the voice by now)
+    if (m === 'gone') assert.match(await page.textContent('#abLeft'), /Waiting for the voice/);
+    const t0 = Date.now();
+    await page.click('#abCancel');
+    await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 5000 });
+    assert.ok(Date.now() - t0 < 3000, `${m}: took ${Date.now() - t0} ms`);
+  }
+});

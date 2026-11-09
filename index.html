@@ -895,10 +895,13 @@ async function fontKeys(src, uid, identifiers){
       const hex = (identifiers.find(t => /^urn:uuid:/i.test(t)) || '').replace(/^urn:uuid:/i, '').replace(/[^0-9a-f]/gi, '');
       if (hex.length === 32) key = { bytes: Uint8Array.from(hex.match(/../g), h => parseInt(h, 16)), length: 1024 };
     }
-    if (key) out.set(pathKey(resolve('', uri)), key);
+    if (key) { const at = resolve('', uri); out.set(at, key); out.set('\0' + pathKey(at), key); }   // (exact, and folded: lookObf)
   }
   return out.size ? out : null;
 }
+// An obfuscated font's key: by its exact name, or (as getFile finds files) by its folded name, unless a file has
+// that exact name, which isn't the obfuscated one then (loop 4 review).
+function lookObf(obf, p, exactFile){ return obf ? obf.get(p) ?? (exactFile(p) ? null : obf.get('\0' + pathKey(p))) ?? null : null; }
 function unobfuscate(data, key){
   const out = data.slice(), n = Math.min(out.length, key.length);
   for (let i = 0; i < n; i++) out[i] ^= key.bytes[i % key.bytes.length];
@@ -939,7 +942,7 @@ function zipSource(zip){
       const f = getFile(zip, p); if (!f) return null;
       // (Fonts too: a data: copy pasted into every place the font is named could make pages of hundreds of MB.)
       let data = await f.async('uint8array');
-      const key = this.obf?.get(pathKey(p)); if (key) data = unobfuscate(data, key);   // (names compared as getFile does)
+      const key = lookObf(this.obf, p, n => Object.prototype.hasOwnProperty.call(zip.files || {}, n)); if (key) data = unobfuscate(data, key);
       const u = URL.createObjectURL(new Blob([data], { type }));
       if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
@@ -967,7 +970,7 @@ function dirSource(base){
     async exists(p){ return !!abs(p); },
     obf: null, blobs: new Set(),
     async url(p, type){
-      const u = abs(p), key = this.obf?.get(pathKey(p)); if (!u || !key) return u;
+      const u = abs(p), key = lookObf(this.obf, p, () => false); if (!u || !key) return u;
       try {
         const r = await fetch(u); if (!r.ok) return null;
         const data = unobfuscate(new Uint8Array(await r.arrayBuffer()), key);
@@ -2823,7 +2826,7 @@ function setToc(open){
     t.classList.toggle('open', open); t.classList.remove('collapsed');
     if (open && !was) requestAnimationFrame(() => {
       const a = document.activeElement;   // (unless something else took the focus meanwhile, the search box say: round 13 review)
-      if (!a || a === document.body || a === $('#tocBtn')) ($('#tocList a[aria-current]') || $('#tocList a'))?.focus();
+      if (!a || a === document.body || a === $('#tocBtn') || a === frame) ($('#tocList a[aria-current]') || $('#tocList a'))?.focus();
     });
     if (!open && was && t.contains(document.activeElement)) $('#tocBtn').focus();
   }
@@ -3758,8 +3761,8 @@ $('#ttsVoice').addEventListener('change', e => {
 $('#ttsSaved').addEventListener('click', async () => {
   const mb = ((await clipStore.size()) || 0) / 1048576;
   if (!confirm(`Natural voices keep finished audio in this browser so rereading plays at once.\n\n` +
-    `Saved now: ${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB (the oldest is dropped past ${SAVED_AUDIO_MB} MB).\n\nClear it?`)) return;
-  await clipStore.clear();
+    `Saved now: ${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB (the oldest is dropped past ${SAVED_AUDIO_MB + exportRoom()} MB${exportRoom() ? ', with room kept for a stopped audiobook export' : ''}).\n\nClear it?`)) return;
+  await clipStore.clear(); store.del('spine:exportRoom');
   for (const [key, e] of [...n.cache]) if (e.done && !(n.active && n.span && key.endsWith('|' + n.span.out))) { n.cache.delete(key); URL.revokeObjectURL(e.url); }
 });
 $('#ttsDownload').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = true; ne.load(); } $('#ttsPlay').focus(); });
@@ -3987,6 +3990,7 @@ function kGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();
     const id = k.nextId++;
+    if (!k.worker) throw transientError(k.error || 'the voice stopped working');   // (crashed: loop 4 review)
     const m = await new Promise((res, rej) => { k.pending.set(id, { res, rej }); k.worker.postMessage({ type: 'generate', id, text, voice: opts.snap?.kVoice ?? k.voice, speed: opts.snap?.rate ?? tts.rate }); });
     return { data: m.data, rate: m.rate, genSec: m.ms / 1000 };
   };
@@ -4040,6 +4044,7 @@ import(${JSON.stringify(lib + 'worker.js')}).then(() => { for (const data of que
 }
 function pkRequest(type, payload){
   const id = pk.nextId++;
+  if (!pk.worker) return Promise.reject(transientError(pk.error || 'the voice stopped working'));
   return new Promise((res, rej) => { pk.pending.set(id, { res, rej }); pk.worker.postMessage({ id, type, payload }); });
 }
 function pkProgress(){
@@ -4253,14 +4258,15 @@ function svGenerate(text, opts = {}){
       const unlisten = () => opts.signal?.removeEventListener('abort', stop);
       // Gateway errors or an HTML page instead of audio: the server behind the proxy is gone.
       if ([502, 503, 504].includes(r.status) || (r.ok && /html/i.test(r.headers.get('content-type') || ''))) {
-        svLost(); throw transientError('the voice server isn\'t responding');
+        unlisten(); svLost(); throw transientError('the voice server isn\'t responding');
       }
       // Busy with another request, often one just cancelled that the server hasn't let go of yet: retry
       // soon, then less often.
       if (r.status === 409 && attempt < 40) { unlisten(); await bgSleep(Math.min(1500, 150 * 2 ** attempt)); if (opts.signal?.aborted) throw staleError(); continue; }
       if (!r.ok) {
         let detail = ''; try { detail = (await r.json()).detail; } catch {}
-        const err = new Error(`the voice server answered ${r.status}${detail ? ': ' + detail : ''}`);
+        unlisten();
+        const err = Object.assign(new Error(`the voice server answered ${r.status}${detail ? ': ' + detail : ''}`), { answered: r.status });
         throw r.status === 409 || r.status >= 500 ? Object.assign(err, { transient: true }) : err;
       }
       const rate = Number(r.headers.get('X-Sample-Rate')) || 24000;
@@ -4356,6 +4362,13 @@ function wavBlob(data, rate){
    passages are dropped beyond SAVED_AUDIO_MB. Everything here fails quietly: without storage the voices
    just make the audio again. */
 let SAVED_AUDIO_MB = 500;
+// Room kept in the saved audio for an export that was stopped, for a week (so starting it again reuses its
+// passages), then back to SAVED_AUDIO_MB (loop 4 review).
+function exportRoom(){
+  const r = store.get('spine:exportRoom');
+  if (!r || typeof r !== 'object' || !(Date.now() - r.t < 7 * 86400000)) { if (r) store.del('spine:exportRoom'); return 0; }
+  return Number(r.mb) || 0;
+}
 const clipStore = (() => {
   let dbp = null, saves = 0;
   const open = () => dbp ??= new Promise(res => {
@@ -4398,7 +4411,7 @@ const clipStore = (() => {
     async put(key, blob, dur){
       if (!(SAVED_AUDIO_MB > 0)) return;   // 0: nothing is saved
       await run('readwrite', st => st.put({ key, blob, dur, size: blob.size, used: Date.now() }));
-      if (++saves % 10 === 1) sweep((SAVED_AUDIO_MB + Math.max(api.extraMB, Number(store.get('spine:exportRoom')) || 0)) * 1048576);
+      if (++saves % 10 === 1) sweep((SAVED_AUDIO_MB + Math.max(api.extraMB, exportRoom())) * 1048576);
     },
     size: () => sweep(Infinity, true),   // (only counts: L-e of round 13's review)
     clear: () => run('readwrite', st => st.clear())
@@ -5043,7 +5056,8 @@ async function abCover(){
 }
 
 // --- The export itself.
-async function abWaitIfPaused(){ while (ab.paused && !ab.cancel) await new Promise(r => { ab.resume = r; }); }
+// Waits while paused; how long, in ms.
+async function abWaitIfPaused(){ const t0 = performance.now(); while (ab.paused && !ab.cancel) await new Promise(r => { ab.resume = r; }); return performance.now() - t0; }
 const abCancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
 // How long an export waits for a voice that has gone away before it stops (the tests shorten it).
 const AB_WAIT_SEC = Number(window.SPINE_TEST?.abWaitSec) || 300;
@@ -5059,29 +5073,43 @@ function abAbortable(p){
 // A passage's audio, or its sentences one by one when the passage as a whole fails (as reading aloud does),
 // each tried again a couple of times. A sentence that still fails comes back as { failed } (left silent).
 async function abSay(ne, chunks, ci, keyBase, snap){
-  const tryOne = async span => {
-    let waited = 0;
+  const tryOne = async (span, once = false) => {
+    let since = 0, healthy = 0;   // since: when the voice first failed (ms, not counting time paused)
     for (let attempt = 0; ; attempt++) {
       try { return await abAbortable(abPassage(ne, span.out, keyBase, snap)); }
       catch (e) {
         if (ab.cancel || e?.stale || e?.cancelled) throw abCancelled();
-        // The voice away for a while (a restart, a dropped connection): wait for it, up to a few minutes, without
-        // counting the sentence as one it can't say (round 13 review). A failure that is the text's: tried twice more.
+        // The voice away for a while (a restart, a dropped connection, a crashed worker): waited for, up to a few
+        // minutes by the clock, without counting the sentence as one it can't say. But a server that says it is
+        // well and keeps failing this text (a 500 for it) is the text's fault after all (loop 4 review).
         if (e?.transient) {
-          if (waited > AB_WAIT_SEC * 1000) throw Object.assign(e, { gone: true });
-          const ms = Math.min(15000, 2000 * 2 ** Math.min(attempt, 3));
-          ab.waiting = true; abShow(); await bgSleep(ms); waited += ms; ab.waiting = false;
-          if (ne === NEURAL.server) await svProbe().catch(() => {});
+          if (ne === NEURAL.server && e.answered) {
+            await abAbortable(svProbe(0)).catch(err => { if (err?.cancelled) throw err; });
+            if (sv.available && ++healthy >= 2) throw Object.assign(new Error(e.message), { answered: e.answered });
+          }
+          const st = ne.st;
+          if (ne !== NEURAL.server && st.state === 'error') throw Object.assign(new Error(`the voice stopped working${st.error ? ': ' + st.error : ''}`), { gone: true });
+          const started = performance.now();
+          if (!since) since = started;
+          ab.waiting = true; abShow();
+          try {
+            await abAbortable(bgSleep(Math.min(15000, 2000 * 2 ** Math.min(attempt, 3))));
+            const pausedFor = await abWaitIfPaused();
+            since += pausedFor;   // (time paused isn't time waited)
+            if (ne === NEURAL.server) await abAbortable(svProbe()).catch(err => { if (err?.cancelled) throw err; });
+            else if (!ne.ready() && st.state !== 'loading') ne.load();   // (a worker that went: started again)
+          } finally { ab.waiting = false; }
+          if (performance.now() - since > AB_WAIT_SEC * 1000) throw Object.assign(e, { gone: true });
           continue;
         }
-        if (attempt >= 2) throw e;
-        await bgSleep(1500 * (attempt + 1));
+        if (once || attempt >= 2) throw e;   // (a whole passage: once, then sentence by sentence: loop 4 review)
+        await abAbortable(bgSleep(1500 * (attempt + 1)));
       }
     }
   };
   const span = nSpan(ne, ci, chunkStart(chunks[ci]), false, chunks);
   const sentence = async sp => { try { return await tryOne(sp); } catch (e) { if (e?.cancelled || e?.gone) throw e; return { failed: e }; } };
-  try { return { span, pieces: [span.cj > span.ci ? await tryOne(span) : await sentence(span)] }; }
+  try { return { span, pieces: [span.cj > span.ci ? await tryOne(span, true) : await sentence(span)] }; }
   catch (e) {
     if (ab.cancel || e?.stale || e?.cancelled || e?.gone) throw e?.gone ? e : abCancelled();
     const pieces = [];
@@ -5101,7 +5129,7 @@ async function abRun(units, mode, target){
   // Room in the saved audio for this export as well as what's already there, so stopping and starting again
   // finds it (WAV at 24 kHz: about 173 MB an hour). Back to the usual limit afterwards.
   clipStore.extraMB = Math.ceil(abSecs(ab.total) * 48000 / 1048576 * 1.2);
-  store.set('spine:exportRoom', clipStore.extraMB);   // (kept, so a stopped export's audio survives until it is finished)
+  store.set('spine:exportRoom', { mb: clipStore.extraMB, t: Date.now() });   // (kept a week, so a stopped export's audio survives to be reused)
   const groups = mode === 'one' ? [units] : units.map(u => [u]);
   const width = Math.max(2, String(units.length).length);
   // (A new file the save picker made, removed if the export ends without writing it: round 13 review.)
@@ -5141,7 +5169,7 @@ async function abRun(units, mode, target){
       let failedInRow = 0;
       // What's made of this file so far, kept when the export has to stop: only if it has some speech in it, and
       // never in place of a file that was already in the folder (round 13 review).
-      const keepPart = async () => { if (fileSecs > 0 && !existed) { ab.partial = true; try { await finish(); } catch {} } };
+      const keepPart = async () => { if (fileSecs > 0 && !existed && !(mode === 'one' && target && !freshTarget)) { ab.partial = true; try { await finish(); } catch {} } };
       const finish = async () => {
         await enc.finish();
         const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : parts[0].u.title, chapters, track: mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length] });
@@ -5192,7 +5220,7 @@ async function abRun(units, mode, target){
         if (!made) { enc.abort(); await sink.abort?.(); }
       }
     }
-    if (!ab.files.length) throw new Error('the chosen chapters have no text to read');
+    if (!ab.files.length) throw new Error(ab.unreadable.length && !ab.skipped.length ? `the chosen chapters couldn't be read: ${ab.unreadable.join(', ')}` : 'the chosen chapters have no text to read');
     store.del('spine:exportRoom');   // (finished: the extra room in the saved audio isn't needed now)
   } finally {
     clipStore.extraMB = 0;
@@ -5279,7 +5307,7 @@ function abSync(){
   $('#abCancel').textContent = ab.running ? (ab.confirming ? 'Click again to stop' : 'Cancel export') : 'Close';
   $('#abStart').hidden = ab.running;
   const v = neuralEngine();
-  $('#abVoice').textContent = v ? `Voice: ${$('#ttsEngine').selectedOptions[0]?.textContent} · ${$('#ttsVoice').selectedOptions[0]?.textContent || ''}` : '';
+  $('#abVoice').textContent = ab.running ? ab.voiceLabel : v ? `Voice: ${$('#ttsEngine').selectedOptions[0]?.textContent} · ${$('#ttsVoice').selectedOptions[0]?.textContent || ''}` : '';
   $('#ttsExport').classList.toggle('busy', ab.running);
   $('#ttsExport').title = ab.running ? `Exporting the audiobook… ${Math.round(ab.done / (ab.total || 1) * 100)}%` : 'Export as an audiobook (.m4b)';
 }
@@ -5290,7 +5318,8 @@ function abShow(info){
   const f = Math.min(1, ab.done / (ab.total || 1));
   $('#abProgress').value = f;
   const el = (performance.now() - ab.startedAt) / 1000;
-  $('#abLeft').textContent = ab.paused ? 'Paused' : ab.waiting ? 'Waiting for the voice to come back…' : f > 0.02 && el > 5 ? `About ${fmtLeft(el / f - el) || 'a minute'} left` : 'Starting…';
+  $('#abLeft').textContent = ab.confirming ? 'What is finished so far is kept in the saved audio, so starting again goes faster.'
+    : ab.paused ? 'Paused' : ab.waiting ? 'Waiting for the voice to come back…' : f > 0.02 && el > 5 ? `About ${fmtLeft(el / f - el) || 'a minute'} left` : 'Starting…';
   abSync();
 }
 async function abOpen(){
@@ -5332,7 +5361,9 @@ async function abStart(){
   if (book !== b || ab.running || abState().text) return;   // (another book, or the voice went, while choosing)
   if (tts.playing) await ttsTogglePlay();   // reading aloud waits: both would use the voice
   nStop();
-  Object.assign(ab, { running: true, paused: false, cancel: false, ctl: new AbortController(), note: '', kept: '', zipOffer: false, missed: 0, partial: false });
+  clearTimeout(ab.confirmTimer);
+  Object.assign(ab, { running: true, paused: false, cancel: false, confirming: false, ctl: new AbortController(), note: '', kept: '', zipOffer: false, missed: 0, partial: false,
+    voiceLabel: `Voice: ${$('#ttsEngine').selectedOptions[0]?.textContent} · ${$('#ttsVoice').selectedOptions[0]?.textContent || ''}` });
   $('#abDone').replaceChildren(); $('#abDone').hidden = true;
   await abWake();
   abShow();
@@ -5391,12 +5422,11 @@ $('#abCancel').addEventListener('click', () => {
   if (ab.running) {
     // A second click confirms, in the dialog (a blocking confirm() would hold up the export's timers: round 13 review).
     if (ab.doneSecs > 120 && !ab.confirming) {
-      ab.confirming = true; $('#abCancel').textContent = 'Click again to stop';
-      $('#abLeft').textContent = 'What is finished so far is kept in the saved audio, so starting again goes faster.';
-      setTimeout(() => { ab.confirming = false; if (ab.running) abShow(); }, 5000);
+      ab.confirming = true; abShow();
+      clearTimeout(ab.confirmTimer); ab.confirmTimer = setTimeout(() => { ab.confirming = false; if (ab.running) abShow(); }, 5000);
       return;
     }
-    ab.confirming = false; ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); return;
+    clearTimeout(ab.confirmTimer); ab.confirming = false; ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); return;
   }
   $('#abDialog').close();
 });
