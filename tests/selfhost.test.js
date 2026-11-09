@@ -14,6 +14,8 @@ test('with libs/ and fonts/ fetched, nothing is loaded from other sites', async 
     await h.openReader(page, h.READER + book);
     assert.notEqual(await h.title(page), 'Spine Reader', `${book} should open`);
     assert.deepEqual(page.blocked, [], `${book || 'the sample'} reached other sites`);
+    // (Under the reader policy the browser refuses such requests before they reach page.blocked: T-18.)
+    assert.deepEqual(page.cspViolations, [], `${book || 'the sample'} tried to reach other sites`);
     const fonts = await page.evaluate(() => [document.querySelector('#uiFonts').href,
       document.querySelector('#page').contentDocument.querySelector('[id^="spine-font-"]').href]);
     assert.match(fonts[0], /\/reader\/fonts\/ui\.css$/);
@@ -26,6 +28,7 @@ test('ALLOW_CDN off with nothing self-hosted: the reader says what is missing in
   await h.openReader(page, `${h.SITE}/folder-nocdn/index.html`).catch(() => {});
   assert.match(await h.notice(page), /ZIP library isn't on this site/);
   assert.deepEqual(page.blocked, []);
+  assert.deepEqual(page.cspViolations, []);
   const voice = await h.newPage();
   await h.openReader(voice, `${h.SITE}/folder-novoice/index.html`, { 'spine:ttsEngine': 'kokoro' });
   await voice.keyboard.press('r');
@@ -33,6 +36,7 @@ test('ALLOW_CDN off with nothing self-hosted: the reader says what is missing in
   const status = await h.waitFor(async () => { const t = await voice.textContent('#ttsStatus'); return /missing/.test(t) && t; });
   assert.match(status, /self-hosted Kokoro files are missing.*ALLOW_CDN is off/);
   assert.deepEqual(voice.blocked, []);
+  assert.deepEqual(voice.cspViolations, []);
 });
 
 test('a library that does not match its pinned hash is refused', async () => {

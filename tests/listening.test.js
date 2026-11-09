@@ -28,6 +28,7 @@ test('the server voice reads, streams, and nothing leaves the site', async () =>
   const log = await h.breezeLog();
   assert.ok(log.length >= 1 && log[0].ref_text === 'A test clip.' && log[0].ref_bytes > 1000, JSON.stringify(log[0]));
   assert.deepEqual(page.blocked, []);
+  assert.deepEqual(page.cspViolations, []);   // (T-18)
 });
 
 test('media controls show the book while reading aloud, and follow play and pause', async () => {

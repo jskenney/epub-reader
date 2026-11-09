@@ -22,6 +22,7 @@ test('each linked folder opens its own default.epub; without preferences in a co
     assert.equal(await h.title(page), book);
     assert.deepEqual(await look(page), { theme: 'auto', columns: '2', scrolling: false });
     assert.deepEqual(page.blocked, [], 'nothing should be fetched from other sites');
+    assert.deepEqual(page.cspViolations, [], 'nothing should be tried from other sites (T-18)');
   }
 });
 
