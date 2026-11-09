@@ -18,8 +18,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: tests/package-lock.json
-      - name: Playwright
-        run: cd tests && npm ci && npx playwright install --with-deps chromium
+      - name: Playwright, and ffmpeg for the audiobook export tests
+        run: cd tests && npm ci && npx playwright install --with-deps chromium && sudo apt-get install -y ffmpeg
       # The models (about 900 MB) kept between runs, keyed on their pinned checksums: a new pin downloads afresh.
       - uses: actions/cache@v4
         with:

@@ -1558,6 +1558,8 @@ async function startBook(next){
   // Reading aloud belongs to the book it was started in: stop it (or, for a comic, which has no text, close
   // the bar) rather than carry on into the new book (REVIEW.md M-23, L-72).
   if (ab.running) { ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); }   // (an export belongs to its book)
+  else if ($('#abDialog').open) $('#abDialog').close();   // (its chapter list was the other book's: round 13 review)
+  for (const st of [k, pk, sv]) st.wantPlay = false;   // (a voice still loading doesn't start reading the new book: round 13 review)
   if (tts.open) { if (book.comic) ttsClose(); else { tts.playing = false; tts.awaitChapter = false; ttsStopAudio(); setSleep('off'); ttsUpdateBar(); } }
   pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
   const spine = book.spine;
@@ -2563,7 +2565,7 @@ function pagePrev(){
 }
 function onKey(e){
   if ($('#abDialog').open) return;   // (the export dialog is modal: the reader's keys wait)
-  if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs()) { e.preventDefault(); setToc(false); $('#tocBtn').focus(); return; }
+  if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs() && !e.defaultPrevented && e.target.id !== 'searchBox') { e.preventDefault(); setToc(false); $('#tocBtn').focus(); return; }
   const tag = (e.target.tagName || '').toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox') { e.preventDefault(); searchOpen(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -2724,6 +2726,8 @@ function friendly(err, name){
 
 async function openFile(file){
   if (!file) return;
+  // (Another book ends an export of this one: asked first, as Cancel and closing the tab do: round 13 review.)
+  if (ab.running && !confirm('An audiobook of this book is being made. Stop it and open the other book?')) return;
   const seq = ++openSeq;
   try {
     const kind = docKind(file.name, file.type);
@@ -2776,7 +2780,10 @@ function setToc(open){
     // (Escape, or a tap on the page, closes it: REVIEW.md L-79).
     const was = t.classList.contains('open');
     t.classList.toggle('open', open); t.classList.remove('collapsed');
-    if (open && !was) requestAnimationFrame(() => ($('#tocList a[aria-current]') || $('#tocList a'))?.focus({ preventScroll: false }));
+    if (open && !was) requestAnimationFrame(() => {
+      const a = document.activeElement;   // (unless something else took the focus meanwhile, the search box say: round 13 review)
+      if (!a || a === document.body || a === $('#tocBtn')) ($('#tocList a[aria-current]') || $('#tocList a'))?.focus();
+    });
     if (!open && was && t.contains(document.activeElement)) $('#tocBtn').focus();
   }
   else { t.classList.toggle('collapsed', !open); t.classList.remove('open'); }
@@ -4017,6 +4024,10 @@ async function pkLoad(){
     ttsUpdateBar(); return;
   }
   try {
+    // (Anything still waiting on the old worker is told it won't be answered, rather than waiting for good:
+    // round 13 review.)
+    for (const j of pk.pending.values()) j.rej(transientError('the voice was reloaded'));
+    pk.collect = null; pk.onChunk = null;
     pk.worker?.terminate(); pk.pending.clear(); pk.refs.clear(); pk.queue = Promise.resolve();
     pk.worker = pkWorker(lib ? POCKET.local + 'lib/' : POCKET.lib);
     await pkRequest('init', { language: lang, quantized: !FULL_PRECISION, voiceCloning: false,
@@ -4236,7 +4247,8 @@ function svGenerate(text, opts = {}){
           parts.push(f); total += f.length;
           opts.onChunk?.(f, rate);
         }
-      } catch (e) { if (opts.signal?.aborted) throw staleError(); throw new Error('the voice server stopped partway through'); }
+      } catch (e) { unlisten(); if (opts.signal?.aborted) throw staleError(); throw transientError('the voice server stopped partway through'); }   // (a stall or a dropped stream: the voice, not the text)
+      unlisten();   // (done with this request: round 13 review)
       // The audio streams without a length, so a server error partway through can look like a short,
       // complete answer. Speech is never faster than about 4 words a second: much less audio than the
       // text needs means the stream was cut off.
@@ -4325,12 +4337,12 @@ const clipStore = (() => {
     });
   };
   // Walk passages newest first, adding up their sizes; drop those past the limit (or all, for clear).
-  const sweep = (limit) => run('readwrite', (st, done) => {
+  const sweep = (limit, dry = false) => run(dry ? 'readonly' : 'readwrite', (st, done) => {
     let total = 0;
     const rq = st.index('used').openCursor(null, 'prev');
     rq.onsuccess = () => {
       const c = rq.result; if (!c) return done(total);
-      if (total + c.value.size > limit) c.delete(); else total += c.value.size;
+      if (!dry && total + c.value.size > limit) c.delete(); else total += c.value.size;
       c.continue();
     };
   });
@@ -4345,9 +4357,9 @@ const clipStore = (() => {
     async put(key, blob, dur){
       if (!(SAVED_AUDIO_MB > 0)) return;   // 0: nothing is saved
       await run('readwrite', st => st.put({ key, blob, dur, size: blob.size, used: Date.now() }));
-      if (++saves % 10 === 1) sweep((SAVED_AUDIO_MB + api.extraMB) * 1048576);
+      if (++saves % 10 === 1) sweep((SAVED_AUDIO_MB + Math.max(api.extraMB, Number(store.get('spine:exportRoom')) || 0)) * 1048576);
     },
-    size: () => sweep((SAVED_AUDIO_MB + api.extraMB) * 1048576),
+    size: () => sweep(Infinity, true),   // (only counts: L-e of round 13's review)
     clear: () => run('readwrite', st => st.clear())
   };
   return api;
@@ -4623,7 +4635,7 @@ function nStop(){
 const AB_KBPS = 64;                    // AAC bitrate: plenty for speech, about 29 MB an hour
 const AB_GAP = { passage: 0.25, paragraph: 0.45, chapter: 1.5 };   // seconds of silence between pieces
 const ab = { running: false, paused: false, cancel: false, resume: null, units: [], rates: null, wake: null,
-  files: [], skipped: [], gen: {}, last: -1, ctl: null, startedAt: 0, done: 0, total: 0, note: '' };
+  files: [], skipped: [], unreadable: [], gen: {}, last: -1, ctl: null, startedAt: 0, done: 0, total: 0, note: '' };
 
 // --- MP4 boxes (ISO BMFF): big-endian sizes and fields, built as byte arrays. (Lists as long as the book,
 // such as the frame sizes, are filled into one array: never passed as arguments, which a long book would
@@ -4992,24 +5004,45 @@ async function abCover(){
 // --- The export itself.
 async function abWaitIfPaused(){ while (ab.paused && !ab.cancel) await new Promise(r => { ab.resume = r; }); }
 const abCancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
+// How long an export waits for a voice that has gone away before it stops (the tests shorten it).
+const AB_WAIT_SEC = Number(window.SPINE_TEST?.abWaitSec) || 300;
+// A wait that Cancel ends at once, even if the voice never answers (a reloaded worker, a hung request).
+function abAbortable(p){
+  return new Promise((res, rej) => {
+    const sig = ab.ctl.signal, stop = () => rej(abCancelled());
+    if (sig.aborted) return stop();
+    sig.addEventListener('abort', stop, { once: true });
+    p.then(v => { sig.removeEventListener('abort', stop); res(v); }, e => { sig.removeEventListener('abort', stop); rej(e); });
+  });
+}
 // A passage's audio, or its sentences one by one when the passage as a whole fails (as reading aloud does),
 // each tried again a couple of times. A sentence that still fails comes back as { failed } (left silent).
 async function abSay(ne, chunks, ci, keyBase, snap){
   const tryOne = async span => {
+    let waited = 0;
     for (let attempt = 0; ; attempt++) {
-      try { return await abPassage(ne, span.out, keyBase, snap); }
+      try { return await abAbortable(abPassage(ne, span.out, keyBase, snap)); }
       catch (e) {
-        if (ab.cancel || e?.stale) throw abCancelled();
+        if (ab.cancel || e?.stale || e?.cancelled) throw abCancelled();
+        // The voice away for a while (a restart, a dropped connection): wait for it, up to a few minutes, without
+        // counting the sentence as one it can't say (round 13 review). A failure that is the text's: tried twice more.
+        if (e?.transient) {
+          if (waited > AB_WAIT_SEC * 1000) throw Object.assign(e, { gone: true });
+          const ms = Math.min(15000, 2000 * 2 ** Math.min(attempt, 3));
+          ab.waiting = true; abShow(); await bgSleep(ms); waited += ms; ab.waiting = false;
+          if (ne === NEURAL.server) await svProbe().catch(() => {});
+          continue;
+        }
         if (attempt >= 2) throw e;
         await bgSleep(1500 * (attempt + 1));
       }
     }
   };
   const span = nSpan(ne, ci, chunkStart(chunks[ci]), false, chunks);
-  const sentence = async sp => { try { return await tryOne(sp); } catch (e) { if (e?.cancelled) throw e; return { failed: e }; } };
-  try { return { span, pieces: [span.cj > span.ci ? await abPassage(ne, span.out, keyBase, snap) : await sentence(span)] }; }
+  const sentence = async sp => { try { return await tryOne(sp); } catch (e) { if (e?.cancelled || e?.gone) throw e; return { failed: e }; } };
+  try { return { span, pieces: [span.cj > span.ci ? await tryOne(span) : await sentence(span)] }; }
   catch (e) {
-    if (ab.cancel || e?.stale || e?.cancelled) throw abCancelled();
+    if (ab.cancel || e?.stale || e?.cancelled || e?.gone) throw e?.gone ? e : abCancelled();
     const pieces = [];
     for (let j = span.ci; j <= span.cj; j++) pieces.push(await sentence(nSpan(ne, j, chunkStart(chunks[j]), true, chunks)));
     return { span, pieces };
@@ -5023,37 +5056,51 @@ async function abRun(units, mode, target){
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
   const lengths = await chapterLengths();
-  Object.assign(ab, { files: [], skipped: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
+  Object.assign(ab, { files: [], skipped: [], unreadable: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
   // Room in the saved audio for this export as well as what's already there, so stopping and starting again
   // finds it (WAV at 24 kHz: about 173 MB an hour). Back to the usual limit afterwards.
   clipStore.extraMB = Math.ceil(abSecs(ab.total) * 48000 / 1048576 * 1.2);
+  store.set('spine:exportRoom', clipStore.extraMB);   // (kept, so a stopped export's audio survives until it is finished)
   const groups = mode === 'one' ? [units] : units.map(u => [u]);
   const width = Math.max(2, String(units.length).length);
+  // (A new file the save picker made, removed if the export ends without writing it: round 13 review.)
+  const freshTarget = mode === 'one' && target && (await target.getFile?.().catch(() => null))?.size === 0;
   try {
     for (let g = 0; g < groups.length; g++) {
-      // Each unit's sentences first: those with none (a map, a picture page) are left out, and a file with
-      // nothing to say isn't made at all.
-      const parts = [];
-      for (const u of groups[g]) {
-        if (ab.cancel || book !== b) throw abCancelled();
-        const lists = await abUnitChunks(u);
-        if (lists.length) parts.push({ u, lists }); else { ab.skipped.push(u.title); ab.done += Math.max(1, abChars(u, lengths)); }
-      }
-      if (!parts.length) continue;
+      // Each unit's sentences when its turn comes (so the chapters' pages aren't all held at once: round 13
+      // review). Units with none (a map, a picture page) or that can't be read are left out, with a note, and a
+      // file is only made once there is something to say in it.
+      const queue = [...groups[g]];
+      const nextPart = async () => {
+        while (queue.length) {
+          const u = queue.shift();
+          if (ab.cancel || book !== b) throw abCancelled();
+          if (u.chars === 0) { ab.skipped.push(u.title); ab.done += 1; continue; }
+          let lists;
+          try { lists = await abUnitChunks(u); } catch { ab.unreadable.push(u.title); ab.done += Math.max(1, abChars(u, lengths)); continue; }
+          if (lists.length) return { u, lists };
+          ab.skipped.push(u.title); ab.done += Math.max(1, abChars(u, lengths));
+        }
+        return null;
+      };
+      const firstPart = await nextPart();
+      if (!firstPart) continue;
+      const parts = [firstPart];   // (the first; the rest come from nextPart as they're reached)
       const name = mode === 'one' ? `${abName(b.title)}.m4b` : `${String(units.indexOf(parts[0].u) + 1).padStart(width, '0')} - ${abName(parts[0].u.title)}.m4b`;
-      let sink, made = false;
-      if (target && mode === 'one') {
-        // (Removed again on a cancel only if it was a new, empty file: a file chosen to be replaced stays as it was.)
-        const fresh = (await target.getFile?.().catch(() => null))?.size === 0;
-        sink = abFileSink(await target.createWritable(), fresh ? target : null);
-      }
+      let sink, made = false, existed = false, fileSecs = 0;
+      // (A new file the picker made is removed at the end if nothing was finished in it: freshTarget. A file chosen
+      // to be replaced stays as it was.)
+      if (target && mode === 'one') sink = abFileSink(await target.createWritable());
       else if (target) {
-        let existed = true; try { await target.getFileHandle(name); } catch { existed = false; }
+        existed = true; try { await target.getFileHandle(name); } catch { existed = false; }
         sink = abFileSink(await (await target.getFileHandle(name, { create: true })).createWritable());
         if (!existed) { const abort = sink.abort; sink.abort = async () => { await abort(); try { await target.removeEntry(name); } catch {} }; }   // (no empty file left behind)
       } else sink = abMemorySink();
       const m4b = abM4b(sink), enc = abEncoder(m4b, rates), chapters = [];
       let failedInRow = 0;
+      // What's made of this file so far, kept when the export has to stop: only if it has some speech in it, and
+      // never in place of a file that was already in the folder (round 13 review).
+      const keepPart = async () => { if (fileSecs > 0 && !existed) { ab.partial = true; try { await finish(); } catch {} } };
       const finish = async () => {
         await enc.finish();
         const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : parts[0].u.title, chapters, track: mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length] });
@@ -5062,7 +5109,8 @@ async function abRun(units, mode, target){
         if (out.blob && (mode === 'one' || !target)) abDownload(out.blob, name);
       };
       try {
-        for (const { u, lists } of parts) {
+        for (let part = firstPart; part; part = await nextPart()) {
+          const { u, lists } = part;
           if (chapters.length) await enc.silence(AB_GAP.chapter, 24000);
           chapters.push({ title: u.title, start: enc.seconds });
           abShow({ unit: u, index: units.indexOf(u) });
@@ -5074,23 +5122,23 @@ async function abRun(units, mode, target){
             for (let ci = 0; ci < chunks.length;) {
               await abWaitIfPaused();
               if (ab.cancel || book !== b) throw abCancelled();
-              const { span, pieces } = await abSay(ne, chunks, ci, keyBase, snap);
+              let said;
+              try { said = await abSay(ne, chunks, ci, keyBase, snap); }
+              catch (e) { if (e?.gone) await keepPart(); throw e; }
+              const { span, pieces } = said;
               for (const r of pieces) {
                 if (r.failed) {
-                  // A sentence the voice can't say: left silent, and the export goes on; several in a row (the
-                  // voice has gone) stop it, keeping what's made so far.
+                  // A sentence the voice can't say: left silent, and the export goes on (a voice that has gone
+                  // away is waited for in abSay). Many in a row stop it, keeping what's made so far.
                   ab.missed++;
-                  if (++failedInRow >= 3) {
-                    if (chapters.length && ab.doneSecs > 0) { try { ab.partial = true; await finish(); } catch {} }
-                    throw r.failed;
-                  }
+                  if (++failedInRow >= 10) { await keepPart(); throw r.failed; }
                   await enc.silence(1, 24000);
                   continue;
                 }
                 failedInRow = 0;
                 if (!first) await enc.silence(span.b === lastBlock ? AB_GAP.passage : AB_GAP.paragraph, r.rate);
                 await enc.push(r.data, r.rate);
-                first = false; lastBlock = span.b; ab.doneSecs += r.data.length / r.rate;
+                first = false; lastBlock = span.b; ab.doneSecs += r.data.length / r.rate; fileSecs += r.data.length / r.rate;
               }
               ab.done += chunks.slice(ci, span.cj + 1).reduce((s, c) => s + c.e - c.s, 0) / all * chars;
               ci = span.cj + 1;
@@ -5104,7 +5152,11 @@ async function abRun(units, mode, target){
       }
     }
     if (!ab.files.length) throw new Error('the chosen chapters have no text to read');
-  } finally { clipStore.extraMB = 0; }
+    store.del('spine:exportRoom');   // (finished: the extra room in the saved audio isn't needed now)
+  } finally {
+    clipStore.extraMB = 0;
+    if (freshTarget && !ab.files.length) await target.remove?.().catch(() => {});
+  }
 }
 
 // --- The dialog.
@@ -5142,9 +5194,13 @@ async function abMeasure(){
   if (ab.ordered !== b) { await abOrderUnits(); if (book !== b || token !== ab.measure) return; ab.ordered = b; }
   for (const u of ab.units) {
     if (u.chars != null) continue;
-    let count = 0;
-    try { for (const list of await abUnitChunks(u)) for (const c of list) count += c.e - c.s; } catch {}
+    let count = 0, failed = false;
+    try { for (const list of await abUnitChunks(u)) for (const c of list) count += c.e - c.s; } catch { failed = true; }
     if (book !== b || token !== ab.measure) return;
+    // (A chapter that couldn't be read isn't "no text": it stays ticked, is measured again next time, and the
+    // export reports it if it still can't be read: round 13 review.)
+    u.unreadable = failed;
+    if (failed) continue;
     u.chars = count;
     if (!count) u.pick = false;
   }
@@ -5158,7 +5214,7 @@ async function abSummary(){
   let chars = 0, picked = 0;
   ab.units.forEach((u, k) => {
     const c = abChars(u, lengths), len = rows[k]?.querySelector('.ab-len');
-    if (len) len.textContent = u.chars === 0 ? 'no text' : lengths || u.chars != null ? (abSecs(c) >= 30 ? formatDuration(abSecs(c)) : '<1 min') : '';
+    if (len) len.textContent = u.unreadable ? "couldn't be read" : u.chars === 0 ? 'no text' : lengths || u.chars != null ? (abSecs(c) >= 30 ? formatDuration(abSecs(c)) : '<1 min') : '';
     if (u.pick) { chars += c; picked++; }
   });
   const secs = abSecs(chars), mb = secs * AB_KBPS / 8 / 1024, ratio = ab.gen[neuralEngine()?.name];
@@ -5179,7 +5235,7 @@ function abSync(){
   $('#abStart').disabled = !!why.text || !picked || ab.running;
   $('#abPick').hidden = ab.running; $('#abRunning').hidden = !ab.running && !ab.note;
   $('#abPause').hidden = !ab.running; $('#abPause').textContent = ab.paused ? 'Resume' : 'Pause';
-  $('#abCancel').textContent = ab.running ? 'Cancel export' : 'Close';
+  $('#abCancel').textContent = ab.running ? (ab.confirming ? 'Click again to stop' : 'Cancel export') : 'Close';
   $('#abStart').hidden = ab.running;
   const v = neuralEngine();
   $('#abVoice').textContent = v ? `Voice: ${$('#ttsEngine').selectedOptions[0]?.textContent} · ${$('#ttsVoice').selectedOptions[0]?.textContent || ''}` : '';
@@ -5193,7 +5249,7 @@ function abShow(info){
   const f = Math.min(1, ab.done / (ab.total || 1));
   $('#abProgress').value = f;
   const el = (performance.now() - ab.startedAt) / 1000;
-  $('#abLeft').textContent = ab.paused ? 'Paused' : f > 0.02 && el > 5 ? `About ${fmtLeft(el / f - el) || 'a minute'} left` : 'Starting…';
+  $('#abLeft').textContent = ab.paused ? 'Paused' : ab.waiting ? 'Waiting for the voice to come back…' : f > 0.02 && el > 5 ? `About ${fmtLeft(el / f - el) || 'a minute'} left` : 'Starting…';
   abSync();
 }
 async function abOpen(){
@@ -5206,6 +5262,7 @@ async function abOpen(){
   abFillList();
   const d = $('#abDialog'); if (!d.open) d.showModal();
   abSync(); abSummary(); abMeasure();
+  if (tts.engine === 'server' && !ab.running) svProbe().then(() => { if ($('#abDialog').open) abSync(); }).catch(() => {});   // (back after an outage?)
 }
 // The finished files as one ZIP, where they were downloaded one by one (a browser may block some).
 function abZipOffer(){
@@ -5224,7 +5281,7 @@ function abZipOffer(){
 }
 async function abStart(){
   const b = book, units = ab.units.filter(u => u.pick), mode = $('#abForm').elements.abMode.value;
-  if (!units.length || abState().text) return;
+  if (!units.length || abState().text || ab.book !== b) return;
   // A file or folder to write to, where the browser can (asked first: it needs the click).
   let target = null;
   try {
@@ -5244,6 +5301,7 @@ async function abStart(){
     await abRun(units, mode, target); ok = true;
     msg = (mode === 'one' ? 'The audiobook is ready.' : `${plural(ab.files.length, 'file')} ready.`)
       + (ab.skipped.length ? ` Left out, with no text to read: ${ab.skipped.join(', ')}.` : '')
+      + (ab.unreadable.length ? ` Left out, as they couldn't be read: ${ab.unreadable.join(', ')}.` : '')
       + (ab.missed ? ` ${plural(ab.missed, 'sentence')} the voice couldn't say ${ab.missed === 1 ? 'is' : 'are'} silent.` : '');
   } catch (e) {
     msg = e?.cancelled || e?.stale ? 'Export cancelled.' : `Export stopped: ${e?.message || e}.`;
@@ -5290,8 +5348,14 @@ $('#abPause').addEventListener('click', () => {
 });
 $('#abCancel').addEventListener('click', () => {
   if (ab.running) {
-    if (ab.doneSecs > 120 && !confirm('Stop making the audiobook? What is finished so far is kept in the saved audio, so starting again goes faster.')) return;
-    ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); return;
+    // A second click confirms, in the dialog (a blocking confirm() would hold up the export's timers: round 13 review).
+    if (ab.doneSecs > 120 && !ab.confirming) {
+      ab.confirming = true; $('#abCancel').textContent = 'Click again to stop';
+      $('#abLeft').textContent = 'What is finished so far is kept in the saved audio, so starting again goes faster.';
+      setTimeout(() => { ab.confirming = false; if (ab.running) abShow(); }, 5000);
+      return;
+    }
+    ab.confirming = false; ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); return;
   }
   $('#abDialog').close();
 });

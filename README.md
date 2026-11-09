@@ -203,9 +203,11 @@ This needs a real web server (for example `npx vite` or
   are AAC at 64 kbps (about 29 MB an hour), tagged with the title, author and
   cover. Chrome and Edge ask where to save and write as they go; other
   browsers download each file when it's finished (with a "Download all as a
-  ZIP" button for a file per chapter). Passages already read aloud, or made in
-  an earlier export, are reused from the saved audio, so a cancelled export
-  picks up quickly. It needs the browser's AAC encoder (WebCodecs): Chrome,
+  ZIP" button for a file per chapter). Passages made in an earlier export, or
+  already read aloud (with Kokoro, only those heard at 1×, as its speed is part
+  of the audio), are reused from the saved audio, so a cancelled export picks up
+  quickly. If the voice goes away (a server restarting, say), the export waits
+  for it for up to five minutes; a sentence the voice can't say is left silent. It needs the browser's AAC encoder (WebCodecs): Chrome,
   Edge and Safari have one; Firefox doesn't. Reading aloud waits while an
   export runs, and the dialog can be closed meanwhile (the button shows it is
   still working).
@@ -469,7 +471,7 @@ marked ✓).
 | `ALLOW_EXTERNAL_LINKS` ✓ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `SLEEP_TIMER` ✓ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `TIME_LEFT` ✓ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
-| `KEEP_POSITIONS_DAYS` ✓ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). |
+| `KEEP_POSITIONS_DAYS` ✓ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
 | `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. |
 | `LOOKAHEAD_SEC` ✓ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
@@ -520,7 +522,7 @@ each with its own `default.epub`:
 
 ```bash
 cd tests && npm install && npx playwright install chromium && cd ..   # once
-tests/run.sh                        # all tests (about four minutes)
+tests/run.sh                        # all tests (about eight minutes)
 tests/run.sh tests/urls.test.js     # one file
 SLOW=1 tests/run.sh                 # also load the real self-hosted Kokoro and Pocket TTS on the CPU
 NETWORK=1 tests/run.sh              # also load everything from the CDNs under the CDN version of the policy

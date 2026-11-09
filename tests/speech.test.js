@@ -208,3 +208,16 @@ test('the position ribbon is a slider: arrows step a section, Home and End (L-78
   assert.equal(await narrow.evaluate(() => document.querySelector('#toc').classList.contains('open')), false);
   assert.equal(await narrow.evaluate(() => document.activeElement?.id), 'tocBtn');
 });
+
+test('narrow screens: search keeps the focus it was given, and Escape in it clears the search, not the contents (round 13 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 600, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.keyboard.press('/');
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'searchBox');
+  await page.keyboard.type('keeper');
+  assert.equal(await page.inputValue('#searchBox'), 'keeper');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.inputValue('#searchBox'), '');
+  assert.equal(await page.evaluate(() => document.querySelector('#toc').classList.contains('open')), true, 'the contents stay open');
+});

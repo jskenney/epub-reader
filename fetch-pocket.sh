@@ -99,6 +99,9 @@ verify() {
   echo "All files match their checksums."
 }
 
+# Every language asked for checked before anything is downloaded (round 13 review).
+for lang in "${langs[@]}"; do bundle_for "$lang" >/dev/null; done
+
 say "Library (pocket-tts-js $POCKET_JS)"
 for f in worker.js binary.js tokenizer.js; do get "$JSD/pocket-tts-js@$POCKET_JS/src/$f" "lib/$f"; done
 

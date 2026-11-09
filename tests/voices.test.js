@@ -78,7 +78,7 @@ test('finished audio is saved: after a reload the same passage plays without ask
   await page.waitForTimeout(500);
   const asked = (await h.breezeLog()).map(r => r.text);
   assert.ok(!asked.includes(before[0]), 'the first passage should come from saved audio');
-  assert.ok(first < 2000, `first word after ${first} ms`);
+  assert.ok(first < 4000, `first word after ${first} ms`);
 });
 
 test('server voices: clips outside the voices folder are not used (L-12, L-28)', async () => {

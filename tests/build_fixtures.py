@@ -306,6 +306,8 @@ def main():
     damage(books / "bad-picture.epub", "OEBPS/pic.png", "crc")
     epub(books / "bad-first.epub", "Bad First", [("c1.xhtml", "One", paragraphs("Broken", 3)), ("c2.xhtml", "Two", "<p>Second chapter.</p>")], uid="urn:bad-first")
     damage(books / "bad-first.epub", "OEBPS/c1.xhtml", "deflate")
+    # Many short paragraphs (round 13 review): passages quick enough to see a pause stop them.
+    epub(books / "short-lines.epub", "Short Lines", [("c1.xhtml", "Lines", "".join(f"<p>Line {i} is short.</p>" for i in range(1, 61)))], uid="urn:short-lines")
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
     (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))

@@ -67,9 +67,13 @@ async function openExport(page, url = ABC, settings = { 'spine:ttsEngine': 'serv
 async function exportAll(page, mode, count) {
   await page.check(`input[name="abMode"][value="${mode}"]`);
   const files = [];
-  const got = new Promise(res => page.on('download', async d => { const f = path.join(tmp, d.suggestedFilename()); await d.saveAs(f); files.push(f); if (files.length === count) res(); }));
+  let timer, listener;
+  const got = new Promise(res => page.on('download', listener = async d => { const f = path.join(tmp, d.suggestedFilename()); await d.saveAs(f); files.push(f); if (files.length === count) res(); }));
   await page.click('#abStart');
-  await Promise.race([got, new Promise((_, rej) => setTimeout(() => rej(new Error('no downloads: ' + files.join())), 90000))]);
+  // (The listener and the time limit are removed afterwards: a later download isn't caught here, and a pending
+  // timer doesn't keep the test process alive: round 13 review.)
+  try { await Promise.race([got, new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('no downloads: ' + files.join())), 90000); })]); }
+  finally { clearTimeout(timer); page.off('download', listener); }
   await page.waitForFunction(() => document.querySelector('#abPause').hidden, null, { timeout: 10000 });
   return files.sort();
 }
@@ -209,19 +213,18 @@ test('pause, resume, closing the dialog while it works, and cancel (E-10)', { sk
   FRAMES ??= aacFrames();
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
-  await openExport(page, `${h.READER}?book=books/long.epub`);
+  await openExport(page, `${h.READER}?book=books/short-lines.epub`);
   assert.match(await page.textContent('#abSummary'), /making it takes about/, 'an estimate from the voice heard so far');
-  await page.click('#abNone'); await page.check('#abList input >> nth=0');
   await h.clearBreezeLog();
   const downloads = []; page.on('download', d => downloads.push(d.suggestedFilename()));
   await page.click('#abStart');
-  await h.waitFor(async () => (await h.breezeLog()).length >= 1, 10000, 50);
+  await h.waitFor(async () => (await h.breezeLog()).length >= 3, 15000, 50);
   await page.click('#abPause');
   assert.equal(await page.textContent('#abPause'), 'Resume');
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(1500);   // (the passage in hand finishes)
   const n1 = (await h.breezeLog()).length;
-  await page.waitForTimeout(2000);
-  assert.ok((await h.breezeLog()).length <= n1 + 1, 'nothing more is made while paused');
+  await page.waitForTimeout(4000);
+  assert.equal((await h.breezeLog()).length, n1, 'nothing more is asked of the voice while paused');
   await page.keyboard.press('Escape');   // closing the dialog: the export carries on
   assert.equal(await page.evaluate(() => document.querySelector('#abDialog').open), false);
   assert.equal(await page.evaluate(() => document.querySelector('#ttsExport').classList.contains('busy')), true);
@@ -229,7 +232,7 @@ test('pause, resume, closing the dialog while it works, and cancel (E-10)', { sk
   assert.match(await h.notice(page), /waits while the audiobook is being made/);
   await page.click('#ttsExport');
   await page.click('#abPause');   // resume
-  await h.waitFor(async () => (await h.breezeLog()).length > n1 + 1, 15000);
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).length >= n1 + 3, 15000), 'it goes on after Resume');
   await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
   assert.deepEqual(downloads, [], 'nothing is saved from a cancelled single file');
@@ -254,13 +257,13 @@ test('chapters with no text (picture pages) are left out, not made into broken f
   await page.waitForFunction(() => /no text to read/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 20000 });
 });
 
-const fail500 = (route, detail) => route.fulfill({ status: 500, body: JSON.stringify({ detail }), contentType: 'application/json' });
+const fail500 = (route, detail, status = 500) => route.fulfill({ status, body: JSON.stringify({ detail }), contentType: 'application/json' });
 const spoken = route => route.request().postDataBuffer()?.toString('latin1') || '';
 test('a sentence the voice can\'t say is left silent and the export goes on (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
   FRAMES ??= aacFrames();
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
-  await page.route('**/tts/v1/audio/speech', route => /Bravo/.test(spoken(route)) ? fail500(route, 'no') : route.continue());
+  await page.route('**/tts/v1/audio/speech', route => /Bravo/.test(spoken(route)) ? fail500(route, 'no', 422) : route.continue());   // (the text's fault: a 4xx)
   await openExport(page);
   const [file] = await exportAll(page, 'one', 1);
   assert.match(await page.textContent('#abNow'), /ready\. 1 sentence the voice couldn't say is silent\./);
@@ -268,10 +271,26 @@ test('a sentence the voice can\'t say is left silent and the export goes on (E-1
   assert.equal(decodes(file), '');
 });
 
-test('the voice going away mid-export stops it, keeping what was made (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+test('the voice away for a few seconds: the export waits for it and loses nothing (round 13 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
   FRAMES ??= aacFrames();
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
+  let until = 0;
+  await page.route('**/tts/v1/audio/speech', route => {
+    if (!until && /Bravo/.test(spoken(route))) until = Date.now() + 5000;   // (gone for 5 s from Bravo on)
+    return Date.now() < until ? fail500(route, 'restarting', 502) : route.continue();
+  });
+  await openExport(page);
+  const [file] = await exportAll(page, 'one', 1);
+  assert.match(await page.textContent('#abNow'), /^The audiobook is ready\.$/, 'nothing left silent');
+  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+});
+
+test('the voice going away for good stops the export, keeping what was made (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.addInitScript(() => { window.SPINE_TEST = { abWaitSec: 4 }; });   // (rather than five minutes)
   let gone = false;
   await page.route('**/tts/v1/audio/speech', route => gone || /paragraph 2\./.test(spoken(route)) ? (gone = true, fail500(route, 'gone')) : route.continue());
   await openExport(page, `${h.READER}?book=books/long.epub`);
@@ -325,4 +344,41 @@ test('a cancelled single-file export removes the new, empty file it was writing 
   await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
   assert.deepEqual(await page.evaluate(() => window.__removed), ['The Long Book.m4b']);
+  // A file chosen to be replaced (it has something in it) stays as it was when the export is cancelled.
+  await page.evaluate(() => { window.__removed = []; window.__files['The Long Book.m4b'] = 'b2xk'; });
+  await page.click('#abStart');
+  await page.waitForFunction(() => !document.querySelector('#abPause').hidden);
+  await page.click('#abCancel');
+  await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 30000 });
+  assert.deepEqual(await page.evaluate(() => window.__removed), []);
+});
+
+test('a chapter that can\'t be read says so, stays ticked, and is reported; opening another book asks first (round 13 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/abc-missing/`);
+  assert.deepEqual(await page.$$eval('#abList .ab-len', els => els.map(e => e.textContent)), ['<1 min', "couldn't be read", '<1 min']);
+  assert.equal(await page.isChecked('#abList input >> nth=1'), true);
+  const [file] = await exportAll(page, 'one', 1);
+  assert.match(await page.textContent('#abNow'), /Left out, as they couldn't be read: Bravo\./);
+  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['Alpha', 'Charlie']);
+  // While an export runs, opening another book asks first; saying no leaves the export going. (The voice is held
+  // back, so the export is still running.)
+  await page.route('**/tts/v1/audio/speech', () => {});
+  await page.click('#abCancel');
+  await page.goto(`${h.READER}?book=books/short-lines.epub`); await h.waitForBook(page);
+  await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
+  await page.click('#ttsExport');
+  await page.waitForFunction(() => document.querySelector('#abList').dataset.measured);
+  await page.click('#abStart');
+  await page.waitForFunction(() => !document.querySelector('#abPause').hidden);
+  let asked = '';
+  page.once('dialog', d => { asked = d.message(); d.dismiss(); });
+  await page.evaluate(() => document.querySelector('#abDialog').close());
+  await page.setInputFiles('#fileInput', path.join(__dirname, 'site', 'reader', 'books', 'twin-b.epub'));
+  await page.waitForTimeout(500);
+  assert.match(asked, /Stop it and open the other book\?/);
+  assert.equal(await h.title(page), 'Short Lines');
+  assert.equal(await page.evaluate(() => document.querySelector('#ttsExport').classList.contains('busy')), true, 'still exporting');
 });
