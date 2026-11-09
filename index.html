@@ -4800,7 +4800,7 @@ function abM4b(sink){
   chain = chain.then(() => sink.write(ftyp)).then(() => sink.write(new Uint8Array(head)));
   return {
     setFormat(r, d, ch = 1, bps = 0){
-      rate = r; channels = ch; if (bps) kbps = Math.round(bps / 1000);
+      rate = r; channels = ch; kbps = bps ? Math.round(bps / 1000) : 0;   // (0: not known, the encoder's own default)
       const view = d && (ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : new Uint8Array(d));
       asc = view?.length ? view.slice() : abAsc(r, ch);
     },
@@ -4933,10 +4933,11 @@ function abBase64(bytes){ let s = ''; for (let i = 0; i < bytes.length; i += 327
    48 kHz samples, as Opus always counts. */
 function abOgg(sink, plan){
   const serial = (Math.random() * 2 ** 31) >>> 0, PRESKIP = 312;   // (the encoder's start-up delay, libopus's at 48 kHz)
-  let rate = 48000, channels = 1, granule = 0, seq = 0, pend = [], pendBytes = 0, chain = Promise.resolve(), started = false, count = 0, tagsAt = 0, tagsLen = 0;
+  let rate = 48000, channels = 1, granule = 0, lastDur = 0, seq = 0, pend = [], pendBytes = 0, chain = Promise.resolve(), started = false, count = 0, tagsAt = 0, tagsLen = 0;
   const tags = (chapters, size) => {
-    const c = [`TITLE=${plan.title}`, `ALBUM=${plan.album}`, 'GENRE=Audiobook', ...(plan.artist ? [`ARTIST=${plan.artist}`] : []), ...(plan.track ? [`TRACKNUMBER=${plan.track[0]}/${plan.track[1]}`] : []),
-      ...chapters.flatMap((ch, k) => { const n = String(k + 1).padStart(3, '0'); return [`CHAPTER${n}=${abClock(ch.start)}`, `CHAPTER${n}NAME=${ch.title}`]; }),
+    const c = [`TITLE=${plan.title}`, `ALBUM=${plan.album}`, 'GENRE=Audiobook', ...(plan.artist ? [`ARTIST=${plan.artist}`] : []), ...(plan.track ? [`TRACKNUMBER=${plan.track[0]}`, `TRACKTOTAL=${plan.track[1]}`] : []),
+      // (Readers take three digits, CHAPTER001 to CHAPTER999: past that the last chapter runs on to the end.)
+      ...chapters.slice(0, 999).flatMap((ch, k) => { const n = String(k + 1).padStart(3, '0'); return [`CHAPTER${n}=${abClock(ch.start)}`, `CHAPTER${n}NAME=${ch.title}`]; }),
       ...(plan.cover ? [`METADATA_BLOCK_PICTURE=${abBase64(abFlacPicture(plan.cover))}`] : [])].map(t => abText(t));
     const vendor = abText('Spine Reader');
     let body = abCat([abAscii('OpusTags'), abLE(vendor.length, 4), vendor, abLE(c.length, 4), ...c.flatMap(t => [abLE(t.length, 4), t])]);
@@ -4967,13 +4968,15 @@ function abOgg(sink, plan){
     setFormat(r, d, ch = 1){ rate = r; channels = ch; begin(); },
     add(frame, dur){
       begin();
-      granule += dur; count++;
+      granule += dur; lastDur = dur; count++;
       pend.push({ data: frame, granule }); pendBytes += frame.length;
       return pend.length > 50 ? flush() : chain;
     },
     async finish(meta){
       begin();
       if (!count) throw new Error('no audio was made');
+      // The end trimmed to the audio pushed (the encoder pads its last frame; RFC 7845 section 4.4).
+      if (meta.seconds > 0) { const end = PRESKIP + Math.round(meta.seconds * 48000); granule = Math.min(granule, Math.max(granule - lastDur, end)); pend[pend.length - 1].granule = granule; }
       await flush(true); await chain;
       // The tags again, with the real chapter times, the same size.
       const t = oggPages(serial, 1, [{ data: tags(meta.chapters, tagsLen), granule: 0 }]);
@@ -4981,25 +4984,38 @@ function abOgg(sink, plan){
     }
   };
 }
-/* An .mp3 file: an ID3v2.4 tag (title, artist, album, track, cover, and the chapters as CHAP frames listed by a
-   CTOC frame), then MP3 frames from lamejs. */
+/* An .mp3 file: an ID3v2.3 tag (title, artist, album, track, cover, and the chapters as CHAP frames listed by a
+   CTOC frame), then MP3 frames from lamejs. v2.3, not v2.4: Windows reads it best, and ffmpeg (so mpv,
+   Audiobookshelf, Jellyfin) reads the sizes of frames inside a CHAP as plain numbers, which only v2.3 writes
+   (review round 19). */
 function abMp3(sink, plan){
   let chain = Promise.resolve(), started = false, bytes = 0, tagLen = 0, secs = 0;
   const syncsafe = n => Uint8Array.of(n >> 21 & 127, n >> 14 & 127, n >> 7 & 127, n & 127);
-  const frame = (id, body) => abCat([abAscii(id), syncsafe(body.length), abNum(0, 2), body]);
-  const text = (id, t) => frame(id, abCat([Uint8Array.of(3), abText(t)]));   // (3: UTF-8)
+  const frame = (id, body) => abCat([abAscii(id), abNum(body.length, 4), abNum(0, 2), body]);
+  // Text: 0 (Latin-1) when it's plain ASCII, else 1 (UTF-16 with a byte-order mark), as v2.3 has no UTF-8.
+  const text = (id, t) => {
+    if (/^[\x20-\x7e]*$/.test(t)) return frame(id, abCat([Uint8Array.of(0), abAscii(t)]));
+    const b = new Uint8Array(3 + t.length * 2); b.set([1, 0xFF, 0xFE]);
+    for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); b[3 + i * 2] = c & 255; b[4 + i * 2] = c >> 8; }
+    return frame(id, b);
+  };
+  const toc = (id, flags, kids) => frame('CTOC', abCat([abAscii(id), Uint8Array.of(0, flags, kids.length), ...kids.map(k => abCat([abAscii(k), Uint8Array.of(0)]))]));
   const tag = (chapters, total, size) => {
     const ids = chapters.map((_, k) => `ch${k + 1}`);
+    // (A CTOC lists at most 255: more chapters go in tables of 255 listed by the top one.)
+    const groups = []; for (let i = 0; i < ids.length; i += 255) groups.push(ids.slice(i, i + 255));
+    const tocs = !ids.length ? [] : groups.length === 1 ? [toc('toc', 3, ids)]
+      : [toc('toc', 3, groups.map((_, g) => `toc${g + 1}`)), ...groups.map((g, k) => toc(`toc${k + 1}`, 1, g))];
     const frames = [text('TIT2', plan.title), text('TALB', plan.album), text('TCON', 'Audiobook'),
       ...(plan.artist ? [text('TPE1', plan.artist)] : []), ...(plan.track ? [text('TRCK', `${plan.track[0]}/${plan.track[1]}`)] : []),
-      ...(plan.cover ? [frame('APIC', abCat([Uint8Array.of(3), abAscii(plan.cover.type), Uint8Array.of(0, 3, 0), plan.cover.bytes]))] : []),
-      ...(chapters.length ? [frame('CTOC', abCat([abAscii('toc'), Uint8Array.of(0, 3, ids.length), ...ids.map(id => abCat([abAscii(id), Uint8Array.of(0)]))]))] : []),
+      ...(plan.cover ? [frame('APIC', abCat([Uint8Array.of(0), abAscii(plan.cover.type), Uint8Array.of(0, 3, 0), plan.cover.bytes]))] : []),
+      ...tocs,
       ...chapters.map((ch, k) => frame('CHAP', abCat([abAscii(ids[k]), Uint8Array.of(0),
         abNum(Math.round(ch.start * 1000), 4), abNum(Math.round((chapters[k + 1]?.start ?? total) * 1000), 4), abNum(0xFFFFFFFF, 4), abNum(0xFFFFFFFF, 4),
         text('TIT2', ch.title)])))];
     let body = abCat(frames);
     if (size != null) body = abCat([body, new Uint8Array(Math.max(0, size - 10 - body.length))]);   // (zeros after the frames are padding)
-    return abCat([abAscii('ID3'), Uint8Array.of(4, 0, 0), syncsafe(body.length), body]);
+    return abCat([abAscii('ID3'), Uint8Array.of(3, 0, 0), syncsafe(body.length), body]);
   };
   const begin = () => {
     if (started) return; started = true;
@@ -5418,7 +5434,7 @@ async function abRun(units, mode, target, format = 'aac'){
       const keepPart = async () => { if (fileSecs > 0 && !existed && !(mode === 'one' && target && !freshTarget)) { ab.partial = true; try { await finish(); } catch {} } };
       const finish = async () => {
         await enc.finish();
-        const out = await m4b.finish({ ...meta, title: plan.title, chapters, track });
+        const out = await m4b.finish({ ...meta, title: plan.title, chapters, track, seconds: enc.seconds });
         made = true;
         ab.files.push({ name, blob: out.blob || null });
         if (out.blob && (mode === 'one' || !target)) abDownload(out.blob, name);
