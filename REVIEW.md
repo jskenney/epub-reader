@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 14): `index.html` (about 5,900 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 16): `index.html` (about 5,900 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -83,13 +83,23 @@ the interface; the scripts, tests and documents), of `08d645a`. Fixed in `0def7a
   held: nothing reached another site.
 - **Low, tests, documentation:** L-130 to L-148, T-22 to T-26, D-8 and D-9.
 L-138 and L-149 were fixed after it, with T-14, in `2baae6a`. H-12 and two of the lows were checked by reading.
-L-18 (a TTS server issue) was removed in round 6 as belonging to that server's repository. The tests drive the export with a stand-in AAC encoder (the test
+L-18 (a TTS server issue) was removed in round 6 as belonging to that server's repository.
+
+Round 16 was a review of rounds 14 and 15's fixes by two independent reviewers (`08d645a..8a3ae13`). Fixed in
+`74c9765` and `f38b008`, with tests that fail on the code before them except where noted:
+- **High:** H-14 (addresses still got past the CSS cleaner through substitutions: an unclosed `image-set(var(…)`,
+  `url("…" var(--e))`, `if()`; the book policy held) and H-15 (the new check was quadratic: a small sheet froze the
+  tab).
+- **Medium:** M-52 to M-57 (paging dead after a failed render; search re-reading the whole book; the export's new
+  wait stopping on a 500 for one text, wasting the wait on a crashed voice, ignoring Cancel and Pause, and counting
+  only its sleeps).
+- **Low:** L-150 to L-162. The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 167 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 170 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -236,6 +246,8 @@ From all reviews so far, with the commits that fixed them.
 | H-11 | Without a save picker a long book was held in memory as about a million small arrays | `9d10dc0` |
 | H-12 | A Pocket export hung for good (and locked reading aloud) when a book in another Pocket language opened | `ce5efe6` |
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
+| H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
+| H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
 | M-1 | A `%` in `?book=` left the reader stuck on "Loading…" | `46a112b` |
 | M-2 | The "not found" check for HTML documents only worked for identical pages | `33813a3` |
 | M-3 | The sleep timer could stop right after resuming | `33813a3` |
@@ -287,6 +299,12 @@ From all reviews so far, with the commits that fixed them.
 | M-49 | A file of silence could be saved as "kept", even over a complete one | `ce5efe6` |
 | M-50 | A chapter that couldn't be read was shown as "no text", unticked and silently left out | `ce5efe6` |
 | M-51 | On narrow screens, search lost its focus to the contents, so typing fired shortcuts | `ce5efe6` |
+| M-52 | A failed render while another page arrived left paging dead | `74c9765` |
+| M-53 | One unreadable chapter made every search re-read the whole book | `74c9765` |
+| M-54 | A 500 for one text from a server that was well stopped the export after five minutes | `f38b008` |
+| M-55 | A crashed Kokoro (or reloading Pocket) wasted the wait, then stopped with an internal error | `f38b008` |
+| M-56 | Cancel took up to 20 s during a wait for the voice, and a paused export went on polling and stopped itself | `f38b008` |
+| M-57 | The wait limit counted only its sleeps, so a hung server could stall an export for an hour | `f38b008` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -434,6 +452,19 @@ From all reviews so far, with the commits that fixed them.
 | L-148 | `fetch-pocket.sh` checked the languages only after downloading | `ce5efe6` |
 | L-138 | `href` on MathML elements (links in Firefox) | `2baae6a` |
 | L-149 | Archives with data before them weren't read in place | `2baae6a` |
+| L-150 | A good page of the same book could be replaced by the blank page | `74c9765` |
+| L-151 | The blank page wasn't wired (keys, swipes, the wheel) | `74c9765` |
+| L-152 | Moving `@namespace` rules could change the CSS's meaning (a misplaced one made valid; unclosed text) | `74c9765` |
+| L-153 | The non-page note was searched and read aloud; folder books' font copies after closing; ZIP64 records taken for data before the archive | `74c9765` |
+| L-154 | The room kept for a stopped export never expired, and wasn't cleared with the saved audio | `f38b008` |
+| L-155 | An export of only unreadable chapters said "no text to read" | `f38b008` |
+| L-156 | On narrow screens, C from inside the page no longer focused the contents | `f38b008` |
+| L-157 | A whole passage was tried three times before going sentence by sentence | `f38b008` |
+| L-158 | The Cancel confirmation's text vanished, and its timer carried into the next export | `f38b008` |
+| L-159 | A partial file could replace a file picked to be replaced | `f38b008` |
+| L-160 | Failed server requests left an abort listener behind | `f38b008` |
+| L-161 | The voice label went blank while the server was away mid-export | `f38b008` |
+| L-162 | Two fonts differing only in case, one obfuscated, were both de-obfuscated | `f38b008` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
