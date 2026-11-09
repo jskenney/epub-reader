@@ -17,10 +17,10 @@ const noFfmpeg = !(has('ffmpeg') && has('ffprobe')) && 'needs ffmpeg and ffprobe
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-ab-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-// Real AAC-LC frames (24 kHz mono), without their ADTS headers.
-function aacFrames() {
-  const file = path.join(tmp, 'tone.aac');
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=24000:duration=3', '-ac', '1', '-c:a', 'aac', '-b:a', '64k', '-f', 'adts', file]);
+// Real AAC-LC frames (24 kHz mono by default), without their ADTS headers.
+function aacFrames(rate = 24000, channels = 1) {
+  const file = path.join(tmp, `tone-${rate}-${channels}.aac`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=frequency=330:sample_rate=${rate}:duration=3`, '-ac', String(channels), '-c:a', 'aac', '-b:a', '128k', '-f', 'adts', file]);
   const b = fs.readFileSync(file), frames = [];
   for (let at = 0; at + 7 <= b.length;) {
     const len = ((b[at + 3] & 3) << 11) | (b[at + 4] << 3) | (b[at + 5] >> 5), head = (b[at + 1] & 1) ? 7 : 9;
@@ -142,7 +142,7 @@ test('the device voice, or a browser without AAC, explains why export is not pos
   await h.openReader(page, ABC, { 'spine:ttsEngine': 'server' });
   await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
   await page.click('#ttsExport');
-  assert.match(await page.textContent('#abNote'), /can't make AAC audio/);
+  assert.match(await page.textContent('#abNote'), /no AAC encoder/);
   assert.equal(await page.isDisabled('#abStart'), true);
   await page.click('#abCancel');
   await page.selectOption('#ttsEngine', 'device');
@@ -416,4 +416,55 @@ test('Cancel ends an export at once, while the voice never answers or while it w
     await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 5000 });
     assert.ok(Date.now() - t0 < 1200, `${m}: took ${Date.now() - t0} ms`);
   }
+});
+
+// An encoder like Windows' (as far as known): 44.1 or 48 kHz, stereo only, 96 kbps and up.
+function strictAac(frames) {
+  const pool = frames.map(f => Uint8Array.from(atob(f), c => c.charCodeAt(0)));
+  let n = 0;
+  window.__enc = { configured: null, channels: [] };
+  window.AudioEncoder = class {
+    static async isConfigSupported(c) { return { supported: c.codec === 'mp4a.40.2' && [44100, 48000].includes(c.sampleRate) && c.numberOfChannels === 2 && c.bitrate >= 96000, config: c }; }
+    constructor({ output }) { this.output = output; this.left = 0; this.first = true; this.encodeQueueSize = 0; }
+    configure(c) { window.__enc.configured = c; this.rate = c.sampleRate; this.ts = 0; }
+    emit() {
+      const data = pool[n++ % pool.length];
+      const chunk = { byteLength: data.length, duration: Math.round(1024 / this.rate * 1e6), timestamp: this.ts, type: 'key', copyTo: d => d.set(data) };
+      this.ts += chunk.duration;
+      this.output(chunk, this.first ? { decoderConfig: { codec: 'mp4a.40.2', sampleRate: this.rate, numberOfChannels: 2, description: Uint8Array.of(0x11, 0x90).buffer } } : undefined);
+      this.first = false;
+    }
+    encode(audio) { window.__enc.channels.push(audio.numberOfChannels); this.left += audio.numberOfFrames; audio.close?.(); while (this.left >= 1024) { this.left -= 1024; this.emit(); } }
+    async flush() { if (this.left > 0) { this.left = 0; this.emit(); } }
+    close() {}
+  };
+  window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined;
+}
+test('an encoder that takes only 48 kHz stereo at 96 kbps and up (as Windows\' does) is used (user report)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  const frames = aacFrames(48000, 2);
+  const page = await h.newPage();
+  await page.addInitScript(strictAac, frames);
+  await openExport(page);
+  assert.equal(await page.isHidden('#abNote'), true, await page.textContent('#abNote'));
+  const [file] = await exportAll(page, 'one', 1);
+  const enc = await page.evaluate(() => window.__enc);
+  assert.equal(enc.configured.sampleRate, 48000);
+  assert.equal(enc.configured.numberOfChannels, 2);
+  assert.equal(enc.configured.bitrate, 96000);
+  assert.ok(enc.channels.every(c => c === 2));
+  const p = probe(file);
+  assert.equal(p.streams[0].channels, 2);
+  assert.equal(p.streams[0].sample_rate, '48000');
+  assert.equal(decodes(file), '');
+});
+
+test('the dialog says why there is no encoder: a page that isn\'t secure, or none in the browser (user report)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { Object.defineProperty(window, 'isSecureContext', { value: false }); delete window.AudioEncoder; });
+  await openExport(page);
+  assert.match(await page.textContent('#abNote'), /secure page: open it with https:\/\//);
+  const none = await h.newPage();
+  await none.addInitScript(() => { window.AudioEncoder = class { static async isConfigSupported() { return { supported: false }; } }; });
+  await openExport(none);
+  assert.match(await none.textContent('#abNote'), /no AAC encoder.*Chrome on Linux has none/);
 });

@@ -207,8 +207,11 @@ This needs a real web server (for example `npx vite` or
   already read aloud (with Kokoro, only those heard at 1×, as its speed is part
   of the audio), are reused from the saved audio, so a cancelled export picks up
   quickly. If the voice goes away (a server restarting, say), the export waits
-  for it for up to five minutes; a sentence the voice can't say is left silent. It needs the browser's AAC encoder (WebCodecs): Chrome,
-  Edge and Safari have one; Firefox doesn't. Reading aloud waits while an
+  for it for up to five minutes; a sentence the voice can't say is left silent. It needs the browser's AAC encoder (WebCodecs), which
+  browsers only offer to secure pages: serve the reader over `https://` (or open
+  it as `localhost`). Chrome and Edge on Windows and macOS, and Safari, have one
+  (on Windows it takes 96 kbps and up, so files are a little larger there);
+  Chrome on Linux and Firefox don't. The export dialog says which it is. Reading aloud waits while an
   export runs, and the dialog can be closed meanwhile (the button shows it is
   still working).
 - Sleep timer in the read-aloud bar (off unless `SLEEP_TIMER` is turned on):

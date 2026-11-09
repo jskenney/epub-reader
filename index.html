@@ -4751,10 +4751,10 @@ function abRows(rows, widths){
 const abBox = (type, ...parts) => { const body = abCat(parts); return abCat([abNum(8 + body.length, 4), abAscii(type), body]); };
 const abFull = (type, version, flags, ...parts) => abBox(type, abNum(version, 1), abNum(flags, 3), ...parts);
 const AB_MATRIX = abCat([0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000].map(v => abNum(v, 4)));
-// An AAC decoder description (AudioSpecificConfig) for AAC-LC, mono, when the encoder gives none.
-function abAsc(rate){
+// An AAC decoder description (AudioSpecificConfig) for AAC-LC, mono or stereo, when the encoder gives none.
+function abAsc(rate, ch = 1){
   const idx = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350].indexOf(rate);
-  return Uint8Array.of((2 << 3) | (idx >> 1), ((idx & 1) << 7) | (1 << 3));
+  return Uint8Array.of((2 << 3) | (idx >> 1), ((idx & 1) << 7) | (ch << 3));
 }
 // Descriptors inside esds: tag, then a length in four 7-bit bytes.
 const abDesc = (tag, body) => abCat([Uint8Array.of(tag, 0x80 | (body.length >> 21 & 127), 0x80 | (body.length >> 14 & 127), 0x80 | (body.length >> 7 & 127), body.length & 127), body]);
@@ -4782,16 +4782,16 @@ const AB_WRITE = 1 << 20;
 function abM4b(sink){
   const ftyp = abBox('ftyp', abAscii('M4B '), abNum(0, 4), abAscii('M4B '), abAscii('M4A '), abAscii('mp42'), abAscii('isom'));
   const head = 16;   // mdat with a 64-bit size, so a very long book still fits
-  let sizes = new Uint32Array(1 << 14), count = 0, total = 0, bytes = 0, rate = 0, asc = null;
+  let sizes = new Uint32Array(1 << 14), count = 0, total = 0, bytes = 0, rate = 0, asc = null, channels = 1, kbps = AB_KBPS;
   const durs = [];   // [frames, duration] runs
   let pend = [], pendBytes = 0, chain = Promise.resolve();
   const flush = () => { if (!pendBytes) return chain; const b = abCat(pend); pend = []; pendBytes = 0; return chain = chain.then(() => sink.write(b)); };
   chain = chain.then(() => sink.write(ftyp)).then(() => sink.write(new Uint8Array(head)));
   return {
-    setFormat(r, d){
-      rate = r;
+    setFormat(r, d, ch = 1, bps = 0){
+      rate = r; channels = ch; if (bps) kbps = Math.round(bps / 1000);
       const view = d && (ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : new Uint8Array(d));
-      asc = view?.length ? view.slice() : abAsc(r);
+      asc = view?.length ? view.slice() : abAsc(r, ch);
     },
     add(frame, dur){
       if (count === sizes.length) { const s = new Uint32Array(sizes.length * 2); s.set(sizes); sizes = s; }
@@ -4807,7 +4807,7 @@ function abM4b(sink){
       const secs = total / rate, mdatAt = ftyp.length;
       const now = abNum(Math.floor(Date.now() / 1000) + 2082844800, 8);   // (seconds since 1904)
       const ms = Math.round(secs * 1000);
-      const mp4a = abBox('mp4a', abNum(0, 6), abNum(1, 2), abNum(0, 8), abNum(1, 2), abNum(16, 2), abNum(0, 4), abNum(rate * 65536, 4), abEsds(asc || abAsc(rate), AB_KBPS));
+      const mp4a = abBox('mp4a', abNum(0, 6), abNum(1, 2), abNum(0, 8), abNum(channels, 2), abNum(16, 2), abNum(0, 4), abNum(rate * 65536, 4), abEsds(asc || abAsc(rate, channels), kbps));
       const stbl = abBox('stbl',
         abFull('stsd', 0, 0, abNum(1, 4), mp4a),
         abFull('stts', 0, 0, abNum(durs.length, 4), abRows(durs, [4, 4])),
@@ -4876,14 +4876,23 @@ function abFileSink(writable, handle){
     abort: async () => { await writable.abort?.().catch(() => {}); if (handle) await handle.remove?.().catch(() => {}); } };
 }
 
-// --- AAC encoding (WebCodecs). The rates the browser's encoder takes, worked out once.
+// --- AAC encoding (WebCodecs). What the browser's encoder takes, worked out once: for each sample rate the first
+// that works of mono then stereo, at 64 kbps or the lowest bitrate it accepts (Windows' encoder takes only 96 kbps
+// and up). ab.aacWhy says why there is none: the page isn't secure (WebCodecs is offered only to HTTPS and
+// localhost), the browser has no WebCodecs, or no AAC encoder (Chrome on Linux has none).
 async function abAacRates(){
-  if (ab.rates) return ab.rates;
+  if (ab.configs) return ab.configs;
   const out = [];
-  if (window.AudioEncoder) for (const sampleRate of [24000, 48000, 44100]) {
-    try { if ((await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: 1, bitrate: AB_KBPS * 1000 })).supported) out.push(sampleRate); } catch {}
+  ab.aacWhy = !window.isSecureContext ? 'insecure' : !window.AudioEncoder ? 'webcodecs' : '';
+  if (!ab.aacWhy) for (const sampleRate of [24000, 48000, 44100]) {
+    find: for (const numberOfChannels of [1, 2]) for (const bitrate of [64000, 96000, 128000, 160000, 192000, 0]) {
+      const c = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, ...(bitrate && { bitrate }) };
+      try { if ((await AudioEncoder.isConfigSupported(c)).supported) { out.push(c); break find; } } catch {}
+    }
   }
-  return ab.rates = out;
+  if (!out.length && !ab.aacWhy) ab.aacWhy = 'aac';
+  ab.rates = out.map(c => c.sampleRate);
+  return ab.configs = out;
 }
 // Samples at one rate to another: by the browser's own resampler (filtered, so no images or aliasing),
 // or failing that, straight lines between samples.
@@ -4902,22 +4911,23 @@ async function abResample(data, from, to){
 }
 // An encoder feeding an .m4b: push() samples at any rate, finish() flushes it. The encoder is made when the
 // first samples arrive, at their rate if the browser takes it.
-function abEncoder(m4b, rates){
-  let enc = null, rate = 0, at = 0, failed = null, pending = Promise.resolve();
+function abEncoder(m4b, configs){
+  let enc = null, rate = 0, channels = 1, at = 0, failed = null, pending = Promise.resolve();
   const check = () => { if (failed) throw failed; };
   const start = srcRate => {
-    rate = rates.includes(srcRate) ? srcRate : rates.includes(48000) ? 48000 : rates[0];
+    const config = configs.find(c => c.sampleRate === srcRate) || configs.find(c => c.sampleRate === 48000) || configs[0];
+    rate = config.sampleRate; channels = config.numberOfChannels;
     enc = new AudioEncoder({
       output: (chunk, meta) => {
-        if (meta?.decoderConfig) m4b.setFormat(rate, meta.decoderConfig.description);
+        if (meta?.decoderConfig) m4b.setFormat(rate, meta.decoderConfig.description, channels, config.bitrate);
         const b = new Uint8Array(chunk.byteLength); chunk.copyTo(b);
         const dur = chunk.duration ? Math.round(chunk.duration * rate / 1e6) : 1024;
         pending = m4b.add(b, dur || 1024).catch(e => { failed ??= e; });
       },
       error: e => { failed ??= e; }
     });
-    enc.configure({ codec: 'mp4a.40.2', sampleRate: rate, numberOfChannels: 1, bitrate: AB_KBPS * 1000 });
-    m4b.setFormat(rate, null);
+    enc.configure(config);
+    m4b.setFormat(rate, null, channels, config.bitrate);
   };
   return {
     get seconds(){ return rate ? at / rate : 0; },   // audio pushed so far (for chapter starts)
@@ -4928,7 +4938,9 @@ function abEncoder(m4b, rates){
       for (let i = 0; i < d.length; i += 48000) {   // (in pieces of a second or so)
         check();
         const part = d.subarray(i, i + 48000);
-        const audio = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: part.length, numberOfChannels: 1, timestamp: Math.round(at / rate * 1e6), data: part });
+        // (An encoder that takes only stereo gets the voice in both channels.)
+        const planes = channels === 1 ? part : (() => { const two = new Float32Array(part.length * 2); two.set(part); two.set(part, part.length); return two; })();
+        const audio = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: part.length, numberOfChannels: channels, timestamp: Math.round(at / rate * 1e6), data: planes });
         try { enc.encode(audio); } finally { audio.close(); }
         at += part.length;
         // (The encoder's dequeue event, as timers are slowed down in a background tab.)
@@ -5148,7 +5160,7 @@ async function abSay(ne, chunks, ci, keyBase, snap){
   }
 }
 async function abRun(units, mode, target){
-  const ne = neuralEngine(), b = book, rates = await abAacRates();
+  const ne = neuralEngine(), b = book, rates = await abAacRates();   // (the encoder settings that work)
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
   const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
@@ -5265,7 +5277,10 @@ function abState(){
   const ne = neuralEngine();
   if (tts.engine === 'device' || tts.engine === 'narration' || !ne)
     return { text: 'Audiobooks are made with a natural voice: choose Kokoro, Pocket or Server in the read-aloud bar.' };
-  if (!ab.rates?.length) return { text: "This browser can't make AAC audio, which .m4b files need. Use Chrome, Edge or Safari." };
+  if (!ab.configs?.length) return { text: {
+    insecure: 'Audiobooks need the reader on a secure page: open it with https:// (or as localhost). Browsers only let secure pages use their audio encoder.',
+    webcodecs: "This browser doesn't let web pages encode audio (WebCodecs). Use a current Chrome, Edge or Safari.",
+  }[ab.aacWhy] || "This browser has no AAC encoder, which .m4b files need. Chrome on Linux has none; Chrome and Edge on Windows or macOS, and Safari, do." };
   if (!ne.ready()) {
     if (ne.st.state === 'loading') return { text: `Loading the voice… ${ne.st.progressText || ''}`.trim() };
     if (ne.st.state === 'error') return { text: `The voice couldn't be loaded${ne.st.error ? ': ' + ne.st.error : ''}.`, download: true, label: 'Try again' };
@@ -5316,7 +5331,8 @@ async function abSummary(){
     if (len) len.textContent = u.unreadable ? "couldn't be read" : u.chars === 0 ? 'no text' : lengths || u.chars != null ? (abSecs(c) >= 30 ? formatDuration(abSecs(c)) : '<1 min') : '';
     if (u.pick) { chars += c; picked++; }
   });
-  const secs = abSecs(chars), mb = secs * AB_KBPS / 8 / 1024, ratio = ab.gen[neuralEngine()?.name];
+  const kbps = Math.round((ab.configs?.[0]?.bitrate || AB_KBPS * 1000) / 1000);   // (the bitrate the encoder takes: 96 kbps and up on Windows)
+  const secs = abSecs(chars), mb = secs * kbps / 8 / 1024, ratio = ab.gen[neuralEngine()?.name];
   const make = ratio ? ` · making it takes about ${formatDuration(secs * ratio) || '1 min'}` : '';
   let text = picked ? `${plural(picked, 'chapter')} · about ${formatDuration(secs) || '1 min'} · about ${mb < 1 ? '1' : Math.round(mb)} MB${make}` : 'No chapters chosen.';
   // Saved audio lets a stopped export start again quickly, as far as the browser's storage holds it.
