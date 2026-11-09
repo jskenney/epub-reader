@@ -801,7 +801,7 @@ function zipSource(zip){
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
   return {
     kind: 'zip',
-    async text(p){ const f = getFile(zip, p); return f ? clean(await f.async('string')) : null; },
+    async text(p){ const f = getFile(zip, p); return f ? decodeText(await f.async('uint8array'), '', 'utf-8') : null; },
     async exists(p){ return !!getFile(zip, p); },
     async url(p, type){
       const f = getFile(zip, p); if (!f) return null;
@@ -823,7 +823,10 @@ function dirSource(base){
     base: new URL(base).href,   // the folder its files come from (allowed by the book pages' security policy)
     async text(p){
       const u = abs(p); if (!u) return null;
-      try { const r = await fetch(u); return r.ok ? clean(await r.text()) : null; } catch { return null; }
+      try {
+        const r = await fetch(u); if (!r.ok) return null;
+        return decodeText(new Uint8Array(await r.arrayBuffer()), (r.headers.get('content-type') || '').match(/charset\s*=\s*["']?([\w.:-]+)/i)?.[1], 'utf-8');
+      } catch { return null; }
     },
     async exists(p){ return !!abs(p); },
     async url(p){ return abs(p); },
@@ -903,9 +906,24 @@ function docKind(name, type = ''){
   if (['txt', 'text'].includes(e) || /^text\/plain/i.test(type)) return 'text';
   return null;
 }
-// UTF-8, falling back to Windows-1252 for older files.
-function decodeText(bytes){
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
+// Text from bytes: a byte order mark (UTF-8 or UTF-16) first, then the encoding the file declares (an XML
+// declaration, or an HTML <meta charset> near the top), then UTF-8, falling back to Windows-1252 for older
+// files (REVIEW.md M-26), or for a book's files, lenient UTF-8 (the default for XML, and what EPUB requires).
+// An HTTP charset, when a server sends one, comes before all but the mark.
+function decodeText(bytes, httpCharset = '', fallback = 'windows-1252'){
+  const as = (label, b = bytes) => { try { return new TextDecoder(label).decode(b); } catch { return null; } };
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return as('utf-8', bytes.subarray(3));
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) return as('utf-16le', bytes.subarray(2));
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) return as('utf-16be', bytes.subarray(2));
+  if (bytes[0] === 0x3C && bytes[1] === 0 && bytes[2] === 0x3F && bytes[3] === 0) return as('utf-16le');   // "<?" in UTF-16, no mark
+  if (bytes[0] === 0 && bytes[1] === 0x3C && bytes[2] === 0 && bytes[3] === 0x3F) return as('utf-16be');
+  const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024));
+  const declared = httpCharset || (head.match(/^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i)
+    || head.match(/<meta\b[^>]*?\bcharset\s*=\s*["']?([\w.:-]+)/i))?.[1] || '';
+  // (UTF-16 named in a file that isn't UTF-16 is a mistake, as HTML treats it; UTF-8 is tried anyway.)
+  if (declared && !/^(utf-?8|utf-?16(le|be)?|unicode(fffe)?|ucs-2)$/i.test(declared)) { const t = as(declared.toLowerCase()); if (t != null) return t; }
+  if (/^utf-?8$/i.test(declared)) return new TextDecoder().decode(bytes);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder(fallback).decode(bytes); }
 }
 const escHtml = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /* Libraries: loaded from libs/ under LIB_FILES (fetch-libs.sh) when there, otherwise from cdnjs. Both copies
@@ -1141,7 +1159,7 @@ async function openComic(zip, name, { key, seq } = {}){
   let ci = {};
   const ciFile = Object.values(zip.files).find(f => !f.dir && /(^|\/)comicinfo\.xml$/i.test(f.name));
   if (ciFile) {
-    const d = parseDoc(clean(await (getFile(zip, ciFile.name) || ciFile).async('string')), 'application/xml');
+    const d = parseDoc(decodeText(await (getFile(zip, ciFile.name) || ciFile).async('uint8array'), '', 'utf-8'), 'application/xml');
     const g = t => d?.getElementsByTagName(t)[0]?.textContent.trim() || '';
     ci = { title: g('Title'), series: g('Series'), number: g('Number'), volume: g('Volume'), writer: g('Writer'), penciller: g('Penciller'),
       summary: g('Summary'), lang: g('LanguageISO'), manga: g('Manga'), publisher: g('Publisher'), year: g('Year'), genre: g('Genre') };
@@ -1315,7 +1333,7 @@ async function openBook(zip, { sample = false, name = '', seq } = {}){
     const href = it.getAttribute('href'); if (!href) continue;
     const item = { id: it.getAttribute('id'), href, path: resolve(opfPath, href),
       type: (it.getAttribute('media-type') || '').toLowerCase(), props: (it.getAttribute('properties') || '').split(/\s+/),
-      overlay: it.getAttribute('media-overlay') || '' };
+      overlay: it.getAttribute('media-overlay') || '', fallback: it.getAttribute('fallback') || '' };
     manifest.set(item.id, item); byPath.set(item.path, item);
   }
   const spineEl = opf.getElementsByTagNameNS('*', 'spine')[0];
@@ -1914,7 +1932,9 @@ async function buildPage(src, path){
       if (n.getAttribute('media')) st.setAttribute('media', n.getAttribute('media'));
       head.append(st);
     } else {
-      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(n.textContent, path, { budget, owner: path })); head.append(st);
+      const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(n.textContent, path, { budget, owner: path }));
+      if (n.getAttribute('media')) st.setAttribute('media', n.getAttribute('media'));   // (print-only styles stay so: M-24)
+      head.append(st);
     }
   }
   const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(); head.append(ov);
@@ -2043,10 +2063,32 @@ function withoutDocumentControls(t){
   out.push(t.slice(from));
   return out.join('');
 }
+const isPage = it => /html|svg/.test(it.type) || /\.(x?html?|svg)$/i.test(it.path);
+// A spine item's document. Its path (for the addresses in it) is kept as doc.readerPath: a fallback's, when
+// one is used (REVIEW.md M-25).
 async function chapterSource(item){
-  const raw = withoutDocumentControls(await readText(book.zip, item.path) || '');
-  const isHtml = item.type === 'text/html' || /\.html?$/i.test(item.path);
-  return (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
+  // An item that isn't a page (a picture, say) is shown through its manifest fallback, or failing that, a
+  // picture is shown on a page of its own.
+  let it = item;
+  for (let k = 0; k < 8 && !isPage(it) && it.fallback && book.manifest?.get(it.fallback); k++) it = book.manifest.get(it.fallback);
+  let doc;
+  if (!isPage(it) && /^image\//.test(it.type)) {
+    doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p><img src="${escHtml(encodeURIComponent(it.path.split('/').pop()))}" alt=""/></p></body></html>`, 'application/xhtml+xml');
+  } else {
+    const raw = withoutDocumentControls(await readText(book.zip, it.path) || '');
+    const isHtml = it.type === 'text/html' || /\.html?$/i.test(it.path);
+    doc = (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
+  }
+  // An SVG page (EPUB 3 allows them, often for the cover): the drawing becomes the body of a page.
+  if (doc.documentElement.localName === 'svg') {
+    const X = 'http://www.w3.org/1999/xhtml', page = document.implementation.createDocument(X, 'html', null);
+    const body = page.createElementNS(X, 'body');
+    body.append(page.importNode(doc.documentElement, true));
+    page.documentElement.append(page.createElementNS(X, 'head'), body);
+    doc = page;
+  }
+  doc.readerPath = it.path;
+  return doc;
 }
 // A detached copy of a chapter, built like the page shown in the frame (without its styles and resources),
 // so its text splits into the same blocks and sentences: for preparing speech ahead and for search.
@@ -2072,7 +2114,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   updateChrome();
   try {
     const src = await chapterSource(item);
-    const html = await buildPage(src, item.path);
+    const html = await buildPage(src, src.readerPath);
     if (token !== renderToken) return;
     await loadFrame(html);
     if (token !== renderToken) return;

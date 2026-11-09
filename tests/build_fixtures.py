@@ -65,6 +65,26 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
             z.writestr(zipfile.ZipInfo(name) if data == b"" else name, data)   # empty files stored (0 bytes), as tools do
 
 
+def epub_items(path, title, items, spine, files, uid):
+    """An EPUB with a hand-written manifest: items [(id, href, media-type, extra attributes)], spine [id],
+    files {path under OEBPS/: bytes or text}."""
+    manifest = "".join(f'<item id="{i}" href="{h}" media-type="{t}" {x}/>' for i, h, t, x in items)
+    opf = f"""<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">{uid}</dc:identifier>
+<dc:title>{title}</dc:title><dc:language>en</dc:language></metadata>
+<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>{manifest}</manifest>
+<spine>{"".join(f'<itemref idref="{i}"/>' for i in spine)}</spine></package>"""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
+        z.writestr("META-INF/container.xml", """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
+        z.writestr("OEBPS/content.opf", opf)
+        z.writestr("OEBPS/nav.xhtml", xhtml("Contents", '<nav epub:type="toc"><ol><li><a href="nav.xhtml">Contents</a></li></ol></nav>'))
+        for name, data in files.items():
+            z.writestr("OEBPS/" + name, data)
+
+
 def raw_zip(path, entries, comment=b""):
     """Write a ZIP byte by byte, for archives zipfile won't make on purpose. entries: dicts with name (bytes),
     data, and optionally deflate (bool), method (override), flags, cextra / lextra (central / local extra
@@ -172,6 +192,29 @@ def main():
         ("c2.xhtml", "Chapter Two", "<h1>Chapter Two</h1>" + paragraphs("Second", 12) + "<p>He said, “I don’t think so.”</p>"),
         ("c3.xhtml", "Chapter Three", "<h1>Chapter Three</h1>" + paragraphs("Third", 4)),
     ], uid="urn:long")
+    # A print-only style block, which mustn't apply on screen (REVIEW.md M-24).
+    epub(books / "print-style.epub", "Print Style", [("c1.xhtml", "One", "<h1>One</h1><p>Seen on screen.</p>", '<style media="print">p{display:none}</style>')], uid="urn:print-style")
+    # Spine items that aren't XHTML (REVIEW.md M-25): an SVG page, a picture with an XHTML fallback in another
+    # folder, and a picture with none; a chapter in UTF-16 and one in Shift_JIS (M-26).
+    sjis = xhtml("Sjis", "<p>日本語の本です。</p>").replace('encoding="utf-8"', 'encoding="Shift_JIS"').encode("shift_jis")
+    epub_items(books / "odd-spine.epub", "Odd Spine", [
+        ("svg", "cover.svg", "image/svg+xml", ""),
+        ("img", "plate.png", "image/png", 'fallback="fb"'),
+        ("fb", "pages/plate.xhtml", "application/xhtml+xml", ""),
+        ("pic", "bare.png", "image/png", ""),
+        ("u16", "u16.xhtml", "application/xhtml+xml", ""),
+        ("sj", "sjis.xhtml", "application/xhtml+xml", ""),
+        ("plate", "plate2.png", "image/png", ""),
+    ], ["svg", "img", "pic", "u16", "sj"], {
+        "cover.svg": '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#4a8"/><text x="20" y="100">Drawn cover words</text></svg>',
+        "plate.png": png(30, 20, (200, 0, 0)), "plate2.png": png(64, 48, (0, 200, 0)), "bare.png": png(50, 40, (0, 0, 200)),
+        "pages/plate.xhtml": xhtml("Plate", '<p>Fallback page.</p><p><img id="fb-img" src="../plate2.png" alt="plate"/></p>'),
+        "u16.xhtml": xhtml("U16", "<p>Sixteen-bit café text.</p>").replace('encoding="utf-8"', 'encoding="UTF-16"').encode("utf-16"),
+        "sjis.xhtml": sjis,
+    }, "urn:odd-spine")
+    # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
+    (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
+    (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))
     # Text, then only pictures to the end (REVIEW.md M-23): reading past the text mustn't turn to the last page.
     epub(books / "text-then-pictures.epub", "Text Then Pictures", [("c1.xhtml", "Words", "<h1>Words</h1><p>Only a few words here.</p>")]
          + [(f"p{i}.xhtml", f"Plate {i}", f'<p><img src="p{i}.png" alt=""/></p>') for i in (2, 3)],
