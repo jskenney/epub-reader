@@ -89,6 +89,11 @@ test('one file: chosen chapters, each a chapter marker, with title, author and c
   const p = probe(file);
   assert.deepEqual(p.chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
   assert.equal(p.streams[0].codec_name, 'aac');
+  // The chapters also as a QuickTime text track (what Apple's players read), with the same titles.
+  const text = p.streams.find(s => s.codec_tag_string === 'text');
+  assert.ok(text, JSON.stringify(p.streams.map(s => [s.codec_type, s.codec_tag_string])));
+  const subs = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-map', `0:${text.index}`, '-c', 'copy', '-f', 'data', '-']).toString();
+  for (const t of ['Alpha', 'Bravo', 'Charlie']) assert.match(subs, new RegExp(t));
   assert.equal(p.format.tags.title, 'ABC');
   assert.equal(p.format.tags.artist, 'Test Author');
   assert.ok(Number(p.format.duration) > 2, p.format.duration);
@@ -159,4 +164,43 @@ test('the cover is included (an SVG cover drawn into a PNG); units follow the ta
   assert.equal(p.chapters.length, 1);
   assert.equal(p.chapters[0].tags.title, rows[1][0]);
   await page.screenshot({ path: path.join(tmp, 'dialog.png') });
+});
+
+// Stand-in file pickers: files written through them (including the write back at a position that fills in
+// the size) are collected, then handed to the test as base64.
+function fakePickers() {
+  window.__files = {};
+  const handle = name => ({ name, async createWritable() {
+    let buf = new Uint8Array(0), pos = 0;
+    const put = (data, at) => { const d = data instanceof Uint8Array ? data : new Uint8Array(data); if (at + d.length > buf.length) { const nb = new Uint8Array(at + d.length); nb.set(buf); buf = nb; } buf.set(d, at); return at + d.length; };
+    return { async write(x) { if (x?.type === 'write') { put(x.data, x.position); } else pos = put(x, pos); },
+      async close() { let s = ''; for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode(...buf.subarray(i, i + 32768)); window.__files[name] = btoa(s); },
+      async abort() {} };
+  } });
+  window.showSaveFilePicker = async o => handle(o.suggestedName);
+  window.showDirectoryPicker = async () => ({ getFileHandle: async name => handle(name) });
+}
+async function pickerFiles(page, count) {
+  await page.waitForFunction(n => Object.keys(window.__files).length >= n && document.querySelector('#abPause').hidden, count, { timeout: 90000 });
+  const files = await page.evaluate(() => window.__files);
+  return Object.entries(files).sort().map(([name, b64]) => { const f = path.join(tmp, 'picked-' + name); fs.writeFileSync(f, Buffer.from(b64, 'base64')); return f; });
+}
+test('with the browser\'s pickers, files are written as they are made, one or one per chapter (E-10)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.addInitScript(fakePickers);
+  await openExport(page);
+  await page.check('input[name="abMode"][value="one"]');
+  await page.click('#abStart');
+  const [one] = await pickerFiles(page, 1);
+  assert.deepEqual(probe(one).chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+  assert.equal(decodes(one), '');
+  await page.evaluate(() => { window.__files = {}; });
+  await page.check('input[name="abMode"][value="each"]');
+  await page.click('#abStart');
+  const each = await pickerFiles(page, 3);
+  assert.deepEqual(each.map(f => path.basename(f)), ['picked-01 - Alpha.m4b', 'picked-02 - Bravo.m4b', 'picked-03 - Charlie.m4b']);
+  for (const f of each) assert.equal(decodes(f), '');
+  assert.equal(await page.isVisible('#abDone button'), false, 'no ZIP offer: the files are already in the folder');
 });

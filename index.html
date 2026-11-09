@@ -4493,8 +4493,9 @@ function abM4b(sink){
       const mdia = abBox('mdia', abFull('mdhd', 1, 0, now, now, abNum(rate, 4), abNum(total, 8), abNum(0x55C4, 2), abNum(0, 2)),   // (language "und")
         abFull('hdlr', 0, 0, abNum(0, 4), abAscii('soun'), abNum(0, 12), abText('SoundHandler\0')), minf);
       const ms = Math.round(secs * 1000);
-      const trak = abBox('trak', abFull('tkhd', 1, 3, now, now, abNum(1, 4), abNum(0, 4), abNum(ms, 8), abNum(0, 8), abNum(0, 2), abNum(0, 2), abNum(0x100, 2), abNum(0, 2), AB_MATRIX, abNum(0, 4), abNum(0, 4)), mdia);
-      const mvhd = abFull('mvhd', 1, 0, now, now, abNum(1000, 4), abNum(ms, 8), abNum(0x10000, 4), abNum(0x100, 2), abNum(0, 10), AB_MATRIX, abNum(0, 24), abNum(2, 4));
+      const trak = abBox('trak', abFull('tkhd', 1, 3, now, now, abNum(1, 4), abNum(0, 4), abNum(ms, 8), abNum(0, 8), abNum(0, 2), abNum(0, 2), abNum(0x100, 2), abNum(0, 2), AB_MATRIX, abNum(0, 4), abNum(0, 4)),
+        abBox('tref', abBox('chap', abNum(2, 4))), mdia);
+      const mvhd = abFull('mvhd', 1, 0, now, now, abNum(1000, 4), abNum(ms, 8), abNum(0x10000, 4), abNum(0x100, 2), abNum(0, 10), AB_MATRIX, abNum(0, 24), abNum(3, 4));
       const tags = [abTag('\xa9nam', 1, abText(meta.title)), abTag('\xa9alb', 1, abText(meta.album)), abTag('\xa9gen', 1, abText('Audiobook')),
         abTag('stik', 21, Uint8Array.of(2)), abTag('\xa9too', 1, abText('Spine Reader'))];
       if (meta.artist) tags.push(abTag('\xa9ART', 1, abText(meta.artist)), abTag('aART', 1, abText(meta.artist)));
@@ -4502,9 +4503,31 @@ function abM4b(sink){
       if (meta.cover) tags.push(abTag('covr', meta.cover.type === 'image/jpeg' ? 13 : 14, meta.cover.bytes));
       const udta = abBox('udta', abChpl(meta.chapters),
         abFull('meta', 0, 0, abFull('hdlr', 0, 0, abNum(0, 4), abAscii('mdir'), abAscii('appl'), abNum(0, 8), Uint8Array.of(0)), abBox('ilst', ...tags)));
-      const moov = abBox('moov', mvhd, trak, udta);
+      // Chapter titles as a QuickTime text track too, which Apple's players read (they ignore chpl): one sample
+      // per chapter (its title, marked UTF-8), placed at the end of mdat, and pointed to from the audio track.
+      const marks = (meta.chapters.length ? meta.chapters : [{ title: meta.title, start: 0 }]).map((c, k, all) => {
+        const t = abText(c.title || 'Chapter'), from = Math.round(c.start * rate), to = all[k + 1] ? Math.round(all[k + 1].start * rate) : total;
+        return { bytes: abCat([abNum(t.length, 2), t, abNum(12, 4), abAscii('encd'), abNum(0x100, 4)]), dur: Math.max(1, to - from) };
+      });
+      let textAt = mdatAt + head + bytes;
+      const textOffsets = marks.map(m => { const o = textAt; textAt += m.bytes.length; return o; });
+      for (const m of marks) await sink.write(m.bytes);
+      const textEntry = abBox('text', abNum(0, 6), abNum(1, 2), Uint8Array.of(0, 0, 0, 0, 0, 0, 0, 1), new Uint8Array(35));
+      const textTrak = abBox('trak',
+        abFull('tkhd', 1, 2, now, now, abNum(2, 4), abNum(0, 4), abNum(ms, 8), abNum(0, 8), abNum(0, 2), abNum(0, 2), abNum(0, 2), abNum(0, 2), AB_MATRIX, abNum(0, 4), abNum(0, 4)),
+        abBox('mdia', abFull('mdhd', 1, 0, now, now, abNum(rate, 4), abNum(total, 8), abNum(0x55C4, 2), abNum(0, 2)),
+          abFull('hdlr', 0, 0, abNum(0, 4), abAscii('text'), abNum(0, 12), abText('ChapterHandler\0')),
+          abBox('minf',
+            abBox('gmhd', abFull('gmin', 0, 0, abNum(0x40, 2), abNum(0x8000, 2), abNum(0x8000, 2), abNum(0x8000, 2), abNum(0, 2), abNum(0, 2)), abBox('text', AB_MATRIX)),
+            abBox('dinf', abFull('dref', 0, 0, abNum(1, 4), abFull('url ', 0, 1))),
+            abBox('stbl', abFull('stsd', 0, 0, abNum(1, 4), textEntry),
+              abFull('stts', 0, 0, abNum(marks.length, 4), ...marks.map(m => abCat([abNum(1, 4), abNum(m.dur, 4)]))),
+              abFull('stsc', 0, 0, abNum(1, 4), abNum(1, 4), abNum(1, 4), abNum(1, 4)),
+              abFull('stsz', 0, 0, abNum(0, 4), abNum(marks.length, 4), ...marks.map(m => abNum(m.bytes.length, 4))),
+              abFull('co64', 0, 0, abNum(marks.length, 4), ...textOffsets.map(o => abNum(o, 8)))))));
+      const moov = abBox('moov', mvhd, trak, textTrak, udta);
       await sink.write(moov);
-      const mdat = abCat([abNum(1, 4), abAscii('mdat'), abNum(head + bytes, 8)]);
+      const mdat = abCat([abNum(1, 4), abAscii('mdat'), abNum(textAt - mdatAt, 8)]);
       return sink.finish(mdatAt, mdat, secs);
     }
   };
