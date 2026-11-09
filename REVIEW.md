@@ -157,7 +157,56 @@ A web app manifest and service worker, so the reader can be installed and open s
 Use ComicInfo's `Manga` value to show comic pages right to left, including spreads.
 
 ### E-10. Audiobook export
-Render a chapter or book with the server voice into an `.m4b` with chapter markers (deferred earlier).
+
+Export chosen chapters as an audiobook in `.m4b` (AAC in MP4, with chapter markers), with any of the natural
+voices: Kokoro, Pocket TTS or the server voice. All three return raw samples through the same `generate()` call,
+so one export path serves them all; the server is simply the fastest. The device voice can't be exported:
+`speechSynthesis` plays straight to the speakers and gives the page no access to the audio.
+
+**Choosing chapters.** An "Export audiobook" dialog lists the chapters with checkboxes, All / None, and
+shift-click to select a range.
+- Each row shows an estimated length, from the word count (as "time left" does).
+- Units follow the table of contents, not the book's files: each entry runs from its heading to the next one,
+  since a file can hold several chapters and a chapter can span files.
+- Untitled front matter (cover, copyright) starts unticked; everything else starts ticked.
+- A summary line updates as you tick, for example "12 chapters · about 6 h 40 min · about 190 MB", with a
+  generation-time estimate for the selected voice.
+
+**Output.** Either:
+- **one file:** a single `.m4b` with a chapter marker at each chosen chapter, or
+- **a file per chapter:** `NN - Title.m4b`, each with the same album, author and cover tags, a track number and
+  its own chapter marker, so audiobook apps group them as one book.
+
+Both use AAC at 64 kbps mono (about 29 MB per hour), at 1× speed (players have their own speed control).
+
+**Saving.**
+- **One file:** where the browser has a save picker (Chrome, Edge), the file is written to disk as it is
+  encoded. Elsewhere the encoded file is kept in memory and downloaded at the end.
+- **A file per chapter:** where the browser has a folder picker (Chrome, Edge), each file is written as its
+  chapter finishes, so a cancelled run keeps the finished chapters. Elsewhere each file is downloaded
+  separately as it finishes (the browser may ask once to allow several downloads). If the browser blocks them,
+  a fallback offers the finished files as one ZIP of `.m4b` files (stored, not compressed).
+
+**During the run.**
+- A progress bar shows the current chapter and the time remaining, with Pause and Cancel.
+- Generated passages go into the saved-audio cache, so a cancelled or interrupted run resumes where it stopped,
+  and passages already listened to are reused at once.
+- The screen is kept awake (Wake Lock) while exporting.
+- Reading aloud is paused for the duration, since both would use the same voice engine.
+
+**Limits.**
+- Encoding uses the browser's WebCodecs `AudioEncoder`. The dialog checks for AAC support when it opens. Where
+  it's missing (Firefox today, and some Safari versions), the menu item is disabled with a note that export
+  needs Chrome, Edge or Safari. There is no fallback format.
+- With the device voice selected, the item is disabled with a note that export needs Kokoro, Pocket TTS or the
+  server voice.
+
+**Work.**
+- A small MP4 writer in `index.html` (AAC frames, Nero-style `chpl` chapters, title, author and cover tags):
+  about 300 to 400 lines, no new dependencies.
+- The dialog, per-chapter text and the export loop reuse the reader's existing code.
+- **Tests:** check the output with `ffprobe` (chapter count, titles, duration), and run one short end-to-end
+  export with the server voice.
 
 ### E-11. A settings panel
 A panel in the page for the options that are now only in `index.html` or `reader-config.json`: look-ahead,
