@@ -76,3 +76,38 @@ test('an old Latin-1 file served with charset=utf-8, and Markdown that mentions 
   await h.openReader(page, `${h.READER}?book=books/latin-tips.md`);
   assert.match(await frameText(page), /Café crème brûlée\./);
 });
+
+test('paging gets past a chapter that can\'t be shown, both ways (round 11, fourth review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/abc-missing/`);
+  const file = () => page.textContent('#curFile');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''));
+  assert.equal(await file(), 'OEBPS/c1.xhtml', 'still on the chapter shown');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => /Charlie/.test(document.querySelector('#page').contentDocument?.body?.innerText || ''), null, { timeout: 5000 });
+  assert.equal(await file(), 'OEBPS/c3.xhtml');
+  await page.waitForTimeout(1600);   // (until the page is fully shown: the fonts get up to 1.5 s)
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(800);
+  assert.equal(await file(), 'OEBPS/c3.xhtml');
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForFunction(() => /Alpha/.test(document.querySelector('#page').contentDocument?.body?.innerText || ''), null, { timeout: 5000 });
+  assert.equal(await file(), 'OEBPS/c1.xhtml');
+});
+
+test('encoding labels: aliases, x-user-defined, and a server label the browser drops lets the file\'s own declaration count (round 11, fourth review)', async () => {
+  const page = await h.newPage();
+  const serve = async (name, type, body) => page.route(`**/books/${name}`, route => route.fulfill({ status: 200, headers: { 'Content-Type': type }, body }));
+  // ISO-2022-JP is 7-bit, so valid UTF-8 too: named by an alias, it must still be decoded as declared.
+  const jis = Buffer.from([0x1b, 0x24, 0x42, 0x46, 0x7c, 0x4b, 0x5c, 0x1b, 0x28, 0x42]);   // 日本
+  await serve('jis.txt', 'text/plain; charset=csISO2022JP', jis);
+  await h.openReader(page, `${h.READER}?book=books/jis.txt`);
+  assert.match(await frameText(page), /日本/);
+  await serve('xud.html', 'text/html', Buffer.concat([Buffer.from('<meta charset="x-user-defined"><p>Caf'), Buffer.from([0xe9]), Buffer.from('.</p>')]));
+  await h.openReader(page, `${h.READER}?book=books/xud.html`);
+  assert.match(await frameText(page), /Café\./);
+  await serve('dropped.html', 'text/html; charset=none', Buffer.concat([Buffer.from('<meta charset="shift_jis"><p>'), Buffer.from([0x93, 0xfa, 0x96, 0x7b]), Buffer.from('</p>')]));
+  await h.openReader(page, `${h.READER}?book=books/dropped.html`);
+  assert.match(await frameText(page), /日本/);
+});

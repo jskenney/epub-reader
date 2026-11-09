@@ -937,14 +937,18 @@ function decodeText(bytes, { http = '', sniff = true, fallback = 'windows-1252' 
   if (bytes[0] === 0 && bytes[1] === 0x3C && bytes[2] === 0 && bytes[3] === 0x3F) return as('utf-16be');
   // (A server's "utf-8" is often added to every text file, old ones too: valid UTF-8 is taken first anyway,
   // so it is only a hint, and the file's own declaration or the fallback decides otherwise. Round 11 review.)
-  let declared = /^utf-?8$/i.test(http) ? '' : http;
+  // Labels as the browser knows them (aliases such as csISO2022JP; unknown ones are dropped). UTF-16 named in a
+  // file that isn't UTF-16 is a mistake, as HTML treats it; x-user-defined is read as Windows-1252, as HTML does.
+  const norm = label => {
+    let e = ''; try { e = label ? new TextDecoder(label).encoding : ''; } catch {}
+    return /^utf-16/.test(e) ? '' : e === 'x-user-defined' ? 'windows-1252' : e;
+  };
+  let declared = norm(http);
+  if (declared === 'utf-8') declared = '';
   if (!declared && sniff) {
     const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024)).replace(/<!--[\s\S]*?(-->|$)/g, '');
-    declared = (head.match(/^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i) || head.match(/<meta\b[^>]*?\bcharset\s*=\s*["']?([\w.:-]+)/i))?.[1] || '';
+    declared = norm((head.match(/^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i) || head.match(/<meta\b[^>]*?\bcharset\s*=\s*["']?([\w.:-]+)/i))?.[1] || '');
   }
-  try { declared = declared ? new TextDecoder(declared).encoding : ''; } catch { declared = ''; }   // (aliases: csISO2022JP)
-  // (UTF-16 named in a file that isn't UTF-16 is a mistake, as HTML treats it.)
-  if (/^utf-16/.test(declared)) declared = '';
   let utf8 = null; try { utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch {}
   if (utf8 != null && !(declared === 'iso-2022-jp' && bytes.includes(0x1B))) return utf8;
   if (declared && declared !== 'utf-8') { const t = as(declared); if (t != null) return t; }
@@ -2140,7 +2144,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   i = Math.max(0, Math.min(book.spine.length - 1, i));
   const token = ++renderToken;
   ttsBeforeRender();
-  const item = book.spine[i], prev = cur;
+  const item = book.spine[i], prev = cur, prevDoc = frame.contentDocument;
   cur = { i, page: 0, pages: 1, f: fraction };
   updateChrome();
   try {
@@ -2165,7 +2169,12 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     showNotice(`Couldn't display ${item.href}: ${err.message}`, 'error');
     // The page shown is still the one before: so are the position and the header (round 11 review). Reading
     // aloud that came here stops, rather than showing "playing" with nothing to play.
-    if (prev?.book === book) { cur = prev; updateChrome(); savePos(); }
+    // (Only while the frame still shows it, and laid out again, as a resize meanwhile may have moved it.)
+    if (prev?.book === book && frame.contentDocument === prevDoc) {
+      cur = prev; cur.failed = new Set([...(prev.failed || []), i]);
+      if (scrolling()) cur.f = fraction(); else position('', cur.f);
+      updateChrome(); savePos();
+    }
     if (tts.awaitChapter || tts.playing) { tts.awaitChapter = false; tts.playing = false; ++tts.token; ttsUpdateBar(); }
   }
 }
@@ -2338,27 +2347,30 @@ function restyleFrame(){
 const viewBottom = () => frame.contentWindow.innerHeight - (tts.open ? tts.barH : 0) - 16;
 const atTop = () => (scroller()?.scrollTop ?? 0) <= 4;
 const atBottom = () => { const se = scroller(); return !se || se.scrollTop + se.clientHeight >= se.scrollHeight - 4; };
+// The next and previous chapters, passing over ones that just failed to show (so paging gets past them).
+const nextChapter = () => { let j = cur.i + 1; while (cur.failed?.has(j)) j++; return j; };
+const prevChapter = () => { let j = cur.i - 1; while (cur.failed?.has(j)) j--; return j; };
 function pageNext(){
   if (!book) return;
   ttsUserNav();
   if (scrolling()) {
     if (!atBottom()) { const se = scroller(); scrollTo(se.scrollTop + viewBottom() - 60); }
-    else if (cur.i < book.spine.length - 1) renderChapter(cur.i + 1);
+    else if (nextChapter() < book.spine.length) renderChapter(nextChapter());
     return;
   }
   if (cur.page < cur.pages - 1) showPage(cur.page + 1);
-  else if (cur.i < book.spine.length - 1) renderChapter(cur.i + 1);
+  else if (nextChapter() < book.spine.length) renderChapter(nextChapter());
 }
 function pagePrev(){
   if (!book) return;
   ttsUserNav();
   if (scrolling()) {
     if (!atTop()) { const se = scroller(); scrollTo(se.scrollTop - (viewBottom() - 60)); }
-    else if (cur.i > 0) renderChapter(cur.i - 1, { fraction: 1 });
+    else if (prevChapter() >= 0) renderChapter(prevChapter(), { fraction: 1 });
     return;
   }
   if (cur.page > 0) showPage(cur.page - 1);
-  else if (cur.i > 0) renderChapter(cur.i - 1, { fraction: 1 });
+  else if (prevChapter() >= 0) renderChapter(prevChapter(), { fraction: 1 });
 }
 function onKey(e){
   const tag = (e.target.tagName || '').toLowerCase();
@@ -2551,7 +2563,7 @@ $('#ribbon').addEventListener('click', e => {
   renderChapter(Math.floor(((e.clientX - r.left) / r.width) * book.spine.length));
 });
 $('#ribbon').addEventListener('keydown', e => {
-  if (e.key === 'Enter') renderChapter(cur.i + 1);
+  if (e.key === 'Enter' && nextChapter() < book.spine.length) renderChapter(nextChapter());
 });
 $('#tocList').addEventListener('click', e => {
   const a = e.target.closest('a[data-path]'); if (!a) return;
