@@ -62,7 +62,7 @@ async function openExport(page, url = ABC, settings = { 'spine:ttsEngine': 'serv
   await page.waitForTimeout(500);
   await page.keyboard.press(' ');   // (pause: export is started from the bar)
   await page.click('#ttsExport');
-  await page.waitForFunction(() => document.querySelector('#abDialog').open);
+  await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured);
 }
 async function exportAll(page, mode, count) {
   await page.check(`input[name="abMode"][value="${mode}"]`);
@@ -110,7 +110,7 @@ test('a file per chapter: numbered files with track numbers; a ZIP of them is of
   await page.addInitScript(fakeAac, FRAMES);
   await openExport(page);
   await page.uncheck('#abList input >> nth=1');   // Bravo left out
-  assert.match(await page.textContent('#abSummary'), /^2 chapters/);
+  await page.waitForFunction(() => /^2 chapters/.test(document.querySelector('#abSummary').textContent));
   await h.clearBreezeLog();
   const files = await exportAll(page, 'each', 2);
   assert.deepEqual(files.map(f => path.basename(f)), ['01 - Alpha.m4b', '02 - Charlie.m4b']);
@@ -241,12 +241,61 @@ test('chapters with no text (picture pages) are left out, not made into broken f
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
   await openExport(page, `${h.READER}?book=books/text-then-pictures.epub`);
-  assert.equal((await page.locator('#abList input:checked').count()), 3);
+  // The picture pages are found to have no text: unticked, and marked so.
+  assert.equal((await page.locator('#abList input:checked').count()), 1);
+  assert.deepEqual(await page.$$eval('#abList .ab-len', els => els.map(e => e.textContent)), ['<1 min', 'no text', 'no text']);
+  await page.check('#abList input >> nth=1');   // ticked anyway: left out, with a note
   const files = await exportAll(page, 'each', 1);
   assert.deepEqual(files.map(f => path.basename(f)), ['01 - Words.m4b']);
   assert.equal(decodes(files[0]), '');
-  assert.match(await page.textContent('#abNow'), /Left out, with no text to read: Plate 2, Plate 3/);
+  assert.match(await page.textContent('#abNow'), /Left out, with no text to read: Plate 2\./);
   await page.click('#abNone'); await page.check('#abList input >> nth=1');
   await page.click('#abStart');
   await page.waitForFunction(() => /no text to read/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 20000 });
+});
+
+const fail500 = (route, detail) => route.fulfill({ status: 500, body: JSON.stringify({ detail }), contentType: 'application/json' });
+const spoken = route => route.request().postDataBuffer()?.toString('latin1') || '';
+test('a sentence the voice can\'t say is left silent and the export goes on (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.route('**/tts/v1/audio/speech', route => /Bravo/.test(spoken(route)) ? fail500(route, 'no') : route.continue());
+  await openExport(page);
+  const [file] = await exportAll(page, 'one', 1);
+  assert.match(await page.textContent('#abNow'), /ready\. 1 sentence the voice couldn't say is silent\./);
+  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+  assert.equal(decodes(file), '');
+});
+
+test('the voice going away mid-export stops it, keeping what was made (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  let gone = false;
+  await page.route('**/tts/v1/audio/speech', route => gone || /paragraph 2\./.test(spoken(route)) ? (gone = true, fail500(route, 'gone')) : route.continue());
+  await openExport(page, `${h.READER}?book=books/long.epub`);
+  await page.click('#abNone'); await page.check('#abList input >> nth=0'); await page.check('#abList input >> nth=1');
+  const [part] = await exportAll(page, 'one', 1);
+  assert.match(await page.textContent('#abNow'), /Export stopped/);
+  assert.match(await page.textContent('#abDone'), /1 finished file kept \(the last one up to where it stopped\)/);
+  assert.deepEqual(probe(part).chapters.map(c => c.tags.title), ['Chapter One']);
+  assert.equal(decodes(part), '');
+});
+
+test('a voice not yet downloaded: the dialog offers the download, and Export waits for it; reader keys wait behind the dialog (E-10 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.AudioEncoder = class { static async isConfigSupported() { return { supported: true }; } }; });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:ttsEngine': 'server' });
+  await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
+  await page.selectOption('#ttsEngine', 'pocket');
+  await page.click('#ttsExport');
+  assert.match(await page.textContent('#abNote'), /needs a one-time .* download/);
+  assert.equal(await page.isVisible('#abLoad'), true);
+  assert.equal(await page.isDisabled('#abStart'), true);
+  const before = await page.textContent('#spinePos');
+  for (const k of ['ArrowRight', 'PageDown', 'l', 't', 'r']) await page.keyboard.press(k);
+  await page.waitForTimeout(300);
+  assert.equal(await page.textContent('#spinePos'), before, 'no page turned behind the dialog');
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), null, 'no theme change');
 });

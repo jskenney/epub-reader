@@ -166,7 +166,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 #abDialog p{margin:0}
 .ab-col{display:flex;flex-direction:column;gap:10px;min-height:0}
 .ab-list{list-style:none;margin:0;padding:6px;border:1px solid var(--rule);border-radius:6px;overflow:auto;max-height:42vh;background:var(--paper)}
-.ab-list label{display:flex;gap:8px;align-items:baseline;padding:4px 6px;border-radius:4px;cursor:pointer}
+.ab-list label{display:flex;gap:8px;align-items:baseline;padding:4px 6px;border-radius:4px;cursor:pointer;user-select:none}
 .ab-list label:hover{background:var(--surface)}
 .ab-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ab-len,.ab-muted{color:var(--muted);font-size:12.5px}
@@ -175,7 +175,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .ab-tools .ab-muted{margin-left:auto}
 .ab-actions{justify-content:flex-end}
 .ab-mode{border:0;padding:0;margin:0;gap:18px}
-.ab-note{background:var(--warn-soft);padding:8px 10px;border-radius:6px}
+.ab-note{background:var(--warn-soft);padding:8px 10px;border-radius:6px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 #abProgress{width:100%;accent-color:var(--ribbon)}
 #ttsExport.busy{color:var(--ribbon);border-color:var(--ribbon)}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
@@ -396,7 +396,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 <dialog id="abDialog" aria-labelledby="abTitle">
   <form id="abForm" method="dialog">
     <h2 id="abTitle">Export audiobook</h2>
-    <p class="ab-note" id="abNote" hidden></p>
+    <p class="ab-note" id="abNote" hidden><span id="abNoteText"></span> <button type="button" class="btn" id="abLoad" hidden>Download</button></p>
     <div id="abPick" class="ab-col">
       <div class="ab-tools"><button type="button" class="btn" id="abAll">All</button><button type="button" class="btn" id="abNone">None</button><span class="ab-muted" id="abVoice"></span></div>
       <ul class="ab-list" id="abList" aria-label="Chapters"></ul>
@@ -408,14 +408,14 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </div>
     <div id="abRunning" class="ab-col" hidden>
       <p id="abNow" role="status"></p>
-      <progress id="abProgress" max="1" value="0"></progress>
+      <progress id="abProgress" max="1" value="0" aria-label="Export progress"></progress>
       <p class="ab-muted" id="abLeft"></p>
     </div>
     <div id="abDone" class="ab-col" hidden></div>
     <div class="ab-actions">
       <button type="button" class="btn" id="abPause" hidden>Pause</button>
       <button type="button" class="btn" id="abCancel">Close</button>
-      <button type="button" class="btn primary" id="abStart">Export</button>
+      <button type="button" class="btn primary" id="abStart" aria-describedby="abNote">Export</button>
     </div>
   </form>
 </dialog>
@@ -2423,6 +2423,7 @@ function pagePrev(){
   else if (prevChapter() >= 0) renderChapter(prevChapter(), { fraction: 1 });
 }
 function onKey(e){
+  if ($('#abDialog').open) return;   // (the export dialog is modal: the reader's keys wait)
   const tag = (e.target.tagName || '').toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox') { e.preventDefault(); searchOpen(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -3411,6 +3412,7 @@ function ttsBack(){ tts.follow = true; ttsRefollow(); ttsUpdateBar(); }
 
 function ttsUpdateBar(status){
   updateMedia();
+  if ($('#abDialog').open && !ab.running) abSync();   // (the voice loading or changing: the export dialog's note)
   // Paused while the sleep timer was waiting for the passage to end: the reader took over, so the timer is done.
   if (!tts.playing && sleep.due) setSleep('off');
   // A note (such as the sleep timer stopping) stays until reading starts again.
@@ -4194,7 +4196,7 @@ function nSynth(ne, text){
     });
     const dur = r.data.length / r.rate, blob = wavBlob(r.data, r.rate);
     kSpeedCheck(r.genSec / dur, ne);
-    ab.genRatio = (ab.genRatio ?? r.genSec / dur) * 0.7 + (r.genSec / dur) * 0.3;   // (for the export dialog's estimate)
+    ab.gen[ne.name] = (ab.gen[ne.name] ?? r.genSec / dur) * 0.7 + (r.genSec / dur) * 0.3;   // (for the export dialog's estimate)
     n.secPerWeight = n.secPerWeight * 0.6 + (dur / textWeights(text)[text.length]) * 0.4;   // learn the speaking rate
     clipStore.put(key, blob, dur);   // (saved even if cancelled meanwhile: its key matches what it was made with)
     // Cancelled while it was being made (Kokoro can't be interrupted): no URL, which nothing would revoke (L-51).
@@ -4425,7 +4427,7 @@ function nStop(){
 const AB_KBPS = 64;                    // AAC bitrate: plenty for speech, about 29 MB an hour
 const AB_GAP = { passage: 0.25, paragraph: 0.45, chapter: 1.5 };   // seconds of silence between pieces
 const ab = { running: false, paused: false, cancel: false, resume: null, units: [], rates: null, wake: null,
-  files: [], skipped: [], last: -1, ctl: null, startedAt: 0, done: 0, total: 0, note: '' };
+  files: [], skipped: [], gen: {}, last: -1, ctl: null, startedAt: 0, done: 0, total: 0, note: '' };
 
 // --- MP4 boxes (ISO BMFF): big-endian sizes and fields, built as byte arrays. (Lists as long as the book,
 // such as the frame sizes, are filled into one array: never passed as arguments, which a long book would
@@ -4636,7 +4638,8 @@ function abEncoder(m4b, rates){
         const audio = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: part.length, numberOfChannels: 1, timestamp: Math.round(at / rate * 1e6), data: part });
         try { enc.encode(audio); } finally { audio.close(); }
         at += part.length;
-        while (enc.encodeQueueSize > 8) { await new Promise(r => setTimeout(r, 5)); check(); }
+        // (The encoder's dequeue event, as timers are slowed down in a background tab.)
+        while (enc.encodeQueueSize > 8) { await new Promise(r => { enc.ondequeue = () => { enc.ondequeue = null; r(); }; setTimeout(r, 50); }); check(); }
       }
       await pending; check();
     },
@@ -4686,10 +4689,12 @@ function abAfter(c, frag){
 async function abUnitChunks(u){
   const out = [];
   for (let j = u.i; j < book.spine.length && (j < u.end.i || (j === u.end.i && u.end.frag)); j++) {
+    if (j > u.i && book.spine[j].linear === false) continue;   // (notes and the like outside the reading order)
     let ch = await chapterChunks(j);
     if (ch === null) throw new Error(`${book.spine[j].href} couldn't be read`);
     if (j === u.i && u.frag) ch = ch.filter(c => abAfter(c, u.frag) !== false);
-    if (j === u.end.i && u.end.frag) ch = ch.filter(c => abAfter(c, u.end.frag) !== true);
+    // (An end heading that isn't there: the next unit starts with the file, so this one doesn't take it.)
+    if (j === u.end.i && u.end.frag) ch = ch.filter(c => abAfter(c, u.end.frag) === false);
     if (ch.length) out.push(ch);
   }
   return out;
@@ -4703,7 +4708,8 @@ function abUnitChars(u, lengths){
   }
   return n;
 }
-const abSecs = chars => chars * n.secPerWeight * 1.12;   // speaking time, from the rate the voices have shown
+// Speaking time at 1×, from the rate the voices have shown (Kokoro's audio is made at the reading speed).
+const abSecs = chars => chars * n.secPerWeight * 1.12 * (tts.engine === 'kokoro' ? tts.rate : 1);
 
 // --- One passage's audio: saved audio if there is some, else made now (and saved).
 function abWavSamples(buf){
@@ -4718,7 +4724,7 @@ async function abPassage(ne, text, keyBase, snap){
   const t0 = performance.now();
   const r = await ne.generate(text, { snap, signal: ab.ctl.signal });
   const dur = r.data.length / r.rate;
-  ab.genRatio = (ab.genRatio ?? (performance.now() - t0) / 1000 / dur) * 0.7 + ((performance.now() - t0) / 1000 / dur) * 0.3;
+  const ratio = (performance.now() - t0) / 1000 / dur; ab.gen[ne.name] = (ab.gen[ne.name] ?? ratio) * 0.7 + ratio * 0.3;
   clipStore.put(key, wavBlob(r.data, r.rate), dur);
   return r;
 }
@@ -4770,7 +4776,7 @@ async function abCover(){
 async function abWaitIfPaused(){ while (ab.paused && !ab.cancel) await new Promise(r => { ab.resume = r; }); }
 const abCancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
 // A passage's audio, or its sentences one by one when the passage as a whole fails (as reading aloud does),
-// each tried again a couple of times before the export gives up.
+// each tried again a couple of times. A sentence that still fails comes back as { failed } (left silent).
 async function abSay(ne, chunks, ci, keyBase, snap){
   const tryOne = async span => {
     for (let attempt = 0; ; attempt++) {
@@ -4783,12 +4789,12 @@ async function abSay(ne, chunks, ci, keyBase, snap){
     }
   };
   const span = nSpan(ne, ci, chunkStart(chunks[ci]), false, chunks);
-  try { return { span, pieces: [await (span.cj > span.ci ? abPassage(ne, span.out, keyBase, snap) : tryOne(span))] }; }
+  const sentence = async sp => { try { return await tryOne(sp); } catch (e) { if (e?.cancelled) throw e; return { failed: e }; } };
+  try { return { span, pieces: [span.cj > span.ci ? await abPassage(ne, span.out, keyBase, snap) : await sentence(span)] }; }
   catch (e) {
-    if (ab.cancel || e?.stale) throw abCancelled();
-    if (span.cj === span.ci) throw e;
+    if (ab.cancel || e?.stale || e?.cancelled) throw abCancelled();
     const pieces = [];
-    for (let j = span.ci; j <= span.cj; j++) pieces.push(await tryOne(nSpan(ne, j, chunkStart(chunks[j]), true, chunks)));
+    for (let j = span.ci; j <= span.cj; j++) pieces.push(await sentence(nSpan(ne, j, chunkStart(chunks[j]), true, chunks)));
     return { span, pieces };
   }
 }
@@ -4800,7 +4806,7 @@ async function abRun(units, mode, target){
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
   const lengths = await chapterLengths();
-  Object.assign(ab, { files: [], skipped: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abUnitChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
+  Object.assign(ab, { files: [], skipped: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
   // Room in the saved audio for this export as well as what's already there, so stopping and starting again
   // finds it (WAV at 24 kHz: about 173 MB an hour). Back to the usual limit afterwards.
   clipStore.extraMB = Math.ceil(abSecs(ab.total) * 48000 / 1048576 * 1.2);
@@ -4814,7 +4820,7 @@ async function abRun(units, mode, target){
       for (const u of groups[g]) {
         if (ab.cancel || book !== b) throw abCancelled();
         const lists = await abUnitChunks(u);
-        if (lists.length) parts.push({ u, lists }); else { ab.skipped.push(u.title); ab.done += Math.max(1, abUnitChars(u, lengths)); }
+        if (lists.length) parts.push({ u, lists }); else { ab.skipped.push(u.title); ab.done += Math.max(1, abChars(u, lengths)); }
       }
       if (!parts.length) continue;
       const name = mode === 'one' ? `${abName(b.title)}.m4b` : `${String(units.indexOf(parts[0].u) + 1).padStart(width, '0')} - ${abName(parts[0].u.title)}.m4b`;
@@ -4826,12 +4832,20 @@ async function abRun(units, mode, target){
         if (!existed) { const abort = sink.abort; sink.abort = async () => { await abort(); try { await target.removeEntry(name); } catch {} }; }   // (no empty file left behind)
       } else sink = abMemorySink();
       const m4b = abM4b(sink), enc = abEncoder(m4b, rates), chapters = [];
+      let failedInRow = 0;
+      const finish = async () => {
+        await enc.finish();
+        const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : parts[0].u.title, chapters, track: mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length] });
+        made = true;
+        ab.files.push({ name, blob: out.blob || null });
+        if (out.blob && (mode === 'one' || !target)) abDownload(out.blob, name);
+      };
       try {
         for (const { u, lists } of parts) {
           if (chapters.length) await enc.silence(AB_GAP.chapter, 24000);
           chapters.push({ title: u.title, start: enc.seconds });
           abShow({ unit: u, index: units.indexOf(u) });
-          const chars = Math.max(1, abUnitChars(u, lengths));
+          const chars = Math.max(1, abChars(u, lengths));
           const all = lists.reduce((a, l) => a + l.reduce((s, c) => s + c.e - c.s, 0), 0) || 1;
           let first = true;
           for (const chunks of lists) {
@@ -4841,6 +4855,18 @@ async function abRun(units, mode, target){
               if (ab.cancel || book !== b) throw abCancelled();
               const { span, pieces } = await abSay(ne, chunks, ci, keyBase, snap);
               for (const r of pieces) {
+                if (r.failed) {
+                  // A sentence the voice can't say: left silent, and the export goes on; several in a row (the
+                  // voice has gone) stop it, keeping what's made so far.
+                  ab.missed++;
+                  if (++failedInRow >= 3) {
+                    if (chapters.length && ab.doneSecs > 0) { try { ab.partial = true; await finish(); } catch {} }
+                    throw r.failed;
+                  }
+                  await enc.silence(1, 24000);
+                  continue;
+                }
+                failedInRow = 0;
                 if (!first) await enc.silence(span.b === lastBlock ? AB_GAP.passage : AB_GAP.paragraph, r.rate);
                 await enc.push(r.data, r.rate);
                 first = false; lastBlock = span.b; ab.doneSecs += r.data.length / r.rate;
@@ -4851,11 +4877,7 @@ async function abRun(units, mode, target){
             }
           }
         }
-        await enc.finish();
-        const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : parts[0].u.title, chapters, track: mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length] });
-        made = true;
-        ab.files.push({ name, blob: out.blob || null });
-        if (out.blob && (mode === 'one' || !target)) abDownload(out.blob, name);
+        await finish();
       } finally {
         if (!made) { enc.abort(); await sink.abort?.(); }
       }
@@ -4866,41 +4888,73 @@ async function abRun(units, mode, target){
 
 // --- The dialog.
 function abState(){
-  // Why export isn't possible now, or ''.
-  if (!book || book.comic) return 'This book has no text to read aloud.';
-  if (tts.engine === 'device' || tts.engine === 'narration' || !neuralEngine())
-    return 'Audiobooks are made with a natural voice: choose Kokoro, Pocket or Server in the read-aloud bar.';
-  if (!ab.rates?.length) return "This browser can't make AAC audio, which .m4b files need. Use Chrome, Edge or Safari.";
-  return '';
+  // Why export isn't possible now ({ text }, with download: true when the voice needs its download), or {}.
+  if (!book || book.comic) return { text: 'This book has no text to read aloud.' };
+  const ne = neuralEngine();
+  if (tts.engine === 'device' || tts.engine === 'narration' || !ne)
+    return { text: 'Audiobooks are made with a natural voice: choose Kokoro, Pocket or Server in the read-aloud bar.' };
+  if (!ab.rates?.length) return { text: "This browser can't make AAC audio, which .m4b files need. Use Chrome, Edge or Safari." };
+  if (!ne.ready()) {
+    if (ne.st.state === 'loading') return { text: `Loading the voice… ${ne.st.progressText || ''}`.trim() };
+    if (ne.st.state === 'error') return { text: `The voice couldn't be loaded${ne.st.error ? ': ' + ne.st.error : ''}.`, download: true, label: 'Try again' };
+    if (!ne.agreed()) return { text: `${ne.name} needs a one-time ${ne.size()} download before it can make an audiobook.`, download: true, label: 'Download' };
+    return { text: 'Loading the voice…' };
+  }
+  return {};
 }
 function abFillList(){
   const list = $('#abList'); list.replaceChildren();
   ab.units.forEach((u, k) => {
     const li = document.createElement('li'); li.style.paddingLeft = `${Math.min(u.depth, 4) * 14}px`;
+    li.hidden = u.front && u.chars === 0;   // (no text before the first heading: nothing to offer)
     const label = document.createElement('label'), box = document.createElement('input'), t = document.createElement('span'), len = document.createElement('span');
     box.type = 'checkbox'; box.checked = u.pick; box.dataset.k = k;
-    t.className = 'ab-t'; t.textContent = u.title; len.className = 'ab-len';
+    t.className = 'ab-t'; t.textContent = u.title; t.title = u.title; len.className = 'ab-len';
     label.append(box, t, len); li.append(label); list.append(li);
   });
+}
+const abChars = (u, lengths) => u.chars ?? abUnitChars(u, lengths);
+// The text of each unit, measured once per book in the background (estimates until then come from the chapter
+// lengths, shared evenly between the units in a file). Units found to have none start unticked.
+async function abMeasure(){
+  const b = book, token = ab.measure = (ab.measure || 0) + 1;
+  for (const u of ab.units) {
+    if (u.chars != null) continue;
+    let count = 0;
+    try { for (const list of await abUnitChunks(u)) for (const c of list) count += c.e - c.s; } catch {}
+    if (book !== b || token !== ab.measure) return;
+    u.chars = count;
+    if (!count) u.pick = false;
+  }
+  if (!ab.running) n.chap = new Map();   // (the detached copies made for measuring aren't kept: L-98)
+  if ($('#abDialog').open && !ab.running) { abFillList(); await abSummary(); }
+  $('#abList').dataset.measured = 'yes';
 }
 async function abSummary(){
   const lengths = await chapterLengths();
   const rows = [...$('#abList').children];
   let chars = 0, picked = 0;
   ab.units.forEach((u, k) => {
-    const c = abUnitChars(u, lengths), len = rows[k]?.querySelector('.ab-len');
-    if (len) len.textContent = lengths ? (abSecs(c) >= 30 ? formatDuration(abSecs(c)) : c ? '<1 min' : '—') : '';
+    const c = abChars(u, lengths), len = rows[k]?.querySelector('.ab-len');
+    if (len) len.textContent = u.chars === 0 ? 'no text' : lengths || u.chars != null ? (abSecs(c) >= 30 ? formatDuration(abSecs(c)) : '<1 min') : '';
     if (u.pick) { chars += c; picked++; }
   });
-  const secs = abSecs(chars), mb = secs * AB_KBPS / 8 / 1024;
-  const make = ab.genRatio ? ` · making it takes about ${formatDuration(secs * ab.genRatio) || '1 min'}` : '';
-  $('#abSummary').textContent = picked ? `${plural(picked, 'chapter')} · about ${formatDuration(secs) || '1 min'} · about ${mb < 1 ? '1' : Math.round(mb)} MB${make}` : 'No chapters chosen.';
+  const secs = abSecs(chars), mb = secs * AB_KBPS / 8 / 1024, ratio = ab.gen[neuralEngine()?.name];
+  const make = ratio ? ` · making it takes about ${formatDuration(secs * ratio) || '1 min'}` : '';
+  let text = picked ? `${plural(picked, 'chapter')} · about ${formatDuration(secs) || '1 min'} · about ${mb < 1 ? '1' : Math.round(mb)} MB${make}` : 'No chapters chosen.';
+  // Saved audio lets a stopped export start again quickly, as far as the browser's storage holds it.
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est?.quota && secs * 48000 > (est.quota - est.usage) * 0.8) text += ` · if stopped, starting again reuses only about ${formatDuration((est.quota - est.usage) * 0.8 / 48000) || '1 min'}`;
+  } catch {}
+  $('#abSummary').textContent = text;
   abSync();
 }
 function abSync(){
-  const why = abState(), picked = ab.units.some(u => u.pick);
-  $('#abNote').textContent = why; $('#abNote').hidden = !why;
-  $('#abStart').disabled = !!why || !picked || ab.running;
+  const why = ab.running ? {} : abState(), picked = ab.units.some(u => u.pick);
+  $('#abNoteText').textContent = why.text || ''; $('#abNote').hidden = !why.text;
+  $('#abLoad').hidden = !why.download; $('#abLoad').textContent = why.label || 'Download';
+  $('#abStart').disabled = !!why.text || !picked || ab.running;
   $('#abPick').hidden = ab.running; $('#abRunning').hidden = !ab.running && !ab.note;
   $('#abPause').hidden = !ab.running; $('#abPause').textContent = ab.paused ? 'Resume' : 'Pause';
   $('#abCancel').textContent = ab.running ? 'Cancel export' : 'Close';
@@ -4923,60 +4977,77 @@ function abShow(info){
 async function abOpen(){
   if (!book) return;
   await abAacRates();
-  if (!ab.running && (!ab.units.length || ab.book !== book)) { ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; }
-  abFillList(); $('#abDone').replaceChildren(); if (!ab.running) $('#abDone').hidden = true;
+  if (!ab.running && (!ab.units.length || ab.book !== book)) {
+    ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; delete $('#abList').dataset.measured;
+    $('#abDone').replaceChildren(); $('#abDone').hidden = true;
+  }
+  abFillList();
   const d = $('#abDialog'); if (!d.open) d.showModal();
-  abSync(); abSummary();
+  abSync(); abSummary(); abMeasure();
+}
+// The finished files as one ZIP, where they were downloaded one by one (a browser may block some).
+function abZipOffer(){
+  const done = $('#abDone'); done.replaceChildren();
+  const files = ab.files.filter(f => f.blob);
+  if (files.length > 1 && ab.zipOffer) {
+    const p = document.createElement('p'); p.textContent = 'If your browser blocked some of the downloads, get them all in one file:';
+    const zb = document.createElement('button'); zb.type = 'button'; zb.className = 'btn'; zb.id = 'abZip'; zb.textContent = 'Download all as a ZIP';
+    zb.addEventListener('click', async () => {
+      try { abDownload(await abZip(files), `${abName(ab.book?.title)}.zip`); } catch (e) { showNotice(`Couldn't make the ZIP: ${e.message}.`, 'error'); }
+    });
+    done.append(p, zb);
+  }
+  if (ab.kept) { const p = document.createElement('p'); p.textContent = ab.kept; done.append(p); }
+  done.hidden = !done.childElementCount;
 }
 async function abStart(){
-  const units = ab.units.filter(u => u.pick), mode = $('#abForm').elements.abMode.value;
-  if (!units.length || abState()) return;
+  const b = book, units = ab.units.filter(u => u.pick), mode = $('#abForm').elements.abMode.value;
+  if (!units.length || abState().text) return;
   // A file or folder to write to, where the browser can (asked first: it needs the click).
   let target = null;
   try {
-    if (mode === 'one' && window.showSaveFilePicker) target = await showSaveFilePicker({ suggestedName: `${abName(book.title)}.m4b`, types: [{ description: 'Audiobook', accept: { 'audio/mp4': ['.m4b'] } }] });
+    if (mode === 'one' && window.showSaveFilePicker) target = await showSaveFilePicker({ suggestedName: `${abName(b.title)}.m4b`, types: [{ description: 'Audiobook', accept: { 'audio/mp4': ['.m4b'] } }] });
     else if (mode !== 'one' && window.showDirectoryPicker) target = await showDirectoryPicker({ mode: 'readwrite' });
   } catch (e) { if (e?.name === 'AbortError') return; target = null; }
-  const ne = neuralEngine();
-  if (!ne.ready()) {
-    ab.note = 'Loading the voice…'; $('#abNow').textContent = ab.note; $('#abRunning').hidden = false;
-    await ne.load();
-    if (!ne.ready()) { ab.note = `The voice couldn't be loaded${ne.st.error ? ': ' + ne.st.error : ''}.`; $('#abNow').textContent = ab.note; abSync(); return; }
-  }
+  if (book !== b || ab.running || abState().text) return;   // (another book, or the voice went, while choosing)
   if (tts.playing) await ttsTogglePlay();   // reading aloud waits: both would use the voice
   nStop();
-  Object.assign(ab, { running: true, paused: false, cancel: false, ctl: new AbortController(), note: '' });
+  Object.assign(ab, { running: true, paused: false, cancel: false, ctl: new AbortController(), note: '', kept: '', zipOffer: false, missed: 0, partial: false });
   $('#abDone').replaceChildren(); $('#abDone').hidden = true;
-  try { ab.wake = await navigator.wakeLock?.request('screen'); } catch { ab.wake = null; }
+  await abWake();
   abShow();
+  $('#abPause').focus();
   let msg = '', ok = false;
   try {
     await abRun(units, mode, target); ok = true;
     msg = (mode === 'one' ? 'The audiobook is ready.' : `${plural(ab.files.length, 'file')} ready.`)
-      + (ab.skipped.length ? ` Left out, with no text to read: ${ab.skipped.join(', ')}.` : '');
+      + (ab.skipped.length ? ` Left out, with no text to read: ${ab.skipped.join(', ')}.` : '')
+      + (ab.missed ? ` ${plural(ab.missed, 'sentence')} the voice couldn't say ${ab.missed === 1 ? 'is' : 'are'} silent.` : '');
+  } catch (e) {
+    msg = e?.cancelled || e?.stale ? 'Export cancelled.' : `Export stopped: ${e?.message || e}.`;
   }
-  catch (e) { msg = e?.cancelled || e?.stale ? 'Export cancelled.' : `Export stopped: ${e?.message || e}`; }
   ab.running = false; ab.paused = false;
   try { await ab.wake?.release(); } catch {} ab.wake = null;
   ab.note = msg; $('#abNow').textContent = msg; $('#abLeft').textContent = ''; $('#abProgress').value = ok ? 1 : $('#abProgress').value;
-  const done = $('#abDone'); done.replaceChildren();
-  if (ab.files.some(f => f.blob)) {
-    if (ok && mode !== 'one' && !target && ab.files.length > 1) {
-      const p = document.createElement('p'); p.textContent = 'If your browser blocked some of the downloads, get them all in one file:';
-      const zb = document.createElement('button'); zb.type = 'button'; zb.className = 'btn'; zb.textContent = 'Download all as a ZIP';
-      zb.addEventListener('click', async () => abDownload(await abZip(ab.files.filter(f => f.blob)), `${abName(book.title)}.zip`));
-      done.append(p, zb);
-    } else if (!ok) {
-      const p = document.createElement('p'); p.textContent = `${plural(ab.files.length, 'finished file')} kept.`; done.append(p);
-    }
-  }
-  done.hidden = !done.childElementCount;
+  ab.zipOffer = ok && mode !== 'one' && !target;
+  if (!ok && ab.files.length) ab.kept = `${plural(ab.files.length, 'finished file')} kept${ab.partial ? ' (the last one up to where it stopped)' : ''}.`;
+  abZipOffer();
   abSync();
-  if (!$('#abDialog').open) showNotice(msg, ok ? 'info' : 'error');
+  if ($('#abDialog').open) ($('#abZip') || $('#abCancel')).focus();
+  else showNotice(msg + (ab.zipOffer && ab.files.length > 1 ? ' The headphones button in the read-aloud bar also offers them as one ZIP.' : ''), ok ? 'info' : 'error');
+}
+// Keep the screen on while exporting (the browser lets go of it when the tab is hidden: taken again on return).
+async function abWake(){
+  try { ab.wake = await navigator.wakeLock?.request('screen'); ab.wake?.addEventListener?.('release', () => { ab.wake = null; }); } catch { ab.wake = null; }
 }
 $('#ttsExport').addEventListener('click', abOpen);
 $('#abList').addEventListener('click', e => {
-  const box = e.target.closest('input[type="checkbox"]'); if (!box) return;
+  const label = e.target.closest('label'); if (!label) return;
+  const box = label.querySelector('input[type="checkbox"]');
+  if (e.target !== box) {
+    if (!e.shiftKey) return;   // (a plain click on the text: the label ticks the box itself, and that click comes here)
+    e.preventDefault(); box.checked = !box.checked;   // shift-click on the text: as on the box
+  }
   const k = Number(box.dataset.k);
   if (e.shiftKey && ab.last >= 0 && ab.last !== k) {   // shift-click: the range from the last one clicked
     for (let j = Math.min(ab.last, k); j <= Math.max(ab.last, k); j++) ab.units[j].pick = box.checked;
@@ -4985,18 +5056,26 @@ $('#abList').addEventListener('click', e => {
   ab.last = k; abSummary();
 });
 for (const [id, v] of [['#abAll', true], ['#abNone', false]]) $(id).addEventListener('click', () => {
-  ab.units.forEach(u => { u.pick = v; }); $('#abList').querySelectorAll('input').forEach(x => { x.checked = v; }); abSummary();
+  ab.units.forEach(u => { u.pick = v && u.chars !== 0; }); $('#abList').querySelectorAll('input').forEach((x, j) => { x.checked = ab.units[j].pick; }); abSummary();
 });
+$('#abLoad').addEventListener('click', () => { const ne = neuralEngine(); if (ne) { ne.st.wantPlay = false; if (ne.st.state === 'error') ne.st.state = 'idle'; ne.load(); } abSync(); });
 $('#abStart').addEventListener('click', abStart);
-$('#abPause').addEventListener('click', () => { ab.paused = !ab.paused; if (!ab.paused) ab.resume?.(); abShow(); });
+$('#abPause').addEventListener('click', () => {
+  ab.paused = !ab.paused;
+  if (ab.paused) ab.pausedAt = performance.now();
+  else { ab.startedAt += performance.now() - (ab.pausedAt || performance.now()); ab.resume?.(); }   // (time paused isn't counted)
+  abShow();
+});
 $('#abCancel').addEventListener('click', () => {
-  if (ab.running) { ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); return; }
+  if (ab.running) {
+    if (ab.doneSecs > 120 && !confirm('Stop making the audiobook? What is finished so far is kept in the saved audio, so starting again goes faster.')) return;
+    ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); return;
+  }
   $('#abDialog').close();
 });
 // (A dialog closed while exporting: the export goes on; the button in the bar shows it and opens it again.)
-document.addEventListener('visibilitychange', async () => {
-  if (ab.running && document.visibilityState === 'visible' && !ab.wake) try { ab.wake = await navigator.wakeLock?.request('screen'); } catch {}
-});
+document.addEventListener('visibilitychange', () => { if (ab.running && document.visibilityState === 'visible' && !ab.wake) abWake(); });
+window.addEventListener('beforeunload', e => { if (ab.running) { e.preventDefault(); e.returnValue = ''; } });
 
 /* ---------- search ----------
    Every chapter's text is gathered once per book (from detached copies, block by block, as textBlocks
