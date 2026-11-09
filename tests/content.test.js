@@ -51,3 +51,15 @@ test('text in UTF-16 and Shift_JIS reads correctly, in books and as files (M-26)
   const t = await frameText(page);
   assert.match(t, /^Sixteen-bit plain text, café\./);
 });
+
+test('UTF-8 under a stale or wrong declaration stays UTF-8; real Latin-1 that says so still reads (M-26 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/stale-charset.epub`);
+  assert.match(await frameText(page), /café – “quoted”/, 'a stale <meta> charset');
+  await toSpine(page, 2);
+  assert.match(await frameText(page), /café – “quoted”/, 'a wrong XML declaration');
+  await toSpine(page, 3);
+  assert.match(await frameText(page), /Latin crème brûlée\./, 'real Latin-1');
+  await h.openReader(page, `${h.READER}?book=books/tips.md`);
+  assert.match(await frameText(page), /café – “quoted”/, 'Markdown that mentions a charset');
+});

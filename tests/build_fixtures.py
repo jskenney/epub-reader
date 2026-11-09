@@ -232,6 +232,19 @@ def main():
         "u16.xhtml": xhtml("U16", "<p>Sixteen-bit café text.</p>").replace('encoding="utf-8"', 'encoding="UTF-16"').encode("utf-16"),
         "sjis.xhtml": sjis,
     }, "urn:odd-spine")
+    # UTF-8 under stale or wrong declarations, which must stay UTF-8, and real Latin-1 that says so (M-26 review).
+    utf = "<p>café – “quoted”</p>"
+    epub_items(books / "stale-charset.epub", "Stale Charset", [
+        ("a", "a.xhtml", "application/xhtml+xml", ""), ("b", "b.xhtml", "application/xhtml+xml", ""), ("c", "c.xhtml", "application/xhtml+xml", ""),
+    ], ["a", "b", "c"], {
+        "a.xhtml": ('<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" '
+                    'content="text/html; charset=iso-8859-1"/><title>A</title></head><body>' + utf + '</body></html>').encode("utf-8"),
+        "b.xhtml": ('<?xml version="1.0" encoding="iso-8859-1"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>B</title></head><body>'
+                    + utf + '</body></html>').encode("utf-8"),
+        "c.xhtml": ('<?xml version="1.0" encoding="iso-8859-1"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>C</title></head><body>'
+                    '<p>Latin crème brûlée.</p></body></html>').encode("latin-1"),
+    }, "urn:stale-charset")
+    (books / "tips.md").write_text('# Tips\n\nWrite `<meta charset="windows-1252">` only if you mean it: café – “quoted”.\n', encoding="utf-8")
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
     (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))

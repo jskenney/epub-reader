@@ -486,14 +486,15 @@ async function firstBytes(r, n){
   reader.cancel().catch(() => {});
   return out;
 }
+// Every one of a folder's files is there (a download that stopped partway, or files of the other precision,
+// don't count as a self-hosted copy: REVIEW.md M-27). Only the first bytes are asked for, so the large model
+// files aren't started and dropped.
+async function allReal(base, names){ return (await Promise.all(names.map(n => realFile(base + n, n.endsWith('.json') ? 'json' : 'any', true)))).every(Boolean); }
 // Is there a real file at url (not an error or "not found" page)? kind 'json' also requires JSON. Only the
 // first bytes are read, so it is cheap even for large files.
-// Every one of a folder's files is there (a download that stopped partway, or files of the other precision,
-// don't count as a self-hosted copy: REVIEW.md M-27).
-async function allReal(base, names){ return (await Promise.all(names.map(n => realFile(base + n, n.endsWith('.json') ? 'json' : 'any')))).every(Boolean); }
-async function realFile(url, kind = 'any'){
+async function realFile(url, kind = 'any', head = false){
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await fetch(url, { cache: 'no-store', ...(head && { headers: { Range: 'bytes=0-255' } }) });
     if (!r.ok || looksHtml(r)) { r.body?.cancel().catch(() => {}); return false; }
     const t = new TextDecoder().decode(await firstBytes(r, 256)).replace(/^\uFEFF/, '').trimStart();
     if (/^<(!doctype|html|head|body|\?xml|!--)/i.test(t)) return false;
@@ -814,7 +815,7 @@ function zipSource(zip){
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
   return {
     kind: 'zip',
-    async text(p){ const f = getFile(zip, p); return f ? decodeText(await f.async('uint8array'), '', 'utf-8') : null; },
+    async text(p){ const f = getFile(zip, p); return f ? decodeText(await f.async('uint8array'), { fallback: 'utf-8' }) : null; },
     async exists(p){ return !!getFile(zip, p); },
     async url(p, type){
       const f = getFile(zip, p); if (!f) return null;
@@ -838,7 +839,7 @@ function dirSource(base){
       const u = abs(p); if (!u) return null;
       try {
         const r = await fetch(u); if (!r.ok) return null;
-        return decodeText(new Uint8Array(await r.arrayBuffer()), (r.headers.get('content-type') || '').match(/charset\s*=\s*["']?([\w.:-]+)/i)?.[1], 'utf-8');
+        return decodeText(new Uint8Array(await r.arrayBuffer()), { http: charsetOf(r), fallback: 'utf-8' });
       } catch { return null; }
     },
     async exists(p){ return !!abs(p); },
@@ -919,24 +920,32 @@ function docKind(name, type = ''){
   if (['txt', 'text'].includes(e) || /^text\/plain/i.test(type)) return 'text';
   return null;
 }
-// Text from bytes: a byte order mark (UTF-8 or UTF-16) first, then the encoding the file declares (an XML
-// declaration, or an HTML <meta charset> near the top), then UTF-8, falling back to Windows-1252 for older
-// files (REVIEW.md M-26), or for a book's files, lenient UTF-8 (the default for XML, and what EPUB requires).
-// An HTTP charset, when a server sends one, comes before all but the mark.
-function decodeText(bytes, httpCharset = '', fallback = 'windows-1252'){
+// Text from bytes (REVIEW.md M-26): a byte order mark (UTF-8 or UTF-16) first. Then valid UTF-8 is taken as
+// UTF-8 whatever the file or server says, since stale declarations ("iso-8859-1" left on a page re-saved as
+// UTF-8) are common and real Shift_JIS or Latin-1 text is almost never valid UTF-8; the one exception is 7-bit
+// ISO-2022-JP. Otherwise the declared encoding: the server's charset, an XML declaration, or with sniff (HTML
+// and book files, not plain text or Markdown) a <meta charset> near the top. Failing those, fallback:
+// Windows-1252 for older files, or for a book's files lenient UTF-8 (the default for XML, which EPUB requires).
+const charsetOf = r => (r.headers.get('content-type') || '').match(/charset\s*=\s*["']?([\w.:-]+)/i)?.[1] || '';
+function decodeText(bytes, { http = '', sniff = true, fallback = 'windows-1252' } = {}){
   const as = (label, b = bytes) => { try { return new TextDecoder(label).decode(b); } catch { return null; } };
   if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return as('utf-8', bytes.subarray(3));
   if (bytes[0] === 0xFF && bytes[1] === 0xFE) return as('utf-16le', bytes.subarray(2));
   if (bytes[0] === 0xFE && bytes[1] === 0xFF) return as('utf-16be', bytes.subarray(2));
   if (bytes[0] === 0x3C && bytes[1] === 0 && bytes[2] === 0x3F && bytes[3] === 0) return as('utf-16le');   // "<?" in UTF-16, no mark
   if (bytes[0] === 0 && bytes[1] === 0x3C && bytes[2] === 0 && bytes[3] === 0x3F) return as('utf-16be');
-  const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024));
-  const declared = httpCharset || (head.match(/^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i)
-    || head.match(/<meta\b[^>]*?\bcharset\s*=\s*["']?([\w.:-]+)/i))?.[1] || '';
-  // (UTF-16 named in a file that isn't UTF-16 is a mistake, as HTML treats it; UTF-8 is tried anyway.)
-  if (declared && !/^(utf-?8|utf-?16(le|be)?|unicode(fffe)?|ucs-2)$/i.test(declared)) { const t = as(declared.toLowerCase()); if (t != null) return t; }
-  if (/^utf-?8$/i.test(declared)) return new TextDecoder().decode(bytes);
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder(fallback).decode(bytes); }
+  let declared = http;
+  if (!declared && sniff) {
+    const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024)).replace(/<!--[\s\S]*?(-->|$)/g, '');
+    declared = (head.match(/^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i) || head.match(/<meta\b[^>]*?\bcharset\s*=\s*["']?([\w.:-]+)/i))?.[1] || '';
+  }
+  declared = declared.toLowerCase();
+  // (UTF-16 named in a file that isn't UTF-16 is a mistake, as HTML treats it.)
+  if (/^(utf-?16(le|be)?|unicode(fffe)?|ucs-2)$/.test(declared)) declared = '';
+  let utf8 = null; try { utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch {}
+  if (utf8 != null && !(declared === 'iso-2022-jp' && bytes.includes(0x1B))) return utf8;
+  if (declared && !/^utf-?8$/.test(declared)) { const t = as(declared); if (t != null) return t; }
+  return new TextDecoder(/^utf-?8$/.test(declared) ? 'utf-8' : fallback).decode(bytes);
 }
 const escHtml = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /* Libraries: loaded from libs/ under LIB_FILES (fetch-libs.sh) when there, otherwise from cdnjs. Both copies
@@ -1075,9 +1084,9 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   }
   return parts.length ? parts : [[]];
 }
-async function openDocument(buffer, name, kind, { base = null, key, seq } = {}){
+async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '' } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
-  const text = decodeText(new Uint8Array(buffer));
+  const text = decodeText(new Uint8Array(buffer), { http: charset, sniff: kind === 'html' });
   let doc, meta = {}, headExtra = '';
   if (kind === 'html') {
     doc = new DOMParser().parseFromString(withoutDocumentControls(text), 'text/html');
@@ -1172,7 +1181,7 @@ async function openComic(zip, name, { key, seq } = {}){
   let ci = {};
   const ciFile = Object.values(zip.files).find(f => !f.dir && /(^|\/)comicinfo\.xml$/i.test(f.name));
   if (ciFile) {
-    const d = parseDoc(decodeText(await (getFile(zip, ciFile.name) || ciFile).async('uint8array'), '', 'utf-8'), 'application/xml');
+    const d = parseDoc(decodeText(await (getFile(zip, ciFile.name) || ciFile).async('uint8array'), { fallback: 'utf-8' }), 'application/xml');
     const g = t => d?.getElementsByTagName(t)[0]?.textContent.trim() || '';
     ci = { title: g('Title'), series: g('Series'), number: g('Number'), volume: g('Volume'), writer: g('Writer'), penciller: g('Penciller'),
       summary: g('Summary'), lang: g('LanguageISO'), manga: g('Manga'), publisher: g('Publisher'), year: g('Year'), genre: g('Genre') };
@@ -2020,7 +2029,7 @@ function releaseImages(shownPath){
   if (book?.comicParts) return releaseComicImages(shownPath);
   if (!book?.owners) return;
   const i = book.spine.findIndex(s => s.path === shownPath);
-  const keep = new Set(book.spine.slice(Math.max(0, i - 1), i + 2).map(s => s.path));
+  const keep = new Set(book.spine.slice(Math.max(0, i - 1), i + 2).flatMap(s => [s.path, s.readerPath]));
   const cover = book.coverId && book.manifest.get(book.coverId)?.path;
   const src = book.src;
   for (const [path, owners] of book.owners) {
@@ -2104,6 +2113,7 @@ async function chapterSource(item){
     doc = page;
   }
   doc.readerPath = it.path;
+  item.readerPath = it.path;   // (its pictures are kept while the item is near: releaseImages)
   return doc;
 }
 // A detached copy of a chapter, built like the page shown in the frame (without its styles and resources),
@@ -4766,7 +4776,7 @@ async function fetchDocument(u, kind, init = {}){
   if (kind !== 'html' && looksHtml(r)) return { miss: 'a web page came back instead' };
   const buf = await r.arrayBuffer();
   if (await isSoftNotFound(u.href, new TextDecoder().decode(buf))) return { miss: `the site's "not found" page` };
-  return { buf };
+  return { buf, charset: charsetOf(r) };
 }
 // The folder's default book: the first name in DEFAULT_BOOK that is really there, else the built-in sample.
 async function openDefault(seq = ++openSeq){
@@ -4778,7 +4788,7 @@ async function openDefault(seq = ++openSeq){
     try {
       if (kind) {
         const got = await fetchDocument(u, kind, { cache: 'no-cache' });
-        if (got.buf) { await openDocument(got.buf, name, kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq }); return; }
+        if (got.buf) { await openDocument(got.buf, name, kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset }); return; }
       } else {
         const found = await zipFromUrl(u, { cache: 'no-cache' });
         if (found.zip && /\.cbz$/i.test(u.pathname)) { await openZip(found.zip, name, { key: `spine:pos:url:${u.pathname}`, seq }); return; }
@@ -4826,7 +4836,7 @@ async function openFromUrl(ref){
         if (got.miss) { misses.push(`${u.pathname} (${got.miss})`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
-          { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq });
+          { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset });
         return;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
