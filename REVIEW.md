@@ -49,10 +49,18 @@ changes and the new tests. They found two medium regressions and a few low gaps,
 - **L-90 to L-97:** smaller gaps in the same changes (see Resolved).
 The rest is open: L-98, L-99 and T-20.
 
+A third review, of `c28c12d` and `1ba12ab`, found two more medium regressions, fixed in `d82fa29` with tests that
+fail on the code before it:
+- **M-30:** a server's `charset=utf-8` (which nginx.conf.example adds to `.md`) overrode the Windows-1252
+  fallback, so old Latin-1 text and Markdown opened by link turned into replacement characters.
+- **M-31:** reading aloud into a chapter that couldn't be loaded stayed "playing" with nothing to play, and saved
+  the failed chapter as the position while the page still showed the one before.
+- **L-100 to L-103:** smaller gaps (see Resolved).
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 126 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 128 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
 changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
 has a test that fails on the code before it.
@@ -253,7 +261,10 @@ README says it does. **Fix:** read `LIBS` and the version constants by name.
 - The M-23 test checks the page shown, not the saved position.
 - The M-27 test names port 8790; the T-18 checks run right after loading, so a refused request logged later
   is missed.
-- L-75 (giving up on a stalled stream) has no test: it would take a minute of waiting, or a setting for tests.
+- L-75 (giving up on a stalled stream) and L-100 have no test: they would take minutes of waiting, or a setting
+  for tests.
+- Also untested: L-90 (fallback pages keep their pictures), L-91 and L-103 (the range probe), L-93 (narration at
+  the end of the text), L-94 and L-96 (the sleep timer).
 
 ## Documentation
 
@@ -412,6 +423,8 @@ From all reviews so far, with the commits that fixed them.
 | M-27 | A partly downloaded self-hosted Pocket TTS (or Kokoro runtime), or one of the other precision, failed instead of using the CDN | `7e42a4a` |
 | M-28 | The new decoding (M-26) trusted a stale declared encoding over valid UTF-8, garbling old books and Markdown that mentions a charset (round 11 review) | `c28c12d` |
 | M-29 | The new look-ahead (M-23) took a chapter that failed to load once as having no text, and skipped it (round 11 review) | `1ba12ab` |
+| M-30 | A server's `charset=utf-8` overrode the Windows-1252 fallback for old files opened by link (round 11, third review) | `d82fa29` |
+| M-31 | Reading aloud into a chapter that couldn't be loaded stayed "playing" and saved the failed chapter as the position (round 11, third review) | `d82fa29` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -497,6 +510,10 @@ From all reviews so far, with the commits that fixed them.
 | L-95 | The stall limit (L-75) also cut off a slow server before its first audio | `1ba12ab` |
 | L-96 | The sleep timer carried over into a newly opened book | `1ba12ab` |
 | L-97 | No status while passing over many picture pages | `1ba12ab` |
+| L-100 | No time limit between a streaming server's headers and its first audio (after L-95) | `d82fa29` |
+| L-101 | Encoding aliases (`csISO2022JP`) weren't recognised for the 7-bit ISO-2022-JP exception | `d82fa29` |
+| L-102 | An error while splitting a looked-ahead chapter into sentences was kept and stalled reading | `d82fa29` |
+| L-103 | The range probe (L-91) could fail on a voice folder on another site whose server doesn't allow the header | `d82fa29` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
