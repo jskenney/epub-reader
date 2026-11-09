@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-08, after round 10): `index.html` (about 4,700 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 11): `index.html` (about 4,700 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -29,13 +29,25 @@ numbers (L-71), and a few inaccurate sentences (D-5): the gzip note, which files
 Round 10 (`a29374c`) added E-16: without a `?book=` link, the reader opens `default.epub`, else `default.md`
 (`DEFAULT_BOOK` is now an ordered list). The new code uses the same "not found" page checks as `?book=` links,
 and is tested on a server with real 404s and on one that answers every missing file with a 200 page. No
-independent review was run for this round. *Reproduced* means confirmed in Chromium, Node or nginx against the real
-code; *read* means confirmed by reading the code only.
+independent review was run for this round.
 
-**Tests.** All 112 tests pass, as root and (for the scripts) as an unprivileged user. Five more need `SLOW=1` or
-`NETWORK=1`. They passed here before the last two fix commits, which don't touch the voice or loading code:
-- the real Kokoro and Pocket TTS, self-hosted and from the CDNs under the CDN policy
-- libraries and fonts from the CDNs
+Round 11 was a full review by three independent reviewers: one on opening and building books, one on reading
+aloud, settings and the interface, and one on the scripts, the nginx example, the workflow, the README and the
+tests. Each was given the code and the areas to cover, not the author's conclusions. No critical or high items
+were found. What was fixed (`7a0abfb` to `961118e`):
+- **Medium:** M-23 to M-27.
+- **Low items that kept a book or a voice from working:** L-72, L-73, L-75 and L-80 to L-83.
+- **Tests:** T-18. **Documentation:** D-6.
+
+The other low items, T-19 and D-7 are open below.
+
+*Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
+reading the code only.
+
+**Tests.** All 124 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
+changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
+has a test that fails on the code before it.
 
 Most fixes in rounds 7 and 8 have a test, and those tests fail on the code before the fix. Some were checked
 by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
@@ -62,21 +74,98 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-No critical, high, medium or low items are open. The open items are:
-- **Tests:** T-11 (the weekly workflow hasn't run yet) and T-13 to T-17.
+No critical, high or medium items are open. The open items are:
+- **Low:** L-74, L-76 to L-79 and L-84 to L-89. None keeps a book or a voice from working.
+- **Tests:** T-11 (the weekly workflow hasn't run yet), T-13 to T-17 and T-19.
+- **Documentation:** D-7.
 - **Enhancements:** E-1 to E-11 and E-15.
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| [L-74](#l-74-pocket-tts-asks-to-download-again-after-a-language-change) | Pocket TTS asks to download again after a language change | Low |
+| [L-76](#l-76-a-short-outage-makes-passages-read-sentence-by-sentence) | A short outage makes passages read sentence by sentence | Low |
+| [L-77](#l-77-keep_positions_days-applies-to-the-whole-site) | `KEEP_POSITIONS_DAYS` applies to the whole site | Low |
+| [L-78](#l-78-the-position-ribbon-from-the-keyboard) | The position ribbon from the keyboard | Low |
+| [L-79](#l-79-the-narrow-screen-contents-has-no-focus-handling) | The narrow-screen contents has no focus handling | Low |
+| [L-84](#l-84-css-urls-lose-their-fragment) to [L-87](#l-87-the-body-style-attribute-isnt-cleaned) | Smaller CSS cleaning gaps | Low |
+| [L-88](#l-88-obfuscated-fonts-arent-de-obfuscated) | Obfuscated fonts aren't de-obfuscated | Low |
+| [L-89](#l-89-the-checksum-check-passes-files-the-list-doesnt-name) | The checksum check passes files the list doesn't name | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-13](#t-13-a-self-hosting-test-needs-internet-but-isnt-gated) | A self-hosting test needs internet but isn't gated | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
 | [T-15](#t-15-test-housekeeping) | Test housekeeping | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-17](#t-17-workflow-upkeep) | Workflow upkeep | Tests |
+| [T-19](#t-19-two-script-tests-match-anywhere-in-the-page) | Two script tests match anywhere in the page | Tests |
+| [D-7](#d-7-documentation-nits) | Documentation nits | Docs |
 | [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
+
+## Low
+
+### L-74. Pocket TTS asks to download again after a language change
+
+*Read* (needs the real model). After English Pocket TTS has loaded, `pk.state` stays `'ready'`, and
+`ttsUpdateBar` loads on its own only from `'idle'`. So a German book, whose model was downloaded before, shows
+the download offer again instead of loading quietly. One click loads it. **Fix:** also load on its own when
+`pk` is ready for another language and the new one was agreed to.
+
+### L-76. A short outage makes passages read sentence by sentence
+
+*Read.* Every failed passage is added to `n.failed`, including network blips, the server being briefly gone, a
+timeout and a crashed Kokoro worker. Those paragraphs are then read one sentence at a time until reload, which
+phrases worse. **Fix:** record only errors from a server that answered.
+
+### L-77. `KEEP_POSITIONS_DAYS` applies to the whole site
+
+*Read.* The daily sweep covers every position on the site with the current folder's value, so a folder set to
+`0` ("keep forever") still loses positions when a page in another folder runs with a shorter setting.
+**Fix:** say in the README that the setting is site-wide, or keep the longest value seen.
+
+### L-78. The position ribbon from the keyboard
+
+*Read.* Enter on the focused ribbon in the last chapter re-renders that chapter from its start. The ribbon is
+`role="progressbar"` but can be focused and clicked, with no keyboard way back. **Fix:** ignore Enter in the
+last chapter; consider `role="slider"` with arrow keys.
+
+### L-79. The narrow-screen contents has no focus handling
+
+*Read.* At 820 px or narrower, opening the contents doesn't move focus into it, Escape doesn't close it,
+closing it doesn't return focus to the button, and tapping the page leaves it open. **Fix:** all four.
+
+### L-84. CSS URLs lose their fragment
+
+*Reproduced.* `url(s.svg#b)` in a stylesheet becomes the file's address without `#b` (attributes keep it), so
+an SVG sprite in CSS shows the wrong picture. **Fix:** carry the fragment over, as attributes do.
+
+### L-85. A remote `@import` after an inlined one is dropped
+
+*Reproduced* (only with `ALLOW_REMOTE_CONTENT` on). Once a local import is pasted in, a following remote
+`@import` comes after style rules and is removed. **Fix:** move kept remote imports above the pasted text.
+
+### L-86. An imported sheet's `@namespace` is lost
+
+*Reproduced.* Pasted after other rules or inside a wrapper, `@namespace` is dropped, so `prefix|…` selectors in
+that sheet stop working (rare: `epub|type` selectors never match anyway). **Fix:** give such a sheet its own
+`<style>`.
+
+### L-87. The body style attribute isn't cleaned
+
+*Read.* `style` on `<body>` is copied to the page without the CSS cleaning. The book policy blocks what it would
+load, and with remote content on a relative `url()` points at the reader's site. **Fix:** include `<body>`.
+
+### L-88. Obfuscated fonts aren't de-obfuscated
+
+*Read.* Fonts obfuscated by the IDPF or Adobe method (`META-INF/encryption.xml`) fail to load, and the book's
+text falls back to the reader's fonts. **Fix:** undo the XOR of the first 1040 (IDPF) or 1024 (Adobe) bytes
+with the key from the identifier.
+
+### L-89. The checksum check passes files the list doesn't name
+
+*Reproduced.* A downloaded file with no line in `checksums/*.sha256` only prints a note, and the run still ends
+"All files match" with exit 0, though the README says the check fails closed. Today every file is listed.
+**Fix:** fail for files the script itself downloads; keep the note for extra files.
 
 ## Tests
 
@@ -126,6 +215,27 @@ the reader policy and nothing leaked. **Fix:** also run them on a port without t
 
 *Read.* `slow.yml` uses Node 20 (end of life since April 2026), `checkout@v4`/`setup-node@v4` (Node 20
 runtime), `npm install` rather than `npm ci`, and downloads about 900 MB of models every run without a cache.
+
+### T-19. Two script tests match anywhere in the page
+
+*Reproduced.* The integrity test in `scripts.test.js` checks that each library's file and hash appear somewhere
+in `index.html`, so swapped hashes pass (books would then fail to open, which other tests catch). The version
+check uses `includes` over the whole page, so a comment counts, and doesn't check `TRANSFORMERS` though the
+README says it does. **Fix:** read `LIBS` and the version constants by name.
+
+## Documentation
+
+### D-7. Documentation nits
+
+- `nginx.conf.example` sets `default_type "text/markdown; charset=utf-8"`, so `.md` files probably aren't
+  gzipped (`gzip_types` compares the whole type). *Read only.* Use `default_type text/markdown; charset utf-8;
+  charset_types text/markdown;`.
+- The README's test requirements leave out `unzip` (used by `urls.test.js`) and `curl` (`run.sh`), say Node 20+
+  where `--test-concurrency` needs 20.10, and give "about a minute" for what takes about 3.5.
+- "Each script also has a `--list` option": `fetch-fonts.sh` has none.
+- Kokoro's download is "about 450 MB" in its script and "about 435 MB" in the README (436 MB measured).
+- `tools/make-checksums.py` sorts `libs/LICENSES/*` before `libs/jszip.min.js`, unlike the committed list, so
+  regenerating with no change still makes a diff.
 
 ## Enhancements
 
@@ -221,8 +331,10 @@ items) would suit comics-style and picture books.
 ## Suggested order
 
 1. **T-11:** run the workflow once by hand (Actions → Slow tests → Run workflow).
-2. **T-13 to T-17:** test housekeeping.
-3. The enhancements, as wanted.
+2. **L-89 and T-19:** the checksum and pinned-version checks.
+3. **L-74, L-76, L-79:** small read-aloud and narrow-screen fixes.
+4. **T-13 to T-17, D-7:** test and documentation housekeeping.
+5. The other low items and the enhancements, as wanted.
 
 ## Resolved
 
@@ -261,6 +373,11 @@ From all reviews so far, with the commits that fixed them.
 | M-20 | Pocket TTS from the CDNs didn't start under the CDN reader policy | `a5d39b8` |
 | M-21 | The CSS budget counted nested and font text several times and dropped legitimate sheets (round 8 review) | `84bc895` |
 | M-22 | Every new reader saw "Publisher narration (not in this book)" as the engine (round 8 review) | `f8ed09c` |
+| M-23 | Reading aloud on a comic (or past the last text) turned every page to the end and saved that position | `7a0abfb` |
+| M-24 | A head `<style media="print">` applied on screen | `9e05168` |
+| M-25 | SVG pages and pictures in the spine showed blank or as binary text; manifest fallbacks weren't used | `9e05168` |
+| M-26 | Text in UTF-16 or a declared encoding (Shift_JIS and others) was garbled | `9e05168` |
+| M-27 | A partly downloaded self-hosted Pocket TTS (or Kokoro runtime), or one of the other precision, failed instead of using the CDN | `7e42a4a` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -331,6 +448,13 @@ From all reviews so far, with the commits that fixed them.
 | L-69 | nginx.conf.example: why books, audio and models stay out of gzip_types | `99b2a18`, `7a86a5f` |
 | L-70 | Case-insensitive file lookups scanned every name in large archives | `90a6b6f` |
 | L-71 | Status announcements weren't repeated on reopening the bar, and changes differing only in numbers were swallowed (round 9 review) | `7a86a5f` |
+| L-72 | Opening another book while reading aloud started reading the new one on its own | `7a0abfb` |
+| L-73 | A voice or speed chosen while paused didn't apply to the paused passage | `7a0abfb` |
+| L-75 | A server voice stream that stalled partway left reading silent, with every later request queued | `7a0abfb` |
+| L-80 | A missing file with `&` or `'` in its name opened the site's "not found" page as the book | `c14fb66` |
+| L-81 | A book folder named with `;` or `,` broke the book policy, so its pictures and fonts were refused | `c14fb66` |
+| L-82 | Without JSZip, text, Markdown and EPUBs read in place were refused too | `c14fb66` |
+| L-83 | `"DEFAULT_BOOK": ""` opened the reader's own page as a book | `c14fb66` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -342,11 +466,13 @@ From all reviews so far, with the commits that fixed them.
 | T-9 | Gaps left after round 3 (same-size replacement, ZIP cases, pre-parse test, SRI check) | `888f900`, `37b6f2f`, `78a8a9e` |
 | T-10 | Cases checked only by script | `0231f23`, `5a16313`, `3a98b99` |
 | T-12 | A test overwrote the system's `curl` when run as root, and failed as anyone else | `4266cd2` |
+| T-18 | Under the reader policy, "nothing left the site" checks couldn't fail; they now also check for refused requests | `961118e` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
 | D-4 | Documentation out of date (voice count, Node version, Markdown library, fetch-script folders, model precision) | `614e88c` |
 | D-5 | Inaccurate sentences from D-4 and L-69: the gzip note, which files each fetch script reads, FULL_PRECISION on WebGPU (round 9 review) | `7a86a5f` |
+| D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
