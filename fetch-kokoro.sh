@@ -4,7 +4,7 @@
 #
 #   ./fetch-kokoro.sh            run from anywhere; files go next to this script
 #
-# Safe to re-run: finished files are skipped and interrupted downloads resume. Total is about 450 MB.
+# Safe to re-run: finished files are skipped and interrupted downloads resume. Total is about 435 MB.
 # Every file is checked against checksums/kokoro.sha256; any that don't match are removed (run it again).
 # The reader uses kokoro.web.js and ort/ (when all its files are there) from here, and each model file it
 # finds here, and takes the rest from the CDNs.

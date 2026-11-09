@@ -46,7 +46,8 @@ test('a library that does not match its pinned hash is refused', async () => {
   assert.equal(await page.evaluate(() => window.JSZip?.tampered ?? null), null, 'the tampered file must not run');
 });
 
-test('without local libraries the CDN copy is used, checked against the same hash', async () => {
+// (It reaches cdnjs, so it needs internet access: NETWORK=1, as the CDN tests: REVIEW.md T-13.)
+test('without local libraries the CDN copy is used, checked against the same hash', { skip: !process.env.NETWORK && 'set NETWORK=1 to run (reaches cdnjs)' }, async () => {
   const page = await h.newPage({ allow: ['cdnjs.cloudflare.com'] });
   const loaded = [];
   page.on('requestfinished', r => { if (/cdnjs/.test(r.url())) loaded.push(r.url()); });

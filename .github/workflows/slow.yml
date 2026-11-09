@@ -12,12 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
       - name: Playwright
-        run: cd tests && npm install && npx playwright install --with-deps chromium
+        run: cd tests && npm ci && npx playwright install --with-deps chromium
+      # The models (about 900 MB) kept between runs, keyed on their pinned checksums: a new pin downloads afresh.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            kokoro
+            pocket
+          key: voice-models-${{ hashFiles('checksums/kokoro.sha256', 'checksums/pocket.sha256') }}
       - name: Self-hosted files (checked against checksums/)
         run: ./fetch-libs.sh && ./fetch-fonts.sh && ./fetch-kokoro.sh && ./fetch-pocket.sh en
       - name: Tests, with the real models and the CDN policy

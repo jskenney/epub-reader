@@ -301,8 +301,9 @@ need to. Options can go in any order (`./fetch-pocket.sh de --int8`), and the
 scripts stick to what macOS's older bash and BSD tools support. After changing a pinned version
 or model revision, regenerate the lists with `python3 tools/make-checksums.py`;
 large model files aren't downloaded for this, since Hugging Face records
-their SHA-256. Each script also has a `--list` option that prints what it
-would download without downloading it.
+their SHA-256. `fetch-libs.sh`, `fetch-kokoro.sh` and `fetch-pocket.sh` also
+have a `--list` option that prints what they would download without
+downloading it (`fetch-fonts.sh` keeps its own list in `fonts/SHA256SUMS`).
 
 ### Upgrading a pinned version
 
@@ -519,7 +520,7 @@ each with its own `default.epub`:
 
 ```bash
 cd tests && npm install && npx playwright install chromium && cd ..   # once
-tests/run.sh                        # all tests (about a minute)
+tests/run.sh                        # all tests (about four minutes)
 tests/run.sh tests/urls.test.js     # one file
 SLOW=1 tests/run.sh                 # also load the real self-hosted Kokoro and Pocket TTS on the CPU
 NETWORK=1 tests/run.sh              # also load everything from the CDNs under the CDN version of the policy
@@ -540,6 +541,9 @@ media controls, the sleep timer, time left and audiobook export. The export
 tests need `ffmpeg` and `ffprobe` (they're skipped without them): the test
 browser has no AAC encoder, so a stand-in hands out real AAC frames made by
 ffmpeg, and the `.m4b` files are checked and decoded with ffprobe and ffmpeg.
+
+The tests need Python 3, Node 20.10 or later, Playwright's Chromium, `unzip`, and (for the export tests)
+`ffmpeg` and `ffprobe`.
 
 `.github/workflows/slow.yml` runs the whole suite weekly on GitHub, and on
 demand, with the real models (`SLOW=1`) and the CDNs (`NETWORK=1`), so changes

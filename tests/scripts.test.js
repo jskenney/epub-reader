@@ -12,9 +12,14 @@ const run = (cwd, script, args = [], env = {}) => {
   const r = spawnSync('bash', [script, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env } });
   return { code: r.status, out: r.stdout + r.stderr };
 };
+// Temporary folders, removed after the tests even when one fails (REVIEW.md T-15). (Removing a folder of links
+// removes the links, not what they point to.)
+const temps = [];
+const tempDir = prefix => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); temps.push(d); return d; };
+test.after(() => { for (const d of temps) fs.rmSync(d, { recursive: true, force: true }); });
 // A copy of the repository's scripts, checksums and downloaded libraries, so nothing needs downloading.
 function sandbox() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-scripts-'));
+  const dir = tempDir('spine-scripts-');
   for (const f of ['fetch-libs.sh', 'fetch-kokoro.sh', 'fetch-pocket.sh', 'fetch-fonts.sh', 'index.html']) fs.copyFileSync(path.join(REPO, f), path.join(dir, f));
   fs.cpSync(path.join(REPO, 'checksums'), path.join(dir, 'checksums'), { recursive: true });
   fs.cpSync(path.join(REPO, 'libs'), path.join(dir, 'libs'), { recursive: true, dereference: true });
@@ -22,7 +27,7 @@ function sandbox() {
 }
 // A PATH with every command except sha256sum and shasum.
 function pathWithoutHashTools() {
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-bin-'));
+  const bin = tempDir('spine-bin-');
   for (const d of ['/usr/local/bin', '/usr/bin', '/bin']) {
     if (!fs.existsSync(d)) continue;
     for (const f of fs.readdirSync(d)) {
@@ -106,7 +111,7 @@ test("fetch scripts: a stale partial download from another address starts afresh
   fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part.url'), 'https://cdnjs.cloudflare.com/ajax/libs/marked/1.0.0/marked.min.js\n');
   // A curl that logs its calls, can't resume (exit 33, as for a server ignoring ranges), and otherwise "downloads"
   // the real file (appending to what is there, as -C - would).
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-bin-')), log = path.join(bin, 'log');
+  const bin = tempDir('spine-bin-'), log = path.join(bin, 'log');
   stub(bin, 'curl', `#!/bin/sh
 echo "$*" >> "${log}"
 out=""; prev=""; for a; do [ "$prev" = "-o" ] && out=$a; prev=$a; done
@@ -137,7 +142,7 @@ test('fetch-fonts.sh --strict fails on a changed file or a font file not in the 
   const dir = sandbox();
   fs.cpSync(path.join(REPO, 'fonts'), path.join(dir, 'fonts'), { recursive: true, dereference: true });
   // Offline: Google's stylesheet now names a font file that isn't in fonts/SHA256SUMS; nothing else answers.
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-bin-'));
+  const bin = tempDir('spine-bin-');
   stub(bin, 'curl', '#!/bin/sh\nfor a; do u=$a; done\ncase $u in *googleapis*) echo "@font-face{src:url(https://fonts.gstatic.com/s/new/v1/x.woff2)}";; *) exit 7;; esac\n');
   const env = { PATH: `${bin}:${process.env.PATH}` };
   assert.equal(run(dir, 'fetch-fonts.sh', ['--bogus'], env).code, 2);
@@ -172,24 +177,32 @@ test('fetch-fonts.sh --strict fails on a changed file or a font file not in the 
   fs.rmSync(bin, { recursive: true, force: true });
 });
 
-test('versions pinned in index.html and in the fetch scripts agree (D-3)', () => {
+test('versions pinned in index.html and in the fetch scripts agree, read from their definitions (D-3, T-19)', () => {
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const page = read('index.html'), libs = read('fetch-libs.sh'), kokoro = read('fetch-kokoro.sh'), pocket = read('fetch-pocket.sh');
   const v = (src, name) => src.match(new RegExp(`^${name}=(\\S+)`, 'm'))?.[1];
-  assert.ok(page.includes(`/jszip/${v(libs, 'JSZIP')}/jszip.min.js`), 'JSZIP');
-  assert.ok(page.includes(`/marked/${v(libs, 'MARKED')}/marked.min.js`), 'MARKED');
-  assert.ok(page.includes(`kokoro-js@${v(kokoro, 'KOKORO_JS')}/`), 'KOKORO_JS');
-  assert.ok(page.includes(`revision: '${v(kokoro, 'REV')}'`), 'Kokoro REV');
-  assert.ok(page.includes(`pocket-tts-js@${v(pocket, 'POCKET_JS')}/`), 'POCKET_JS');
-  assert.ok(page.includes(`onnxruntime-web@${v(pocket, 'ORT')}/`), 'ORT');
-  assert.ok(page.includes(`pocket-tts-onnx/resolve/${v(pocket, 'REV')}/`), 'Pocket REV');
+  // Each value from where index.html defines it (a match in a comment elsewhere doesn't count).
+  const def = re => page.match(re)?.[1];
+  const block = name => page.slice(page.indexOf(`const ${name} = {`), page.indexOf('};', page.indexOf(`const ${name} = {`)));
+  assert.equal(def(/jszip: \{ file: 'libs\/jszip\.min\.js', cdn: '[^']*\/jszip\/([^/]+)\/jszip\.min\.js'/), v(libs, 'JSZIP'), 'JSZIP');
+  assert.equal(def(/^const MARKED_URL = '[^']*\/marked\/([^/]+)\/marked\.min\.js';/m), v(libs, 'MARKED'), 'MARKED');
+  assert.equal(block('KOKORO').match(/lib: '[^']*kokoro-js@([^/]+)\//)?.[1], v(kokoro, 'KOKORO_JS'), 'KOKORO_JS');
+  assert.equal(block('KOKORO').match(/revision: '([^']+)'/)?.[1], v(kokoro, 'REV'), 'Kokoro REV');
+  assert.equal(block('POCKET').match(/lib: '[^']*pocket-tts-js@([^/]+)\//)?.[1], v(pocket, 'POCKET_JS'), 'POCKET_JS');
+  assert.equal(block('POCKET').match(/ort: '[^']*onnxruntime-web@([^/]+)\//)?.[1], v(pocket, 'ORT'), 'ORT');
+  assert.equal(block('POCKET').match(/model: '[^']*pocket-tts-onnx\/resolve\/([^/]+)\//)?.[1], v(pocket, 'REV'), 'Pocket REV');
+  // TRANSFORMERS is the transformers.js inside kokoro-js: its runtime files must come from the same version.
+  const bundle = path.join(__dirname, '..', 'kokoro', 'kokoro.web.js');
+  if (fs.existsSync(bundle)) assert.ok(fs.readFileSync(bundle, 'utf8').includes(`"${v(kokoro, 'TRANSFORMERS')}"`), `TRANSFORMERS ${v(kokoro, 'TRANSFORMERS')} isn't the version kokoro.web.js bundles`);
 });
 
-test('the Subresource Integrity hashes in LIBS match the files in libs/ (T-9)', { skip: !libsFetched && 'libs/ not fetched' }, () => {
+test('the Subresource Integrity hashes in LIBS match the files in libs/, each its own (T-9, T-19)', { skip: !libsFetched && 'libs/ not fetched' }, () => {
   const page = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  for (const file of ['jszip.min.js', 'marked.min.js']) {
+  const libs = Object.fromEntries([...page.matchAll(/(\w+): \{ file: 'libs\/([^']+)'[^}]*?integrity: '([^']+)'/g)].map(m => [m[2], m[3]]));
+  assert.deepEqual(Object.keys(libs).sort(), ['jszip.min.js', 'marked.min.js']);
+  for (const file of Object.keys(libs)) {
     const want = 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(__dirname, '..', 'libs', file))).digest('base64');
-    assert.ok(page.includes(`file: 'libs/${file}'`) && page.includes(`integrity: '${want}'`), `${file}: ${want} isn't in LIBS`);
+    assert.equal(libs[file], want, file);
   }
 });
 
@@ -198,7 +211,7 @@ test("the Kokoro worker's source, written inside a template string in index.html
   const start = src.indexOf('const KOKORO_WORKER = `') + 'const KOKORO_WORKER = '.length;
   let end = start + 1;
   while (!(src[end] === '`' && src[end - 1] !== '\\')) end++;
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'spine-worker-')), 'worker.mjs');
+  const file = path.join(tempDir('spine-worker-'), 'worker.mjs');
   fs.writeFileSync(file, eval(src.slice(start, end + 1)));   // the text the worker is given
   const r = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);

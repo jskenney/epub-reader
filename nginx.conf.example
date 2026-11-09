@@ -28,7 +28,7 @@ location ^~ /reader/ {
     location ~* \.mjs$  { types { } default_type text/javascript; }
     location ~* \.wasm$ { types { } default_type application/wasm; }
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
-    location ~* \.md$   { types { } default_type "text/markdown; charset=utf-8"; }
+    location ~* \.md$   { types { } default_type text/markdown; charset utf-8; charset_types text/markdown; }
 
     # Browsers keep every file but check it is still current each time (an unchanged file is a short 304 reply),
     # so a new index.html, config, library or model is used at once. (Keeping libraries for days without checking
@@ -48,5 +48,5 @@ location ^~ /reader/ {
 # Optional: books under /bookshelf/ (see BOOKSHELF in the README) with the same types.
 location ^~ /bookshelf/ {
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
-    location ~* \.md$ { types { } default_type "text/markdown; charset=utf-8"; }
+    location ~* \.md$ { types { } default_type text/markdown; charset utf-8; charset_types text/markdown; }
 }
