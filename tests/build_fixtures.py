@@ -306,6 +306,13 @@ def main():
     damage(books / "bad-picture.epub", "OEBPS/pic.png", "crc")
     epub(books / "bad-first.epub", "Bad First", [("c1.xhtml", "One", paragraphs("Broken", 3)), ("c2.xhtml", "Two", "<p>Second chapter.</p>")], uid="urn:bad-first")
     damage(books / "bad-first.epub", "OEBPS/c1.xhtml", "deflate")
+    # Text, two picture pages, then text again (T-20): reading passes the pictures and goes on to the text.
+    epub(books / "text-pictures-text.epub", "Text Pictures Text", [("c1.xhtml", "Words", "<p>Opening words.</p>")]
+         + [(f"p{i}.xhtml", f"Plate {i}", f'<p><img src="p{i}.png" alt=""/></p>') for i in (2, 3)]
+         + [("c4.xhtml", "More", "<p>Closing words after the plates.</p>")],
+         uid="urn:text-pictures-text", extra={f"OEBPS/p{i}.png": png(40, 30, (90, 60 * i, 120)) for i in (2, 3)})
+    # MathML with links on it, which Firefox would follow (L-138).
+    epub(books / "math-links.epub", "Math Links", [("c1.xhtml", "One", '<p>Formula: <math xmlns="http://www.w3.org/1998/Math/MathML" id="m" href="https://example.org/"><mi id="mi" href="#x">x</mi></math></p>')], uid="urn:math-links")
     # Many short paragraphs (round 13 review): passages quick enough to see a pause stop them.
     epub(books / "short-lines.epub", "Short Lines", [("c1.xhtml", "Lines", "".join(f"<p>Line {i} is short.</p>" for i in range(1, 61)))], uid="urn:short-lines")
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.

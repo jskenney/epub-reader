@@ -6,6 +6,7 @@ const SOFT = 'http://localhost:8791';     // the same site, answering missing fi
 const REMOTE = 'http://localhost:8792';   // "another site": records every request a book makes to it
 const NORANGE = 'http://localhost:8793';  // the same site, ignoring range requests (books are downloaded whole)
 const CDN = 'http://localhost:8794';      // the same site, sending the CDN version of the reader policy
+const PLAIN = 'http://localhost:8795';    // the same site with no reader policy at all (any static server)
 const READER = `${SITE}/reader/index.html`;
 
 let browser;
@@ -83,5 +84,5 @@ async function waitFor(fn, ms = 20000, step = 100) {
   return null;
 }
 
-module.exports = { SITE, SOFT, REMOTE, NORANGE, CDN, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, inFrame,
+module.exports = { SITE, SOFT, REMOTE, NORANGE, CDN, PLAIN, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, inFrame,
   remoteLog, clearRemoteLog, breezeLog, clearBreezeLog, spokenWord, waitFor };

@@ -24,7 +24,7 @@ cleanup() { kill "${pids[@]}" 2>/dev/null || true; }
 trap cleanup EXIT
 # Is something answering on a local port? (Python rather than curl, which minimal systems lack: REVIEW.md T-15.)
 listening() { python3 -c 'import socket,sys; s=socket.socket(); s.settimeout(0.2); sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)' "$1"; }
-for port in 8790 8791 8792 8793 8794; do
+for port in 8790 8791 8792 8793 8794 8795; do
   if listening "$port"; then echo "Port $port is already in use (an earlier run still going?): stop it and try again." >&2; exit 1; fi
 done
 # The site sends the reader policy from nginx.conf.example, so the tests check that documented policy works.
@@ -37,8 +37,11 @@ python3 tests/server.py --root tests/site --port 8793 --no-range --csp-from ngin
 python3 tests/server.py --root tests/site --port 8792 --log & pids+=($!)
 # The same site with the CDN version of the reader policy (tests that reach CDNs run only with NETWORK=1).
 python3 tests/server.py --root tests/site --port 8794 --csp-from nginx.conf.example --csp-variant cdn & pids+=($!)
+# The same site with no reader policy at all, as any static server: the hostile-book tests run here too, so the
+# book pages' own policy and the cleaning are what keep books in (REVIEW.md T-14).
+python3 tests/server.py --root tests/site --port 8795 & pids+=($!)
 # Wait for each server; stop if one of them exited instead (a failed start).
-ports=(8790 8791 8793 8792 8794)
+ports=(8790 8791 8793 8792 8794 8795)
 for k in "${!ports[@]}"; do
   for _ in $(seq 1 100); do
     listening "${ports[$k]}" && break

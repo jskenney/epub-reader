@@ -74,5 +74,5 @@ test('a self-hosted Pocket TTS model missing files of the precision in use comes
   const status = await h.waitFor(async () => { const t = await page.textContent('#ttsStatus'); return /stand-in/.test(t) && t; }, 15000);
   assert.ok(status, await page.textContent('#ttsStatus'));
   assert.match(status, /model https:\/\/huggingface\.co\/vlapky\/pocket-tts-onnx\//, 'the model from the CDN');
-  assert.match(status, /ort http:\/\/localhost:8790\/pocket-partial\/pocket\/ort\//, 'the complete runtime folder from this site');
+  assert.ok(status.includes(`ort ${h.SITE}/pocket-partial/pocket/ort/`), `the complete runtime folder from this site: ${status}`);
 });

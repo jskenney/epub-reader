@@ -57,3 +57,12 @@ test('a wrong checksum: refused by default, used with a warning when lenient (up
   finally { console.warn = warn; }
   assert.match(warned.join(' '), /a\.txt: its checksum doesn't match/);
 });
+
+test('an archive with data before it (a self-extracting archive) is read in place, its offsets moved (L-149)', async () => {
+  const [plain] = zip({ 'a.txt': Buffer.from('hello world'), 'b.txt': Buffer.from('second file') });
+  const buf = Buffer.concat([Buffer.alloc(1234, 0x4d), plain]);   // (1234 bytes of "program" first)
+  const z = await lazyZip(reader(buf), buf.length);
+  assert.ok(z, 'read in place');
+  assert.equal(await z.file('a.txt').async('string'), 'hello world');
+  assert.equal(await z.file('b.txt').async('string'), 'second file');
+});

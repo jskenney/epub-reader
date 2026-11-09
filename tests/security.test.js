@@ -6,20 +6,21 @@ const h = require('./helpers');
 test.afterEach(h.closePages);
 test.after(h.close);
 
+for (const [where, base] of [['behind the reader policy', h.SITE], ['with no reader policy', h.PLAIN]])
 for (const [label, ref] of [['from an EPUB file', 'books/hostile.epub'], ['from an extracted folder', 'books/hostile-dir/']])
-test(`a hostile book reaches no other site, and its own pictures still show (${label})`, async () => {
+test(`a hostile book reaches no other site, and its own pictures still show (${label}, ${where}) (T-14)`, async () => {
   const page = await h.newPage();
   const sameSite = [];
   page.on('request', r => { if (/missing-local|\/base\/|\/refresh/.test(r.url())) sameSite.push(r.url()); });
   await h.clearRemoteLog();
-  await h.openReader(page, `${h.READER}?book=${ref}`);
+  await h.openReader(page, `${base}/reader/index.html?book=${ref}`);
   // Wait for every picture in the page to finish (or fail), then a little longer than the page's meta refresh.
   await page.waitForFunction(() => [...document.querySelector('#page').contentDocument.images].every(i => i.complete), null, { timeout: 10000 });
   await page.waitForTimeout(1500);
   assert.deepEqual(await h.remoteLog(), [], 'requests reached the other site');
   assert.deepEqual(page.blocked, [], 'requests went to a blocked site');
   // (A book opened from a folder can only find out a file is missing by asking its own folder for it.)
-  const outside = sameSite.filter(u => !(ref.endsWith('/') && u.startsWith(`${h.SITE}/reader/${ref}`)));
+  const outside = sameSite.filter(u => !(ref.endsWith('/') && u.startsWith(`${base}/reader/${ref}`)));
   assert.deepEqual(outside, [], 'requests went to this site outside the book');
   const state = await h.inFrame(page, doc => ({
     remoteImg: doc.querySelector('#remote-img').getAttribute('src'),
@@ -52,10 +53,10 @@ test(`a hostile book reaches no other site, and its own pictures still show (${l
   assert.equal(state.poster, null);
   assert.equal(state.links, 0);
   assert.equal(state.ping, false);
-  assert.deepEqual(state.bypassSrcs.filter(u => !(ref.endsWith('/') && u.startsWith(`${h.SITE}/reader/${ref}`))), [],
+  assert.deepEqual(state.bypassSrcs.filter(u => !(ref.endsWith('/') && u.startsWith(`${base}/reader/${ref}`))), [],
     'protocol-relative, tab-in-scheme, upper-case and missing pictures are removed');
   assert.deepEqual([state.iframes, state.base, state.refresh, state.animations], [0, 0, 0, 0], 'upper-case IFRAME, BASE, META and SVG set are removed');
-  assert.match(state.policy, ref.endsWith('/') ? /^default-src 'none'; img-src data: blob: http:\/\/localhost:8790\/reader\/books\/hostile-dir\// : /^default-src 'none'; img-src data: blob:;/);
+  assert.ok(ref.endsWith('/') ? state.policy.startsWith(`default-src 'none'; img-src data: blob: ${base}/reader/books/hostile-dir/`) : /^default-src 'none'; img-src data: blob:;/.test(state.policy), state.policy);
   assert.deepEqual([state.where, state.still], ['about:srcdoc', true], 'the page is still the book');
   // A missing or remote cursor image falls back to the next cursor, rather than dropping the declaration (L-21).
   assert.deepEqual(state.cursors.map(c => c.replace(/^url\("[^"]*"\), /, '')), ['pointer', 'pointer', 'pointer']);
@@ -162,4 +163,10 @@ test('ALLOW_REMOTE_CONTENT and ALLOW_EXTERNAL_LINKS from a folder config', async
   const web = await h.inFrame(page, doc => [doc.querySelector('#web-link').hasAttribute('href'), doc.querySelector('#svg-in').getAttribute('data-spine-path'),
     !!doc.querySelector('meta[http-equiv="Content-Security-Policy"]')]);
   assert.deepEqual(web, [false, 'OEBPS/c2.xhtml', false], 'no security policy when remote content is allowed');
+});
+
+test('href on MathML elements is removed: Firefox would follow it (L-138)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/math-links.epub`);
+  assert.deepEqual(await h.inFrame(page, doc => ['m', 'mi'].map(id => doc.getElementById(id)?.getAttribute('href'))), [null, null]);
 });

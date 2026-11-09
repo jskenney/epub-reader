@@ -716,8 +716,14 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
     if (u32(tail, i) === 0x06054b50 && i + 22 + u16(tail, i + 20) <= tail.length && u32(tail, i + 16) + u32(tail, i + 12) === tailStart + i) e = i;
   }
   if (e < 0) return null;
-  const count = u16(tail, e + 10), cdSize = u32(tail, e + 12), cdOffset = u32(tail, e + 16);
-  if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF || cdOffset + cdSize > size) return null;   // ZIP64
+  const count = u16(tail, e + 10), cdSize = u32(tail, e + 12), rawCdOffset = u32(tail, e + 16);
+  if (count === 0xFFFF || cdSize === 0xFFFFFFFF || rawCdOffset === 0xFFFFFFFF) return null;   // ZIP64
+  // Data before the archive (a self-extracting archive, say: REVIEW.md L-149) moves every offset by its length,
+  // as JSZip allows: the directory ends where the record starts.
+  const shift = tailStart + e - (rawCdOffset + cdSize);
+  if (shift < 0) return null;
+  const cdOffset = rawCdOffset + shift;
+  if (cdOffset + cdSize > size) return null;
   const cd = cdOffset >= tailStart ? tail.subarray(cdOffset - tailStart, cdOffset - tailStart + cdSize) : await read(cdOffset, cdSize);
   if (cd.length < cdSize) return null;
   // A plain object would let an entry named "__proto__" change it, and "constructor" look like an entry.
@@ -731,7 +737,7 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
   for (let n = 0, p = 0; n < count; n++) {
     if (p + 46 > cd.length || u32(cd, p) !== 0x02014b50) return null;
     const flags = u16(cd, p + 8), method = u16(cd, p + 10), crc = u32(cd, p + 16), csize = u32(cd, p + 20), usize = u32(cd, p + 24);
-    const nlen = u16(cd, p + 28), xlen = u16(cd, p + 30), clen = u16(cd, p + 32), local = u32(cd, p + 42);
+    const nlen = u16(cd, p + 28), xlen = u16(cd, p + 30), clen = u16(cd, p + 32), rawLocal = u32(cd, p + 42), local = rawLocal + shift;
     const raw = cd.subarray(p + 46, p + 46 + nlen);
     let name = null;
     // Extra fields: the Info-ZIP Unicode Path (0x7075), for names not already marked as UTF-8 (as JSZip does).
@@ -742,7 +748,7 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
       x += 4 + len;
     }
     p += 46 + nlen + xlen + clen;
-    if (flags & 1 || (method !== 0 && method !== 8) || csize === 0xFFFFFFFF || usize === 0xFFFFFFFF || local === 0xFFFFFFFF) return null;
+    if (flags & 1 || (method !== 0 && method !== 8) || csize === 0xFFFFFFFF || usize === 0xFFFFFFFF || rawLocal === 0xFFFFFFFF) return null;
     if (name === null) {
       if (flags & 0x800) name = utf8.decode(raw);   // marked as UTF-8; otherwise try UTF-8, then Latin-1
       else { try { name = strict.decode(raw); } catch { name = latin.decode(raw); } }
@@ -2019,6 +2025,9 @@ function sanitize(doc){
     for (const a of [...el.attributes]) {
       if (/^on/i.test(a.name)) el.removeAttribute(a.name);
       else if (/^(href|src|xlink:href|action|formaction)$/i.test(a.name) && /^javascript:/i.test(urlText(a.value))) el.removeAttribute(a.name);
+      // (MathML elements with href are links in Firefox, which the reader's link handling doesn't cover: REVIEW.md
+      // L-138. Books don't need them; a link around a formula uses <a>.)
+      else if (el.namespaceURI === 'http://www.w3.org/1998/Math/MathML' && /^(href|xlink:href)$/i.test(a.name)) el.removeAttribute(a.name);
     }
   }
 }

@@ -275,15 +275,17 @@ test('the voice away for a few seconds: the export waits for it and loses nothin
   FRAMES ??= aacFrames();
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
-  let until = 0;
+  await openExport(page, `${h.READER}?book=books/short-lines.epub`);
+  // Gone for 5 s from line 30 on (well past what reading aloud prepared before the export).
+  let until = 0, failed = 0;
   await page.route('**/tts/v1/audio/speech', route => {
-    if (!until && /Bravo/.test(spoken(route))) until = Date.now() + 5000;   // (gone for 5 s from Bravo on)
-    return Date.now() < until ? fail500(route, 'restarting', 502) : route.continue();
+    if (!until && /Line 30 /.test(spoken(route))) until = Date.now() + 5000;
+    return Date.now() < until ? (failed++, fail500(route, 'restarting', 502)) : route.continue();
   });
-  await openExport(page);
   const [file] = await exportAll(page, 'one', 1);
+  assert.ok(failed > 0, 'the outage happened during the export');
   assert.match(await page.textContent('#abNow'), /^The audiobook is ready\.$/, 'nothing left silent');
-  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie']);
+  assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['Lines']);
 });
 
 test('the voice going away for good stops the export, keeping what was made (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {

@@ -137,6 +137,17 @@ test('reading past the last text stops there, not on the last picture page (M-23
   await page.waitForFunction(() => /End of book/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
   assert.match(await page.textContent('#spinePos'), /spine 1\//, 'still on the text');
   assert.equal(await playing(page), false);
+  // (The saved position too: T-20.)
+  assert.deepEqual(await page.evaluate(() => Object.entries(localStorage).filter(([k]) => k.startsWith('spine:pos:') && !k.startsWith('spine:pos:loose:')).map(([, v]) => JSON.parse(v).i)), [0]);
+});
+
+test('reading passes picture pages and goes on to the text after them (T-20)', async () => {
+  const page = await h.newPage();
+  await h.clearBreezeLog();
+  await h.openReader(page, `${h.READER}?book=books/text-pictures-text.epub`, serverVoice);
+  await startReading(page);
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(r => r.text.includes('Closing words')), 20000), 'the text after the plates is read');
+  await page.waitForFunction(() => /spine 4\//.test(document.querySelector('#spinePos').textContent), null, { timeout: 10000 });
 });
 
 test('opening another book while reading stops reading; a comic closes the bar (L-72, M-23)', async () => {
