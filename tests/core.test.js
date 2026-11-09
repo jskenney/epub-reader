@@ -55,6 +55,28 @@ test('search: across chapters, ignoring case, accents and curly quotes; Enter st
   assert.equal(await page.isVisible('#tocNav'), true);
 });
 
+test('search: with many matches the next-match button stays put, and the current match stays in view', async () => {
+  const page = await h.newPage();
+  await page.setViewportSize({ width: 1200, height: 700 });
+  await h.openReader(page, `${h.READER}?book=books/short-lines.epub`);
+  await page.fill('#searchBox', 'is short'); await page.waitForTimeout(800);
+  assert.match(await page.textContent('#searchStatus'), /of 60 matches/);
+  const box = () => page.locator('#searchNext').boundingBox();
+  const start = await box();
+  for (let i = 1; i <= 30; i++) {
+    await page.mouse.click(start.x + start.width / 2, start.y + start.height / 2);   // (the same spot every time)
+    await page.waitForFunction(n => document.querySelector('#searchStatus').textContent.startsWith(`${n} of`), i + 1);
+  }
+  assert.deepEqual(await box(), start);
+  const view = await page.evaluate(() => {
+    const list = document.querySelector('#searchResults').getBoundingClientRect(), cur = document.querySelector('#searchResults button[aria-current]').getBoundingClientRect();
+    return { inside: cur.top >= list.top && cur.bottom <= list.bottom, sidebar: document.querySelector('#toc').scrollTop };
+  });
+  assert.deepEqual(view, { inside: true, sidebar: 0 });
+  await page.fill('#searchBox', ''); await page.waitForTimeout(500);   // (the contents back, scrolling as before)
+  assert.equal(await page.evaluate(() => document.querySelector('#toc').classList.contains('searching')), false);
+});
+
 test("a book element with the reader's own ids doesn't break page counting, and links to it still work (L-11)", async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/reader-ids.epub`);
