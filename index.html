@@ -564,7 +564,7 @@ function pageSignature(text, url){
   const forms = [u.href, u.pathname, safeDecode(u.pathname), name, safeDecode(name)];
   for (const f of [...forms]) { const e = escHtml(f); forms.push(e, e.replace(/'/g, '&#39;'), e.replace(/'/g, '&#x27;'), e.replace(/'/g, '&apos;')); }
   for (const s of forms.sort((a, b) => b.length - a.length)) if (s) t = t.split(s).join(' ');
-  return t.replace(/[\w-]*\d[\w-]*/g, '#').replace(/\s+/g, ' ').trim();
+  return t.replace(/[\w-]+/g, w => /\d/.test(w) ? '#' : w).replace(/\s+/g, ' ').trim();   // (linear: round 13 review)
 }
 async function isSoftNotFound(url, text){
   const dir = new URL('.', url).href;
@@ -601,10 +601,12 @@ function fragOf(href){
 // them, is found too: L-44, L-48.)
 const pathKey = p => p.replace(/^\/+/, '').normalize('NFC').toLowerCase();
 function getFile(zip, path){
-  let f = zip.file(path) || zip.file(path.replace(/^\/+/, ''));   // (as written first: some archives' names do start with "/")
+  // (Only the archive's own names: JSZip keeps them in a plain object, where "constructor" is always there.)
+  const own = n => Object.prototype.hasOwnProperty.call(zip.files || {}, n) ? zip.file(n) : null;
+  let f = own(path) || own(path.replace(/^\/+/, ''));   // (as written first: some archives' names do start with "/")
   if (!f) {
     const name = foldedNames(zip).get(pathKey(path));
-    if (name) f = zip.file(name);
+    if (name) f = own(name);
   }
   return f && f._data?.compressedContent ? checkedEntry(zip, f) : f;
 }
@@ -879,7 +881,7 @@ async function fontKeys(src, uid, identifiers){
       const hex = (identifiers.find(t => /^urn:uuid:/i.test(t)) || '').replace(/^urn:uuid:/i, '').replace(/[^0-9a-f]/gi, '');
       if (hex.length === 32) key = { bytes: Uint8Array.from(hex.match(/../g), h => parseInt(h, 16)), length: 1024 };
     }
-    if (key) out.set(resolve('', uri), key);
+    if (key) out.set(pathKey(resolve('', uri)), key);
   }
   return out.size ? out : null;
 }
@@ -923,7 +925,7 @@ function zipSource(zip){
       const f = getFile(zip, p); if (!f) return null;
       // (Fonts too: a data: copy pasted into every place the font is named could make pages of hundreds of MB.)
       let data = await f.async('uint8array');
-      if (this.obf?.has(p)) data = unobfuscate(data, this.obf.get(p));
+      const key = this.obf?.get(pathKey(p)); if (key) data = unobfuscate(data, key);   // (names compared as getFile does)
       const u = URL.createObjectURL(new Blob([data], { type }));
       if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
@@ -943,16 +945,22 @@ function dirSource(base){
       const u = abs(p); if (!u) return null;
       try {
         const r = await fetch(u); if (!r.ok) return null;
-        return decodeText(new Uint8Array(await r.arrayBuffer()), { http: charsetOf(r), fallback: 'utf-8' });
+        const t = decodeText(new Uint8Array(await r.arrayBuffer()), { http: charsetOf(r), fallback: 'utf-8' });
+        // (A site's "not found" page sent with status 200 isn't the file: round 13 review.)
+        return await isSoftNotFound(u, t) ? null : t;
       } catch { return null; }
     },
     async exists(p){ return !!abs(p); },
-    obf: null,
+    obf: null, blobs: new Set(),
     async url(p, type){
-      const u = abs(p); if (!u || !this.obf?.has(p)) return u;
-      try { const r = await fetch(u); return r.ok ? URL.createObjectURL(new Blob([unobfuscate(new Uint8Array(await r.arrayBuffer()), this.obf.get(p))], { type })) : null; } catch { return null; }
+      const u = abs(p), key = this.obf?.get(pathKey(p)); if (!u || !key) return u;
+      try {
+        const r = await fetch(u); if (!r.ok) return null;
+        const b = URL.createObjectURL(new Blob([unobfuscate(new Uint8Array(await r.arrayBuffer()), key)], { type }));
+        this.blobs.add(b); return b;
+      } catch { return null; }
     },
-    dispose(){}
+    dispose(){ this.blobs.forEach(u => URL.revokeObjectURL(u)); this.blobs.clear(); }
   };
 }
 function parseDoc(text, type){
@@ -1735,10 +1743,17 @@ function cssTokens(css){   // css: preprocessed
 // What a missing or remote image becomes: an empty picture, valid wherever an image is (unlike "none", which
 // would drop "cursor: url(x), pointer" or a font's whole src list), and nothing to fetch.
 const NO_IMAGE = 'url(data:,)';
+// A picture, font or stylesheet that is itself damaged (or too large) is left out, rather than the whole page
+// failing; trouble with the book as a whole (changed, moved, the server no longer answering) is still reported
+// (round 13 review).
+const onlyDamaged = e => { if (/damaged archive|too large|larger than/i.test(e?.message || '')) { console.warn(e.message); return null; } throw e; };
 // A local address written as an unquoted url(), with the characters that would end it encoded.
 const cssUrl = u => `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))})`;
 // The addresses in a stylesheet: [{ s, e, ref, kind }], kind "import" (an @import rule, s..e the whole rule)
 // or "image" (a url token, url() or src() with a string, or a string inside image-set() or image()).
+// A rule moved elsewhere ends with ";" (the last rule of a sheet may have none, and would take what follows).
+const cssEndRule = t => /;\s*$/.test(t) ? t : t + ';';
+const IMAGE_STRING_FNS = /^(-webkit-)?image-set$|^image$|^src$/;
 function cssRefs(css){
   const toks = cssTokens(css), refs = [], fns = [];
   let block = 0, late = false;   // late: past the point where @import is allowed (anything but @charset and @layer x;)
@@ -1752,16 +1767,26 @@ function cssRefs(css){
         // (a missing ")" at the end of the sheet is fine: the browser closes it there)
         if (toks[m]?.t === 'string' && (toks[q]?.t === ')' || q >= toks.length)) { refs.push({ s: tk.s, e: toks[q]?.e ?? css.length, ref: toks[m].v, kind: 'image' }); k = q; continue; }
       }
-      fns.push(tk.v);
+      // var() or env() inside a function that takes addresses as strings: the address would only appear when the
+      // browser substitutes it, past this cleaner, so the whole function goes (REVIEW.md round 13 review).
+      if ((tk.v === 'var' || tk.v === 'env') && fns.some(f => IMAGE_STRING_FNS.test(f.v))) fns.findLast(f => IMAGE_STRING_FNS.test(f.v)).bad = true;
+      fns.push({ v: tk.v, s: tk.s });
     }
-    else if (tk.t === '(') fns.push('(');
-    else if (tk.t === ')') fns.pop();
-    else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1) || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
+    else if (tk.t === '(') fns.push({ v: '(', s: tk.s });
+    else if (tk.t === ')') {
+      const f = fns.pop();
+      if (f?.bad) { while (refs.length && refs.at(-1).s >= f.s) refs.pop(); refs.push({ s: f.s, e: tk.e, ref: '', kind: 'blocked' }); }
+    }
+    else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1)?.v || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
     else if (tk.t === '{') { if (block === 0) late = true; block++; }
     else if (tk.t === '}') block = Math.max(0, block - 1);
     else if (tk.t === 'at' && block === 0 && !['import', 'charset', 'layer'].includes(tk.v)) {
       late = true;
-      if (tk.v === 'namespace') { let m = k + 1; while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++; k = toks[m]?.t === '{' ? m - 1 : m; }
+      if (tk.v === 'namespace') {
+        let m = k + 1; while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++;
+        if (toks[m]?.t !== '{') refs.push({ s: tk.s, e: toks[m]?.e ?? css.length, ref: '', kind: 'namespace' });   // (moved to the top: rewriteCss)
+        k = toks[m]?.t === '{' ? m - 1 : m;
+      }
     }
     else if (tk.t === 'at' && tk.v === 'import' && block === 0) {
       // The prelude, to ";" or the end; a "{" makes it a block rule, which @import and @namespace aren't.
@@ -1849,12 +1874,16 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
     r.clean = ref;
   }
   const done = new Map();
-  for (const [k, v] of jobs) done.set(k, await v);
-  const parts = [], hoist = [];
+  for (const [k, v] of jobs) done.set(k, await Promise.resolve(v).catch(onlyDamaged));   // (damaged: missing)
+  const parts = [], hoist = [], spaceAt = [];
   let at = 0, inlined = false, pastedHere = 0;
   for (const r of refs) {
     let text = null;   // null: leave it as written
-    if (r.kind === 'import') {
+    if (r.kind === 'blocked') text = NO_IMAGE;
+    else if (r.kind === 'namespace') {   // (this sheet's own: kept as its own part, moved to the top below if need be)
+      parts.push(css.slice(at, r.s)); spaceAt.push(parts.length); parts.push(css.slice(r.s, r.e)); at = r.e; continue;
+    }
+    else if (r.kind === 'import') {
       if (r.late || attr) text = '';   // (ignored by the browser anyway)
       else if (r.local) {
         const p = resolve(cssPath, r.clean), key = `${depth}|${p}`;
@@ -1863,7 +1892,7 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
         else {
           sheet = budget.cache.get(key);
           if (sheet == null) {
-            const t = await readText(book.zip, p), inner = {};
+            const t = await readText(book.zip, p).catch(onlyDamaged), inner = {};
             sheet = t ? cssCloseAtEnd(await rewriteCss(t, p, { depth: depth + 1, budget, chain: [...chain, p], owner, cut: inner })) : '';
             if (inner.v) cut.v = true; else budget.cache.set(key, sheet);
           }
@@ -1873,12 +1902,17 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
           if (sheet && !fits) { sheet = null; cut.v = true; }
           else if (sheet) pastedHere += sheet.length;
         }
-        // (A pasted sheet's @namespace rules go to the top, where they still count: REVIEW.md L-86.)
-        if (sheet && /@namespace/i.test(sheet)) sheet = sheet.replace(/@namespace\s[^;{}]*;/gi, m => { hoist.push(m); return ''; });
+        // (A pasted sheet's @namespace rules go to the top, where they still count: REVIEW.md L-86. Found with the
+        // tokenizer, so text in strings and comments is left alone.)
+        if (sheet && /@namespace/i.test(sheet)) {
+          const spaces = cssRefs(sheet).filter(x => x.kind === 'namespace');
+          for (const x of spaces) hoist.push(cssEndRule(sheet.slice(x.s, x.e)));
+          for (const x of spaces.reverse()) sheet = sheet.slice(0, x.s) + sheet.slice(x.e);
+        }
         text = sheet ? cssWrapImport(sheet, r.cond) + '\n' : '';
         inlined = true;
       } else if (!ALLOW_REMOTE_CONTENT || !isRemote(r.clean)) text = '';   // another site (or a data: sheet): dropped
-      else { hoist.push(css.slice(r.s, r.e)); text = ''; }   // (kept, and moved above anything pasted: L-85)
+      else { hoist.push(cssEndRule(css.slice(r.s, r.e))); text = ''; }   // (kept, and moved above anything pasted: L-85)
     } else if (r.local) {
       const u = done.get(r.clean), frag = r.clean.includes('#') ? r.clean.slice(r.clean.indexOf('#')) : '';
       // (A fragment, such as an SVG sprite's view, is kept as attributes keep it: REVIEW.md L-84.)
@@ -1889,6 +1923,9 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
     at = r.e;
   }
   parts.push(css.slice(at));
+  // This sheet's own @namespace rules go to the top as well when something was pasted in before them, or when
+  // this sheet will itself be pasted into another (round 13 review).
+  if (spaceAt.length && (inlined || depth > 0)) for (const k of spaceAt) { hoist.push(cssEndRule(parts[k])); parts[k] = ''; }
   // Remote imports kept, then namespaces, first: rules pasted before them would make the browser drop them.
   const imports = hoist.filter(h => /^@import/i.test(h)), spaces = hoist.filter(h => !/^@import/i.test(h));
   const out = (hoist.length ? [...imports, ...spaces].join('\n') + '\n' : '') + parts.join('');
@@ -1998,7 +2035,8 @@ async function localize(doc, path, budget = cssBudget()){
       // A file the book doesn't have is removed rather than left to resolve against this site. (A fragment, as in
       // sprite.svg#icon, is kept on the file's new address.)
       const frag = v.includes('#') ? v.slice(v.indexOf('#')) : '';
-      jobs.push(resourceURL(resolve(path, v), path).then(u => { if (u) el.setAttribute(attr, u + frag); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
+      // (A file that can't be read, damaged say, is missing too, rather than the whole page failing: round 13 review.)
+      jobs.push(resourceURL(resolve(path, v), path).catch(onlyDamaged).then(u => { if (u) el.setAttribute(attr, u + frag); else if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); }));
     }
   }
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
@@ -2088,7 +2126,7 @@ async function buildPage(src, path){
         if (ALLOW_REMOTE_CONTENT && /^https?:/i.test(href)) { const l = out.createElement('link'); l.rel = 'stylesheet'; l.href = href; head.append(l); }
         continue;
       }
-      const p = resolve(path, href), css = await readText(book.zip, p);
+      const p = resolve(path, href), css = await readText(book.zip, p).catch(onlyDamaged);
       if (!css || linked.has(p) || !cssSpend(budget, css.length)) continue;   // (a page linking one big sheet thousands of times)
       linked.add(p);
       const st = out.createElement('style'); st.textContent = styleText(await rewriteCss(css, p, { budget, owner: path }));
@@ -2127,7 +2165,9 @@ async function buildPage(src, path){
     if (again.documentElement.outerHTML === html) break;
     if (round === 3) throw new Error("its markup reads differently each time, so it can't be shown safely");
     page = again;
-    sanitize(page); stripRemote(page); markLinks(page, path);
+    // (Everything the first round did, the address rewriting too: markup that only appears on reading back
+    // must not keep styles, srcset or relative addresses that were never seen: round 13 review.)
+    sanitize(page); stripRemote(page); await localize(page, path, cssBudget()); markLinks(page, path);
   }
   pointLinksHere(page);
   if (!ALLOW_REMOTE_CONTENT) {   // and have the browser refuse anything that isn't part of the book
@@ -2238,13 +2278,16 @@ async function chapterSource(item){
   let it = item;
   for (let k = 0; k < 8 && !isPage(it) && it.fallback && book.manifest?.get(it.fallback); k++) it = book.manifest.get(it.fallback);
   let doc;
-  if (!isPage(it) && /^image\//.test(it.type)) {
+  if (!isPage(it) && !/^image\//.test(it.type)) {   // (audio, a PDF…: not decoded as text: round 13 review)
+    doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p>This part of the book (${escHtml(it.type || it.path.split('/').pop())}) can't be shown here.</p></body></html>`, 'application/xhtml+xml');
+  } else if (!isPage(it) && /^image\//.test(it.type)) {
     doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p><img src="${escHtml(encodeURIComponent(it.path.split('/').pop()))}" alt=""/></p></body></html>`, 'application/xhtml+xml');
   } else {
     const text = await readText(book.zip, it.path);
     if (text == null) throw new Error(`${it.path} couldn't be read`);   // (not shown as an empty page)
     const raw = withoutDocumentControls(text);
-    const isHtml = it.type === 'text/html' || /\.html?$/i.test(it.path);
+    // (By media type: many books name XHTML files .html. The extension decides only when there is no type.)
+    const isHtml = it.type === 'text/html' || (!/xml/.test(it.type) && /\.html?$/i.test(it.path));
     doc = (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
   }
   // An SVG page (EPUB 3 allows them, often for the cover): the drawing becomes the body of a page.
@@ -2309,6 +2352,11 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
       if (scrolling()) cur.f = fraction(); else position('', cur.f);
       updateChrome(); savePos();
       ttsRestore();
+    } else if (frame.contentDocument === prevDoc) {
+      // Nothing of this book to go back to (its first page failed): an empty page, not another book's left behind.
+      await loadFrame('<!doctype html><meta charset="utf-8"><title></title><body></body>');
+      if (token !== renderToken) return;
+      cur.failed = new Set([i]); cur.shown = true; cur.book = book;
     }
     if (tts.awaitChapter || tts.playing) { tts.awaitChapter = false; tts.playing = false; ++tts.token; ttsUpdateBar(); }
   }
@@ -2492,7 +2540,7 @@ const atBottom = () => { const se = scroller(); return !se || se.scrollTop + se.
 const nextChapter = () => { let j = cur.i + 1; while (cur.failed?.has(j)) j++; return j; };
 const prevChapter = () => { let j = cur.i - 1; while (cur.failed?.has(j)) j--; return j; };
 function pageNext(){
-  if (!book) return;
+  if (!book || !cur.shown) return;   // (a chapter still loading: the next turn waits for it, round 13 review)
   ttsUserNav();
   if (scrolling()) {
     if (!atBottom()) { const se = scroller(); scrollTo(se.scrollTop + viewBottom() - 60); }
@@ -2503,7 +2551,7 @@ function pageNext(){
   else if (nextChapter() < book.spine.length) renderChapter(nextChapter());
 }
 function pagePrev(){
-  if (!book) return;
+  if (!book || !cur.shown) return;
   ttsUserNav();
   if (scrolling()) {
     if (!atTop()) { const se = scroller(); scrollTo(se.scrollTop - (viewBottom() - 60)); }
@@ -5280,13 +5328,15 @@ function fold(t){
 function searchIndex(){
   if (book.search) return book.search;
   const b = book;
+  let incomplete = false;
   b.search = (async () => {
     const chapters = [];
     for (let i = 0; i < b.spine.length; i++) {
       if (book !== b) return chapters;
       if (i % 4 === 0) searchStatus(`Gathering text… ${Math.round(i / b.spine.length * 100)}%`);
       let blocks = [];
-      try { blocks = textBlocks(await chapterDoc(i), SEARCH_SKIP); } catch {}
+      // (A chapter that couldn't be read is left out this time and tried again by a later search: round 13 review.)
+      try { blocks = textBlocks(await chapterDoc(i), SEARCH_SKIP); } catch { incomplete = true; }
       let link = null;
       for (let j = i; j >= 0 && !link; j--) link = tocLinkFor(b.spine[j].path);
       const fallback = link && !link.dataset.frag ? link.textContent : b.spine.length > 1 ? `Section ${i + 1}` : '';
@@ -5298,8 +5348,10 @@ function searchIndex(){
       }));
       if (i % 8 === 7) await new Promise(r => setTimeout(r));   // keep the page responsive
     }
+    if (incomplete) setTimeout(() => { if (b.search === done) b.search = null; });
     return chapters;
   })();
+  const done = b.search;
   return b.search;
 }
 // The search pattern for a query: its words folded like the text, soft hyphens and zero-width characters

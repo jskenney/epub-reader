@@ -132,3 +132,71 @@ test('UTF-8 text with a stray bad byte stays UTF-8, not read as Windows-1252 (L-
   const t = await frameText(page);
   assert.match(t, /Café crème brûlée, naïve façade\. � The end — fin\./, t);
 });
+
+const frameHtml = page => h.inFrame(page, doc => doc.documentElement.outerHTML);
+test('markup that only appears on reading back has its styles, srcset and addresses cleaned too (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.clearRemoteLog();
+  await h.openReader(page, `${h.READER}?book=books/mutation-css.epub`);
+  const html = await frameHtml(page);
+  assert.doesNotMatch(html, /localhost:8792/, 'no address of the other site is left');
+  assert.doesNotMatch(html, /src="mx-local\.png"/, 'no relative address left to resolve against the reader');
+  await page.waitForTimeout(500);
+  assert.deepEqual(await h.remoteLog(), []);
+});
+
+test('var() inside image-set() or image(): the address would appear past the cleaner, so it goes (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/var-image.epub`);
+  const css = await h.inFrame(page, doc => [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n'));
+  assert.doesNotMatch(css, /image-set\(var/, css.slice(-400));
+  const bg = await h.inFrame(page, doc => ['a', 'b', 'c'].map(id => doc.defaultView.getComputedStyle(doc.getElementById(id)).backgroundImage));
+  for (const v of bg) assert.doesNotMatch(v, /var-|8792/, v);
+});
+
+test('XHTML files named .html are read as XHTML (self-closed tags stay empty) (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/xhtml-named-html.epub`);
+  assert.match(await frameText(page), /after the anchor\.[\s\S]*Last paragraph\./, 'nothing hidden inside the self-closed div');
+});
+
+test('the importing sheet keeps its own @namespace, and text in strings is left alone (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/ns-sheet.epub`);
+  // (epub|type selectors can't match in a page read as HTML; what matters is that the browser keeps the rule.)
+  const [spaces, after] = await h.inFrame(page, doc => [[...doc.styleSheets].flatMap(ss => [...ss.cssRules]).filter(r => r instanceof doc.defaultView.CSSNamespaceRule).map(r => r.prefix),
+    doc.defaultView.getComputedStyle(doc.getElementById('q'), '::after').content]);
+  assert.deepEqual(spaces, ['epub']);
+  assert.equal(after, '"@namespace zz;"');
+});
+
+test('a damaged picture is left out, not the whole page (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/bad-picture.epub`);
+  assert.match(await frameText(page), /The text of chapter one\./);
+});
+
+test('a newly opened book whose first chapter can\'t be shown doesn\'t leave the last book\'s page; paging gets on (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.setInputFiles('#fileInput', require('node:path').join(__dirname, 'site', 'reader', 'books', 'bad-first.epub'));
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Bad First');
+  await page.waitForFunction(() => /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''));
+  await page.waitForTimeout(500);
+  assert.doesNotMatch(await frameText(page), /keeper|First paragraph/, 'not the other book\'s page');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => /Second chapter/.test(document.querySelector('#page').contentDocument?.body?.innerText || ''), null, { timeout: 5000 });
+});
+
+test('page turns while a chapter loads wait for it, rather than skipping a chapter (round 13 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  for (let k = 0; k < 20; k++) {   // to the last page of chapter one
+    const [x, y] = (await page.textContent('#spinePos')).match(/page (\d+)\/(\d+)/).slice(1).map(Number);
+    if (x >= y) break;
+    await page.keyboard.press('ArrowRight'); await page.waitForTimeout(200);
+  }
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(1500);
+  assert.match(await page.textContent('#spinePos'), /spine 2\//);
+});

@@ -266,6 +266,46 @@ def main():
         epub(books / f"{name}.epub", name, [("c1.xhtml", "One", "<p>Obfuscated font text.</p>", style)], uid=uid,
              extra={"OEBPS/f.ttf": obfuscated(key, n), "META-INF/encryption.xml": enc(alg)})
     (books / "obf-font.bin").write_bytes(font)
+    # Round 13 review: markup that only appears on reading back (mutation) carrying styles, srcset and a relative
+    # src; var() inside image-set(); XHTML files named .html; namespaces in the importing sheet and in strings;
+    # a damaged picture.
+    mx = ('&lt;/style&gt;&lt;form&gt;&lt;math&gt;&lt;mtext&gt;&lt;/form&gt;&lt;form&gt;&lt;mglyph&gt;&lt;xmp&gt;&lt;/math&gt;'
+          '&lt;style&gt;body{background:url(' + REMOTE + '/mx-css.png)}&lt;/style&gt;'
+          '&lt;img srcset="' + REMOTE + '/mx-srcset.png 1x" src="mx-local.png"&gt;&lt;p style="background:url(' + REMOTE + '/mx-attr.png)"&gt;MXP&lt;/p&gt;&lt;/xmp&gt;')
+    epub_items(books / "mutation-css.epub", "Mutation CSS", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", "<p>Hello</p><style>" + mx + "</style><p>after</p>")}, "urn:mutation-css")
+    varcss = (':root{--x:"' + REMOTE + '/var-a.png"; --y:"' + REMOTE + '/var-b.png"; --rel:"var-rel.png"}'
+              ' #a{background-image:image-set(var(--x) 1x)} #b{background-image:-webkit-image-set(var(--y) 1x)} #c{background-image:image-set(var(--rel) 1x)}')
+    epub_items(books / "var-image.epub", "Var Image", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<p id="a">A</p><p id="b">B</p><p id="c">C</p>', "<style>" + varcss + "</style>")}, "urn:var-image")
+    epub_items(books / "xhtml-named-html.epub", "Xhtml Named Html", [("c1", "c1.html", "application/xhtml+xml", "")], ["c1"],
+               {"c1.html": xhtml("One", '<p>Before <a id="pg5"/>after the anchor.</p><div class="sep"/><p id="last">Last paragraph.</p>', "<style>.sep{display:none}</style>")}, "urn:xhtml-named-html")
+    epub_items(books / "ns-sheet.epub", "Ns Sheet", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("s", "style.css", "text/css", ""), ("a", "a.css", "text/css", "")], ["c1"], {
+        "c1.xhtml": xhtml("One", '<p id="n1" epub:type="x">namespaced</p><p id="q">q</p>', '<link rel="stylesheet" href="style.css"/>'),
+        "style.css": '@import "a.css";\n@namespace epub "http://www.idpf.org/2007/ops";\np[epub|type~="x"]{color:rgb(255, 0, 0)}\n',
+        "a.css": 'h1{color:blue}\n#q::after{content:"@namespace zz;"}\n'}, "urn:ns-sheet")
+    # A picture with a wrong checksum (round 13 review: the page shows, without it), and a book whose first
+    # chapter can't be inflated (opened after another book: that book's page mustn't stay).
+    def damage(path, name, how):
+        b = bytearray(path.read_bytes())
+        with zipfile.ZipFile(path) as z: info = z.getinfo(name)
+        if how == "crc":
+            struct.pack_into("<I", b, info.header_offset + 14, info.CRC ^ 1)
+            i = 0
+            while (i := b.find(b"PK\x01\x02", i)) >= 0:
+                n = struct.unpack_from("<H", b, i + 28)[0]
+                if b[i + 46:i + 46 + n] == name.encode(): struct.pack_into("<I", b, i + 16, info.CRC ^ 1)
+                i += 4
+        else:   # garble the deflated data
+            n, x = struct.unpack_from("<HH", b, info.header_offset + 26)
+            at = info.header_offset + 30 + n + x
+            for k in range(at, at + min(8, info.compress_size)): b[k] = 0xFF
+        path.write_bytes(bytes(b))
+    epub(books / "bad-picture.epub", "Bad Picture", [("c1.xhtml", "One", '<p>The text of chapter one.</p><p><img src="pic.png" alt="p"/></p>')],
+         uid="urn:bad-picture", extra={"OEBPS/pic.png": png(20, 20, (200, 0, 0))})
+    damage(books / "bad-picture.epub", "OEBPS/pic.png", "crc")
+    epub(books / "bad-first.epub", "Bad First", [("c1.xhtml", "One", paragraphs("Broken", 3)), ("c2.xhtml", "Two", "<p>Second chapter.</p>")], uid="urn:bad-first")
+    damage(books / "bad-first.epub", "OEBPS/c1.xhtml", "deflate")
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
     (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))
