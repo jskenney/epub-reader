@@ -860,6 +860,57 @@ async function zipFromUrl(url, init = {}){
   return wholeFile(r);
 }
 
+/* Fonts obfuscated as the EPUB specification allows (listed in META-INF/encryption.xml), so they can't simply
+   be copied out of the book: the first 1040 bytes XORed with the SHA-1 of the book's identifier (IDPF), or the
+   first 1024 with the 16 bytes of its urn:uuid (Adobe). Undone when the font is handed to the page
+   (REVIEW.md L-88). Real encryption (DRM) isn't something the reader can open. */
+const OBF_IDPF = 'http://www.idpf.org/2008/embedding', OBF_ADOBE = 'http://ns.adobe.com/pdf/enc#RC';
+async function fontKeys(src, uid, identifiers){
+  const xml = await src.text('META-INF/encryption.xml').catch(() => null);
+  const doc = xml && parseDoc(xml, 'application/xml'); if (!doc) return null;
+  const out = new Map();
+  for (const ed of doc.getElementsByTagNameNS('*', 'EncryptedData')) {
+    const alg = ed.getElementsByTagNameNS('*', 'EncryptionMethod')[0]?.getAttribute('Algorithm');
+    const uri = ed.getElementsByTagNameNS('*', 'CipherReference')[0]?.getAttribute('URI');
+    if (!uri || (alg !== OBF_IDPF && alg !== OBF_ADOBE)) continue;
+    let key = null;
+    if (alg === OBF_IDPF) { const id = (uid || '').replace(/[\x20\x09\x0d\x0a]/g, ''); if (id) key = { bytes: await sha1(new TextEncoder().encode(id)), length: 1040 }; }
+    else {
+      const hex = (identifiers.find(t => /^urn:uuid:/i.test(t)) || '').replace(/^urn:uuid:/i, '').replace(/[^0-9a-f]/gi, '');
+      if (hex.length === 32) key = { bytes: Uint8Array.from(hex.match(/../g), h => parseInt(h, 16)), length: 1024 };
+    }
+    if (key) out.set(resolve('', uri), key);
+  }
+  return out.size ? out : null;
+}
+function unobfuscate(data, key){
+  const out = data.slice(), n = Math.min(out.length, key.length);
+  for (let i = 0; i < n; i++) out[i] ^= key.bytes[i % key.bytes.length];
+  return out;
+}
+// SHA-1, from the browser where it can (secure pages only), otherwise here (it only keys font obfuscation).
+async function sha1(bytes){
+  try { if (crypto.subtle) return new Uint8Array(await crypto.subtle.digest('SHA-1', bytes)); } catch {}
+  const words = new Uint32Array(((bytes.length + 8 >> 6) + 1) * 16), v = new DataView(words.buffer);
+  bytes.forEach((b, i) => v.setUint8(i, b)); v.setUint8(bytes.length, 0x80);
+  for (let i = 0; i < words.length; i++) words[i] = v.getUint32(i * 4);   // (big-endian words)
+  words[words.length - 1] = bytes.length * 8;
+  let [a, b, c, d, e] = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
+  const w = new Uint32Array(80), rol = (x, n) => (x << n) | (x >>> (32 - n));
+  for (let o = 0; o < words.length; o += 16) {
+    for (let t = 0; t < 80; t++) w[t] = t < 16 ? words[o + t] : rol(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1);
+    let [A, B, C, D, E] = [a, b, c, d, e];
+    for (let t = 0; t < 80; t++) {
+      const f = t < 20 ? (B & C) | (~B & D) : t < 40 ? B ^ C ^ D : t < 60 ? (B & C) | (B & D) | (C & D) : B ^ C ^ D;
+      const k = t < 20 ? 0x5A827999 : t < 40 ? 0x6ED9EBA1 : t < 60 ? 0x8F1BBCDC : 0xCA62C1D6;
+      const tmp = (rol(A, 5) + f + E + k + w[t]) >>> 0; E = D; D = C; C = rol(B, 30) >>> 0; B = A; A = tmp;
+    }
+    a = (a + A) >>> 0; b = (b + B) >>> 0; c = (c + C) >>> 0; d = (d + D) >>> 0; e = (e + E) >>> 0;
+  }
+  const out = new Uint8Array(20), ov = new DataView(out.buffer);
+  [a, b, c, d, e].forEach((x, i) => ov.setUint32(i * 4, x));
+  return out;
+}
 function zipSource(zip){
   const blobs = new Set();
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
@@ -867,10 +918,13 @@ function zipSource(zip){
     kind: 'zip',
     async text(p){ const f = getFile(zip, p); return f ? decodeText(await f.async('uint8array'), { fallback: 'utf-8' }) : null; },
     async exists(p){ return !!getFile(zip, p); },
+    obf: null,   // obfuscated fonts: path -> key (fontKeys)
     async url(p, type){
       const f = getFile(zip, p); if (!f) return null;
       // (Fonts too: a data: copy pasted into every place the font is named could make pages of hundreds of MB.)
-      const u = URL.createObjectURL(new Blob([await f.async('uint8array')], { type }));
+      let data = await f.async('uint8array');
+      if (this.obf?.has(p)) data = unobfuscate(data, this.obf.get(p));
+      const u = URL.createObjectURL(new Blob([data], { type }));
       if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
     },
@@ -893,7 +947,11 @@ function dirSource(base){
       } catch { return null; }
     },
     async exists(p){ return !!abs(p); },
-    async url(p){ return abs(p); },
+    obf: null,
+    async url(p, type){
+      const u = abs(p); if (!u || !this.obf?.has(p)) return u;
+      try { const r = await fetch(u); return r.ok ? URL.createObjectURL(new Blob([unobfuscate(new Uint8Array(await r.arrayBuffer()), this.obf.get(p))], { type })) : null; } catch { return null; }
+    },
     dispose(){}
   };
 }
@@ -976,6 +1034,19 @@ function docKind(name, type = ''){
 // ISO-2022-JP. Otherwise the declared encoding: the server's charset, an XML declaration, or with sniff (HTML
 // and book files, not plain text or Markdown) a <meta charset> near the top. Failing those, fallback:
 // Windows-1252 for older files, or for a book's files lenient UTF-8 (the default for XML, which EPUB requires).
+// Valid multi-byte UTF-8 sequences in some bytes, and bytes that aren't part of one.
+function utf8Stats(bytes){
+  let good = 0, bad = 0;
+  for (let i = 0; i < bytes.length;) {
+    const b = bytes[i];
+    if (b < 0x80) { i++; continue; }
+    const len = b >= 0xC2 && b <= 0xDF ? 2 : b >= 0xE0 && b <= 0xEF ? 3 : b >= 0xF0 && b <= 0xF4 ? 4 : 0;
+    let ok = len > 0 && i + len <= bytes.length;
+    for (let k = 1; ok && k < len; k++) ok = (bytes[i + k] & 0xC0) === 0x80;
+    if (ok) { good++; i += len; } else { bad++; i++; }
+  }
+  return { good, bad };
+}
 const charsetOf = r => (r.headers.get('content-type') || '').match(/charset\s*=\s*["']?([\w.:-]+)/i)?.[1] || '';
 function decodeText(bytes, { http = '', sniff = true, fallback = 'windows-1252' } = {}){
   const as = (label, b = bytes) => { try { return new TextDecoder(label).decode(b); } catch { return null; } };
@@ -1000,6 +1071,9 @@ function decodeText(bytes, { http = '', sniff = true, fallback = 'windows-1252' 
   }
   let utf8 = null; try { utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch {}
   if (utf8 != null && !(declared === 'iso-2022-jp' && bytes.includes(0x1B))) return utf8;
+  // UTF-8 apart from a stray byte or two (a bad copy and paste): still UTF-8, with a replacement mark for each,
+  // rather than every accented letter read wrong (REVIEW.md L-108).
+  if (utf8 == null && declared !== 'iso-2022-jp') { const { good, bad } = utf8Stats(bytes); if (good >= 3 && bad <= Math.max(2, good / 50)) return new TextDecoder().decode(bytes); }
   if (declared && declared !== 'utf-8') { const t = as(declared); if (t != null) return t; }
   return new TextDecoder(declared === 'utf-8' ? 'utf-8' : fallback).decode(bytes);
 }
@@ -1424,6 +1498,7 @@ async function openBook(zip, { sample = false, name = '', seq } = {}){
 
   const next = { zip, src: zip, opfPath, version: pkg.getAttribute('version') || '?', title: dc('title')[0] || name || 'Untitled',
     authors: dc('creator'), language: dc('language')[0] || '', uid, info, manifest, byPath, spine, urls: new Map(), sample };
+  zip.obf = await fontKeys(zip, uid, ids.map(textOf));
   next.toc = await loadToc(next, spineEl);
   next.hasOverlays = spine.some(s => s.overlay);
   next.coverId = md ? [...md.getElementsByTagNameNS('*', 'meta')].find(m => m.getAttribute('name') === 'cover')?.getAttribute('content') || '' : '';
@@ -1775,7 +1850,7 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
   }
   const done = new Map();
   for (const [k, v] of jobs) done.set(k, await v);
-  const parts = [];
+  const parts = [], hoist = [];
   let at = 0, inlined = false, pastedHere = 0;
   for (const r of refs) {
     let text = null;   // null: leave it as written
@@ -1798,20 +1873,27 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
           if (sheet && !fits) { sheet = null; cut.v = true; }
           else if (sheet) pastedHere += sheet.length;
         }
+        // (A pasted sheet's @namespace rules go to the top, where they still count: REVIEW.md L-86.)
+        if (sheet && /@namespace/i.test(sheet)) sheet = sheet.replace(/@namespace\s[^;{}]*;/gi, m => { hoist.push(m); return ''; });
         text = sheet ? cssWrapImport(sheet, r.cond) + '\n' : '';
         inlined = true;
       } else if (!ALLOW_REMOTE_CONTENT || !isRemote(r.clean)) text = '';   // another site (or a data: sheet): dropped
+      else { hoist.push(css.slice(r.s, r.e)); text = ''; }   // (kept, and moved above anything pasted: L-85)
     } else if (r.local) {
-      const u = done.get(r.clean);
-      text = u ? cssUrl(u) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
+      const u = done.get(r.clean), frag = r.clean.includes('#') ? r.clean.slice(r.clean.indexOf('#')) : '';
+      // (A fragment, such as an SVG sprite's view, is kept as attributes keep it: REVIEW.md L-84.)
+      text = u ? cssUrl(u + frag) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
     } else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
     if (text === null) continue;
     parts.push(css.slice(at, r.s), text);
     at = r.e;
   }
   parts.push(css.slice(at));
+  // Remote imports kept, then namespaces, first: rules pasted before them would make the browser drop them.
+  const imports = hoist.filter(h => /^@import/i.test(h)), spaces = hoist.filter(h => !/^@import/i.test(h));
+  const out = (hoist.length ? [...imports, ...spaces].join('\n') + '\n' : '') + parts.join('');
   // Sheets pasted together are read as one: read the result again, in case the joins made new addresses.
-  return inlined && again ? rewriteCss(parts.join(''), cssPath, { depth, again: false, budget, chain, attr, owner, cut }) : parts.join('');
+  return inlined && again ? rewriteCss(out, cssPath, { depth, again: false, budget, chain, attr, owner, cut }) : out;
 }
 
 /* ---------- building a page ---------- */
@@ -1922,13 +2004,15 @@ async function localize(doc, path, budget = cssBudget()){
   doc.querySelectorAll('img[srcset],source[srcset]').forEach(el => el.removeAttribute('srcset'));
   for (const st of doc.body.getElementsByTagName('style')) jobs.push(rewriteCss(st.textContent, path, { budget, owner: path }).then(c => { st.textContent = styleText(c); }));
   // SVG paint and effect attributes take url() as CSS does.
-  for (const el of doc.body.querySelectorAll('[fill*="(" i],[stroke*="(" i],[filter*="(" i],[mask*="(" i],[clip-path*="(" i],[marker-start*="(" i],[marker-mid*="(" i],[marker-end*="(" i]')) {
+  // (The body's own attributes too, copied from the book's: REVIEW.md L-87.)
+  const withBody = sel => [doc.body, ...doc.body.querySelectorAll(sel)].filter(el => el.matches(sel));
+  for (const el of withBody('[fill*="(" i],[stroke*="(" i],[filter*="(" i],[mask*="(" i],[clip-path*="(" i],[marker-start*="(" i],[marker-mid*="(" i],[marker-end*="(" i]')) {
     for (const a of ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end']) {
       const v = el.getAttribute(a);
       if (v?.includes('(')) jobs.push(rewriteCss(v, path, { budget, attr: true, owner: path }).then(c => el.setAttribute(a, c)));
     }
   }
-  for (const el of doc.body.querySelectorAll('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true, owner: path }).then(c => el.setAttribute('style', c)));
+  for (const el of withBody('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true, owner: path }).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
@@ -4641,10 +4725,11 @@ function abMemorySink(){
     finish: async (at, mdat, secs) => ({ blob: new Blob([head[0], mdat, ...blobs, ...pend], { type: 'audio/mp4' }), secs })
   };
 }
-function abFileSink(writable){
+function abFileSink(writable, handle){
   return { write: b => writable.write(b),
     finish: async (at, mdat, secs) => { await writable.write({ type: 'write', position: at, data: mdat }); await writable.close(); return { secs }; },
-    abort: () => writable.abort?.().catch(() => {}) };
+    // (The file the save picker made, removed if nothing was finished in it, where the browser allows: L-113.)
+    abort: async () => { await writable.abort?.().catch(() => {}); if (handle) await handle.remove?.().catch(() => {}); } };
 }
 
 // --- AAC encoding (WebCodecs). The rates the browser's encoder takes, worked out once.
@@ -4909,7 +4994,11 @@ async function abRun(units, mode, target){
       if (!parts.length) continue;
       const name = mode === 'one' ? `${abName(b.title)}.m4b` : `${String(units.indexOf(parts[0].u) + 1).padStart(width, '0')} - ${abName(parts[0].u.title)}.m4b`;
       let sink, made = false;
-      if (target && mode === 'one') sink = abFileSink(await target.createWritable());
+      if (target && mode === 'one') {
+        // (Removed again on a cancel only if it was a new, empty file: a file chosen to be replaced stays as it was.)
+        const fresh = (await target.getFile?.().catch(() => null))?.size === 0;
+        sink = abFileSink(await target.createWritable(), fresh ? target : null);
+      }
       else if (target) {
         let existed = true; try { await target.getFileHandle(name); } catch { existed = false; }
         sink = abFileSink(await (await target.getFileHandle(name, { create: true })).createWritable());

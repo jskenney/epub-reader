@@ -40,3 +40,12 @@ test('nothing made: no file, a clear error (E-10 review)', async () => {
   const m4b = abM4b(abMemorySink());
   await assert.rejects(m4b.finish({ title: 'x', album: 'x', chapters: [] }), /no audio/);
 });
+
+test('the SHA-1 used for font obfuscation where the browser has none (plain http) matches the real one (L-88)', async () => {
+  const sha1src = src.slice(src.indexOf('async function sha1(bytes){'), src.indexOf('function zipSource(zip){'));
+  const sha1 = new Function('crypto', `${sha1src}\nreturn sha1;`)({});   // (no crypto.subtle: the page's own version)
+  for (const t of ['', 'abc', 'urn:isbn:9780000000001', 'x'.repeat(55), 'y'.repeat(56), 'z'.repeat(1000)]) {
+    const want = require('node:crypto').createHash('sha1').update(t).digest('hex');
+    assert.equal(Buffer.from(await sha1(new TextEncoder().encode(t))).toString('hex'), want, JSON.stringify(t.slice(0, 10)));
+  }
+});

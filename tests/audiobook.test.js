@@ -169,8 +169,8 @@ test('the cover is included (an SVG cover drawn into a PNG); units follow the ta
 // Stand-in file pickers: files written through them (including the write back at a position that fills in
 // the size) are collected, then handed to the test as base64.
 function fakePickers() {
-  window.__files = {};
-  const handle = name => ({ name, async createWritable() {
+  window.__files = {}; window.__removed = [];
+  const handle = name => ({ name, async getFile() { return { size: window.__files[name] ? 1 : 0 }; }, async remove() { window.__removed.push(name); }, async createWritable() {
     let buf = new Uint8Array(0), pos = 0;
     const put = (data, at) => { const d = data instanceof Uint8Array ? data : new Uint8Array(data); if (at + d.length > buf.length) { const nb = new Uint8Array(at + d.length); nb.set(buf); buf = nb; } buf.set(d, at); return at + d.length; };
     return { async write(x) { if (x?.type === 'write') { put(x.data, x.position); } else pos = put(x, pos); },
@@ -311,4 +311,18 @@ test('contents entries out of order within a file are put in the order of their 
   assert.deepEqual(probe(file).chapters.map(c => c.tags.title), ['First', 'Second', 'Third']);
   const said = (await h.breezeLog()).map(r => r.text);
   for (const t of ['First part text.', 'Second part text.', 'Third part text.']) assert.equal(said.filter(x => x.includes(t)).length, 1, `${t} once: ${JSON.stringify(said)}`);
+});
+
+test('a cancelled single-file export removes the new, empty file it was writing (L-113)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.addInitScript(fakePickers);
+  await openExport(page, `${h.READER}?book=books/long.epub`);
+  await page.check('input[name="abMode"][value="one"]');
+  await page.click('#abStart');
+  await page.waitForFunction(() => !document.querySelector('#abPause').hidden);
+  await page.click('#abCancel');
+  await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
+  assert.deepEqual(await page.evaluate(() => window.__removed), ['The Long Book.m4b']);
 });

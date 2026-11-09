@@ -87,6 +87,18 @@ test('downloads are checked, and the check fails closed (L-3, L-4)', { skip: !li
   fs.rmSync(bin, { recursive: true, force: true });
 });
 
+test('a file the script downloads but its checksum list leaves out fails the check, rather than passing unchecked (L-89)', { skip: !libsFetched && 'libs/ not fetched' }, () => {
+  const dir = sandbox();
+  const sums = path.join(dir, 'checksums', 'libs.sha256');
+  fs.writeFileSync(sums, fs.readFileSync(sums, 'utf8').split('\n').filter(l => !l.endsWith('libs/marked.min.js')).join('\n'));
+  const r = run(dir, 'fetch-libs.sh');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /UNPINNED libs\/marked\.min\.js/);
+  assert.doesNotMatch(r.out, /All files match/);
+  assert.equal(fs.existsSync(path.join(dir, 'libs', 'marked.min.js')), true, 'kept: it may be right, it just can\'t be checked');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test("fetch scripts: a stale partial download from another address starts afresh; a server that can't resume restarts it (L-58)", { skip: !libsFetched && 'libs/ not fetched' }, () => {
   const dir = sandbox();
   fs.rmSync(path.join(dir, 'libs', 'marked.min.js'));

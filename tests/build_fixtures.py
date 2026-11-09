@@ -253,6 +253,19 @@ def main():
         "c1.xhtml": xhtml("C1", '<h2 id="a">First</h2><p>First part text.</p><h2 id="b">Second</h2><p>Second part text.</p>'),
         "c2.xhtml": xhtml("C2", '<p>Third part text.</p>'),
     }, "urn:toc-order", nav=[("c1.xhtml#b", "Second"), ("c1.xhtml#a", "First"), ("c2.xhtml#nowhere", "Third")])
+    # Fonts obfuscated as EPUB allows (L-88): IDPF (SHA-1 of the identifier) and Adobe (the urn:uuid's bytes).
+    import hashlib
+    font = b"\x00\x01\x00\x00" + bytes((i * 7 + 3) % 256 for i in range(3000))
+    def obfuscated(key, n):
+        return bytes(b ^ key[i % len(key)] if i < n else b for i, b in enumerate(font))
+    enc = lambda alg: f"""<?xml version="1.0"?><encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+<enc:EncryptedData><enc:EncryptionMethod Algorithm="{alg}"/><enc:CipherData><enc:CipherReference URI="OEBPS/f.ttf"/></enc:CipherData></enc:EncryptedData></encryption>"""
+    style = '<style>@font-face{font-family:Obf;src:url(f.ttf)} p{font-family:Obf}</style>'
+    for name, uid, alg, key, n in (("obf-idpf", " urn:isbn:9780000000001 ", "http://www.idpf.org/2008/embedding", hashlib.sha1(b"urn:isbn:9780000000001").digest(), 1040),
+                                   ("obf-adobe", "urn:uuid:0123abcd-4567-89ef-0123-456789abcdef", "http://ns.adobe.com/pdf/enc#RC", bytes.fromhex("0123abcd456789ef0123456789abcdef"), 1024)):
+        epub(books / f"{name}.epub", name, [("c1.xhtml", "One", "<p>Obfuscated font text.</p>", style)], uid=uid,
+             extra={"OEBPS/f.ttf": obfuscated(key, n), "META-INF/encryption.xml": enc(alg)})
+    (books / "obf-font.bin").write_bytes(font)
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
     (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))

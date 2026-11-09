@@ -111,3 +111,24 @@ test('encoding labels: aliases, x-user-defined, and a server label the browser d
   await h.openReader(page, `${h.READER}?book=books/dropped.html`);
   assert.match(await frameText(page), /日本/);
 });
+
+test('fonts obfuscated as EPUB allows (IDPF and Adobe) are handed to the page as the real font (L-88)', async () => {
+  const page = await h.newPage();
+  const want = require('node:fs').readFileSync(require('node:path').join(__dirname, 'site', 'reader', 'books', 'obf-font.bin'));
+  for (const name of ['obf-idpf', 'obf-adobe']) {
+    await h.openReader(page, `${h.READER}?book=books/${name}.epub`);
+    const url = await h.inFrame(page, doc => [...doc.querySelectorAll('style')].map(s => s.textContent).join('').match(/blob:[^)"']+/)?.[0]);
+    assert.ok(url, `${name}: the font's address`);
+    const got = Buffer.from(await page.evaluate(async u => [...new Uint8Array(await (await fetch(u)).arrayBuffer())], url));
+    assert.ok(got.equals(want), `${name}: the font as it was before obfuscation (first bytes ${got.subarray(0, 8).toString('hex')})`);
+  }
+});
+
+test('UTF-8 text with a stray bad byte stays UTF-8, not read as Windows-1252 (L-108)', async () => {
+  const page = await h.newPage();
+  const body = Buffer.concat([Buffer.from('# Notes\n\nCafé crème brûlée, naïve façade. ', 'utf8'), Buffer.from([0xff]), Buffer.from(' The end — fin.\n', 'utf8')]);
+  await page.route('**/books/stray.md', route => route.fulfill({ status: 200, headers: { 'Content-Type': 'text/markdown' }, body }));
+  await h.openReader(page, `${h.READER}?book=books/stray.md`);
+  const t = await frameText(page);
+  assert.match(t, /Café crème brûlée, naïve façade\. � The end — fin\./, t);
+});

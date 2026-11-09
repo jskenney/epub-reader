@@ -26,9 +26,11 @@ function cleaner(allowRemote = false) {
     // A book's ordinary nesting with big font sheets (round 8 review): nothing may be left out.
     'base.css': '@import "fonts.css"; .b{color:blue}', 'fonts.css': '@font-face{font-family:F;src:url(f1.ttf)} @font-face{font-family:G;src:url(f2.ttf)}' + '/*' + 'z'.repeat(2e6) + '*/',
     // A sheet reached first at the depth limit, then directly (round 8 review): the second use is complete.
-    'd1.css': '@import "d2.css";', 'd2.css': '@import "d3.css";', 'd3.css': '@import "d4.css";', 'd4.css': '@import "dd.css";', 'dd.css': '@import "ee.css"; .d{}', 'ee.css': '.e{color:red}' };
+    'd1.css': '@import "d2.css";', 'd2.css': '@import "d3.css";', 'd3.css': '@import "d4.css";', 'd4.css': '@import "dd.css";', 'dd.css': '@import "ee.css"; .d{}', 'ee.css': '.e{color:red}',
+    // L-86: a pasted sheet with its own namespace.
+    'ns.css': '@namespace svg url(http://www.w3.org/2000/svg); svg|rect{fill:red}', 'plain.css': 'a{color:blue}' };
   return new Function('ALLOW_REMOTE_CONTENT', 'book', 'resolve', 'readText', 'resourceURL', `${body}\nreturn { rewriteCss, cssTokens, cssRefs, cssPreprocess };`)(
-    allowRemote, { zip: null }, (base, ref) => ref, async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`));
+    allowRemote, { zip: null }, (base, ref) => ref.split('#')[0], async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`));
 }
 
 const R = 'http://evil.test';
@@ -139,4 +141,15 @@ test('the cleaned CSS asks no other site for anything when the browser applies i
   for (const css of LEAKS.slice(0, 3)) await page.evaluate(t => { const s = document.createElement('style'); s.textContent = t; document.head.append(s); }, css);
   await page.waitForTimeout(1000);
   assert.ok(page.blocked.some(u => /evil\.test/.test(u)), 'the uncleaned CSS should have tried');
+});
+
+test('a fragment in a CSS url is kept (L-84); a remote import after a pasted one stays, above it (L-85); a pasted sheet keeps its namespace (L-86)', async () => {
+  const { rewriteCss } = cleaner(true);
+  assert.equal(await rewriteCss('.x{background:url(sprite.svg#star)}', 'x.css'), '.x{background:url(blob:local/sprite.svg#star)}');
+  const out = await rewriteCss('@import "plain.css"; @import "https://fonts.example/f.css"; p{color:red}', 'x.css');
+  assert.match(out, /^@import "https:\/\/fonts\.example\/f\.css";/, out);
+  assert.match(out, /a\{color:blue\}/); assert.match(out, /p\{color:red\}/);
+  const ns = await rewriteCss('@import "plain.css"; @import "ns.css"; p{}', 'x.css');
+  assert.match(ns, /^@namespace svg url\(http:\/\/www\.w3\.org\/2000\/svg\);/, ns);
+  assert.match(ns, /svg\|rect\{fill:red\}/);
 });

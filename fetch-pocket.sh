@@ -20,6 +20,7 @@ POCKET_JS=0.1.0                                         # must match POCKET.lib 
 ORT=1.20.0                                              # must match POCKET.ort in index.html
 REPO=vlapky/pocket-tts-onnx
 REV=c469236dbc5f68287fa2fbf175b66de3b80123af            # must match POCKET.model in index.html
+GOT=()
 DEST=pocket
 
 JSD=https://cdn.jsdelivr.net/npm
@@ -55,6 +56,7 @@ for l in "${langs[@]}"; do [ "$l" = all ] && langs=(en de it pt es) && break; do
 say() { [ "$LIST" = 1 ] || echo "$@"; }
 get() {   # get URL PATH-UNDER-DEST
   local url=$1 out=$DEST/$2
+  GOT+=("$out")   # (every file this script downloads must have a pinned checksum: verify)
   if [ "$LIST" = 1 ]; then printf '%s	%s
 ' "$url" "$out"; return; fi
   if [ -s "$out" ]; then echo "  have   $2"; return; fi
@@ -74,7 +76,7 @@ get() {   # get URL PATH-UNDER-DEST
 # Check every downloaded file against the pinned SHA-256 list in checksums/ (committed with this script).
 # Files that don't match are removed, so running the script again downloads them afresh.
 verify() {
-  local sums=checksums/$1.sha256 bad=0 hash path tool
+  local sums=checksums/$1.sha256 bad=0 unpinned=0 hash path tool
   if [ "$VERIFY" = 0 ]; then echo "Checksums not checked (--no-verify)."; return; fi
   [ -f "$sums" ] || { echo "Missing $sums, so the downloads can't be checked. Run --no-verify to skip the check." >&2; exit 1; }
   if command -v sha256sum >/dev/null; then tool=(sha256sum); elif command -v shasum >/dev/null; then tool=(shasum -a 256)
@@ -86,9 +88,14 @@ verify() {
     if [ "$("${tool[@]}" "$path" | cut -d' ' -f1)" != "$hash" ]; then echo "  BAD    $path (removed)"; rm -f "$path"; bad=1; fi
   done < "$sums"
   while IFS= read -r path; do   # lines are "<64 hex digits>  <path>": compare whole paths
-    awk -v p="$path" 'substr($0, 67) == p { found = 1 } END { exit !found }' "$sums" || echo "  note   $path has no pinned checksum"
+    awk -v p="$path" 'substr($0, 67) == p { found = 1 } END { exit !found }' "$sums" && continue
+    # A file this script downloads but the list doesn't name can't be checked: that fails, rather than passing
+    # unchecked (REVIEW.md L-89). Other files someone put here are only noted.
+    if printf '%s\n' "${GOT[@]}" | grep -qxF -- "$path"; then echo "  UNPINNED $path: not in $sums, so it can't be checked"; unpinned=1
+    else echo "  note   $path has no pinned checksum"; fi
   done < <(find "$DEST" -type f ! -name NOTICE.txt ! -name '*.part' ! -name '*.part.url' | sort)
   if [ "$bad" = 1 ]; then echo "Some files didn't match their checksums and were removed; run this script again." >&2; exit 1; fi
+  if [ "$unpinned" = 1 ]; then echo "Some downloaded files have no pinned checksum: update $sums (python3 tools/make-checksums.py), or run with --no-verify." >&2; exit 1; fi
   echo "All files match their checksums."
 }
 
