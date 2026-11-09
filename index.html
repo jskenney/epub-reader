@@ -2322,7 +2322,7 @@ async function chapterSource(item){
   // as text: a note says it can't be shown, which search, reading aloud and exports pass over. With no type and a
   // name not known either, it is read as a page, as before: loop 4 review.)
   const type = it.type || (book.byPath ? typeOf(it.path) : '');
-  if (!isPage(it) && it.type && !/^image\//.test(type)) {
+  if (!isPage(it) && type && type !== 'application/octet-stream' && !/^image\//.test(type)) {
     doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p data-spine-note="">This part of the book (${escHtml(it.type)}) can't be shown here.</p></body></html>`, 'application/xhtml+xml');
   } else if (!isPage(it) && /^image\//.test(type)) {
     doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p><img src="${escHtml(encodeURIComponent(it.path.split('/').pop()))}" alt=""/></p></body></html>`, 'application/xhtml+xml');
@@ -2360,13 +2360,13 @@ async function chapterDoc(i){
   // Serialize and parse again, as the frame's srcdoc does, so the text splits the same way.
   return new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
 }
-async function renderChapter(i, { frag = '', fraction = 0 } = {}){
+async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   // (not "fraction": that is the function: loop 5 review)
   if (!book) return;
   i = Math.max(0, Math.min(book.spine.length - 1, i));
   const token = ++renderToken;
   ttsBeforeRender();
   const item = book.spine[i];
-  cur = { i, page: 0, pages: 1, f: fraction };
+  cur = { i, page: 0, pages: 1, f: startAt };
   updateChrome();
   try {
     const src = await chapterSource(item);
@@ -2378,7 +2378,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     const fonts = frame.contentDocument.fonts;
     if (fonts) await Promise.race([fonts.ready, new Promise(r => setTimeout(r, 1500))]);
     if (token !== renderToken) return;
-    position(frag, fraction);
+    position(frag, startAt);
     hideStatus();
     cur.shown = true; cur.book = book;
     lastShown = { cur, doc: frame.contentDocument };   // (to go back to if a later chapter can't be shown)
@@ -2566,7 +2566,8 @@ function goTo(path, frag = ''){
   let idx = book.spine.findIndex(s => s.path === path);
   if (idx < 0) idx = book.spine.findIndex(s => pathKey(s.path) === pathKey(path));   // (case or Unicode form: L-48)
   if (idx < 0) { showNotice(`That link points to ${path}, which isn't part of the book's reading order.`, 'error'); return; }
-  if (idx === cur.i && cur.shown && frame.contentDocument) { position(frag, 0); return; }
+  // (Choosing a chapter that failed to show tries it again: loop 5 review.)
+  if (idx === cur.i && cur.shown && !cur.failed?.has(idx) && frame.contentDocument) { position(frag, 0); return; }
   renderChapter(idx, { frag });   // (also a chapter that failed to load: choosing it again tries again)
 }
 function restyleFrame(){
@@ -4043,7 +4044,12 @@ import(${JSON.stringify(lib + 'worker.js')}).then(() => { for (const data of que
       if (m.type === 'result') job?.res(m.result); else job?.rej(new Error(m.error));
     }
   };
-  w.onerror = e => { for (const j of pk.pending.values()) j.rej(transientError(e.message || 'the worker failed to start')); pk.pending.clear(); };
+  w.onerror = e => {
+    for (const j of pk.pending.values()) j.rej(transientError(e.message || 'the worker failed to start'));
+    pk.pending.clear();
+    // (A worker that stopped working is marked so, as Kokoro's is, so it is loaded again rather than tried: loop 5.)
+    if (pk.worker === w && pk.state === 'ready') { pk.state = 'error'; pk.error = `the voice stopped working (${e.message || 'the worker failed'})`; w.terminate(); pk.worker = null; if (tts.open) ttsUpdateBar(); }
+  };
   return w;
 }
 function pkRequest(type, payload){
@@ -4256,7 +4262,7 @@ function svGenerate(text, opts = {}){
       const ctl = new AbortController(), giveUp = setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000);
       const stop = () => ctl.abort(); opts.signal?.addEventListener('abort', stop, { once: true });   // (removed below)
       try { r = await fetch(TTS_SERVER.api + 'v1/audio/speech', { method: 'POST', body: form, signal: ctl.signal }); }
-      catch (e) { if (opts.signal?.aborted) throw staleError(); svLost(); throw transientError('the voice server isn\'t responding'); }
+      catch (e) { opts.signal?.removeEventListener('abort', stop); if (opts.signal?.aborted) throw staleError(); svLost(); throw transientError('the voice server isn\'t responding'); }
       finally { clearTimeout(giveUp); }
       // (Kept for the stream while it plays; dropped when this attempt is retried or ends.)
       const unlisten = () => opts.signal?.removeEventListener('abort', stop);
@@ -5087,12 +5093,12 @@ async function abSay(ne, chunks, ci, keyBase, snap){
         // minutes by the clock, without counting the sentence as one it can't say. But a server that says it is
         // well and keeps failing this text (a 500 for it) is the text's fault after all (loop 4 review).
         if (e?.transient) {
-          if (ne === NEURAL.server && e.answered) {
+          if (ne === NEURAL.server && e.answered >= 500) {   // (not 409: busy is waited for)
             await abAbortable(svProbe(0)).catch(err => { if (err?.cancelled) throw err; });
             if (sv.available && ++healthy >= 2) throw Object.assign(new Error(e.message), { answered: e.answered });
           }
           const st = ne.st;
-          if (ne !== NEURAL.server && st.state === 'error') throw Object.assign(new Error(`the voice stopped working${st.error ? ': ' + st.error : ''}`), { gone: true });
+          if (ne !== NEURAL.server && st.state === 'error') throw Object.assign(new Error(/^the voice stopped working/.test(st.error || '') ? st.error : `the voice stopped working${st.error ? ': ' + st.error : ''}`), { gone: true });
           const started = performance.now();
           if (!since) since = started;
           ab.waiting = true; abShow();
@@ -5494,7 +5500,7 @@ function searchIndex(){
     })();
     return b.search;
   }
-  b.searchFailed = new Set();
+  b.searchFailed = new Set(); b.searchBusy = true;   // (a search meanwhile doesn't use up a retry)
   b.search = (async () => {
     const chapters = [];
     for (let i = 0; i < b.spine.length; i++) {
@@ -5505,6 +5511,7 @@ function searchIndex(){
       chapters.push(entries(i, blocks));
       if (i % 8 === 7) await new Promise(r => setTimeout(r));   // keep the page responsive
     }
+    b.searchBusy = false;
     return chapters;
   })();
   return b.search;
@@ -5592,7 +5599,7 @@ async function searchGo(n){
   searchCount();
   const h = search.hits[search.cur];
   ttsUserNav();
-  if (cur.i !== h.i) { await renderChapter(h.i); return; }   // searchAfterRender shows it
+  if (cur.i !== h.i || cur.failed?.has(h.i)) { await renderChapter(h.i); return; }   // searchAfterRender shows it
   searchHighlight(true);
 }
 function searchAfterRender(){ if (search.hits.length) searchHighlight(search.hits[search.cur]?.i === cur.i); }

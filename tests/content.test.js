@@ -200,3 +200,22 @@ test('page turns while a chapter loads wait for it, rather than skipping a chapt
   await page.waitForTimeout(1500);
   assert.match(await page.textContent('#spinePos'), /spine 2\//);
 });
+
+test('in the scroll layout a chapter that can\'t be shown leaves the page before, and choosing it again tries again (loop 5 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/abc-missing/`, { 'spine:layout': 'scroll' });
+  await page.click('#tocList a >> nth=1');
+  await page.waitForFunction(() => /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''));
+  await page.waitForTimeout(300);
+  assert.deepEqual(page.errors, []);
+  assert.equal(await page.textContent('#curFile'), 'OEBPS/c1.xhtml');
+  // Chosen again (from a blank page after a new book's failed first chapter too): tried again, and said so again.
+  const blank = await h.newPage();
+  await h.openReader(blank, `${h.READER}?book=books/bad-first.epub`);
+  await blank.waitForFunction(() => /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''));
+  await blank.click('#noticeAction').catch(() => {});
+  await blank.waitForFunction(() => document.querySelector('#notice').hidden || !/couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''), null, { timeout: 3000 }).catch(() => {});
+  await blank.evaluate(() => { document.querySelector('#notice').hidden = true; });
+  await blank.click('#tocList a >> nth=0');
+  await blank.waitForFunction(() => !document.querySelector('#notice').hidden && /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''), null, { timeout: 5000 });
+});

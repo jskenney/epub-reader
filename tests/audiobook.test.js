@@ -414,6 +414,6 @@ test('Cancel ends an export at once, while the voice never answers or while it w
     const t0 = Date.now();
     await page.click('#abCancel');
     await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 5000 });
-    assert.ok(Date.now() - t0 < 3000, `${m}: took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 1200, `${m}: took ${Date.now() - t0} ms`);
   }
 });
