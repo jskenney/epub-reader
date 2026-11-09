@@ -41,10 +41,18 @@ were found. What was fixed (`7a0abfb` to `961118e`):
 
 The other low items, T-19 and D-7 are open below.
 
+Two more independent reviewers then went over those commits: one on the loading changes, one on the read-aloud
+changes and the new tests. They found two medium regressions and a few low gaps, fixed in `c28c12d` and
+`1ba12ab`, each with a test that fails on the code before it:
+- **M-28:** the new decoding (M-26) trusted a stale declared encoding over text that is valid UTF-8.
+- **M-29:** the new look-ahead (M-23) took a chapter that failed to load once as having no text, and skipped it.
+- **L-90 to L-97:** smaller gaps in the same changes (see Resolved).
+The rest is open: L-98, L-99 and T-20.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 124 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 126 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
 changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
 has a test that fails on the code before it.
@@ -75,8 +83,8 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 ## Summary
 
 No critical, high or medium items are open. The open items are:
-- **Low:** L-74, L-76 to L-79 and L-84 to L-89. None keeps a book or a voice from working.
-- **Tests:** T-11 (the weekly workflow hasn't run yet), T-13 to T-17 and T-19.
+- **Low:** L-74, L-76 to L-79, L-84 to L-89, L-98 and L-99. None keeps a book or a voice from working.
+- **Tests:** T-11 (the weekly workflow hasn't run yet), T-13 to T-17, T-19 and T-20.
 - **Documentation:** D-7.
 - **Enhancements:** E-1 to E-11 and E-15.
 
@@ -92,6 +100,8 @@ No critical, high or medium items are open. The open items are:
 | [L-84](#l-84-css-urls-lose-their-fragment) to [L-87](#l-87-the-body-style-attribute-isnt-cleaned) | Smaller CSS cleaning gaps | Low |
 | [L-88](#l-88-obfuscated-fonts-arent-de-obfuscated) | Obfuscated fonts aren't de-obfuscated | Low |
 | [L-89](#l-89-the-checksum-check-passes-files-the-list-doesnt-name) | The checksum check passes files the list doesn't name | Low |
+| [L-98](#l-98-every-chapter-looked-at-is-kept-in-memory) | Every chapter looked at is kept in memory | Low |
+| [L-99](#l-99-two-small-read-aloud-races) | Two small read-aloud races | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-13](#t-13-a-self-hosting-test-needs-internet-but-isnt-gated) | A self-hosting test needs internet but isn't gated | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
@@ -99,6 +109,7 @@ No critical, high or medium items are open. The open items are:
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-17](#t-17-workflow-upkeep) | Workflow upkeep | Tests |
 | [T-19](#t-19-two-script-tests-match-anywhere-in-the-page) | Two script tests match anywhere in the page | Tests |
+| [T-20](#t-20-round-11-test-gaps) | Round 11 test gaps | Tests |
 | [D-7](#d-7-documentation-nits) | Documentation nits | Docs |
 | [E-1](#e-1-footnote-pop-ups) to [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
@@ -167,6 +178,18 @@ with the key from the identifier.
 "All files match" with exit 0, though the README says the check fails closed. Today every file is listed.
 **Fix:** fail for files the script itself downloads; keep the note for extra files.
 
+### L-98. Every chapter looked at is kept in memory
+
+*Read.* The detached copies of chapters made for looking ahead (and now, at chapter ends, with the device voice
+too) stay in `n.chap` for the whole session, with their DOM. **Fix:** keep only the sentence positions, or keep
+the few nearest chapters.
+
+### L-99. Two small read-aloud races
+
+*Reproduced / read.* Pause and Play while the reader is looking past picture pages replays the last passage
+before going on. And R pressed just as another book opens (while the server voice is checked) starts reading in
+the new book. **Fix:** check the token and the book after each wait.
+
 ## Tests
 
 ### T-11. The weekly workflow hasn't run yet
@@ -222,6 +245,15 @@ runtime), `npm install` rather than `npm ci`, and downloads about 900 MB of mode
 in `index.html`, so swapped hashes pass (books would then fail to open, which other tests catch). The version
 check uses `includes` over the whole page, so a comment counts, and doesn't check `TRANSFORMERS` though the
 README says it does. **Fix:** read `LIBS` and the version constants by name.
+
+### T-20. Round 11 test gaps
+
+*Read.*
+- Passing over picture pages and then reading a later text chapter isn't tested (it works when tried by hand).
+- The M-23 test checks the page shown, not the saved position.
+- The M-27 test names port 8790; the T-18 checks run right after loading, so a refused request logged later
+  is missed.
+- L-75 (giving up on a stalled stream) has no test: it would take a minute of waiting, or a setting for tests.
 
 ## Documentation
 
@@ -378,6 +410,8 @@ From all reviews so far, with the commits that fixed them.
 | M-25 | SVG pages and pictures in the spine showed blank or as binary text; manifest fallbacks weren't used | `9e05168` |
 | M-26 | Text in UTF-16 or a declared encoding (Shift_JIS and others) was garbled | `9e05168` |
 | M-27 | A partly downloaded self-hosted Pocket TTS (or Kokoro runtime), or one of the other precision, failed instead of using the CDN | `7e42a4a` |
+| M-28 | The new decoding (M-26) trusted a stale declared encoding over valid UTF-8, garbling old books and Markdown that mentions a charset (round 11 review) | `c28c12d` |
+| M-29 | The new look-ahead (M-23) took a chapter that failed to load once as having no text, and skipped it (round 11 review) | `1ba12ab` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -455,6 +489,14 @@ From all reviews so far, with the commits that fixed them.
 | L-81 | A book folder named with `;` or `,` broke the book policy, so its pictures and fonts were refused | `c14fb66` |
 | L-82 | Without JSZip, text, Markdown and EPUBs read in place were refused too | `c14fb66` |
 | L-83 | `"DEFAULT_BOOK": ""` opened the reader's own page as a book | `c14fb66` |
+| L-90 | Pictures on a fallback page (M-25) were released as soon as it was shown (round 11 review) | `c28c12d` |
+| L-91 | The self-hosted voice check (M-27) started and dropped downloads of the large model files; now it asks for the first bytes | `c28c12d` |
+| L-92 | The server's charset wasn't used for documents opened by link (round 11 review) | `c28c12d` |
+| L-93 | Narration still turned to a following picture page at the end of the text (round 11 review) | `1ba12ab` |
+| L-94 | A sleep timer that ran out, or was set to the chapter end, while the reader looked past picture pages was ignored | `1ba12ab` |
+| L-95 | The stall limit (L-75) also cut off a slow server before its first audio | `1ba12ab` |
+| L-96 | The sleep timer carried over into a newly opened book | `1ba12ab` |
+| L-97 | No status while passing over many picture pages | `1ba12ab` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -467,6 +509,7 @@ From all reviews so far, with the commits that fixed them.
 | T-10 | Cases checked only by script | `0231f23`, `5a16313`, `3a98b99` |
 | T-12 | A test overwrote the system's `curl` when run as root, and failed as anyone else | `4266cd2` |
 | T-18 | Under the reader policy, "nothing left the site" checks couldn't fail; they now also check for refused requests | `961118e` |
+| T-21 | The sleep-timer tests' clock steps could trip the stall limit on a slow machine (round 11 review) | `1ba12ab` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
