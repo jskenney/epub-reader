@@ -248,6 +248,11 @@ def main():
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
     (books / "u16.txt").write_bytes("Sixteen-bit plain text, café.\n".encode("utf-16"))
+    # Three short chapters as an extracted folder (round 11 review): a chapter that fails to load once while
+    # it is looked at ahead must still be read.
+    epub(books / "abc.epub", "ABC", [(f"c{i}.xhtml", n, f"<p>{n} words here.</p>") for i, n in ((1, "Alpha"), (2, "Bravo"), (3, "Charlie"))], uid="urn:abc")
+    with zipfile.ZipFile(books / "abc.epub") as z:
+        z.extractall(books / "abc")
     # Text, then only pictures to the end (REVIEW.md M-23): reading past the text mustn't turn to the last page.
     epub(books / "text-then-pictures.epub", "Text Then Pictures", [("c1.xhtml", "Words", "<h1>Words</h1><p>Only a few words here.</p>")]
          + [(f"p{i}.xhtml", f"Plate {i}", f'<p><img src="p{i}.png" alt=""/></p>') for i in (2, 3)],

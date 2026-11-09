@@ -1418,7 +1418,7 @@ async function startBook(next){
   book = next;
   // Reading aloud belongs to the book it was started in: stop it (or, for a comic, which has no text, close
   // the bar) rather than carry on into the new book (REVIEW.md M-23, L-72).
-  if (tts.open) { if (book.comic) ttsClose(); else { tts.playing = false; tts.awaitChapter = false; ttsStopAudio(); ttsUpdateBar(); } }
+  if (tts.open) { if (book.comic) ttsClose(); else { tts.playing = false; tts.awaitChapter = false; ttsStopAudio(); setSleep('off'); ttsUpdateBar(); } }
   pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
   const spine = book.spine;
   search.token++; Object.assign(search, { q: '', hits: [], cur: -1, shown: false });
@@ -2100,7 +2100,9 @@ async function chapterSource(item){
   if (!isPage(it) && /^image\//.test(it.type)) {
     doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p><img src="${escHtml(encodeURIComponent(it.path.split('/').pop()))}" alt=""/></p></body></html>`, 'application/xhtml+xml');
   } else {
-    const raw = withoutDocumentControls(await readText(book.zip, it.path) || '');
+    const text = await readText(book.zip, it.path);
+    if (text == null) throw new Error(`${it.path} couldn't be read`);   // (not shown as an empty page)
+    const raw = withoutDocumentControls(text);
     const isHtml = it.type === 'text/html' || /\.html?$/i.test(it.path);
     doc = (!isHtml && parseDoc(raw, 'application/xhtml+xml')) || parseDoc(raw, 'text/html');
   }
@@ -3016,21 +3018,28 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepF
   setTimeout(() => { if (token === tts.token) synth.speak(u); }, 0);
 }
 async function ttsEndOfChapter(){
-  if (tts.playing && sleep.mode === 'chapter') {   // sleep timer: stop at the end of this chapter
+  const stopHere = () => {   // sleep timer: stop at the end of this chapter
     tts.playing = false; ++tts.token; moAudio.pause(); nStop(); synth?.cancel(); hl('tts-word');
-    setSleep('off'); tts.note = 'Sleep timer: stopped at the end of the chapter'; ttsUpdateBar(); return;
-  }
-  // On to the next chapter with text to read. Pages with none (pictures only) are passed over without being
-  // shown, so reading past the last text doesn't turn every page to the end and save that as the position
-  // (REVIEW.md M-23). Publisher narration has its own clips per chapter, so it goes chapter by chapter.
+    setSleep('off'); tts.note = 'Sleep timer: stopped at the end of the chapter'; ttsUpdateBar();
+  };
+  if (tts.playing && sleep.mode === 'chapter') { stopHere(); return; }
+  // On to the next chapter with something to read. Pages with nothing (pictures only) are passed over without
+  // being shown, so reading past the last text doesn't turn every page to the end and save that as the
+  // position (REVIEW.md M-23). A chapter that couldn't be read counts as having text, so it is shown and its
+  // error reported rather than skipped; one with the publisher's narration counts when narration is chosen.
   if (book && !book.comic) {
-    const b = book, token = tts.token;
+    const b = book, token = tts.token, live = () => book === b && token === tts.token && tts.playing;
+    let said = false;
     for (let j = cur.i + 1; j < b.spine.length; j++) {
-      if (!tts.mo && !(await chapterChunks(j)).length) {
-        if (book !== b || token !== tts.token || !tts.playing) return;   // stopped, moved or another book meanwhile
+      const chunks = tts.engine === 'narration' && b.spine[j].overlay ? null : await chapterChunks(j);
+      if (!live()) return;   // stopped, moved or another book meanwhile
+      if (chunks && !chunks.length) {
+        if (!said && j > cur.i + 2) { said = true; ttsUpdateBar('Passing pages without text…'); }
         continue;
       }
-      if (book !== b || token !== tts.token || !tts.playing) return;
+      // (The sleep timer may have run out, or been set to the chapter's end, while looking.)
+      if (sleep.mode === 'chapter') { stopHere(); return; }
+      if (sleepDue()) { ++tts.token; return; }
       tts.awaitChapter = true; renderChapter(j); return;
     }
   }
@@ -3948,7 +3957,8 @@ function svGenerate(text, opts = {}){
         for (;;) {
           // A stream that stops arriving partway (the server stalled) is given up on too, rather than leaving
           // reading silent with every later request queued behind it (REVIEW.md L-75).
-          const stall = setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000);
+          // (Not before the first audio: a slow server may take long to start, as it always could.)
+          const stall = total ? setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000) : 0;
           let done, value;
           try { ({ done, value } = await reader.read()); } finally { clearTimeout(stall); }
           if (done) break;
@@ -4160,7 +4170,8 @@ const chunkStart = c => wordStartAt(c.b, c.s, c.s, c.e);
 // The sentences of a later chapter, from a detached copy built like the page shown in the frame.
 async function chapterChunks(i){
   if (n.chapBook !== book) { n.chap = new Map(); n.chapBook = book; }
-  if (!n.chap.has(i)) n.chap.set(i, chapterDoc(i).then(d => chunksOf(d).chunks).catch(() => []));
+  // (A chapter that couldn't be read is null, and not kept, so it is tried again: round 11 review.)
+  if (!n.chap.has(i)) n.chap.set(i, chapterDoc(i).then(d => chunksOf(d).chunks, () => { n.chap.delete(i); return null; }));
   return n.chap.get(i);
 }
 /* Look-ahead: after the passage being spoken, keep making the following passages one at a time (behind
@@ -4178,6 +4189,7 @@ async function nLookAhead(ne, span, current){
       const i = at.chap + 1;
       if (!book || i >= book.spine.length || book.spine[i].overlay || ++hops > 5) return;
       const chunks = await chapterChunks(i);
+      if (!chunks) return;
       at = { chunks, ci: 0, chap: i };
       continue;
     }

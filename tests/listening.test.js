@@ -16,7 +16,7 @@ async function startReading(page) {
 // Move the page's clock on in steps of under a minute, with real time between them for the voice stream to
 // arrive, as real time passes (one big jump would also look like a stalled stream: REVIEW.md L-75).
 async function fastForward(page, sec) {
-  for (let left = sec; left > 0; left -= 40) { await page.clock.fastForward(Math.min(40, left) * 1000); await page.waitForTimeout(150); }
+  for (let left = sec; left > 0; left -= 25) { await page.clock.fastForward(Math.min(25, left) * 1000); await page.waitForTimeout(150); }
 }
 const playing = page => page.evaluate(() => document.querySelector('#ttsPlay').classList.contains('playing'));
 
@@ -174,4 +174,22 @@ test('a voice chosen while paused applies when playing again, instead of the old
   // (Passages after it are made in the new voice anyway: the one paused in must be too.)
   const again = await h.waitFor(async () => (await h.breezeLog()).find(r => r.ref_text === 'Another clip.' && r.text.startsWith(sentence.slice(0, 15))), 10000);
   assert.ok(again, `the paused passage ("${sentence.slice(0, 30)}…") is made again in the new voice: ${JSON.stringify((await h.breezeLog()).map(r => [r.ref_text, r.text.slice(0, 25)]))}`);
+});
+
+test('a chapter that failed to load while being looked at ahead is still read, not skipped (round 11 review)', async () => {
+  const page = await h.newPage();
+  await h.clearBreezeLog();
+  // Chapter 2 can't be loaded until the first passage has been made and looked past (the look-ahead tries it
+  // then), and loads normally after that.
+  let failed = 0, down = true;
+  await page.route('**/books/abc/OEBPS/c2.xhtml', route => down ? (failed++, route.abort()) : route.continue());
+  await h.openReader(page, `${h.READER}?book=books/abc/`, serverVoice);
+  await startReading(page);
+  await h.waitFor(async () => (await h.breezeLog()).some(r => r.text.includes('Alpha words')), 10000, 50);
+  await page.waitForTimeout(800);
+  down = false;
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(r => r.text.includes('Charlie')), 30000), 'reads on to the end');
+  const texts = (await h.breezeLog()).map(r => r.text).join(' | ');
+  assert.ok(failed >= 1, 'the first request for chapter 2 failed');
+  assert.match(texts, /Bravo words here/, `chapter 2 was read: ${texts}`);
 });
