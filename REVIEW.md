@@ -71,13 +71,15 @@ reader. Their findings were reproduced and fixed in `9d10dc0` and `ed1aa5e`, wit
 - **C-1:** any file of more than about 22 minutes failed to save once all its audio had been made.
 - **H-10, H-11:** no chapters in Apple's players; a long book held in memory as a million small arrays.
 - **M-33 to M-42, L-109 to L-129** (see Resolved).
-L-110, L-113, L-119 and L-129 are open in part. The tests drive the export with a stand-in AAC encoder (the test
+Round 13 (`ed36ce1` to `4d65017`) fixed the open low items that could be fixed (L-74, L-76 to L-79, L-84 to L-89,
+L-98, L-99, L-107, L-108, L-113, L-119, L-129), and T-13, T-15, T-17, T-19 and D-7, each with a test where it can
+have one. T-15's suggestion to bind the test server to 127.0.0.1 was left out, as for the voice server. The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 142 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 152 tests pass. Five more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. They passed in round 10; round 11
 changed only which self-hosted voice folders are used, which the new M-27 test covers. Every fix in round 11
 has a test that fails on the code before it.
@@ -108,154 +110,28 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 ## Summary
 
 No critical, high or medium items are open. The open items are:
-- **Low:** L-74, L-76 to L-79, L-84 to L-89, L-98, L-99, L-107, L-108, L-110, L-113, L-119 and L-129. None keeps
-  a book, a voice or an export from working.
-- **Tests:** T-11 (the weekly workflow hasn't run yet), T-13 to T-17, T-19 and T-20.
-- **Documentation:** D-7.
+- **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
+- **Tests:** T-11 (the weekly workflow hasn't run yet), T-14, T-16 and T-20.
 - **Enhancements:** E-1 to E-9, E-11 and E-15.
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
-| [L-74](#l-74-pocket-tts-asks-to-download-again-after-a-language-change) | Pocket TTS asks to download again after a language change | Low |
-| [L-76](#l-76-a-short-outage-makes-passages-read-sentence-by-sentence) | A short outage makes passages read sentence by sentence | Low |
-| [L-77](#l-77-keep_positions_days-applies-to-the-whole-site) | `KEEP_POSITIONS_DAYS` applies to the whole site | Low |
-| [L-78](#l-78-the-position-ribbon-from-the-keyboard) | The position ribbon from the keyboard | Low |
-| [L-79](#l-79-the-narrow-screen-contents-has-no-focus-handling) | The narrow-screen contents has no focus handling | Low |
-| [L-84](#l-84-css-urls-lose-their-fragment) to [L-87](#l-87-the-body-style-attribute-isnt-cleaned) | Smaller CSS cleaning gaps | Low |
-| [L-88](#l-88-obfuscated-fonts-arent-de-obfuscated) | Obfuscated fonts aren't de-obfuscated | Low |
-| [L-89](#l-89-the-checksum-check-passes-files-the-list-doesnt-name) | The checksum check passes files the list doesn't name | Low |
-| [L-98](#l-98-every-chapter-looked-at-is-kept-in-memory) | Every chapter looked at is kept in memory | Low |
-| [L-99](#l-99-two-small-read-aloud-races) | Two small read-aloud races | Low |
-| [L-107](#l-107-reading-aloud-forgets-its-place-after-a-chapter-fails) | Reading aloud forgets its place after a chapter fails | Low |
-| [L-108](#l-108-a-few-bad-bytes-in-mostly-utf-8-text) | A few bad bytes in mostly UTF-8 text | Low |
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
-| [L-113](#l-113-a-cancelled-single-file-export-leaves-an-empty-file) | A cancelled single-file export leaves an empty file | Low |
-| [L-119](#l-119-table-of-contents-entries-out-of-order-within-a-file) | Table of contents entries out of order within a file | Low |
-| [L-129](#l-129-a-background-tab-slows-retries) | A background tab slows retries | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
-| [T-13](#t-13-a-self-hosting-test-needs-internet-but-isnt-gated) | A self-hosting test needs internet but isn't gated | Tests |
 | [T-14](#t-14-the-hostile-book-tests-only-run-behind-the-readers-own-policy) | The hostile-book tests only run behind the reader's own policy | Tests |
-| [T-15](#t-15-test-housekeeping) | Test housekeeping | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
-| [T-17](#t-17-workflow-upkeep) | Workflow upkeep | Tests |
-| [T-19](#t-19-two-script-tests-match-anywhere-in-the-page) | Two script tests match anywhere in the page | Tests |
 | [T-20](#t-20-round-11-test-gaps) | Round 11 test gaps | Tests |
-| [D-7](#d-7-documentation-nits) | Documentation nits | Docs |
 | [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
 ## Low
-
-### L-74. Pocket TTS asks to download again after a language change
-
-*Read* (needs the real model). After English Pocket TTS has loaded, `pk.state` stays `'ready'`, and
-`ttsUpdateBar` loads on its own only from `'idle'`. So a German book, whose model was downloaded before, shows
-the download offer again instead of loading quietly. One click loads it. **Fix:** also load on its own when
-`pk` is ready for another language and the new one was agreed to.
-
-### L-76. A short outage makes passages read sentence by sentence
-
-*Read.* Every failed passage is added to `n.failed`, including network blips, the server being briefly gone, a
-timeout and a crashed Kokoro worker. Those paragraphs are then read one sentence at a time until reload, which
-phrases worse. **Fix:** record only errors from a server that answered.
-
-### L-77. `KEEP_POSITIONS_DAYS` applies to the whole site
-
-*Read.* The daily sweep covers every position on the site with the current folder's value, so a folder set to
-`0` ("keep forever") still loses positions when a page in another folder runs with a shorter setting.
-**Fix:** say in the README that the setting is site-wide, or keep the longest value seen.
-
-### L-78. The position ribbon from the keyboard
-
-*Read.* The ribbon is `role="progressbar"` but can be focused and clicked, with no keyboard way back. (Enter in
-the last chapter no longer re-renders it: `847488f`.) **Fix:** consider `role="slider"` with arrow keys.
-
-### L-79. The narrow-screen contents has no focus handling
-
-*Read.* At 820 px or narrower, opening the contents doesn't move focus into it, Escape doesn't close it,
-closing it doesn't return focus to the button, and tapping the page leaves it open. **Fix:** all four.
-
-### L-84. CSS URLs lose their fragment
-
-*Reproduced.* `url(s.svg#b)` in a stylesheet becomes the file's address without `#b` (attributes keep it), so
-an SVG sprite in CSS shows the wrong picture. **Fix:** carry the fragment over, as attributes do.
-
-### L-85. A remote `@import` after an inlined one is dropped
-
-*Reproduced* (only with `ALLOW_REMOTE_CONTENT` on). Once a local import is pasted in, a following remote
-`@import` comes after style rules and is removed. **Fix:** move kept remote imports above the pasted text.
-
-### L-86. An imported sheet's `@namespace` is lost
-
-*Reproduced.* Pasted after other rules or inside a wrapper, `@namespace` is dropped, so `prefix|…` selectors in
-that sheet stop working (rare: `epub|type` selectors never match anyway). **Fix:** give such a sheet its own
-`<style>`.
-
-### L-87. The body style attribute isn't cleaned
-
-*Read.* `style` on `<body>` is copied to the page without the CSS cleaning. The book policy blocks what it would
-load, and with remote content on a relative `url()` points at the reader's site. **Fix:** include `<body>`.
-
-### L-88. Obfuscated fonts aren't de-obfuscated
-
-*Read.* Fonts obfuscated by the IDPF or Adobe method (`META-INF/encryption.xml`) fail to load, and the book's
-text falls back to the reader's fonts. **Fix:** undo the XOR of the first 1040 (IDPF) or 1024 (Adobe) bytes
-with the key from the identifier.
-
-### L-89. The checksum check passes files the list doesn't name
-
-*Reproduced.* A downloaded file with no line in `checksums/*.sha256` only prints a note, and the run still ends
-"All files match" with exit 0, though the README says the check fails closed. Today every file is listed.
-**Fix:** fail for files the script itself downloads; keep the note for extra files.
-
-### L-98. Every chapter looked at is kept in memory
-
-*Read.* The detached copies of chapters made for looking ahead (and now, at chapter ends, with the device voice
-too) stay in `n.chap` for the whole session, with their DOM. **Fix:** keep only the sentence positions, or keep
-the few nearest chapters.
-
-### L-99. Two small read-aloud races
-
-*Reproduced / read.* Pause and Play while the reader is looking past picture pages replays the last passage
-before going on. And R pressed just as another book opens (while the server voice is checked) starts reading in
-the new book. **Fix:** check the token and the book after each wait.
-
-### L-107. Reading aloud forgets its place after a chapter fails
-
-*Reproduced.* Listening, then choosing a chapter that can't be shown (from the contents or a link) stops
-reading, and the page before stays shown; Play then starts from the top of that page, not the sentence that
-was being read. **Fix:** keep the read-aloud place and put it back when the page is restored.
-
-### L-108. A few bad bytes in mostly UTF-8 text
-
-*Read.* A file that is UTF-8 apart from a stray byte or two is now read in its fallback (Windows-1252 for a
-loose file, or a stale declared encoding), so all its accented letters are wrong, where it used to show one
-replacement character. **Fix, if wanted:** use the fallback only when invalid sequences are more than a small
-share of the non-ASCII bytes.
 
 ### L-110. No edit list for the encoder's delay
 
 *Read.* AAC encoders put 1024 to 2112 samples of delay at the start, and the file doesn't mark them, so each file
 starts with 20 to 45 ms of silence and chapter marks fall that much early. Harmless for speech; WebCodecs
 doesn't report the delay, so an `elst` would have to guess it.
-
-### L-113. A cancelled single-file export leaves an empty file
-
-*Read.* With the save picker (Chrome, Edge), the browser creates the chosen file when it is picked; a cancelled
-export leaves it empty (a file per chapter in a folder removes its unfinished file). **Fix:** none from the page,
-which has no handle to the folder; the message could say so.
-
-### L-119. Table of contents entries out of order within a file
-
-*Reproduced.* An entry listed before an earlier heading in the same file makes an empty unit (now left out with a
-note) and the other unit reads both parts. **Fix:** order the entries in a file by where their headings are.
-
-### L-129. A background tab slows retries
-
-*Read.* The server voice's retries while busy (409) wait with timers, which Chrome slows to once a minute in a
-hidden tab, so an export in a background tab can slow down. (The encoder's back-pressure now waits on its own
-event.) **Fix:** keep the tab visible, or retry on a worker's timer.
 
 ## Tests
 
@@ -270,27 +146,12 @@ Updated.
 
 **Fix:** run it once by hand (Actions → Slow tests → Run workflow).
 
-### T-13. A self-hosting test needs internet but isn't gated
-
-*Read.* "Without local libraries the CDN copy is used" allows cdnjs and expects JSZip from it, so it fails on
-an offline machine, though the README says the suite runs locally. **Fix:** skip without `NETWORK=1`, or answer
-cdnjs locally as `cdn.test.js` does.
-
 ### T-14. The hostile-book tests only run behind the reader's own policy
 
 *Read; checked by hand.* `security.test.js` runs on the port that sends nginx.conf.example's reader policy,
 which alone blocks every request to the other sites, so the "nothing reached another site" checks can't fail.
 The common setup (any static server, no such header) isn't tested. The reviewer ran the hostile books without
 the reader policy and nothing leaked. **Fix:** also run them on a port without the policy.
-
-### T-15. Test housekeeping
-
-*Reproduced.*
-- `scripts.test.js` leaves a `spine-worker-*` folder in the temp directory on every run, and its sandbox folders
-  when an assertion fails (no `finally`).
-- `run.sh` doesn't notice a server that failed to start, or a port already used by something else, and its wait
-  depends on `curl`.
-- `server.py` listens on every interface; `127.0.0.1` is enough.
 
 ### T-16. Coverage gaps
 
@@ -300,18 +161,6 @@ the reader policy and nothing leaked. **Fix:** also run them on a port without t
 - `TTS_SERVER`, `SPAN_MAX`, `SAVED_AUDIO_MB` eviction, `SEARCH_MAX`, `COMIC_PART`, `BOOKSHELF` from a config,
   and `KEEP_POSITIONS_DAYS: 0`.
 - The test server's file types are its own, not nginx.conf.example's.
-
-### T-17. Workflow upkeep
-
-*Read.* `slow.yml` uses Node 20 (end of life since April 2026), `checkout@v4`/`setup-node@v4` (Node 20
-runtime), `npm install` rather than `npm ci`, and downloads about 900 MB of models every run without a cache.
-
-### T-19. Two script tests match anywhere in the page
-
-*Reproduced.* The integrity test in `scripts.test.js` checks that each library's file and hash appear somewhere
-in `index.html`, so swapped hashes pass (books would then fail to open, which other tests catch). The version
-check uses `includes` over the whole page, so a comment counts, and doesn't check `TRANSFORMERS` though the
-README says it does. **Fix:** read `LIBS` and the version constants by name.
 
 ### T-20. Round 11 test gaps
 
@@ -324,20 +173,6 @@ README says it does. **Fix:** read `LIBS` and the version constants by name.
   for tests.
 - Also untested: L-90 (fallback pages keep their pictures), L-91 and L-103 (the range probe), L-93 (narration at
   the end of the text), L-94 and L-96 (the sleep timer).
-
-## Documentation
-
-### D-7. Documentation nits
-
-- `nginx.conf.example` sets `default_type "text/markdown; charset=utf-8"`, so `.md` files probably aren't
-  gzipped (`gzip_types` compares the whole type). *Read only.* Use `default_type text/markdown; charset utf-8;
-  charset_types text/markdown;`.
-- The README's test requirements leave out `unzip` (used by `urls.test.js`) and `curl` (`run.sh`), say Node 20+
-  where `--test-concurrency` needs 20.10, and give "about a minute" for what takes about 3.5.
-- "Each script also has a `--list` option": `fetch-fonts.sh` has none.
-- Kokoro's download is "about 450 MB" in its script and "about 435 MB" in the README (436 MB measured).
-- `tools/make-checksums.py` sorts `libs/LICENSES/*` before `libs/jszip.min.js`, unlike the committed list, so
-  regenerating with no change still makes a diff.
 
 ## Enhancements
 
@@ -381,10 +216,8 @@ items) would suit comics-style and picture books.
 ## Suggested order
 
 1. **T-11:** run the workflow once by hand (Actions → Slow tests → Run workflow).
-2. **L-89 and T-19:** the checksum and pinned-version checks.
-3. **L-74, L-76, L-79:** small read-aloud and narrow-screen fixes.
-4. **T-13 to T-17, D-7:** test and documentation housekeeping.
-5. The other low items and the enhancements, as wanted.
+2. **T-14, T-16, T-20:** test coverage.
+3. The enhancements, as wanted.
 
 ## Resolved
 
@@ -555,6 +388,24 @@ From all reviews so far, with the commits that fixed them.
 | L-126 | A misleading voice note could show while exporting | `ed1aa5e` |
 | L-127 | Non-linear items (notes) were read into the chapter before them | `ed1aa5e` |
 | L-128 | Estimates ignored Kokoro's speed and mixed voices' making times | `ed1aa5e` |
+| L-74 | Pocket TTS asked to download again after a language change | `ed36ce1` |
+| L-76 | A short outage made passages read sentence by sentence for the rest of the session | `ed36ce1` |
+| L-77 | `KEEP_POSITIONS_DAYS` applied site-wide from whichever folder ran the sweep; now the longest asked for | `ed36ce1` |
+| L-78 | The position ribbon: Enter in the last chapter went back to its start; now a slider with arrows, Home and End | `847488f`, `ed36ce1` |
+| L-79 | The narrow-screen contents had no focus handling (focus, Escape, a tap on the page) | `ed36ce1` |
+| L-84 | CSS URLs lost their fragment (SVG sprites) | `0189fa5` |
+| L-85 | A remote `@import` after an inlined one was dropped | `0189fa5` |
+| L-86 | An imported sheet's `@namespace` was lost | `0189fa5` |
+| L-87 | The body's style attribute wasn't cleaned | `0189fa5` |
+| L-88 | Obfuscated fonts (IDPF, Adobe) weren't de-obfuscated | `0189fa5` |
+| L-89 | The checksum check passed files the list doesn't name | `0189fa5` |
+| L-98 | Every chapter looked at was kept in memory; now the eight used last | `ed36ce1` |
+| L-99 | Two read-aloud races: Play after pausing while passing picture pages, and R as another book opens | `ed36ce1` |
+| L-107 | Reading aloud forgot its place after a chapter failed to show | `ed36ce1` |
+| L-108 | A stray bad byte made UTF-8 text read as Windows-1252 | `0189fa5` |
+| L-113 | A cancelled single-file export left an empty file (removed now where the browser allows) | `0189fa5` |
+| L-119 | Contents entries out of order within a file | `ed36ce1` |
+| L-129 | A background tab slowed the voice's retries (now timed on a worker) | `ed36ce1` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
@@ -568,12 +419,17 @@ From all reviews so far, with the commits that fixed them.
 | T-12 | A test overwrote the system's `curl` when run as root, and failed as anyone else | `4266cd2` |
 | T-18 | Under the reader policy, "nothing left the site" checks couldn't fail; they now also check for refused requests | `961118e` |
 | T-21 | The sleep-timer tests' clock steps could trip the stall limit on a slow machine (round 11 review) | `1ba12ab` |
+| T-13 | A self-hosting test needed internet but wasn't gated | `4d65017` |
+| T-15 | Test housekeeping: temporary folders, failed servers and busy ports, curl | `4d65017` |
+| T-17 | Workflow upkeep: Node 22, npm ci, cached models | `4d65017` |
+| T-19 | Two script tests matched anywhere in the page; TRANSFORMERS unchecked | `4d65017` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
 | D-2 | No web server example for the reader | `2e7a63d` |
 | D-3 | No upgrade checklist for pinned versions | `630738a` |
 | D-4 | Documentation out of date (voice count, Node version, Markdown library, fetch-script folders, model precision) | `614e88c` |
 | D-5 | Inaccurate sentences from D-4 and L-69: the gzip note, which files each fetch script reads, FULL_PRECISION on WebGPU (round 9 review) | `7a86a5f` |
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
+| D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
