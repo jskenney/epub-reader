@@ -183,6 +183,10 @@ def main():
     (model / "bundle.json").write_text('{"bundle_name": "english_2026-04"}')
     for f in ("tokenizer.model", "voices.bin", "text_conditioner_int8.onnx", "flow_lm_main_int8.onnx", "flow_lm_flow_int8.onnx", "mimi_decoder_int8.onnx"):
         (model / f).write_bytes(b"stand-in")
+    # An empty default book name, which would be the reader's own page (REVIEW.md L-83).
+    (SITE / "folder-emptydefault").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-emptydefault" / "index.html")
+    (SITE / "folder-emptydefault" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "DEFAULT_BOOK": ""}))
     # A folder whose default list is set in its config, ending in a text file (DEFAULT_BOOK as a list).
     (SITE / "folder-list").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-list" / "index.html")
@@ -406,6 +410,9 @@ def main():
     # Six chapters, each with its own picture (REVIEW.md M-16): pictures of far chapters are released.
     epub(books / "pictures.epub", "Pictures", [(f"c{i}.xhtml", f"Pictures {i}", f'<h1>Picture {i}</h1><p><img class="pic" src="p{i}.png" alt="p{i}"/></p>') for i in range(1, 7)],
          uid="urn:pictures", extra={f"OEBPS/p{i}.png": png(40 + i, 30, (30 * i, 90, 120)) for i in range(1, 7)})
+    # An extracted book in a folder whose name has ";" and "," (REVIEW.md L-81): its pictures must still load.
+    with zipfile.ZipFile(books / "pictures.epub") as z:
+        z.extractall(books / "semi;colon,comma")
     # A stylesheet that imports itself 30 times, linked 50 times (REVIEW.md H-6): must open quickly.
     epub(books / "css-fanout.epub", "CSS Fanout", [("c1.xhtml", "One", "<h1>Fanout</h1><p class='f'>Text.</p>",
          '<link rel="stylesheet" href="self.css"/>' * 50)], uid="urn:css-fanout",

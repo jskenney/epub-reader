@@ -509,7 +509,10 @@ const soft404Probes = new Map();
 function pageSignature(text, url){
   const u = new URL(url), name = u.pathname.split('/').pop();
   let t = text;
-  for (const s of [u.href, u.pathname, safeDecode(u.pathname), name, safeDecode(name)]) if (s) t = t.split(s).join(' ');
+  // (Also as a page would write them, escaped: "a&amp;b.html", "Alice&#39;s.html": REVIEW.md L-80.)
+  const forms = [u.href, u.pathname, safeDecode(u.pathname), name, safeDecode(name)];
+  for (const f of [...forms]) { const e = escHtml(f); forms.push(e, e.replace(/'/g, '&#39;'), e.replace(/'/g, '&#x27;'), e.replace(/'/g, '&apos;')); }
+  for (const s of forms.sort((a, b) => b.length - a.length)) if (s) t = t.split(s).join(' ');
   return t.replace(/[\w-]*\d[\w-]*/g, '#').replace(/\s+/g, ' ').trim();
 }
 async function isSoftNotFound(url, text){
@@ -741,11 +744,18 @@ const zipFromBlob = blob => lazyZip(async (o, l) => {
    otherwise downloaded whole. Every part is tied to the version of the file first seen (If-Range with its
    ETag or Last-Modified) and checked against what was asked, so a book replaced on the server while it's open
    is reported instead of read as a mix of two files. Returns { zip } or { miss: reason }. */
+// JSZip, for what can't be read in place (a whole download, the sample): a plain message if it didn't load.
+// Everything else (text, Markdown, HTML, archives read in place) opens without it (REVIEW.md L-82).
+function zipLib(){
+  if (window.JSZip) return window.JSZip;
+  throw new Error(ALLOW_CDN ? "the ZIP library didn't load, so this book can't be opened. Check your connection and reload the page"
+    : "the ZIP library isn't on this site (libs/jszip.min.js, from fetch-libs.sh), so this book can't be opened");
+}
 // A whole ZIP downloaded, read by JSZip.
 async function wholeFile(r){
   const buf = await r.arrayBuffer();
   if (!isZipBytes(buf)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
-  return { zip: await JSZip.loadAsync(buf) };
+  return { zip: await zipLib().loadAsync(buf) };
 }
 async function zipFromUrl(url, init = {}){
   let r;
@@ -1981,10 +1991,13 @@ async function buildPage(src, path){
    book itself (blob: and data: copies, or the folder a book opened from a folder is in), styles only inline
    or the reader's fonts, and nothing else: no frames, no other sites, no forms, no <base>. This catches
    whatever the cleaning above might miss. */
+// An address as a policy source: ";", ",", quotes and spaces would end or split it (REVIEW.md L-81). The
+// browser compares paths decoded, so the encoded form matches the same files.
+const policyUrl = u => u.replace(/[;,'"\s]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 function bookPolicy(){
-  const folder = book?.src?.base || '';
-  const fontCssFrom = fontsLocal ? fontsBase() : ALLOW_CDN ? 'https://fonts.googleapis.com' : '';
-  const fontFilesFrom = fontsLocal ? fontsBase() : ALLOW_CDN ? 'https://fonts.gstatic.com' : '';
+  const folder = policyUrl(book?.src?.base || '');
+  const fontCssFrom = fontsLocal ? policyUrl(fontsBase()) : ALLOW_CDN ? 'https://fonts.googleapis.com' : '';
+  const fontFilesFrom = fontsLocal ? policyUrl(fontsBase()) : ALLOW_CDN ? 'https://fonts.gstatic.com' : '';
   return [`default-src 'none'`, `img-src data: blob: ${folder}`, `media-src data: blob: ${folder}`,
     `font-src data: blob: ${fontFilesFrom} ${folder}`, `style-src 'unsafe-inline' data: ${fontCssFrom}`,
     `base-uri 'none'`, `form-action 'none'`].map(d => d.replace(/\s+/g, ' ').trim()).join('; ');
@@ -2495,7 +2508,7 @@ async function openFile(file){
     if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}`, seq });
     else {
       let zip = await zipFromBlob(file).catch(() => null);   // in place when possible
-      if (!zip) { zip = await JSZip.loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
+      if (!zip) { zip = await zipLib().loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
       await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}`, seq });
     }
   }
@@ -4706,7 +4719,8 @@ async function loadConfig(){
     try {
       if (CONFIG_SETTINGS[key]) {
         const [type, apply] = CONFIG_SETTINGS[key];
-        if (type === 'books') { if (!(typeof value === 'string' || (Array.isArray(value) && value.length && value.every(v => typeof v === 'string')))) throw new Error('should be a name or a list of names'); }
+        // (An empty name would be this page itself: L-83.)
+        if (type === 'books') { if (![value].flat().length || ![value].flat().every(v => typeof v === 'string' && v.trim())) throw new Error('should be a name or a list of names (not empty)'); }
         else if (typeof value !== type || value === null) throw new Error(`should be a ${type}`);
         if (type === 'number' && !Number.isFinite(value)) throw new Error('should be a finite number');
         apply(value);
@@ -4736,14 +4750,8 @@ async function loadConfig(){
   { const t = store.get('spine:theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
   syncThemeBtn();
   setToc(!narrow.matches);
-  if (!window.JSZip) {
-    $('#bookTitle').textContent = 'Spine Reader';
-    showNotice(ALLOW_CDN ? "The ZIP library didn't load, so EPUB files can't be opened. Check your connection and reload the page."
-      : "The ZIP library isn't on this site (libs/jszip.min.js, from fetch-libs.sh), so EPUB files can't be opened.", 'error');
-  } else {
-    const ref = new URLSearchParams(location.search).get('book');
-    await (ref ? openFromUrl(ref) : openDefault());
-  }
+  const ref = new URLSearchParams(location.search).get('book');
+  await (ref ? openFromUrl(ref) : openDefault());
 })();
 /* Without ?book=, a default.epub next to this page opens if there is one; otherwise the built-in sample.
    A missing file may still come back as 200 (a site's "not found" page), so the reply has to be a real
@@ -4781,8 +4789,12 @@ async function openDefault(seq = ++openSeq){
   if (!isStale(seq)) await openSample(seq);
 }
 async function openSample(seq = ++openSeq){
-  try { await openBook(zipSource(await JSZip.loadAsync(await makeSample())), { sample: true, seq }); }
-  catch (err) { if (!isStale(seq)) { hideStatus(); showNotice("Couldn't build the sample book: " + err.message, 'error'); } }
+  try { await openBook(zipSource(await zipLib().loadAsync(await makeSample())), { sample: true, seq }); }
+  catch (err) {
+    if (isStale(seq)) return;
+    hideStatus(); if (!book) $('#bookTitle').textContent = 'Spine Reader';
+    showNotice("Couldn't show the sample book: " + err.message + '.', 'error');
+  }
 }
 /* ?book=dir/ opens an extracted EPUB folder; ?book=dir/a.epub fetches and unzips the archive;
    ?book=dir/a.txt, .md or .html opens that document.

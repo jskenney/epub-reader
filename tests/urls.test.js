@@ -227,3 +227,34 @@ test("a bad ?book= link opens the folder's default.epub, with a note about the l
     assert.match(await h.notice(page), /books\/nothing.epub couldn't be opened\. Nothing was found/);
   } finally { fs.rmSync(target, { force: true }); }
 });
+
+test('a missing file with "&" or "\'" in its name is still recognised on a site that answers with a "not found" page (L-80)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SOFT}/reader/index.html?book=books/Alice's%20%26%20Bob.html`);
+  assert.equal(await h.title(page), 'Four Fables', 'the "not found" page is not opened as the book');
+  assert.match(await h.notice(page), /couldn't|not found|isn't/i);
+});
+
+test('an extracted book in a folder named with ";" and "," shows its pictures (L-81)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/semi%3Bcolon%2Ccomma/`);
+  assert.equal(await h.title(page), 'Pictures');
+  await page.waitForFunction(() => document.querySelector('#page').contentDocument.querySelector('img.pic')?.naturalWidth > 0, null, { timeout: 5000 });
+  assert.deepEqual(page.cspViolations, []);
+});
+
+test('without the ZIP library, text files and EPUBs read in place still open; the sample says why it can\'t (L-82)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-nocdn/index.html?book=/reader/books/plain.txt`);
+  assert.match(await h.inFrame(page, doc => doc.body.innerText), /It was a dark night/);
+  await h.openReader(page, `${h.SITE}/folder-nocdn/index.html?book=/reader/books/long.epub`);
+  assert.equal(await h.title(page), 'The Long Book');
+  await h.openReader(page, `${h.SITE}/folder-nocdn/index.html`).catch(() => {});
+  assert.match(await h.notice(page), /ZIP library isn't on this site/);
+});
+
+test('an empty DEFAULT_BOOK in a config is refused rather than opening the reader\'s own page (L-83)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-emptydefault/index.html`);
+  assert.equal(await h.title(page), 'Four Fables');
+});
