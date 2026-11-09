@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 17): `index.html` (about 5,900 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 18): `index.html` (about 5,900 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -99,7 +99,10 @@ Round 17 was an adversarial review of the whole CSS cleaner, and a review of rou
 review found no live bypass in Chromium 153 across every form tried (escapes, every place an address can appear,
 substitutions, pasted sheets, the hoisting, `</style`, timing traps); one latent gap, URL-typed `attr()`, is closed
 in `95d266b`. The other review found two medium bugs (M-58, M-59) and seven low ones (L-164 to L-170), fixed in
-`a2dabfe`. The tests drive the export with a stand-in AAC encoder (the test
+`a2dabfe`.
+
+Round 18 reviewed round 17's fixes and found only low items (L-171 to L-173), fixed in `1f4e9d8` and `44f1b2d`. With no
+critical, high or medium item in the last two reviews of the changes, the review-and-fix loops stopped there. The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
@@ -485,6 +488,9 @@ From all reviews so far, with the commits that fixed them.
 | L-168 | The Cancel test's limit was too loose to catch its fix being undone | `a2dabfe` |
 | L-169 | An untyped item with a known non-picture name (.mp3, .pdf) was read as text | `a2dabfe` |
 | L-170 | A search during the first indexing used up a retry of failed chapters | `a2dabfe` |
+| L-171 | The `attr()` check read raw text: an attribute named `data-url` was blocked, and a comment, an escape or a fallback string fooled it | `1f4e9d8`, `44f1b2d` |
+| L-172 | The non-page note showed "()" for an untyped item | `44f1b2d` |
+| L-173 | Pocket's worker errors weren't checked against the current worker, and unreadable messages weren't handled | `44f1b2d` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
