@@ -101,8 +101,9 @@ substitutions, pasted sheets, the hoisting, `</style`, timing traps); one latent
 in `95d266b`. The other review found two medium bugs (M-58, M-59) and seven low ones (L-164 to L-170), fixed in
 `a2dabfe`.
 
-Round 18 reviewed round 17's fixes and found only low items (L-171 to L-173), fixed in `1f4e9d8` and `44f1b2d`. With no
-critical, high or medium item in the last two reviews of the changes, the review-and-fix loops stopped there. The tests drive the export with a stand-in AAC encoder (the test
+Round 18 reviewed round 17's fixes and found only low items (L-171 to L-173), fixed in `1f4e9d8` and `44f1b2d`. With only
+low items left in that review, and the CSS cleaner holding under an adversarial review in round 17, the
+review-and-fix loops stopped there (six of the ten allowed). The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
