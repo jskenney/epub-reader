@@ -13,6 +13,11 @@ async function startReading(page) {
   await page.keyboard.press('r');
   assert.ok(await h.waitFor(() => h.spokenWord(page), 20000), 'reading should start');
 }
+// Move the page's clock on in steps of under a minute, with real time between them for the voice stream to
+// arrive, as real time passes (one big jump would also look like a stalled stream: REVIEW.md L-75).
+async function fastForward(page, sec) {
+  for (let left = sec; left > 0; left -= 40) { await page.clock.fastForward(Math.min(40, left) * 1000); await page.waitForTimeout(150); }
+}
 const playing = page => page.evaluate(() => document.querySelector('#ttsPlay').classList.contains('playing'));
 
 test('the server voice reads, streams, and nothing leaves the site', async () => {
@@ -46,7 +51,7 @@ test('sleep timer: stops at the end of a sentence once the time is up, and can b
   await startReading(page);
   await page.selectOption('#ttsSleep', '15');
   assert.match(await page.$eval('#ttsSleep', s => s.selectedOptions[0].textContent), /Stops in 1[45]:\d\d/);
-  await page.clock.fastForward('15:05');
+  await fastForward(page, 905);
   // It stops at the end of the passage being read (a long paragraph here: up to ~20 s).
   const stopped = await h.waitFor(async () => !(await playing(page)) && await page.textContent('#ttsStatus'), 60000);
   assert.match(stopped, /Sleep timer: reading stopped/);
@@ -61,12 +66,12 @@ test('sleep timer: pausing while it waits for the passage to end turns it off, s
   await h.openReader(page, LONG, serverVoice);
   await startReading(page);
   await page.selectOption('#ttsSleep', '15');
-  await page.clock.fastForward('15:05');
+  await fastForward(page, 905);
   assert.ok(await h.waitFor(async () => /Stopping after this passage/.test(await page.$eval('#ttsSleep', s => s.selectedOptions[0].textContent)), 5000));
   await page.keyboard.press(' ');   // pause
   await page.waitForTimeout(300);
   assert.equal(await page.inputValue('#ttsSleep'), 'off');
-  await page.clock.fastForward('02:00');
+  await fastForward(page, 120);
   await page.keyboard.press(' ');   // play again, more than a minute later
   await page.waitForTimeout(3000);
   assert.equal(await playing(page), true, 'reading should carry on');
@@ -109,4 +114,63 @@ test('time left in the chapter and the book', async () => {
   const left = await h.waitFor(async () => { const t = await page.textContent('#timeLeft'); return /left in chapter/.test(t) && t; }, 10000);
   assert.match(left, /· \d+ min left in chapter · \d+ min in book/);
   assert.match(await page.getAttribute('#timeLeft', 'title'), /reading speed/);
+});
+
+test('a comic has no text to read: R says so and the page and saved position stay put (M-23)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/comic.cbz`, serverVoice);
+  const positions = () => page.evaluate(() => Object.entries(localStorage).filter(([k]) => k.startsWith('spine:pos:')).map(([k, v]) => [k, JSON.parse(v).i, JSON.parse(v).f]));
+  const before = await positions();
+  await page.keyboard.press('r');
+  await page.waitForTimeout(1500);
+  assert.match(await page.textContent('#spinePos'), /spine 1\//);
+  assert.match(await h.notice(page), /no text to read aloud/);
+  assert.equal(await page.evaluate(() => document.querySelector('#tts').hidden), true, 'the bar stays closed');
+  assert.deepEqual(await positions(), before);
+});
+
+test('reading past the last text stops there, not on the last picture page (M-23)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/text-then-pictures.epub`, serverVoice);
+  await startReading(page);
+  await page.waitForFunction(() => /End of book/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
+  assert.match(await page.textContent('#spinePos'), /spine 1\//, 'still on the text');
+  assert.equal(await playing(page), false);
+});
+
+test('opening another book while reading stops reading; a comic closes the bar (L-72, M-23)', async () => {
+  const page = await h.newPage();
+  await h.clearBreezeLog();
+  await h.openReader(page, LONG, serverVoice);
+  await startReading(page);
+  const books = require('node:path').join(__dirname, 'site', 'reader', 'books');
+  await page.setInputFiles('#fileInput', require('node:path').join(books, 'twin-b.epub'));
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Twin Title');
+  await page.waitForTimeout(2000);
+  assert.equal(await playing(page), false, 'not reading the new book on its own');
+  assert.ok(!(await h.breezeLog()).some(r => r.text.includes('twin-b')), 'nothing of the new book was asked for');
+  await page.keyboard.press(' ');   // play: reads the new book
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(r => r.text.includes('twin-b')), 10000));
+  await page.setInputFiles('#fileInput', require('node:path').join(books, 'comic.cbz'));
+  await page.waitForFunction(() => /spine 1\/3/.test(document.querySelector('#spinePos').textContent));
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => document.querySelector('#tts').hidden), true, 'the bar is closed for a comic');
+  assert.match(await page.textContent('#spinePos'), /spine 1\/3/);
+});
+
+test('a voice chosen while paused applies when playing again, instead of the old audio resuming (L-73)', async () => {
+  const page = await h.newPage();
+  await h.clearBreezeLog();
+  await h.openReader(page, LONG, serverVoice);
+  await startReading(page);
+  await page.keyboard.press(' ');
+  await page.waitForFunction(() => document.querySelector('#ttsPlay').getAttribute('aria-label') === 'Play');
+  await page.waitForTimeout(500);
+  const sentence = await page.evaluate(() => [...document.querySelector('#page').contentWindow.CSS.highlights.get('tts-sentence')][0].toString());
+  await h.clearBreezeLog();
+  await page.selectOption('#ttsVoice', { label: 'Second narrator' });
+  await page.keyboard.press(' ');
+  // (Passages after it are made in the new voice anyway: the one paused in must be too.)
+  const again = await h.waitFor(async () => (await h.breezeLog()).find(r => r.ref_text === 'Another clip.' && r.text.startsWith(sentence.slice(0, 15))), 10000);
+  assert.ok(again, `the paused passage ("${sentence.slice(0, 30)}…") is made again in the new voice: ${JSON.stringify((await h.breezeLog()).map(r => [r.ref_text, r.text.slice(0, 25)]))}`);
 });

@@ -1376,6 +1376,9 @@ async function startBook(next){
   // the previous book's recording (REVIEW.md M-17).
   moAudio.pause(); delete moAudio.dataset.path; moAudio.removeAttribute('src'); moAudio.load();
   book = next;
+  // Reading aloud belongs to the book it was started in: stop it (or, for a comic, which has no text, close
+  // the bar) rather than carry on into the new book (REVIEW.md M-23, L-72).
+  if (tts.open) { if (book.comic) ttsClose(); else { tts.playing = false; tts.awaitChapter = false; ttsStopAudio(); ttsUpdateBar(); } }
   pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
   const spine = book.spine;
   search.token++; Object.assign(search, { q: '', hits: [], cur: -1, shown: false });
@@ -2944,12 +2947,25 @@ function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepF
   tts.utt = u;   // keep a reference: some browsers drop events for collected utterances
   setTimeout(() => { if (token === tts.token) synth.speak(u); }, 0);
 }
-function ttsEndOfChapter(){
+async function ttsEndOfChapter(){
   if (tts.playing && sleep.mode === 'chapter') {   // sleep timer: stop at the end of this chapter
     tts.playing = false; ++tts.token; moAudio.pause(); nStop(); synth?.cancel(); hl('tts-word');
     setSleep('off'); tts.note = 'Sleep timer: stopped at the end of the chapter'; ttsUpdateBar(); return;
   }
-  if (book && cur.i < book.spine.length - 1) { tts.awaitChapter = true; renderChapter(cur.i + 1); return; }
+  // On to the next chapter with text to read. Pages with none (pictures only) are passed over without being
+  // shown, so reading past the last text doesn't turn every page to the end and save that as the position
+  // (REVIEW.md M-23). Publisher narration has its own clips per chapter, so it goes chapter by chapter.
+  if (book && !book.comic) {
+    const b = book, token = tts.token;
+    for (let j = cur.i + 1; j < b.spine.length; j++) {
+      if (!tts.mo && !(await chapterChunks(j)).length) {
+        if (book !== b || token !== tts.token || !tts.playing) return;   // stopped, moved or another book meanwhile
+        continue;
+      }
+      if (book !== b || token !== tts.token || !tts.playing) return;
+      tts.awaitChapter = true; renderChapter(j); return;
+    }
+  }
   tts.playing = false; ++tts.token; moAudio.pause(); hl('tts-word'); ttsUpdateBar('End of book');
 }
 
@@ -3142,6 +3158,7 @@ function ttsStartPoint(){
 }
 // R / the Read aloud button.
 async function ttsReadHere(){
+  if (book?.comic) { showNotice('Comics have no text to read aloud.', 'info'); return; }
   if (!book || !ttsOpen()) return;
   // (After each wait: the bar may have been closed meanwhile, and then nothing may start: REVIEW.md M-18.)
   if (tts.engine === 'server') { await svProbe(); if (!tts.open) return; }
@@ -3205,7 +3222,11 @@ function ttsSetRate(r){
   if (neuralEngine()?.playbackSpeed && !(n.active && n.mode === 'stream')) { nAudio.playbackRate = tts.rate; return; }
   // Web Speech can't change rate mid-sentence and Kokoro bakes speed into the audio: restart at the current word
   if (tts.playing && !tts.mo) ttsGo(tts.ci, tts.pos);
+  else ttsDropPaused();
 }
+// A paused natural-voice passage was made with the old voice or speed: drop it, so Play makes it again from
+// the current word with the new settings instead of resuming the old audio (REVIEW.md L-73).
+function ttsDropPaused(){ if (!tts.playing && n.paused && n.active && !tts.mo) { ++tts.token; nStop(); } }
 async function ttsSetEngine(engine){
   tts.engine = engine; store.set('spine:ttsEngine', engine);
   const wasPlaying = tts.playing;
@@ -3361,7 +3382,7 @@ $('#ttsVoice').addEventListener('change', e => {
   else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
   else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); svClipVersion(svVoice()); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
-  if (tts.playing) ttsGo(tts.ci, tts.pos);
+  if (tts.playing) ttsGo(tts.ci, tts.pos); else ttsDropPaused();
 });
 $('#ttsSaved').addEventListener('click', async () => {
   const mb = ((await clipStore.size()) || 0) / 1048576;
@@ -3851,7 +3872,11 @@ function svGenerate(text, opts = {}){
       try {
         const reader = r.body.getReader();
         for (;;) {
-          const { done, value } = await reader.read();
+          // A stream that stops arriving partway (the server stalled) is given up on too, rather than leaving
+          // reading silent with every later request queued behind it (REVIEW.md L-75).
+          const stall = setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000);
+          let done, value;
+          try { ({ done, value } = await reader.read()); } finally { clearTimeout(stall); }
           if (done) break;
           let bytes = value;
           if (carry) { bytes = new Uint8Array(carry.length + value.length); bytes.set(carry); bytes.set(value, carry.length); }
