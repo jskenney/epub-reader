@@ -487,6 +487,7 @@ const store = {
 const RID = Object.fromEntries(['clip', 'flow', 'end', 'base', 'override', 'font'].map(n => [n, `spine-${n}-${Math.random().toString(36).slice(2, 8)}`]));
 let book = null;
 let cur = { i: 0 };
+let lastShown = null;   // { cur, doc }: the last chapter a render finished showing (renderChapter)
 let fontPct = Number(store.get('spine:font')) || 100;
 // Single-letter shortcuts (C, F, T, L, I, R, /, [ and ]) can clash with screen readers' browse-mode keys, so
 // they can be turned off (the Aa menu, or "shortcuts": false in reader-config.json as the starting choice).
@@ -720,11 +721,18 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
   if (count === 0xFFFF || cdSize === 0xFFFFFFFF || rawCdOffset === 0xFFFFFFFF) return null;   // ZIP64
   // Data before the archive (a self-extracting archive, say: REVIEW.md L-149) moves every offset by its length,
   // as JSZip allows: the directory ends where the record starts.
-  const shift = tailStart + e - (rawCdOffset + cdSize);
+  let shift = tailStart + e - (rawCdOffset + cdSize);
   if (shift < 0) return null;
-  const cdOffset = rawCdOffset + shift;
-  if (cdOffset + cdSize > size) return null;
-  const cd = cdOffset >= tailStart ? tail.subarray(cdOffset - tailStart, cdOffset - tailStart + cdSize) : await read(cdOffset, cdSize);
+  const directory = async sh => {
+    const at = rawCdOffset + sh;
+    if (at + cdSize > size) return null;
+    return at >= tailStart ? tail.subarray(at - tailStart, at - tailStart + cdSize) : read(at, cdSize);
+  };
+  let cd = await directory(shift);
+  // (Other records between the directory and its end record, ZIP64 ones with usable 32-bit fields: no data before
+  // the archive after all: loop 4 review.)
+  if (shift > 0 && !(cd?.length >= 4 && u32(cd, 0) === 0x02014b50)) { shift = 0; cd = await directory(0); }
+  if (!cd) return null;
   if (cd.length < cdSize) return null;
   // A plain object would let an entry named "__proto__" change it, and "constructor" look like an entry.
   const files = Object.create(null), kept = new Map();
@@ -962,11 +970,13 @@ function dirSource(base){
       const u = abs(p), key = this.obf?.get(pathKey(p)); if (!u || !key) return u;
       try {
         const r = await fetch(u); if (!r.ok) return null;
-        const b = URL.createObjectURL(new Blob([unobfuscate(new Uint8Array(await r.arrayBuffer()), key)], { type }));
+        const data = unobfuscate(new Uint8Array(await r.arrayBuffer()), key);
+        if (this.disposed) return null;   // (the book was closed meanwhile)
+        const b = URL.createObjectURL(new Blob([data], { type }));
         this.blobs.add(b); return b;
       } catch { return null; }
     },
-    dispose(){ this.blobs.forEach(u => URL.revokeObjectURL(u)); this.blobs.clear(); }
+    dispose(){ this.disposed = true; this.blobs.forEach(u => URL.revokeObjectURL(u)); this.blobs.clear(); }
   };
 }
 function parseDoc(text, type){
@@ -1760,39 +1770,47 @@ const cssUrl = u => `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).t
 // The addresses in a stylesheet: [{ s, e, ref, kind }], kind "import" (an @import rule, s..e the whole rule)
 // or "image" (a url token, url() or src() with a string, or a string inside image-set() or image()).
 // A rule moved elsewhere ends with ";" (the last rule of a sheet may have none, and would take what follows).
-const cssEndRule = t => /;\s*$/.test(t) ? t : t + ';';
-const IMAGE_STRING_FNS = /^(-webkit-)?image-set$|^image$|^src$/;
+const cssEndRule = t => /;\s*$/.test(t) ? t : cssCloseAtEnd(t) + ';';   // (closed first: an open string or bracket would take the ";")
+const IMAGE_STRING_FNS = /^(-webkit-)?image-set$|^image$|^src$|^url$/;
+const SUBSTITUTIONS = /^(var|env|if|attr|inherit|first-valid)$/;
 function cssRefs(css){
   const toks = cssTokens(css), refs = [], fns = [];
   let block = 0, late = false;   // late: past the point where @import is allowed (anything but @charset and @layer x;)
+  let nsOk = true;   // still where @namespace counts (before any rule): only those are moved (loop 4 review)
   const next = k => { while (toks[k]?.t === 'ws' || toks[k]?.t === 'comment') k++; return k; };
   for (let k = 0; k < toks.length; k++) {
     const tk = toks[k];
     if (tk.t === 'url') refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
     else if (tk.t === 'function') {
+      let bad = false;
       if (tk.v === 'url' || tk.v === 'src') {
         const m = next(k + 1), q = next(m + 1);
         // (a missing ")" at the end of the sheet is fine: the browser closes it there)
         if (toks[m]?.t === 'string' && (toks[q]?.t === ')' || q >= toks.length)) { refs.push({ s: tk.s, e: toks[q]?.e ?? css.length, ref: toks[m].v, kind: 'image' }); k = q; continue; }
+        bad = true;   // anything more than a string (a var() after it, modifiers): the address is out of reach, so it goes
       }
-      // var() or env() inside a function that takes addresses as strings: the address would only appear when the
-      // browser substitutes it, past this cleaner, so the whole function goes (REVIEW.md round 13 review).
-      if ((tk.v === 'var' || tk.v === 'env') && fns.some(f => IMAGE_STRING_FNS.test(f.v))) fns.findLast(f => IMAGE_STRING_FNS.test(f.v)).bad = true;
-      fns.push({ v: tk.v, s: tk.s });
+      // A substitution (var(), env(), if(), attr(), a custom --function()) inside a function that takes addresses: the
+      // address would only appear when the browser substitutes it, past this cleaner, so the whole function goes.
+      // (Each entry points to the nearest such function around it, so this is one step, not a walk back: loop 4.)
+      const img = IMAGE_STRING_FNS.test(tk.v) ? null : fns.at(-1)?.img;
+      if (img && (SUBSTITUTIONS.test(tk.v) || tk.v.startsWith('--'))) img.bad = true;
+      const entry = { v: tk.v, s: tk.s, bad };
+      entry.img = IMAGE_STRING_FNS.test(tk.v) ? entry : img;
+      fns.push(entry);
     }
-    else if (tk.t === '(') fns.push({ v: '(', s: tk.s });
+    else if (tk.t === '(') fns.push({ v: '(', s: tk.s, img: fns.at(-1)?.img });
     else if (tk.t === ')') {
       const f = fns.pop();
       if (f?.bad) { while (refs.length && refs.at(-1).s >= f.s) refs.pop(); refs.push({ s: f.s, e: tk.e, ref: '', kind: 'blocked' }); }
     }
     else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1)?.v || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
-    else if (tk.t === '{') { if (block === 0) late = true; block++; }
+    else if (tk.t === '{') { if (block === 0) { late = true; nsOk = false; } block++; }
     else if (tk.t === '}') block = Math.max(0, block - 1);
     else if (tk.t === 'at' && block === 0 && !['import', 'charset', 'layer'].includes(tk.v)) {
-      late = true;
+      late = true; if (tk.v !== 'namespace') nsOk = false;
       if (tk.v === 'namespace') {
         let m = k + 1; while (m < toks.length && toks[m].t !== ';' && toks[m].t !== '{') m++;
-        if (toks[m]?.t !== '{') refs.push({ s: tk.s, e: toks[m]?.e ?? css.length, ref: '', kind: 'namespace' });   // (moved to the top: rewriteCss)
+        if (toks[m]?.t !== '{' && nsOk) refs.push({ s: tk.s, e: toks[m]?.e ?? css.length, ref: '', kind: 'namespace' });   // (moved to the top: rewriteCss)
         k = toks[m]?.t === '{' ? m - 1 : m;
       }
     }
@@ -1813,6 +1831,10 @@ function cssRefs(css){
       k = m;
     }
   }
+  // A function still open at the end of the sheet is closed there by the browser: one to be blocked is blocked
+  // to the end (loop 4 review).
+  const open = fns.find(f => f.bad);
+  if (open) { while (refs.length && refs.at(-1).s >= open.s) refs.pop(); refs.push({ s: open.s, e: css.length, ref: '', kind: 'blocked' }); }
   return refs;
 }
 // The end of a stylesheet closes whatever is open in it (a comment, a string, a url, brackets and blocks):
@@ -2289,9 +2311,13 @@ async function chapterSource(item){
   let it = item;
   for (let k = 0; k < 8 && !isPage(it) && it.fallback && book.manifest?.get(it.fallback); k++) it = book.manifest.get(it.fallback);
   let doc;
-  if (!isPage(it) && !/^image\//.test(it.type)) {   // (audio, a PDF…: not decoded as text: round 13 review)
-    doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p>This part of the book (${escHtml(it.type || it.path.split('/').pop())}) can't be shown here.</p></body></html>`, 'application/xhtml+xml');
-  } else if (!isPage(it) && /^image\//.test(it.type)) {
+  // (A picture known by its type or its name; something else with a type of its own, audio or a PDF, isn't decoded
+  // as text: a note says it can't be shown, which search, reading aloud and exports pass over. With no type and a
+  // name not known either, it is read as a page, as before: loop 4 review.)
+  const type = it.type || (book.byPath ? typeOf(it.path) : '');
+  if (!isPage(it) && it.type && !/^image\//.test(type)) {
+    doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p data-spine-note="">This part of the book (${escHtml(it.type)}) can't be shown here.</p></body></html>`, 'application/xhtml+xml');
+  } else if (!isPage(it) && /^image\//.test(type)) {
     doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p><img src="${escHtml(encodeURIComponent(it.path.split('/').pop()))}" alt=""/></p></body></html>`, 'application/xhtml+xml');
   } else {
     const text = await readText(book.zip, it.path);
@@ -2332,7 +2358,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   i = Math.max(0, Math.min(book.spine.length - 1, i));
   const token = ++renderToken;
   ttsBeforeRender();
-  const item = book.spine[i], prev = cur, prevDoc = frame.contentDocument;
+  const item = book.spine[i];
   cur = { i, page: 0, pages: 1, f: fraction };
   updateChrome();
   try {
@@ -2348,6 +2374,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     position(frag, fraction);
     hideStatus();
     cur.shown = true; cur.book = book;
+    lastShown = { cur, doc: frame.contentDocument };   // (to go back to if a later chapter can't be shown)
     releaseImages(item.path);
     ttsAfterRender();
     searchAfterRender();
@@ -2357,17 +2384,22 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     showNotice(`Couldn't display ${item.href}: ${err.message}`, 'error');
     // The page shown is still the one before: so are the position and the header (round 11 review). Reading
     // aloud that came here stops, rather than showing "playing" with nothing to play.
-    // (Only while the frame still shows it, and laid out again, as a resize meanwhile may have moved it.)
-    if (prev?.book === book && frame.contentDocument === prevDoc) {
-      cur = prev; cur.failed = new Set([...(prev.failed || []), i]);
+    // (The last page of this book actually shown, while the frame still shows it, laid out again, as a resize
+    // meanwhile may have moved it. Otherwise, whatever else is in the frame (another book's page, a page that
+    // arrived for a render overtaken since): an empty page in its place, wired as any page, so the reader
+    // always ends up somewhere it can turn from: loop 4 review.)
+    const back = lastShown?.cur.book === book && lastShown.doc === frame.contentDocument ? lastShown.cur : null;
+    if (back) {
+      cur = back; cur.failed = new Set([...(back.failed || []), i]);
       if (scrolling()) cur.f = fraction(); else position('', cur.f);
       updateChrome(); savePos();
       ttsRestore();
-    } else if (frame.contentDocument === prevDoc) {
-      // Nothing of this book to go back to (its first page failed): an empty page, not another book's left behind.
+    } else {
       await loadFrame('<!doctype html><meta charset="utf-8"><title></title><body></body>');
       if (token !== renderToken) return;
+      wireFrame();
       cur.failed = new Set([i]); cur.shown = true; cur.book = book;
+      lastShown = { cur, doc: frame.contentDocument };
     }
     if (tts.awaitChapter || tts.playing) { tts.awaitChapter = false; tts.playing = false; ++tts.token; ttsUpdateBar(); }
   }
@@ -3085,7 +3117,7 @@ const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
   barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
-const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],#' + RID.end + ',' +
+const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],[data-spine-note],#' + RID.end + ',' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
 const hasWords = t => /[\p{L}\p{N}]/u.test(t);
@@ -5377,7 +5409,7 @@ window.addEventListener('beforeunload', e => { if (ab.running) { e.preventDefaul
    splits the page in the frame) and searched ignoring case, accents and curly-vs-straight quotes. A match
    is kept as (chapter, block, offset), so after the chapter renders the same block in the frame gives its
    DOM range: matches in the chapter are highlighted, the chosen one more strongly, and the page turns to it. */
-const SEARCH_SKIP = 'script,style,noscript,template,[hidden],#' + RID.end;
+const SEARCH_SKIP = 'script,style,noscript,template,[hidden],[data-spine-note],#' + RID.end;
 let SEARCH_MAX = 500;
 const search = { q: '', hits: [], cur: -1, token: 0, timer: 0, shown: false };
 const foldMap = new Map();
@@ -5399,32 +5431,48 @@ function fold(t){
   return o;
 }
 function searchIndex(){
-  if (book.search) return book.search;
   const b = book;
-  let incomplete = false;
+  // A chapter that couldn't be read is tried again by a later search, a few times; the chapters already read are
+  // kept (loop 4 review: the whole book was read again at every pause in typing).
+  if (b.search && !(b.searchFailed?.size && (b.searchTries || 0) < 3 && !b.searchBusy)) return b.search;
+  const entries = (i, blocks) => {
+    let link = null;
+    for (let j = i; j >= 0 && !link; j--) link = tocLinkFor(b.spine[j].path);
+    const fallback = link && !link.dataset.frag ? link.textContent : b.spine.length > 1 ? `Section ${i + 1}` : '';
+    let heading = fallback;
+    return blocks.map(x => {
+      const text = x.text, entry = { text, folded: fold(text), heading };
+      if (/^h[1-3]$/i.test(x.el?.localName || '') && text.trim()) heading = entry.heading = text.replace(/\s+/g, ' ').trim();
+      return entry;
+    });
+  };
+  if (b.search) {   // only the chapters that failed
+    const before = b.search;
+    b.searchTries = (b.searchTries || 0) + 1; b.searchBusy = true;
+    b.search = (async () => {
+      const chapters = await before;
+      for (const i of [...b.searchFailed]) {
+        if (book !== b) break;
+        try { chapters[i] = entries(i, textBlocks(await chapterDoc(i), SEARCH_SKIP)); b.searchFailed.delete(i); } catch {}
+      }
+      b.searchBusy = false;
+      return chapters;
+    })();
+    return b.search;
+  }
+  b.searchFailed = new Set();
   b.search = (async () => {
     const chapters = [];
     for (let i = 0; i < b.spine.length; i++) {
       if (book !== b) return chapters;
       if (i % 4 === 0) searchStatus(`Gathering text… ${Math.round(i / b.spine.length * 100)}%`);
       let blocks = [];
-      // (A chapter that couldn't be read is left out this time and tried again by a later search: round 13 review.)
-      try { blocks = textBlocks(await chapterDoc(i), SEARCH_SKIP); } catch { incomplete = true; }
-      let link = null;
-      for (let j = i; j >= 0 && !link; j--) link = tocLinkFor(b.spine[j].path);
-      const fallback = link && !link.dataset.frag ? link.textContent : b.spine.length > 1 ? `Section ${i + 1}` : '';
-      let heading = fallback;
-      chapters.push(blocks.map(x => {
-        const text = x.text, entry = { text, folded: fold(text), heading };
-        if (/^h[1-3]$/i.test(x.el?.localName || '') && text.trim()) heading = entry.heading = text.replace(/\s+/g, ' ').trim();
-        return entry;
-      }));
+      try { blocks = textBlocks(await chapterDoc(i), SEARCH_SKIP); } catch { b.searchFailed.add(i); }
+      chapters.push(entries(i, blocks));
       if (i % 8 === 7) await new Promise(r => setTimeout(r));   // keep the page responsive
     }
-    if (incomplete) setTimeout(() => { if (b.search === done) b.search = null; });
     return chapters;
   })();
-  const done = b.search;
   return b.search;
 }
 // The search pattern for a query: its words folded like the text, soft hyphens and zero-width characters

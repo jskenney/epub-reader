@@ -48,17 +48,30 @@ const LEAKS = [
   // From the round 5 review: tokenizer differences from Chromium.
   `a{x:1.url(a"b)} a{background:url(${R}/23.png)}`, `a{background:url(${R}/24.png\\`, `a{background:url(${R}/nul\0x.png)}`,
   `a{background:url("${R}/25.png"`, `a{background:url( "${R}/26.png" `,
+  // Loop 4 review: substitutions that would put an address together past the cleaner.
+  `:root{--x:"${R}/30.png"} p{background-image:image-set(var(--x) 1x`, `p{background-image:url("${R}/31.png" var(--e))}`,
+  `p{background-image:image-set(if(else:"${R}/32.png") 1x)}`, `p{background-image:src("${R}/33.png" type("image/png"))}`,
+  `p{background-image:image-set(env(--nope, "${R}/34.png") 1x)}`, `p{background-image:url("${R}/35.png" env(--e,))}`,
 ];
 
 // Imports whose text, pasted into the importing sheet, would join with it into a new address (or run on).
 const JOINS = [`@import "tail.css";${R}/27.png)}`, `@import "tail2.css";rl(${R}/28.png)}`, `@import "tail3.css";"${R}/29.png" 1x)}`,
   `@import "open-comment.css"; b{color:red}`, `@import "open-string.css"; b{color:red}`];
 
+test('many var() inside image-set() stay quick (loop 4 review: the check was quadratic)', async () => {
+  const { rewriteCss } = cleaner();
+  const css = 'a{b:image-set(' + 'var('.repeat(40000);
+  const t0 = Date.now();
+  await rewriteCss(css, 'x.css');
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+});
+
 test('every known form loses its remote address, in linear time (L-29, T-10)', async () => {
   const { rewriteCss, cssRefs, cssPreprocess } = cleaner();
   for (const css of LEAKS) {
     const out = await rewriteCss(css, 'x.css');
-    assert.doesNotMatch(out, /evil\.test|\\68ttp|00005c/, `${JSON.stringify(css)} -> ${JSON.stringify(out)}`);
+    // (A string in a custom property's value isn't fetched by itself: only where an address function uses it.)
+    assert.doesNotMatch(out.replace(/--[\w-]+\s*:\s*"[^"]*"/g, ''), /evil\.test|\\68ttp|00005c/, `${JSON.stringify(css)} -> ${JSON.stringify(out)}`);
   }
   // Imported sheets don't join into new addresses, or run on into the rest (the browser reads each on its own):
   // no remote address is left as a reference in the result, read as the browser will read it.
