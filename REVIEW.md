@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 16): `index.html` (about 5,900 lines), the fetch scripts,
+Review of the repository (2026-11-09, round 17): `index.html` (about 5,900 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -93,13 +93,19 @@ Round 16 was a review of rounds 14 and 15's fixes by two independent reviewers (
 - **Medium:** M-52 to M-57 (paging dead after a failed render; search re-reading the whole book; the export's new
   wait stopping on a 500 for one text, wasting the wait on a crashed voice, ignoring Cancel and Pause, and counting
   only its sleeps).
-- **Low:** L-150 to L-162. The tests drive the export with a stand-in AAC encoder (the test
+- **Low:** L-150 to L-162.
+
+Round 17 was an adversarial review of the whole CSS cleaner, and a review of round 16's other fixes. The cleaner
+review found no live bypass in Chromium 153 across every form tried (escapes, every place an address can appear,
+substitutions, pasted sheets, the hoisting, `</style`, timing traps); one latent gap, URL-typed `attr()`, is closed
+in `95d266b`. The other review found two medium bugs (M-58, M-59) and seven low ones (L-164 to L-170), fixed in
+`a2dabfe`. The tests drive the export with a stand-in AAC encoder (the test
 browser has none) that hands out real AAC frames from ffmpeg, and check the files with ffprobe and ffmpeg.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 170 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 172 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -140,7 +146,7 @@ No critical, high or medium items are open. The open items are:
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
-| [T-20](#t-20-round-11-test-gaps) | Round 11 test gaps | Tests |
+| [T-20](#t-20-test-gaps) | Test gaps | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
 ## Low
@@ -173,13 +179,17 @@ Updated.
   and `KEEP_POSITIONS_DAYS: 0`.
 - The test server's file types are its own, not nginx.conf.example's.
 
-### T-20. Round 11 test gaps
+### T-20. Test gaps
 
-*Read.* Still untested (the rest was covered in round 15):
+*Read.* Still untested:
 - L-75 and L-100 (giving up on a stalled stream): they would take minutes of waiting, or a setting for tests.
 - L-90 (fallback pages keep their pictures), L-91 and L-103 (the range probe), L-93 (narration at the end of the
   text), L-94 and L-96 (the sleep timer).
 - The T-18 checks run right after loading, so a refused request logged later is missed.
+- From rounds 16 and 17: the search retry, the non-page note, the ZIP64 fallback in lazyZip, obfuscated fonts by
+  exact name, folder books' dispose guard, the export's saved-audio room, keepPart's limits, the voice label, the
+  Cancel confirmation, the 409 wait (a test would take a minute of 409s), and the Pocket crash (needs a stand-in
+  worker).
 
 ## Enhancements
 
@@ -305,6 +315,8 @@ From all reviews so far, with the commits that fixed them.
 | M-55 | A crashed Kokoro (or reloading Pocket) wasted the wait, then stopped with an internal error | `f38b008` |
 | M-56 | Cancel took up to 20 s during a wait for the voice, and a paused export went on polling and stopped itself | `f38b008` |
 | M-57 | The wait limit counted only its sleeps, so a hung server could stall an export for an hour | `f38b008` |
+| M-58 | A voice server that was only busy (409) had its sentences left silent | `a2dabfe` |
+| M-59 | In the scroll layout, restoring after a failed chapter threw (an option hid `fraction()`), leaving read-aloud "playing" | `a2dabfe` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -465,6 +477,14 @@ From all reviews so far, with the commits that fixed them.
 | L-160 | Failed server requests left an abort listener behind | `f38b008` |
 | L-161 | The voice label went blank while the server was away mid-export | `f38b008` |
 | L-162 | Two fonts differing only in case, one obfuscated, were both de-obfuscated | `f38b008` |
+| L-163 | `attr()` typed as an address (from an HTML attribute the cleaner never sees) wasn't blocked (latent: browsers don't fetch it yet) | `95d266b` |
+| L-164 | A failed chapter chosen again from the blank page (or search) wasn't tried again | `a2dabfe` |
+| L-165 | A crashed Pocket worker wasn't marked as one, so the export retried it | `a2dabfe` |
+| L-166 | Kokoro's crash message said "the voice stopped working" twice | `a2dabfe` |
+| L-167 | A failed connection to the voice server left an abort listener behind | `a2dabfe` |
+| L-168 | The Cancel test's limit was too loose to catch its fix being undone | `a2dabfe` |
+| L-169 | An untyped item with a known non-picture name (.mp3, .pdf) was read as text | `a2dabfe` |
+| L-170 | A search during the first indexing used up a retry of failed chapters | `a2dabfe` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
 | T-3 | Device voices and publisher narration had no tests | `a9c1cce` |
