@@ -244,6 +244,8 @@ def main():
         "c.xhtml": ('<?xml version="1.0" encoding="iso-8859-1"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>C</title></head><body>'
                     '<p>Latin crème brûlée.</p></body></html>').encode("latin-1"),
     }, "urn:stale-charset")
+    # An old Windows-1252 Markdown file that mentions a UTF-8 <meta> (not sniffed in Markdown: round 11 review).
+    (books / "latin-tips.md").write_bytes('# Old\n\nWrite `<meta charset="utf-8">` in new pages. Café crème brûlée.\n'.encode("cp1252"))
     (books / "tips.md").write_text('# Tips\n\nWrite `<meta charset="windows-1252">` only if you mean it: café – “quoted”.\n', encoding="utf-8")
     # Files in other encodings (M-26): Shift_JIS HTML that says so, UTF-16 text with a mark.
     (books / "sjis.html").write_bytes('<html><head><meta charset="shift_jis"><title>本</title></head><body><p>日本語の本です。</p></body></html>'.encode("shift_jis"))
@@ -253,6 +255,10 @@ def main():
     epub(books / "abc.epub", "ABC", [(f"c{i}.xhtml", n, f"<p>{n} words here.</p>") for i, n in ((1, "Alpha"), (2, "Bravo"), (3, "Charlie"))], uid="urn:abc")
     with zipfile.ZipFile(books / "abc.epub") as z:
         z.extractall(books / "abc")
+    # The same with chapter 2 missing from the folder (round 11 review): reading stops there, on chapter 1.
+    with zipfile.ZipFile(books / "abc.epub") as z:
+        z.extractall(books / "abc-missing")
+    (books / "abc-missing" / "OEBPS" / "c2.xhtml").unlink()
     # Text, then only pictures to the end (REVIEW.md M-23): reading past the text mustn't turn to the last page.
     epub(books / "text-then-pictures.epub", "Text Then Pictures", [("c1.xhtml", "Words", "<h1>Words</h1><p>Only a few words here.</p>")]
          + [(f"p{i}.xhtml", f"Plate {i}", f'<p><img src="p{i}.png" alt=""/></p>') for i in (2, 3)],

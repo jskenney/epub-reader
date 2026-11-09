@@ -193,3 +193,15 @@ test('a chapter that failed to load while being looked at ahead is still read, n
   assert.ok(failed >= 1, 'the first request for chapter 2 failed');
   assert.match(texts, /Bravo words here/, `chapter 2 was read: ${texts}`);
 });
+
+test('reading aloud into a chapter that can\'t be loaded stops on the chapter before, and keeps that position (round 11 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/abc-missing/`, serverVoice);
+  await startReading(page);
+  await page.waitForFunction(() => /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''), null, { timeout: 30000 });
+  await page.waitForTimeout(500);
+  assert.equal(await playing(page), false, 'not left "playing" with nothing to play');
+  assert.equal(await page.textContent('#curFile'), 'OEBPS/c1.xhtml');
+  const pos = await page.evaluate(() => Object.entries(localStorage).filter(([k]) => k.startsWith('spine:pos:')).map(([, v]) => JSON.parse(v).i));
+  assert.deepEqual(pos, [0]);
+});

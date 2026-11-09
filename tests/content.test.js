@@ -63,3 +63,16 @@ test('UTF-8 under a stale or wrong declaration stays UTF-8; real Latin-1 that sa
   await h.openReader(page, `${h.READER}?book=books/tips.md`);
   assert.match(await frameText(page), /café – “quoted”/, 'Markdown that mentions a charset');
 });
+
+test('an old Latin-1 file served with charset=utf-8, and Markdown that mentions a UTF-8 <meta>, still read as Windows-1252 (round 11 review)', async () => {
+  const page = await h.newPage();
+  const latin = Buffer.from('# Old\n\nCafé crème brûlée.\n', 'latin1');
+  for (const type of ['text/markdown; charset=utf-8', 'text/plain; charset=utf-8']) {
+    const ext = type.includes('markdown') ? 'md' : 'txt';
+    await page.route(`**/books/served-latin.${ext}`, route => route.fulfill({ status: 200, headers: { 'Content-Type': type }, body: latin }));
+    await h.openReader(page, `${h.READER}?book=books/served-latin.${ext}`);
+    assert.match(await frameText(page), /Café crème brûlée\./, type);
+  }
+  await h.openReader(page, `${h.READER}?book=books/latin-tips.md`);
+  assert.match(await frameText(page), /Café crème brûlée\./);
+});

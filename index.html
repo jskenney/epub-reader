@@ -494,7 +494,8 @@ async function allReal(base, names){ return (await Promise.all(names.map(n => re
 // first bytes are read, so it is cheap even for large files.
 async function realFile(url, kind = 'any', head = false){
   try {
-    const r = await fetch(url, { cache: 'no-store', ...(head && { headers: { Range: 'bytes=0-255' } }) });
+    // (The range only on this site: another site's server might not allow the header.)
+    const r = await fetch(url, { cache: 'no-store', ...(head && new URL(url, location.href).origin === location.origin && { headers: { Range: 'bytes=0-255' } }) });
     if (!r.ok || looksHtml(r)) { r.body?.cancel().catch(() => {}); return false; }
     const t = new TextDecoder().decode(await firstBytes(r, 256)).replace(/^\uFEFF/, '').trimStart();
     if (/^<(!doctype|html|head|body|\?xml|!--)/i.test(t)) return false;
@@ -934,18 +935,20 @@ function decodeText(bytes, { http = '', sniff = true, fallback = 'windows-1252' 
   if (bytes[0] === 0xFE && bytes[1] === 0xFF) return as('utf-16be', bytes.subarray(2));
   if (bytes[0] === 0x3C && bytes[1] === 0 && bytes[2] === 0x3F && bytes[3] === 0) return as('utf-16le');   // "<?" in UTF-16, no mark
   if (bytes[0] === 0 && bytes[1] === 0x3C && bytes[2] === 0 && bytes[3] === 0x3F) return as('utf-16be');
-  let declared = http;
+  // (A server's "utf-8" is often added to every text file, old ones too: valid UTF-8 is taken first anyway,
+  // so it is only a hint, and the file's own declaration or the fallback decides otherwise. Round 11 review.)
+  let declared = /^utf-?8$/i.test(http) ? '' : http;
   if (!declared && sniff) {
     const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024)).replace(/<!--[\s\S]*?(-->|$)/g, '');
     declared = (head.match(/^\s*<\?xml[^>]*?\bencoding\s*=\s*["']([\w.:-]+)["']/i) || head.match(/<meta\b[^>]*?\bcharset\s*=\s*["']?([\w.:-]+)/i))?.[1] || '';
   }
-  declared = declared.toLowerCase();
+  try { declared = declared ? new TextDecoder(declared).encoding : ''; } catch { declared = ''; }   // (aliases: csISO2022JP)
   // (UTF-16 named in a file that isn't UTF-16 is a mistake, as HTML treats it.)
-  if (/^(utf-?16(le|be)?|unicode(fffe)?|ucs-2)$/.test(declared)) declared = '';
+  if (/^utf-16/.test(declared)) declared = '';
   let utf8 = null; try { utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch {}
   if (utf8 != null && !(declared === 'iso-2022-jp' && bytes.includes(0x1B))) return utf8;
-  if (declared && !/^utf-?8$/.test(declared)) { const t = as(declared); if (t != null) return t; }
-  return new TextDecoder(/^utf-?8$/.test(declared) ? 'utf-8' : fallback).decode(bytes);
+  if (declared && declared !== 'utf-8') { const t = as(declared); if (t != null) return t; }
+  return new TextDecoder(declared === 'utf-8' ? 'utf-8' : fallback).decode(bytes);
 }
 const escHtml = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /* Libraries: loaded from libs/ under LIB_FILES (fetch-libs.sh) when there, otherwise from cdnjs. Both copies
@@ -2137,7 +2140,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
   i = Math.max(0, Math.min(book.spine.length - 1, i));
   const token = ++renderToken;
   ttsBeforeRender();
-  const item = book.spine[i];
+  const item = book.spine[i], prev = cur;
   cur = { i, page: 0, pages: 1, f: fraction };
   updateChrome();
   try {
@@ -2152,7 +2155,7 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     if (token !== renderToken) return;
     position(frag, fraction);
     hideStatus();
-    cur.shown = true;
+    cur.shown = true; cur.book = book;
     releaseImages(item.path);
     ttsAfterRender();
     searchAfterRender();
@@ -2160,6 +2163,10 @@ async function renderChapter(i, { frag = '', fraction = 0 } = {}){
     if (token !== renderToken) return;
     hideStatus();
     showNotice(`Couldn't display ${item.href}: ${err.message}`, 'error');
+    // The page shown is still the one before: so are the position and the header (round 11 review). Reading
+    // aloud that came here stops, rather than showing "playing" with nothing to play.
+    if (prev?.book === book) { cur = prev; updateChrome(); savePos(); }
+    if (tts.awaitChapter || tts.playing) { tts.awaitChapter = false; tts.playing = false; ++tts.token; ttsUpdateBar(); }
   }
 }
 
@@ -3957,8 +3964,8 @@ function svGenerate(text, opts = {}){
         for (;;) {
           // A stream that stops arriving partway (the server stalled) is given up on too, rather than leaving
           // reading silent with every later request queued behind it (REVIEW.md L-75).
-          // (Not before the first audio: a slow server may take long to start, as it always could.)
-          const stall = total ? setTimeout(() => ctl.abort(), SV_REPLY_SEC * 1000) : 0;
+          // (Before the first audio, longer: a slow server may take a while to start.)
+          const stall = setTimeout(() => ctl.abort(), (total ? 1 : 3) * SV_REPLY_SEC * 1000);
           let done, value;
           try { ({ done, value } = await reader.read()); } finally { clearTimeout(stall); }
           if (done) break;
@@ -4171,8 +4178,9 @@ const chunkStart = c => wordStartAt(c.b, c.s, c.s, c.e);
 async function chapterChunks(i){
   if (n.chapBook !== book) { n.chap = new Map(); n.chapBook = book; }
   // (A chapter that couldn't be read is null, and not kept, so it is tried again: round 11 review.)
-  if (!n.chap.has(i)) n.chap.set(i, chapterDoc(i).then(d => chunksOf(d).chunks, () => { n.chap.delete(i); return null; }));
-  return n.chap.get(i);
+  const map = n.chap;
+  if (!map.has(i)) map.set(i, chapterDoc(i).then(d => chunksOf(d).chunks).catch(() => { map.delete(i); return null; }));
+  return map.get(i);
 }
 /* Look-ahead: after the passage being spoken, keep making the following passages one at a time (behind
    it, so it is never slowed down) until about LOOKAHEAD_SEC of audio is ready, carrying on into the next
