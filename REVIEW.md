@@ -141,7 +141,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Tests:** T-11 (the weekly workflow hasn't run yet), T-16 and T-20 (in part).
-- **Enhancements:** E-1 to E-9, E-11 and E-15.
+- **Enhancements:** E-1 to E-9, E-11, E-15 and E-17 (being built).
 
 ## Open items
 
@@ -151,7 +151,7 @@ No critical, high or medium items are open. The open items are:
 | [T-11](#t-11-the-weekly-workflow-hasnt-run-yet) | The weekly workflow hasn't run yet | Tests |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books), [E-17](#e-17-audiobook-formats-opus-and-mp3-as-well-as-m4b) | Enhancements | — |
 
 ## Low
 
@@ -233,6 +233,22 @@ saved-audio limit, remote content, shortcuts and so on.
 Pre-paginated (fixed-layout) EPUBs are shown reflowed in columns, and `linear="no"` items are read in order with
 the rest (which the spec allows). Laying out fixed-layout pages as pages (and optionally skipping non-linear
 items) would suit comics-style and picture books.
+
+### E-17. Audiobook formats: `.opus` and `.mp3` as well as `.m4b`
+
+(Filed as E-17: E-16 is the default-book list from round 10.) AAC `.m4b` stays the default, but some browsers
+can't make AAC (Chrome on Linux has no AAC encoder). The export dialog offers three formats, with those this
+browser can't make greyed out and the reason shown:
+- **`.m4b` (AAC)**, the default: WebCodecs' AAC encoder (Chrome and Edge on Windows and macOS, Safari).
+- **`.opus` (Opus in Ogg)**: WebCodecs' Opus encoder, which every Chromium has, Linux included. Chapters as
+  Ogg chapter comments (`CHAPTER001=…`, `CHAPTER001NAME=…`), title, author, album, track and cover
+  (`METADATA_BLOCK_PICTURE`). About 32 kbps mono. Played by VLC, mpv, foobar2000 and several Android audiobook
+  players; not by Apple's apps.
+- **`.mp3` (MP3)**: encoded by lamejs (LAME in JavaScript, LGPL, about 150 KB, self-hosted by fetch-libs.sh or
+  from cdnjs, checked against a pinned hash), so it works in any browser, on plain `http://` too. ID3v2.4 tags
+  with chapters (`CHAP`/`CTOC`), title, author, album, track and cover. 64 kbps mono. Played almost everywhere;
+  chapter support varies by player.
+The choice is remembered. If AAC isn't available, the first format that is gets chosen, with a note why.
 
 ## Suggested order
 
