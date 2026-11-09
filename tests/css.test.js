@@ -172,6 +172,7 @@ test('a fragment in a CSS url is kept (L-84); a remote import after a pasted one
 test('attr() typed as an address is blocked; other attr() is left alone (loop 5 review)', async () => {
   const { rewriteCss } = cleaner();
   for (const css of ATTRS) assert.doesNotMatch(await rewriteCss(css, 'x.css'), /attr\(/, css);
-  for (const css of ['p::after{content:attr(title)}', 'p{width:attr(data-w type(<length>))}'])
+  for (const css of ['p::after{content:attr(title)}', 'p{width:attr(data-w type(<length>))}', 'p::after{content:attr(data-url)}',
+    'a::after{content:" (" attr(href) ")"}', 'p::after{content:attr(data-image-url type(<string>))}'])
     assert.equal(await rewriteCss(css, 'x.css'), css);
 });
