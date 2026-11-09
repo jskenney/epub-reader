@@ -356,7 +356,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <option value="90">Stop in 90 min</option>
           <option value="chapter">Stop at chapter end</option>
         </select>
-        <button class="btn ghost" id="ttsExport" title="Export as an audiobook (.m4b)" aria-label="Export as an audiobook" aria-haspopup="dialog">
+        <button class="btn ghost" id="ttsExport" title="Export as an audiobook" aria-label="Export as an audiobook" aria-haspopup="dialog">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 10V8a5.5 5.5 0 0 1 11 0v2"/><rect x="1.75" y="9.5" width="3" height="4.5" rx="1"/><rect x="11.25" y="9.5" width="3" height="4.5" rx="1"/><path d="M8 5.5v5m-2-2 2 2 2-2"/></svg>
         </button>
         <button class="btn ghost" id="ttsSaved" hidden title="Saved voice audio" aria-label="Saved voice audio">
@@ -402,7 +402,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     <div id="abPick" class="ab-col">
       <div class="ab-tools"><button type="button" class="btn" id="abAll">All</button><button type="button" class="btn" id="abNone">None</button><span class="ab-muted" id="abVoice"></span></div>
       <ul class="ab-list" id="abList" aria-label="Chapters"></ul>
-      <fieldset class="ab-mode"><legend class="ab-legend">Format</legend>
+      <fieldset class="ab-mode" aria-describedby="abFmtNote"><legend class="ab-legend">Format</legend>
         <label><input type="radio" name="abFormat" value="aac"> .m4b (AAC)</label>
         <label><input type="radio" name="abFormat" value="opus"> .opus (Opus)</label>
         <label><input type="radio" name="abFormat" value="mp3"> .mp3 (MP3)</label>
@@ -1121,7 +1121,7 @@ const LIBS = {
     integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
   marked: { file: 'libs/marked.min.js', cdn: MARKED_URL,
     integrity: 'sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+' },
-  // MP3 audiobooks (E-17): LAME in JavaScript, loaded only when an MP3 export is chosen.
+  // MP3 audiobooks (E-17): LAME in JavaScript, loaded when the export dialog opens (to know whether MP3 can be made).
   lamejs: { file: 'libs/lame.min.js', cdn: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js',
     integrity: 'sha384-xuasJXVcyv3hZq0eYpelEkBC8l4yufatZXDsKuyCU2rqfhDCb+ftuE/mSfZAteiK' },
 };
@@ -5032,7 +5032,7 @@ function abMp3(sink, plan){
     }
   };
 }
-// MP3 encoding with lamejs (loaded when an MP3 export starts): samples in, MP3 frames out to the writer, mono at
+// MP3 encoding with lamejs (loaded when the export dialog opens): samples in, MP3 frames out to the writer, mono at
 // 64 kbps, at the voice's own rate (24 kHz for the voices here).
 function abMp3Encoder(mp3){
   let enc = null, rate = 0, at = 0;
@@ -5089,7 +5089,8 @@ async function abFormatCheck(){
     }
     ab.opusConfigs = out;
   }
-  if (ab.mp3 == null) {
+  if (!ab.mp3) {   // (tried again on each opening after a failure: the network may be back)
+    ab.mp3 = null;
     try { await loadLib('lamejs'); ab.mp3 = !!window.lamejs?.Mp3Encoder; ab.mp3Why = ab.mp3 ? '' : "the MP3 encoder didn't start"; }
     catch (e) { ab.mp3 = false; ab.mp3Why = e.message; }
   }
@@ -5102,11 +5103,15 @@ function abFormatWhy(f){
   return ab.mp3 ? '' : ab.mp3 == null ? 'checking…' : `the MP3 encoder couldn't be loaded (${ab.mp3Why})`;
 }
 // The format chosen: the reader's last choice if it can be made here, else the first that can (AAC first).
+// While the choice is still being checked it stays chosen, and Export waits (round 19: a different format was made).
 function abFormat(){
-  const want = ab.formatChoice || store.get('spine:abFormat') || 'aac';
-  return !abFormatWhy(want) ? want : ['aac', 'opus', 'mp3'].find(f => !abFormatWhy(f)) || want;
+  let want = ab.formatChoice || store.get('spine:abFormat') || 'aac';
+  if (!AB_FORMATS[want]) want = 'aac';   // (a value from another version)
+  const why = abFormatWhy(want);
+  return !why || why === 'checking…' ? want : ['aac', 'opus', 'mp3'].find(f => !abFormatWhy(f)) || want;
 }
-const abKbps = f => f === 'aac' ? Math.round((ab.configs?.[0]?.bitrate || AB_KBPS * 1000) / 1000) : f === 'opus' ? 32 : 64;
+// The bitrate, for the size estimate: AAC's from the setting the encoder will take for the voices (24 kHz).
+const abKbps = f => f === 'aac' ? Math.round(((ab.configs?.find(c => c.sampleRate === 24000) || ab.configs?.find(c => c.sampleRate === 48000) || ab.configs?.[0])?.bitrate || AB_KBPS * 1000) / 1000) : f === 'opus' ? 32 : 64;
 // Samples at one rate to another: by the browser's own resampler (filtered, so no images or aliasing),
 // or failing that, straight lines between samples.
 async function abResample(data, from, to){
@@ -5497,7 +5502,7 @@ function abState(){
   const ne = neuralEngine();
   if (tts.engine === 'device' || tts.engine === 'narration' || !ne)
     return { text: 'Audiobooks are made with a natural voice: choose Kokoro, Pocket or Server in the read-aloud bar.' };
-  if (abFormatWhy(abFormat())) return { text: ['aac', 'opus', 'mp3'].some(f => abFormatWhy(f) === 'checking…') ? 'Checking which formats this browser can make…'
+  if (abFormatWhy(abFormat())) return { text: abFormatWhy(abFormat()) === 'checking…' ? `Checking whether this browser can make ${AB_FORMATS[abFormat()].label}…`
     : `No audiobook format can be made in this browser: ${['aac', 'opus', 'mp3'].map(f => `${AB_FORMATS[f].label}: ${abFormatWhy(f)}`).join('; ')}.` };
   if (!ne.ready()) {
     if (ne.st.state === 'loading') return { text: `Loading the voice… ${ne.st.progressText || ''}`.trim() };
@@ -5574,16 +5579,18 @@ function abSync(){
   const chosen = abFormat();
   for (const input of $('#abForm').querySelectorAll('input[name="abFormat"]')) {
     const why = abFormatWhy(input.value);
-    input.disabled = !!why || ab.running; input.checked = input.value === chosen;
-    input.closest('label').title = why ? `Not available: ${why}` : '';
-    input.closest('label').classList.toggle('ab-off', !!why);
+    const checking = why === 'checking…', off = !!why && !checking;   // (one still being checked can be chosen; Export waits)
+    input.disabled = off || ab.running; input.checked = input.value === chosen;
+    input.closest('label').title = checking ? 'Checking…' : off ? `Not available: ${why}` : '';
+    input.closest('label').classList.toggle('ab-off', off);
   }
+  // (The reasons are also here, in text, as a disabled radio button can't be focused to hear its title.)
   const off = ['aac', 'opus', 'mp3'].filter(f => abFormatWhy(f) && abFormatWhy(f) !== 'checking…').map(f => `${AB_FORMATS[f].label}: ${abFormatWhy(f)}`);
-  $('#abFmtNote').textContent = `Plays in ${AB_FORMATS[chosen].players}` + (off.length ? ` Not available here: ${off.join('; ')}.` : '');
+  $('#abFmtNote').textContent = off.length === 3 ? '' : (abFormatWhy(chosen) ? '' : `Plays in ${AB_FORMATS[chosen].players}`) + (off.length ? ` Not available here: ${off.join('; ')}.` : '');
   const v = neuralEngine();
   $('#abVoice').textContent = ab.running ? ab.voiceLabel : v ? `Voice: ${$('#ttsEngine').selectedOptions[0]?.textContent} · ${$('#ttsVoice').selectedOptions[0]?.textContent || ''}` : '';
   $('#ttsExport').classList.toggle('busy', ab.running);
-  $('#ttsExport').title = ab.running ? `Exporting the audiobook… ${Math.round(ab.done / (ab.total || 1) * 100)}%` : 'Export as an audiobook (.m4b)';
+  $('#ttsExport').title = ab.running ? `Exporting the audiobook… ${Math.round(ab.done / (ab.total || 1) * 100)}%` : 'Export as an audiobook';
 }
 function abShow(info){
   if (info) { ab.now = info; }

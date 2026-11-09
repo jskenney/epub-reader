@@ -30,6 +30,7 @@ GOT=()
 DEST=libs
 CDNJS=https://cdnjs.cloudflare.com/ajax/libs
 JSD=https://cdn.jsdelivr.net/npm
+SPDX=https://cdn.jsdelivr.net/gh/spdx/license-list-data@v3.25.0/text   # (pinned licence texts)
 
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 
@@ -88,6 +89,7 @@ say "Licences"
 get "$JSD/jszip@$JSZIP/LICENSE.markdown"   LICENSES/jszip.md
 get "$JSD/marked@$MARKED/LICENSE.md"       LICENSES/marked.md
 get "$JSD/lamejs@$LAMEJS/LICENSE"          LICENSES/lamejs.txt
+get "$SPDX/LGPL-3.0-only.txt"              LICENSES/LGPL-3.0.txt   # (lamejs's licence; the GPL-3.0 text follows it)
 [ "$LIST" = 1 ] && exit 0
 verify libs
 cat > "$DEST/LICENSES/NOTICE.txt" <<NOTICE
@@ -95,7 +97,8 @@ Self-hosted copies of the reader's libraries, fetched by fetch-libs.sh.
 
 JSZip $JSZIP (jszip.min.js)    MIT or GPL-3.0 (your choice)   https://stuk.github.io/jszip/
 marked $MARKED (marked.min.js) MIT                            https://marked.js.org/
-lamejs $LAMEJS (lame.min.js)   LGPL-3.0 (from LAME, LGPL)       https://github.com/zhuker/lamejs
+lamejs $LAMEJS (lame.min.js)   LGPL-3.0 (LGPL-3.0.txt)        https://github.com/zhuker/lamejs
+                               (a port of LAME, LGPL-2.0 or later; lamejs.txt is its licence FAQ)
 NOTICE
 
 echo

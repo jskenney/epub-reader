@@ -186,7 +186,7 @@ function fakePickers() {
       async close() { let s = ''; for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode(...buf.subarray(i, i + 32768)); window.__files[name] = btoa(s); },
       async abort() {} };
   } });
-  window.showSaveFilePicker = async o => handle(o.suggestedName);
+  window.showSaveFilePicker = async o => { window.__types = o.types; return handle(o.suggestedName); };
   window.showDirectoryPicker = async () => ({ getFileHandle: async name => handle(name) });
 }
 async function pickerFiles(page, count) {
@@ -518,4 +518,59 @@ test('.mp3: chapters, title, author in ID3 tags; a file per chapter with track n
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
   assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
+});
+
+test('while the chosen format is still being checked it stays chosen and Export waits (E-17 review)', async () => {
+  const page = await h.newPage();
+  let release;
+  const held = new Promise(r => { release = r; });
+  await page.route('**/libs/lame.min.js', async r => { await held; await r.continue(); });
+  await h.openReader(page, ABC, { 'spine:ttsEngine': 'server', 'spine:abFormat': 'mp3' });
+  await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
+  await page.click('#ttsExport');
+  await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && /Checking whether this browser can make \.mp3/.test(document.querySelector('#abNoteText').textContent));
+  assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
+  assert.equal(await page.isDisabled('#abStart'), true);
+  release();
+  await page.waitForFunction(() => document.querySelector('#abDialog').dataset.formats);
+  assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
+  assert.equal(await page.isDisabled('#abStart'), false);
+});
+
+test('a saved format this version doesn\'t know is ignored; a failed MP3 load is tried again on the next opening (E-17 review)', async () => {
+  const page = await h.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  let block = true;
+  await page.route('**/libs/lame.min.js', r => block ? r.abort() : r.continue());
+  await page.route('**/cdnjs.cloudflare.com/**', r => block ? r.abort() : r.continue());
+  await openExport(page, ABC, { 'spine:ttsEngine': 'server', 'spine:abFormat': 'flac' });
+  assert.deepEqual(errors, []);
+  assert.equal(await page.isChecked('input[name="abFormat"][value="opus"]'), true);   // (no AAC in the test browser)
+  assert.equal(await page.isDisabled('input[name="abFormat"][value="mp3"]'), true);
+  assert.match(await page.textContent('#abFmtNote'), /\.mp3 \(MP3\): the MP3 encoder couldn't be loaded/);
+  block = false;
+  await page.click('#abCancel');
+  await page.evaluate(() => { delete document.querySelector('#abDialog').dataset.formats; });
+  await page.click('#ttsExport');
+  await page.waitForFunction(() => document.querySelector('#abDialog').dataset.formats);
+  assert.equal(await page.isDisabled('input[name="abFormat"][value="mp3"]'), false);
+});
+
+test('.opus and .mp3 through the browser\'s file picker: the type offered, the tags written back in place (E-17 review)', { skip: noFfmpeg, timeout: 180000 }, async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakePickers);
+  await openExport(page);
+  for (const [f, ext, mime] of [['opus', 'opus', 'audio/ogg'], ['mp3', 'mp3', 'audio/mpeg']]) {
+    await page.evaluate(() => { window.__files = {}; });
+    await page.check(`input[name="abFormat"][value="${f}"]`);
+    await page.check('input[name="abMode"][value="one"]');
+    await page.click('#abStart');
+    const [file] = await pickerFiles(page, 1);
+    assert.equal(path.basename(file), `picked-ABC.${ext}`);
+    assert.deepEqual(Object.keys((await page.evaluate(() => window.__types))[0].accept), [mime]);
+    const p = probe(file);
+    assert.deepEqual(p.chapters.map(c => c.tags.title), ['Alpha', 'Bravo', 'Charlie'], f);
+    assert.ok(Number(p.chapters[2].start_time) > Number(p.chapters[1].start_time) && Number(p.chapters[1].start_time) > 0, f);
+    assert.equal(decodes(file), '');
+  }
 });

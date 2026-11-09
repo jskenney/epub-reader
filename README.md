@@ -212,7 +212,8 @@ This needs a real web server (for example `npx vite` or
     Linux included. 32 kbps (about 14 MB an hour), which suits speech.
   - `.mp3`: plays almost everywhere, though not every player shows the
     chapters. Encoded in the page by lamejs (LGPL; self-hosted by
-    `fetch-libs.sh`, or from cdnjs), so it works in any browser. 64 kbps.
+    `fetch-libs.sh`, or from cdnjs, when the dialog opens), so it works in
+    any browser. 64 kbps. Its tags are ID3v2.3, which Windows reads best.
 
   AAC and Opus use WebCodecs, which browsers only offer to secure pages: serve
   the reader over `https://` (or open it as `localhost`). The choice is
@@ -582,7 +583,8 @@ their own licences, which the scripts save beside them (a `LICENSES/` folder
 with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/` and `pocket/`;
 a `NOTICE.txt` in `fonts/`):
 
-- JSZip: MIT or GPLv3 (your choice); marked: MIT; lamejs: LGPL (from LAME).
+- JSZip: MIT or GPLv3 (your choice); marked: MIT; lamejs: LGPL-3.0 (a port of
+  LAME; `LICENSES/LGPL-3.0.txt` holds the LGPL and the GPL text it builds on).
 - The fonts (IBM Plex Sans and Mono, Literata and the reading fonts): SIL Open
   Font License 1.1.
 - Kokoro-82M and kokoro-js: Apache-2.0 (kokoro-js bundles a phonemizer built
