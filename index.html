@@ -656,12 +656,12 @@ function bytesToBase64(u8){
   return btoa(s);
 }
 let crcTable;
-function crc32(b){
+function crc32(b, prev = 0){   // (prev: the checksum so far, to continue it over another piece)
   if (!crcTable) {
     crcTable = new Uint32Array(256);
     for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
   }
-  let c = 0xFFFFFFFF;
+  let c = (prev ^ 0xFFFFFFFF) >>> 0;
   for (let i = 0; i < b.length; i++) c = crcTable[(c ^ b[i]) & 0xFF] ^ (c >>> 8);
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
@@ -4142,7 +4142,8 @@ const clipStore = (() => {
       c.continue();
     };
   });
-  return {
+  const api = {
+    extraMB: 0,   // room for an audiobook export while it runs
     async get(key){
       const rec = await run('readonly', (st, done) => { const rq = st.get(key); rq.onsuccess = () => done(rq.result || null); });
       if (rec && Date.now() - rec.used > 3600e3) run('readwrite', st => st.put({ ...rec, used: Date.now() }));   // keep it recent
@@ -4152,11 +4153,12 @@ const clipStore = (() => {
     async put(key, blob, dur){
       if (!(SAVED_AUDIO_MB > 0)) return;   // 0: nothing is saved
       await run('readwrite', st => st.put({ key, blob, dur, size: blob.size, used: Date.now() }));
-      if (++saves % 10 === 1) sweep(SAVED_AUDIO_MB * 1048576);
+      if (++saves % 10 === 1) sweep((SAVED_AUDIO_MB + api.extraMB) * 1048576);
     },
-    size: () => sweep(SAVED_AUDIO_MB * 1048576),
+    size: () => sweep((SAVED_AUDIO_MB + api.extraMB) * 1048576),
     clear: () => run('readwrite', st => st.clear())
   };
+  return api;
 })();
 // How long text takes to say, in "weights": characters, plus the pauses speakers make at punctuation.
 function textWeights(text){
@@ -4423,9 +4425,11 @@ function nStop(){
 const AB_KBPS = 64;                    // AAC bitrate: plenty for speech, about 29 MB an hour
 const AB_GAP = { passage: 0.25, paragraph: 0.45, chapter: 1.5 };   // seconds of silence between pieces
 const ab = { running: false, paused: false, cancel: false, resume: null, units: [], rates: null, wake: null,
-  files: [], last: -1, ctl: null, startedAt: 0, done: 0, total: 0, note: '' };
+  files: [], skipped: [], last: -1, ctl: null, startedAt: 0, done: 0, total: 0, note: '' };
 
-// --- MP4 boxes (ISO BMFF): big-endian sizes and fields, built as byte arrays.
+// --- MP4 boxes (ISO BMFF): big-endian sizes and fields, built as byte arrays. (Lists as long as the book,
+// such as the frame sizes, are filled into one array: never passed as arguments, which a long book would
+// overflow: REVIEW.md E-10 review.)
 const abAscii = t => Uint8Array.from(t, c => c.charCodeAt(0) & 255);
 function abCat(parts){
   const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
@@ -4436,6 +4440,19 @@ function abNum(n, size){   // an unsigned big-endian integer of size bytes (up t
   const b = new Uint8Array(size);
   for (let i = size - 1; i >= 0; i--) { b[i] = n % 256; n = Math.floor(n / 256); }
   return b;
+}
+// Rows of numbers ([[a, b], …] or [a, …]) as one array of fixed-width big-endian fields.
+function abRows(rows, widths){
+  const w = widths.reduce((a, x) => a + x, 0), out = new Uint8Array(rows.length * w), v = new DataView(out.buffer);
+  rows.forEach((row, r) => {
+    let at = r * w;
+    widths.forEach((size, c) => {
+      const x = Array.isArray(row) ? row[c] : row;
+      if (size === 8) { v.setUint32(at, Math.floor(x / 2 ** 32)); v.setUint32(at + 4, x >>> 0); } else v.setUint32(at, x);
+      at += size;
+    });
+  });
+  return out;
 }
 const abBox = (type, ...parts) => { const body = abCat(parts); return abCat([abNum(8 + body.length, 4), abAscii(type), body]); };
 const abFull = (type, version, flags, ...parts) => abBox(type, abNum(version, 1), abNum(flags, 3), ...parts);
@@ -4454,46 +4471,59 @@ function abEsds(asc, kbps){
 // iTunes-style tags: each item holds a "data" box of a type (1 text, 0 binary, 13 JPEG, 14 PNG, 21 integer).
 const abTag = (name, type, payload) => abBox(name, abBox('data', abNum(type, 4), abNum(0, 4), payload));
 const abText = t => new TextEncoder().encode(t);
-// Nero chapter markers: start times in 100 ns, titles of up to 255 bytes, at most 255 chapters.
+// Nero chapter markers (read by ffmpeg, VLC and others): start times in 100 ns, titles of up to 255 bytes, at
+// most 255 chapters (the QuickTime chapter track below has them all).
 function abChpl(chapters){
   const list = chapters.slice(0, 255).map(c => {
     let t = abText(c.title || 'Chapter');
     if (t.length > 255) { let n = 255; while (n > 0 && (t[n] & 0xC0) === 0x80) n--; t = t.subarray(0, n); }   // (whole characters)
     return abCat([abNum(Math.round(c.start * 1e7), 8), Uint8Array.of(t.length), t]);
   });
-  return abFull('chpl', 1, 0, abNum(0, 4), Uint8Array.of(list.length), ...list);
+  return abFull('chpl', 1, 0, abNum(0, 4), Uint8Array.of(list.length), abCat(list));
 }
-/* An .m4b written as frames arrive: ftyp, then mdat (its size filled in at the end), then moov. sink.write()
-   takes bytes; sink.seek(), when there, goes back to fill in the size (a file being written); otherwise the
-   parts are kept and the size is put in place before they're joined (a file made in memory). */
+/* An .m4b written as frames arrive: ftyp, then mdat (its size filled in at the end), then moov. Frames are
+   gathered into writes of about 1 MB. sink.write() takes bytes; sink.finish() puts the real mdat header in
+   place (going back to it in a file being written, or before the parts are joined in memory). */
+const AB_WRITE = 1 << 20;
 function abM4b(sink){
   const ftyp = abBox('ftyp', abAscii('M4B '), abNum(0, 4), abAscii('M4B '), abAscii('M4A '), abAscii('mp42'), abAscii('isom'));
   const head = 16;   // mdat with a 64-bit size, so a very long book still fits
-  const sizes = [], durs = [];
-  let bytes = 0, rate = 0, asc = null, chain = Promise.resolve();
+  let sizes = new Uint32Array(1 << 14), count = 0, total = 0, bytes = 0, rate = 0, asc = null;
+  const durs = [];   // [frames, duration] runs
+  let pend = [], pendBytes = 0, chain = Promise.resolve();
+  const flush = () => { if (!pendBytes) return chain; const b = abCat(pend); pend = []; pendBytes = 0; return chain = chain.then(() => sink.write(b)); };
   chain = chain.then(() => sink.write(ftyp)).then(() => sink.write(new Uint8Array(head)));
   return {
-    setFormat(r, description){ rate = r; asc = description?.byteLength ? new Uint8Array(description) : abAsc(r); },
-    add(frame, dur){ sizes.push(frame.length); durs.push(dur); bytes += frame.length; chain = chain.then(() => sink.write(frame)); return chain; },
-    get seconds(){ return rate ? durs.reduce((a, d) => a + d, 0) / rate : 0; },
+    setFormat(r, d){
+      rate = r;
+      const view = d && (ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : new Uint8Array(d));
+      asc = view?.length ? view.slice() : abAsc(r);
+    },
+    add(frame, dur){
+      if (count === sizes.length) { const s = new Uint32Array(sizes.length * 2); s.set(sizes); sizes = s; }
+      sizes[count++] = frame.length; bytes += frame.length; total += dur;
+      const last = durs[durs.length - 1]; if (last && last[1] === dur) last[0]++; else durs.push([1, dur]);
+      pend.push(frame); pendBytes += frame.length;
+      return pendBytes >= AB_WRITE ? flush() : chain;
+    },
+    get rate(){ return rate; },
     async finish(meta){
-      await chain;
-      const total = durs.reduce((a, d) => a + d, 0), secs = rate ? total / rate : 0;
-      const mdatAt = ftyp.length;
-      const stts = []; for (const d of durs) { const last = stts[stts.length - 1]; if (last && last[1] === d) last[0]++; else stts.push([1, d]); }
+      await flush();
+      if (!rate || !count) throw new Error('no audio was made');
+      const secs = total / rate, mdatAt = ftyp.length;
       const now = abNum(Math.floor(Date.now() / 1000) + 2082844800, 8);   // (seconds since 1904)
+      const ms = Math.round(secs * 1000);
       const mp4a = abBox('mp4a', abNum(0, 6), abNum(1, 2), abNum(0, 8), abNum(1, 2), abNum(16, 2), abNum(0, 4), abNum(rate * 65536, 4), abEsds(asc || abAsc(rate), AB_KBPS));
       const stbl = abBox('stbl',
         abFull('stsd', 0, 0, abNum(1, 4), mp4a),
-        abFull('stts', 0, 0, abNum(stts.length, 4), ...stts.map(([n, d]) => abCat([abNum(n, 4), abNum(d, 4)]))),
-        abFull('stsc', 0, 0, abNum(sizes.length ? 1 : 0, 4), ...(sizes.length ? [abNum(1, 4), abNum(sizes.length, 4), abNum(1, 4)] : [])),
-        abFull('stsz', 0, 0, abNum(0, 4), abNum(sizes.length, 4), ...sizes.map(s => abNum(s, 4))),
-        abFull('co64', 0, 0, abNum(sizes.length ? 1 : 0, 4), ...(sizes.length ? [abNum(mdatAt + head, 8)] : [])));
+        abFull('stts', 0, 0, abNum(durs.length, 4), abRows(durs, [4, 4])),
+        abFull('stsc', 0, 0, abNum(1, 4), abRows([[1, count, 1]], [4, 4, 4])),
+        abFull('stsz', 0, 0, abNum(0, 4), abNum(count, 4), abRows(sizes.subarray(0, count), [4])),
+        abFull('co64', 0, 0, abNum(1, 4), abNum(mdatAt + head, 8)));
       const minf = abBox('minf', abFull('smhd', 0, 0, abNum(0, 4)),
         abBox('dinf', abFull('dref', 0, 0, abNum(1, 4), abFull('url ', 0, 1))), stbl);
       const mdia = abBox('mdia', abFull('mdhd', 1, 0, now, now, abNum(rate, 4), abNum(total, 8), abNum(0x55C4, 2), abNum(0, 2)),   // (language "und")
         abFull('hdlr', 0, 0, abNum(0, 4), abAscii('soun'), abNum(0, 12), abText('SoundHandler\0')), minf);
-      const ms = Math.round(secs * 1000);
       const trak = abBox('trak', abFull('tkhd', 1, 3, now, now, abNum(1, 4), abNum(0, 4), abNum(ms, 8), abNum(0, 8), abNum(0, 2), abNum(0, 2), abNum(0x100, 2), abNum(0, 2), AB_MATRIX, abNum(0, 4), abNum(0, 4)),
         abBox('tref', abBox('chap', abNum(2, 4))), mdia);
       const mvhd = abFull('mvhd', 1, 0, now, now, abNum(1000, 4), abNum(ms, 8), abNum(0x10000, 4), abNum(0x100, 2), abNum(0, 10), AB_MATRIX, abNum(0, 24), abNum(3, 4));
@@ -4512,7 +4542,7 @@ function abM4b(sink){
       });
       let textAt = mdatAt + head + bytes;
       const textOffsets = marks.map(m => { const o = textAt; textAt += m.bytes.length; return o; });
-      for (const m of marks) await sink.write(m.bytes);
+      await sink.write(abCat(marks.map(m => m.bytes)));
       const textEntry = abBox('text', abNum(0, 6), abNum(1, 2), Uint8Array.of(0, 0, 0, 0, 0, 0, 0, 1), new Uint8Array(35));
       const textTrak = abBox('trak',
         abFull('tkhd', 1, 2, now, now, abNum(2, 4), abNum(0, 4), abNum(ms, 8), abNum(0, 8), abNum(0, 2), abNum(0, 2), abNum(0, 2), abNum(0, 2), AB_MATRIX, abNum(0, 4), abNum(0, 4)),
@@ -4522,21 +4552,28 @@ function abM4b(sink){
             abBox('gmhd', abFull('gmin', 0, 0, abNum(0x40, 2), abNum(0x8000, 2), abNum(0x8000, 2), abNum(0x8000, 2), abNum(0, 2), abNum(0, 2)), abBox('text', AB_MATRIX)),
             abBox('dinf', abFull('dref', 0, 0, abNum(1, 4), abFull('url ', 0, 1))),
             abBox('stbl', abFull('stsd', 0, 0, abNum(1, 4), textEntry),
-              abFull('stts', 0, 0, abNum(marks.length, 4), ...marks.map(m => abCat([abNum(1, 4), abNum(m.dur, 4)]))),
-              abFull('stsc', 0, 0, abNum(1, 4), abNum(1, 4), abNum(1, 4), abNum(1, 4)),
-              abFull('stsz', 0, 0, abNum(0, 4), abNum(marks.length, 4), ...marks.map(m => abNum(m.bytes.length, 4))),
-              abFull('co64', 0, 0, abNum(marks.length, 4), ...textOffsets.map(o => abNum(o, 8)))))));
-      const moov = abBox('moov', mvhd, trak, textTrak, udta);
-      await sink.write(moov);
+              abFull('stts', 0, 0, abNum(marks.length, 4), abRows(marks.map(m => [1, m.dur]), [4, 4])),
+              abFull('stsc', 0, 0, abNum(1, 4), abRows([[1, 1, 1]], [4, 4, 4])),
+              abFull('stsz', 0, 0, abNum(0, 4), abNum(marks.length, 4), abRows(marks.map(m => m.bytes.length), [4])),
+              abFull('co64', 0, 0, abNum(marks.length, 4), abRows(textOffsets, [8]))))));
+      await sink.write(abBox('moov', mvhd, trak, textTrak, udta));
       const mdat = abCat([abNum(1, 4), abAscii('mdat'), abNum(textAt - mdatAt, 8)]);
       return sink.finish(mdatAt, mdat, secs);
     }
   };
 }
-// Where an .m4b goes: kept in memory (a Blob at the end), or written to a file chosen with a picker.
+// Where an .m4b goes: kept in memory, or written to a file chosen with a picker. In memory, the parts are
+// turned into Blobs every 16 MB or so, which the browser can keep out of the page's memory (on disk).
 function abMemorySink(){
-  const parts = [];
-  return { write: async b => { parts.push(b); }, finish: async (at, mdat, secs) => { parts[1] = mdat; return { blob: new Blob(parts, { type: 'audio/mp4' }), secs }; } };
+  const head = [], blobs = []; let pend = [], pendBytes = 0;
+  return {
+    write: async b => {
+      if (head.length < 2) { head.push(b); return; }
+      pend.push(b); pendBytes += b.length;
+      if (pendBytes >= 16 * AB_WRITE) { blobs.push(new Blob(pend)); pend = []; pendBytes = 0; }
+    },
+    finish: async (at, mdat, secs) => ({ blob: new Blob([head[0], mdat, ...blobs, ...pend], { type: 'audio/mp4' }), secs })
+  };
 }
 function abFileSink(writable){
   return { write: b => writable.write(b),
@@ -4553,17 +4590,26 @@ async function abAacRates(){
   }
   return ab.rates = out;
 }
-// Samples at one rate to another (linear: speech made at 24 kHz into a 44.1 or 48 kHz encoder).
-function abResample(data, from, to){
+// Samples at one rate to another: by the browser's own resampler (filtered, so no images or aliasing),
+// or failing that, straight lines between samples.
+async function abResample(data, from, to){
   if (from === to) return data;
-  const n = Math.round(data.length * to / from), out = new Float32Array(n), k = from / to;
-  for (let i = 0; i < n; i++) { const x = i * k, j = Math.floor(x), f = x - j; out[i] = (data[j] ?? 0) * (1 - f) + (data[j + 1] ?? data[j] ?? 0) * f; }
-  return out;
+  try {
+    const ctx = new OfflineAudioContext(1, Math.max(1, Math.round(data.length * to / from)), to);
+    const buf = ctx.createBuffer(1, data.length, from); buf.copyToChannel(data, 0);
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start();
+    return (await ctx.startRendering()).getChannelData(0);
+  } catch {
+    const n = Math.round(data.length * to / from), out = new Float32Array(n), k = from / to;
+    for (let i = 0; i < n; i++) { const x = i * k, j = Math.floor(x), f = x - j; out[i] = (data[j] ?? 0) * (1 - f) + (data[j + 1] ?? data[j] ?? 0) * f; }
+    return out;
+  }
 }
-// An encoder feeding an .m4b: push() samples at any rate, finish() writes the file. The encoder is made when
-// the first samples arrive, at their rate if the browser takes it.
+// An encoder feeding an .m4b: push() samples at any rate, finish() flushes it. The encoder is made when the
+// first samples arrive, at their rate if the browser takes it.
 function abEncoder(m4b, rates){
   let enc = null, rate = 0, at = 0, failed = null, pending = Promise.resolve();
+  const check = () => { if (failed) throw failed; };
   const start = srcRate => {
     rate = rates.includes(srcRate) ? srcRate : rates.includes(48000) ? 48000 : rates[0];
     enc = new AudioEncoder({
@@ -4571,30 +4617,32 @@ function abEncoder(m4b, rates){
         if (meta?.decoderConfig) m4b.setFormat(rate, meta.decoderConfig.description);
         const b = new Uint8Array(chunk.byteLength); chunk.copyTo(b);
         const dur = chunk.duration ? Math.round(chunk.duration * rate / 1e6) : 1024;
-        pending = m4b.add(b, dur || 1024);
+        pending = m4b.add(b, dur || 1024).catch(e => { failed ??= e; });
       },
-      error: e => { failed = e; }
+      error: e => { failed ??= e; }
     });
     enc.configure({ codec: 'mp4a.40.2', sampleRate: rate, numberOfChannels: 1, bitrate: AB_KBPS * 1000 });
     m4b.setFormat(rate, null);
   };
   return {
-    get rate(){ return rate; },
     get seconds(){ return rate ? at / rate : 0; },   // audio pushed so far (for chapter starts)
     async push(data, srcRate){
-      if (failed) throw failed;
+      check();
       if (!enc) start(srcRate);
-      const d = abResample(data, srcRate, rate);
+      const d = await abResample(data, srcRate, rate);
       for (let i = 0; i < d.length; i += 48000) {   // (in pieces of a second or so)
+        check();
         const part = d.subarray(i, i + 48000);
-        enc.encode(new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: part.length, numberOfChannels: 1, timestamp: Math.round(at / rate * 1e6), data: part }));
+        const audio = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: part.length, numberOfChannels: 1, timestamp: Math.round(at / rate * 1e6), data: part });
+        try { enc.encode(audio); } finally { audio.close(); }
         at += part.length;
-        while (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 5));
+        while (enc.encodeQueueSize > 8) { await new Promise(r => setTimeout(r, 5)); check(); }
       }
-      await pending;
+      await pending; check();
     },
     silence(sec, srcRate){ return this.push(new Float32Array(Math.round(sec * (rate || srcRate))), rate || srcRate); },
-    async finish(){ if (enc) { await enc.flush(); enc.close(); } await pending; if (failed) throw failed; }
+    async finish(){ check(); if (enc) { await enc.flush(); enc.close(); enc = null; } await pending; check(); },
+    abort(){ try { enc?.close(); } catch {} enc = null; }
   };
 }
 
@@ -4683,17 +4731,24 @@ function abDownload(blob, name){
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
 async function abZip(files){
+  // Stored entries (the files are already compressed), with the checksum worked out piece by piece and the
+  // data taken as slices of the files themselves, so the book isn't copied in memory. Past 4 GB a ZIP would
+  // need ZIP64: refused (about 145 hours of audio).
+  const le = (n, s) => { const b = new Uint8Array(s); for (let i = 0; i < s; i++) b[i] = Math.floor(n / 2 ** (8 * i)) & 255; return b; };
+  if (files.reduce((a, f) => a + f.blob.size + 100, 0) >= 2 ** 32 - 1) throw new Error('too large for one ZIP; save the files one by one');
   const enc = new TextEncoder(), parts = [], central = [];
   let at = 0;
   for (const f of files) {
-    const data = new Uint8Array(await f.blob.arrayBuffer()), name = enc.encode(f.name), crc = crc32(data) >>> 0;
-    const le = (n, s) => { const b = new Uint8Array(s); for (let i = 0; i < s; i++) b[i] = n / 2 ** (8 * i) & 255; return b; };
-    const common = abCat([le(20, 2), le(0x800, 2), le(0, 2), le(0, 2), le(0x21, 2), le(crc, 4), le(data.length, 4), le(data.length, 4), le(name.length, 2), le(0, 2)]);
-    parts.push(abCat([le(0x04034b50, 4), common, name]), data);
+    const name = enc.encode(f.name);
+    let crc = 0;
+    for (const reader = f.blob.stream().getReader(); ;) { const { done, value } = await reader.read(); if (done) break; crc = crc32(value, crc); }
+    const size = f.blob.size;
+    const common = abCat([le(20, 2), le(0x800, 2), le(0, 2), le(0, 2), le(0x21, 2), le(crc, 4), le(size, 4), le(size, 4), le(name.length, 2), le(0, 2)]);
+    parts.push(abCat([le(0x04034b50, 4), common, name]), f.blob);
     central.push(abCat([le(0x02014b50, 4), le(20, 2), common, le(0, 2), le(0, 2), le(0, 2), le(0, 4), le(at, 4), name]));
-    at += 30 + name.length + data.length;
+    at += 30 + name.length + size;
   }
-  const cd = abCat(central), le = (n, s) => { const b = new Uint8Array(s); for (let i = 0; i < s; i++) b[i] = n / 2 ** (8 * i) & 255; return b; };
+  const cd = abCat(central);
   return new Blob([...parts, cd, abCat([le(0x06054b50, 4), le(0, 4), le(files.length, 2), le(files.length, 2), le(cd.length, 4), le(at, 4), le(0, 2)])], { type: 'application/zip' });
 }
 // The cover as JPEG or PNG bytes (other kinds drawn into a PNG), or null.
@@ -4713,61 +4768,100 @@ async function abCover(){
 
 // --- The export itself.
 async function abWaitIfPaused(){ while (ab.paused && !ab.cancel) await new Promise(r => { ab.resume = r; }); }
+const abCancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
+// A passage's audio, or its sentences one by one when the passage as a whole fails (as reading aloud does),
+// each tried again a couple of times before the export gives up.
+async function abSay(ne, chunks, ci, keyBase, snap){
+  const tryOne = async span => {
+    for (let attempt = 0; ; attempt++) {
+      try { return await abPassage(ne, span.out, keyBase, snap); }
+      catch (e) {
+        if (ab.cancel || e?.stale) throw abCancelled();
+        if (attempt >= 2) throw e;
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    }
+  };
+  const span = nSpan(ne, ci, chunkStart(chunks[ci]), false, chunks);
+  try { return { span, pieces: [await (span.cj > span.ci ? abPassage(ne, span.out, keyBase, snap) : tryOne(span))] }; }
+  catch (e) {
+    if (ab.cancel || e?.stale) throw abCancelled();
+    if (span.cj === span.ci) throw e;
+    const pieces = [];
+    for (let j = span.ci; j <= span.cj; j++) pieces.push(await tryOne(nSpan(ne, j, chunkStart(chunks[j]), true, chunks)));
+    return { span, pieces };
+  }
+}
 async function abRun(units, mode, target){
   const ne = neuralEngine(), b = book, rates = await abAacRates();
+  if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
   const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
   const cover = await abCover();
-  const groups = mode === 'one' ? [units] : units.map(u => [u]);
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
   const lengths = await chapterLengths();
-  Object.assign(ab, { files: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abUnitChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
-  const width = String(units.length).length < 2 ? 2 : String(units.length).length;
-  for (let g = 0; g < groups.length; g++) {
-    const group = groups[g];
-    const name = mode === 'one' ? `${abName(b.title)}.m4b` : `${String(g + 1).padStart(width, '0')} - ${abName(group[0].title)}.m4b`;
-    let sink;
-    if (mode === 'one' && target) sink = abFileSink(await target.createWritable());
-    else if (mode !== 'one' && target) sink = abFileSink(await (await target.getFileHandle(name, { create: true })).createWritable());
-    else sink = abMemorySink();
-    const m4b = abM4b(sink), enc = abEncoder(m4b, rates), chapters = [];
-    try {
-      for (const u of group) {
-        if (chapters.length) await enc.silence(AB_GAP.chapter, 24000);
-        chapters.push({ title: u.title, start: enc.seconds });
-        abShow({ unit: u, index: units.indexOf(u) });
-        const chars = Math.max(1, abUnitChars(u, lengths));
+  Object.assign(ab, { files: [], skipped: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abUnitChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
+  // Room in the saved audio for this export as well as what's already there, so stopping and starting again
+  // finds it (WAV at 24 kHz: about 173 MB an hour). Back to the usual limit afterwards.
+  clipStore.extraMB = Math.ceil(abSecs(ab.total) * 48000 / 1048576 * 1.2);
+  const groups = mode === 'one' ? [units] : units.map(u => [u]);
+  const width = Math.max(2, String(units.length).length);
+  try {
+    for (let g = 0; g < groups.length; g++) {
+      // Each unit's sentences first: those with none (a map, a picture page) are left out, and a file with
+      // nothing to say isn't made at all.
+      const parts = [];
+      for (const u of groups[g]) {
+        if (ab.cancel || book !== b) throw abCancelled();
         const lists = await abUnitChunks(u);
-        const all = lists.reduce((a, l) => a + l.reduce((s, c) => s + c.e - c.s, 0), 0) || 1;
-        let firstPiece = true;
-        for (const chunks of lists) {
-          let lastBlock = null;
-          for (let ci = 0; ci < chunks.length;) {
-            await abWaitIfPaused();
-            if (ab.cancel || book !== b) throw Object.assign(new Error('cancelled'), { cancelled: true });
-            const span = nSpan(ne, ci, chunkStart(chunks[ci]), false, chunks);
-            const r = await abPassage(ne, span.out, keyBase, snap);
-            if (!firstPiece) await enc.silence(span.b === lastBlock ? AB_GAP.passage : AB_GAP.paragraph, r.rate);
-            await enc.push(r.data, r.rate);
-            firstPiece = false; lastBlock = span.b;
-            const said = chunks.slice(ci, span.cj + 1).reduce((s, c) => s + c.e - c.s, 0);
-            ab.done += said / all * chars; ab.doneSecs += r.data.length / r.rate;
-            ci = span.cj + 1;
-            abShow();
+        if (lists.length) parts.push({ u, lists }); else { ab.skipped.push(u.title); ab.done += Math.max(1, abUnitChars(u, lengths)); }
+      }
+      if (!parts.length) continue;
+      const name = mode === 'one' ? `${abName(b.title)}.m4b` : `${String(units.indexOf(parts[0].u) + 1).padStart(width, '0')} - ${abName(parts[0].u.title)}.m4b`;
+      let sink, made = false;
+      if (target && mode === 'one') sink = abFileSink(await target.createWritable());
+      else if (target) {
+        let existed = true; try { await target.getFileHandle(name); } catch { existed = false; }
+        sink = abFileSink(await (await target.getFileHandle(name, { create: true })).createWritable());
+        if (!existed) { const abort = sink.abort; sink.abort = async () => { await abort(); try { await target.removeEntry(name); } catch {} }; }   // (no empty file left behind)
+      } else sink = abMemorySink();
+      const m4b = abM4b(sink), enc = abEncoder(m4b, rates), chapters = [];
+      try {
+        for (const { u, lists } of parts) {
+          if (chapters.length) await enc.silence(AB_GAP.chapter, 24000);
+          chapters.push({ title: u.title, start: enc.seconds });
+          abShow({ unit: u, index: units.indexOf(u) });
+          const chars = Math.max(1, abUnitChars(u, lengths));
+          const all = lists.reduce((a, l) => a + l.reduce((s, c) => s + c.e - c.s, 0), 0) || 1;
+          let first = true;
+          for (const chunks of lists) {
+            let lastBlock = null;
+            for (let ci = 0; ci < chunks.length;) {
+              await abWaitIfPaused();
+              if (ab.cancel || book !== b) throw abCancelled();
+              const { span, pieces } = await abSay(ne, chunks, ci, keyBase, snap);
+              for (const r of pieces) {
+                if (!first) await enc.silence(span.b === lastBlock ? AB_GAP.passage : AB_GAP.paragraph, r.rate);
+                await enc.push(r.data, r.rate);
+                first = false; lastBlock = span.b; ab.doneSecs += r.data.length / r.rate;
+              }
+              ab.done += chunks.slice(ci, span.cj + 1).reduce((s, c) => s + c.e - c.s, 0) / all * chars;
+              ci = span.cj + 1;
+              abShow();
+            }
           }
         }
+        await enc.finish();
+        const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : parts[0].u.title, chapters, track: mode === 'one' ? null : [units.indexOf(parts[0].u) + 1, units.length] });
+        made = true;
+        ab.files.push({ name, blob: out.blob || null });
+        if (out.blob && (mode === 'one' || !target)) abDownload(out.blob, name);
+      } finally {
+        if (!made) { enc.abort(); await sink.abort?.(); }
       }
-      await enc.finish();
-      const out = await m4b.finish({ ...meta, title: mode === 'one' ? b.title : group[0].title, chapters, track: mode === 'one' ? null : [g + 1, groups.length] });
-      if (out.blob) {
-        ab.files.push({ name, blob: out.blob });
-        if (mode === 'one' || !target) abDownload(out.blob, name);
-      } else ab.files.push({ name, blob: null });
-    } catch (e) {
-      sink.abort?.();
-      throw e;
     }
-  }
+    if (!ab.files.length) throw new Error('the chosen chapters have no text to read');
+  } finally { clipStore.extraMB = 0; }
 }
 
 // --- The dialog.
@@ -4856,7 +4950,11 @@ async function abStart(){
   try { ab.wake = await navigator.wakeLock?.request('screen'); } catch { ab.wake = null; }
   abShow();
   let msg = '', ok = false;
-  try { await abRun(units, mode, target); ok = true; msg = mode === 'one' ? 'The audiobook is ready.' : `${plural(ab.files.length, 'file')} ready.`; }
+  try {
+    await abRun(units, mode, target); ok = true;
+    msg = (mode === 'one' ? 'The audiobook is ready.' : `${plural(ab.files.length, 'file')} ready.`)
+      + (ab.skipped.length ? ` Left out, with no text to read: ${ab.skipped.join(', ')}.` : '');
+  }
   catch (e) { msg = e?.cancelled || e?.stale ? 'Export cancelled.' : `Export stopped: ${e?.message || e}`; }
   ab.running = false; ab.paused = false;
   try { await ab.wake?.release(); } catch {} ab.wake = null;

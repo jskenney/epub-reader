@@ -235,3 +235,18 @@ test('pause, resume, closing the dialog while it works, and cancel (E-10)', { sk
   assert.deepEqual(downloads, [], 'nothing is saved from a cancelled single file');
   assert.equal(await page.isDisabled('#abStart'), false, 'ready to start again');
 });
+
+test('chapters with no text (picture pages) are left out, not made into broken files (E-10 review)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/text-then-pictures.epub`);
+  assert.equal((await page.locator('#abList input:checked').count()), 3);
+  const files = await exportAll(page, 'each', 1);
+  assert.deepEqual(files.map(f => path.basename(f)), ['01 - Words.m4b']);
+  assert.equal(decodes(files[0]), '');
+  assert.match(await page.textContent('#abNow'), /Left out, with no text to read: Plate 2, Plate 3/);
+  await page.click('#abNone'); await page.check('#abList input >> nth=1');
+  await page.click('#abStart');
+  await page.waitForFunction(() => /no text to read/.test(document.querySelector('#abNow').textContent) && document.querySelector('#abPause').hidden, null, { timeout: 20000 });
+});
