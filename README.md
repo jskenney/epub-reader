@@ -195,7 +195,12 @@ Two more parameters open files by address:
   it, with CORS headers (`Access-Control-Allow-Origin`); if it doesn't, the
   reader says so. An `http` address can't be read from a page served over
   `https` (the browser blocks it). A note says which site it came from; it can
-  be edited and saved as a copy on your computer. The reader's policy in
+  be edited and saved as a copy on your computer. An EPUB from another site is
+  downloaded whole (its size and ranges aren't shown to other sites). A site
+  address that sends the reader on to another site is refused by `?book=`
+  and `?edit=`; `?get=` follows it and names the site it ended up on. If
+  several of `?edit=`, `?get=` and `?book=` are given, the first in that
+  order is used. The reader's policy in
   `nginx.conf.example` allows `https:` in `connect-src` for this; a site can
   turn `?get=` off with `GET_URLS` in `reader-config.json` (and then take
   `https:` out of the policy).

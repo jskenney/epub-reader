@@ -686,3 +686,34 @@ test('a cancelled Save as leaves the text as it was; the name has room on a narr
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
   assert.notEqual(await page.evaluate(() => document.activeElement.id), 'editBlock', 'past the select');
 });
+
+// Round 24 review, loop 3.
+test('a backslash before emphasis, a link or code keeps them; comments before a doctype keep it; an SVG-less <animate> beside a wrapper stays where it was; script text is left alone by the charset change (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  const [o1, b1] = await typedRoundTrip(page, 'backslash.md');
+  const [want, got] = await sameHtml(page, o1.replace('Start.', 'Start. Typed.'), b1);
+  assert.equal(got, want, b1);
+  const [o2, b2] = await typedRoundTrip(page, 'frag2.html');
+  assert.equal(b2, o2.replace('Start.', 'Start. Typed.'));
+  // (The <animate> stays beside the wrapper, once; the browser writes its attribute in lower case.)
+  const [oa, ba] = await typedRoundTrip(page, 'animwrap.html');
+  assert.equal(ba, oa.replace('Start.', 'Start. Typed.').replace('attributeName', 'attributename'));
+  const [o3] = await typedRoundTrip(page, 'meta2.html');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#editSave')]);
+  assert.equal(fs.readFileSync(await dl.path(), 'utf8'), o3.replace('Start.', 'Start. Typed.').replace('<meta charset="windows-1252">', '<meta charset="utf-8">'));
+});
+
+test('saving a site document to a file leaves another file\'s draft of the same name alone (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeFiles);
+  await h.openReader(page, doc('notes.md'), RAW);
+  await page.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-drafts', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('drafts', { keyPath: 'key' }); rq.onsuccess = () => { const tx = rq.result.transaction('drafts', 'readwrite'); tx.objectStore('drafts').put({ key: 'file:markdown:notes.md', text: 'Other work', from: ['x'], t: 1 }); tx.oncomplete = res; }; }));
+  await startEditing(page);
+  await typeAtEnd(page, 'Mine.\n');
+  await page.click('#editSaveAs');
+  await page.waitForFunction(() => window.__writes === 1);
+  await page.waitForTimeout(300);
+  const left = await page.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-drafts', 1); rq.onsuccess = () => { const g = rq.result.transaction('drafts').objectStore('drafts').getAll(); g.onsuccess = () => res(g.result.map(d => d.text)); }; }));
+  assert.ok(left.includes('Other work'), JSON.stringify(left));
+});

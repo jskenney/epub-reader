@@ -1025,6 +1025,7 @@ async function zipFromUrl(url, init = {}){
   let r;
   try { r = await fetch(url, { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
   if (!r.ok) return { miss: String(r.status) };
+  if (r.redirected && new URL(r.url).origin !== new URL(url, location.href).origin && !init.anySite) return { miss: `it is sent on to ${new URL(r.url).host}, another site` };
   const first = r.status === 206 && /^bytes 0-\d+\/(\d+)$/.exec(r.headers.get('content-range') || '');
   const total = first ? Number(first[1]) : 0;
   if (total > 0) {
@@ -1165,6 +1166,7 @@ function dirSource(base){
       const u = abs(p); if (!u) return null;
       try {
         const r = await fetch(u); if (!r.ok) return null;
+        if (r.redirected && new URL(r.url).origin !== new URL(root).origin) return null;   // (sent on to another site: round 24 review)
         const t = decodeText(new Uint8Array(await r.arrayBuffer()), { http: charsetOf(r), fallback: 'utf-8' });
         // (A site's "not found" page sent with status 200 isn't the file: round 13 review.)
         return await isSoftNotFound(u, t) ? null : t;
@@ -1176,6 +1178,7 @@ function dirSource(base){
       const u = abs(p), key = lookObf(this.obf, p, pathKey); if (!u || !key) return u;   // (a folder on a server: names compared folded)
       try {
         const r = await fetch(u); if (!r.ok) return null;
+        if (r.redirected && new URL(r.url).origin !== new URL(root).origin) return null;   // (sent on to another site: round 24 review)
         const data = unobfuscate(new Uint8Array(await r.arrayBuffer()), key);
         if (this.disposed) return null;   // (the book was closed meanwhile)
         const b = URL.createObjectURL(new Blob([data], { type }));
@@ -1421,10 +1424,10 @@ async function markdownToHtml(md){
 // jump within it), split only when very long. headings: true would split at the main headings instead.
 // The element whose children a document's sections are made of: the body, or the one wrapper it holds.
 // skip: elements not counted (the editor's write-back, where what the page shows as marks is still elements).
-function docRoot(body, skip = ''){
+function docRoot(body, skip = null){
   let root = body;
   for (;;) {
-    const kids = [...root.children].filter(c => !(skip && c.matches(skip)));
+    const kids = [...root.children].filter(c => !skip?.(c));
     if (kids.length !== 1 || !/^(div|main|article|section)$/i.test(kids[0].localName) || [...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return root;
     root = kids[0];
   }
@@ -6829,7 +6832,7 @@ async function editOffered(){
   if (!editable() || book.doc.fresh) return;
   const b = book, d = await draftGet(draftKey());
   if (book !== b || ed.on || !draftFits(d, docSource(b.doc))) return;
-  showNotice(`This document has unsaved changes from ${new Date(d.t).toLocaleString()}, kept in this browser.`, 'info', { label: 'Edit', run: () => editStart() });
+  showNotice(`${b.doc.foreign ? `This comes from ${b.doc.foreign}, another site. ` : ''}This document has unsaved changes from ${new Date(d.t).toLocaleString()}, kept in this browser.`, 'info', { label: 'Edit', run: () => editStart() });
 }
 
 // The text editor: CodeMirror, or a plain text box with the same few operations.
@@ -6997,7 +7000,7 @@ function editTitle(){ if (ed.on && book) document.title = `${editDirty() ? '• 
 function editSyncBar(){
   $('#editName').textContent = (editDirty() ? '• ' : '') + ed.name + (ed.saving ? ' (saving…)' : editDirty() ? ' (unsaved)' : '');
   $('#editName').title = ed.handle ? 'Save writes to this file' : book?.doc?.foreign ? `From ${book.doc.foreign}: Save keeps a copy on this computer` : 'Save asks where to save a copy';
-  $('#editNote').textContent = ed.plainWhy ? `A plain text box: the code editor couldn't be loaded (${ed.plainWhy}).` : '';
+  $('#editNote').textContent = ed.plainWhy ? `A plain text box: the code editor couldn't be loaded (${ed.plainWhy}).` : book?.doc?.foreign ? `From ${book.doc.foreign}, another site.` : '';
   editTitle();
 }
 
@@ -7104,7 +7107,7 @@ function utf8Declared(text){
   const utf = v => /^utf-?8$/i.test(v);
   let out = text.replace(/^(\uFEFF?\s*<\?xml\b[^>]*?\sencoding\s*=\s*["'])([\w.:-]+)/i, (m, a, v) => utf(v) ? m : a + 'UTF-8');
   // (Not in comments, nor in a script's, style's or textarea's text: round 24 review.)
-  const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)|<(script|style|textarea)\b[^>]*>[\s\S]*?(?:<\/\1|$)/gi)].map(m => [m.index + (m[1] ? m[0].indexOf('>') + 1 : 0), m.index + m[0].length]);
+  const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)|<(script|style|textarea)\b[^>]*>[\s\S]*?(?:<\/\1(?=[\s>/])|$)/gi)].map(m => [m.index + (m[1] ? m[0].indexOf('>') + 1 : 0), m.index + m[0].length]);
   return out.replace(/<meta\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi, (tag, at) => {
     if (comments.some(([a, z]) => at >= a && at < z)) return tag;
     const attrs = [...tag.matchAll(/\s([^\s"'=\/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g)];
@@ -7161,8 +7164,8 @@ async function editSave(as = false){
   b.opfPath = ed.name; renderMeta();   // (the information's file name too)
   // (The draft goes, unless something was typed while it was being written: round 24 review.)
   draftDel(keyBefore);
-  if (ed.text === text) { clearTimeout(ed.draftTimer); if (draftKey() !== keyBefore) draftDel(draftKey()); }
-  else if (how === 'downloaded') editDraftSoon();
+  // (A draft under the file's key, if it had one, is another file's work: left alone: round 24 review.)
+  if (ed.text === text) clearTimeout(ed.draftTimer);
   else editDraftSoon();
   editSyncBar();
   $('#editNote').textContent = how === 'saved' ? `Saved to ${ed.name}.` : `Downloaded ${ed.name}.`;
@@ -7260,7 +7263,7 @@ $('#editDone').addEventListener('click', () => editDone());
 window.addEventListener('beforeunload', e => { if (editDirty() || (ed.on && ed.wdirty)) { e.preventDefault(); e.returnValue = ''; } });
 // (Leaving within a moment of typing: the page's edits written and kept as a draft at once: round 24 review.)
 // (Back from the browser's page cache: the editor is still here, so the draft kept for leaving isn't wanted.)
-window.addEventListener('pageshow', e => { if (e.persisted && ed.on) { try { localStorage.removeItem('spine:draftPending'); } catch {} } });
+window.addEventListener('pageshow', e => { if (e.persisted && ed.on) draftPending(); });
 window.addEventListener('pagehide', () => {
   if (!ed.on) return;
   editFlush();
@@ -7299,11 +7302,12 @@ function editParse(t){
   const frag = !/<(html|head|body)(?=[\s>/])/i.test(t.replace(/<!--[\s\S]*?(-->|$)/g, ''));
   return { d: new DOMParser().parseFromString(frag ? `<!DOCTYPE html><html><head></head><body>${t}</body></html>` : t, 'text/html'), xml: false, frag };
 }
+// What the write-back puts aside (an SVG animation only when it sets an address).
+const edPutAside = el => el.matches(ED_KEEP) && !(/^(set|animate)$/i.test(el.localName) && !/href/i.test(el.getAttribute('attributeName') || ''));
 function editMarkup(d){
   ed.orig = []; ed.kept = [];
   for (const el of [...d.body.querySelectorAll(ED_KEEP)]) {
-    if (!el.isConnected) continue;   // (inside one already put aside)
-    if (/^(set|animate)$/i.test(el.localName) && !/href/i.test(el.getAttribute('attributeName') || '')) continue;
+    if (!el.isConnected || !edPutAside(el)) continue;   // (inside one already put aside, or kept in place)
     // (Put aside as a comment, which a parser takes anywhere, in an SVG or a table too; the page shows a chip
     // for it where one can go: editWysiwygReady.)
     // (In XHTML, without the namespace declaration serializing it alone adds.)
@@ -7422,12 +7426,18 @@ function editSerialize(){
   }
   const t = ed.wBase, { d: model, xml, frag } = editParse(t);
   // (The wrapper found as the page found it: a script or style beside it is a mark there: round 24 review.)
-  docRoot(model.body, ED_KEEP).replaceChildren(...editRestore(nodes, model, true).childNodes);
+  docRoot(model.body, edPutAside).replaceChildren(...editRestore(nodes, model, true).childNodes);
   let inner;
   // (XHTML: the whole document serialized and its body taken, so prefixes declared on <html> aren't declared again.)
   if (xml) { const s = new XMLSerializer().serializeToString(model.documentElement), r = bodyRange(s, true); inner = r ? s.slice(r.start, r.end) : model.body.innerHTML; }
   else inner = model.body.innerHTML;
-  if (frag) return (t.match(/^\uFEFF?\s*<!DOCTYPE[^>]*>/i)?.[0] || '') + inner.replace(/\s+$/, '') + t.match(/\s*$/)[0];   // (its doctype too: round 24 review)
+  if (frag) {
+    // (Its doctype too, with any comments before it, which the body then doesn't repeat: round 24 review.)
+    const head = t.match(/^\uFEFF?(?:\s*<!--[\s\S]*?-->)*\s*<!DOCTYPE[^>]*>/i)?.[0] || '', notes = (head.match(/<!--/g) || []).length;
+    if (notes) inner = inner.replace(new RegExp(`^(?:\\s*<!--[\\s\\S]*?-->){${notes}}`), '');
+    if (head) inner = t.slice(head.length).match(/^\s*/)[0] + inner.replace(/^\s+/, '');   // (the white space after the doctype as written)
+    return head + inner.replace(/\s+$/, '') + t.match(/\s*$/)[0];
+  }
   const r = bodyRange(t, xml);
   if (r) {
     const ws = t.slice(r.start, r.end).match(/\s*$/)[0], after = t.slice(r.after);
@@ -7538,7 +7548,7 @@ function mdTable(el){
 // space stays one: round 24 review.)
 // (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
-const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~])/g, '\\\\').replace(/[`*[~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
+const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
   .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;');
 // Whether Markdown reads delimiters around core, between the characters before and after (CommonMark's flanking
 // rules, which let * and ~~ work inside a word); a delimiter right beside another isn't risked.
@@ -7992,10 +8002,12 @@ async function fetchDocument(u, kind, init = {}){
   let r = null;
   try { r = await fetch(u.href, init); } catch {}
   if (!r?.ok) return { miss: r ? String(r.status) : 'network error' };
+  // (Sent on to another site: not this file. ?get= follows it and names that site: round 24 review.)
+  if (r.redirected && new URL(r.url).origin !== u.origin && !init.anySite) return { miss: `it is sent on to ${new URL(r.url).host}, another site` };
   if (kind !== 'html' && looksHtml(r)) return { miss: 'a web page came back instead' };
   const buf = await r.arrayBuffer();
   if (await isSoftNotFound(u.href, new TextDecoder().decode(buf))) return { miss: `the site's "not found" page` };
-  return { buf, charset: charsetOf(r) };
+  return { buf, charset: charsetOf(r), host: new URL(r.url).host };
 }
 // The folder's default book: the first name in DEFAULT_BOOK that is really there, else the built-in sample.
 async function openDefault(seq = ++openSeq){
@@ -8049,7 +8061,7 @@ async function openForEdit(ref){
   const note = msg => { if ($('#notice').hidden || noticeKind !== 'error') showNotice(msg, 'info', { label: 'OK', run(){} }); };
   if (!EDITING) { await openFromUrl(ref); note('Editing is turned off on this site: the document is open to read.'); return; }
   if (/\.epub$/i.test(ref)) { await openFromUrl(ref); note("An EPUB's chapters can't be edited yet: the book is open to read."); return; }
-  const kind = docKind(ref);
+  const kind = docKind(ref.replace(/[?#].*$/, ''));
   if (!EDIT_EXT.test(ref.replace(/[?#].*$/, '')) || !kind) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} can't be edited: ?edit= takes .md, .markdown, .html, .htm and .txt files.`, 'error'); return; }
   const seq = ++openSeq;
   const candidates = bookCandidates(ref);
@@ -8059,7 +8071,7 @@ async function openForEdit(ref){
   for (const u of candidates) {
     const got = await fetchDocument(u, kind);
     if (isStale(seq)) return;
-    if (got.miss) { if (!/^(404|410)$|not found/.test(got.miss)) gone = false; continue; }
+    if (got.miss) { if (!/^(404|410)$|not found|a web page came back/.test(got.miss)) gone = false; continue; }
     try {
       await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset });
       if (!isStale(seq)) await editStart();
@@ -8070,7 +8082,7 @@ async function openForEdit(ref){
   if (!gone) { await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} couldn't be read from the site.`, 'error'); return; }
   // (Not there: a new, empty document with that name, ready to save.)
   try {
-    await openDocument(new ArrayBuffer(0), safeDecode(u.pathname.split('/').pop()), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, created: true });
+    await openDocument(new ArrayBuffer(0), safeDecode(u.pathname.split('/').pop()).replace(/[\/\\]/g, '_'), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, created: true });
     if (!isStale(seq)) await editStart({ mode: 'raw' });
   } catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, ref), 'error'); } }
 }
@@ -8079,9 +8091,8 @@ async function openByAddress(ref){
   if (!GET_URLS) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice("This site doesn't open files by their address (?get=).", 'error'); return; }
   await openFromUrl(ref, { anySite: true });
 }
-// anySite: ?get= (E-24), which takes addresses on other sites too; then: a found document is opened for
-// editing if edit is set.
-async function openFromUrl(ref, { anySite = false, edit = false } = {}){
+// anySite: ?get= (E-24), which takes addresses on other sites too.
+async function openFromUrl(ref, { anySite = false } = {}){
   const seq = ++openSeq;
   showStatus(`Loading ${ref}…`);
   // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
@@ -8089,30 +8100,30 @@ async function openFromUrl(ref, { anySite = false, edit = false } = {}){
   try {
     const candidates = bookCandidates(ref);
     if (!anySite && candidates.some(u => u.origin !== location.origin)) throw new Error('Only books hosted on this same site can be opened from the address.');
-    const foreign = candidates[0].origin !== location.origin ? candidates[0].host : '';
-    if (foreign) {
-      if (!/^https?:$/.test(candidates[0].protocol)) throw new Error('Only web addresses (http or https) can be opened.');
-      if (location.protocol === 'https:' && candidates[0].protocol === 'http:') throw new Error('An http address can\'t be read from a page on https: the browser blocks it. Use the https address, if the site has one.');
-    }
-    const why = m => foreign && m === 'network error' ? `${foreign} didn't let this page read it (the site has to allow it, with CORS headers), or it couldn't be reached` : m;
+    // (Another site by its origin, so a data: address, which has no host, counts too; only web addresses are
+    // taken at all: round 24 review.)
+    if (anySite && candidates.some(u => !/^https?:$/.test(u.protocol))) throw new Error('Only web addresses (http or https) can be opened.');
+    let foreign = candidates[0].origin !== location.origin ? candidates[0].host : '';
+    if (foreign && location.protocol === 'https:' && candidates[0].protocol === 'http:') throw new Error('An http address can\'t be read from a page on https: the browser blocks it. Use the https address, if the site has one.');
+    const why = m => foreign && m === 'network error' ? `${foreign} didn't let this page read it (the site has to allow it, with CORS headers, and this site's own security policy has to allow reading from it), or it couldn't be reached` : m;
     const misses = [];
     for (const u of candidates) {
       const kind = docKind(u.pathname);
       // Each candidate must really be the book: a "not found" page served with status 200 counts as a miss,
       // so the next location is tried.
       if (kind) {
-        const got = await fetchDocument(u, kind, foreign ? { credentials: 'omit' } : {});
+        const got = await fetchDocument(u, kind, anySite ? { credentials: 'omit', anySite } : {});
         if (got.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(got.miss)})`); continue; }
+        if (anySite && got.host && got.host !== location.host) foreign = got.host;   // (where it came from, after any redirect)
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
           { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign });
         if (isStale(seq)) return;
         if (foreign) showFrom(foreign);
-        if (edit) await editStart();
         return;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
-        const found = await zipFromUrl(u.href);
+        const found = await zipFromUrl(u.href, anySite ? { credentials: 'omit', anySite } : {});
         if (found.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(found.miss)})`); continue; }
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
@@ -8124,7 +8135,7 @@ async function openFromUrl(ref, { anySite = false, edit = false } = {}){
       const src = dirSource(u.href);
       const container = await src.text('META-INF/container.xml');
       if (!container || !parseDoc(container, 'application/xml')?.getElementsByTagNameNS('*', 'rootfile')[0]) {
-        misses.push(`${u.pathname} (no META-INF/container.xml)`); continue;
+        misses.push(foreign ? `${u.href} (${foreign} didn't give its META-INF/container.xml: not an EPUB folder, or not readable from here)` : `${u.pathname} (no META-INF/container.xml)`); continue;
       }
       await openBook(src, { name, seq });
       if (foreign && !isStale(seq)) showFrom(foreign);

@@ -128,6 +128,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        m = re.match(r"^/redirect/(\d+)(/.*)$", path)   # (E-24 review: a path sent on to another port, another site)
+        if m:
+            self.send_response(302); self.send_header("Location", f"http://localhost:{m.group(1)}{m.group(2)}"); self.send_header("Content-Length", "0"); self.end_headers(); return
         if path == "/__bytes":
             return self.json(200, sent)
         if path == "/__ranges":

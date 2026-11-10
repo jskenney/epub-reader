@@ -80,9 +80,33 @@ test('?get= opens a document on this site as ?book= does, and one on another sit
 test('?get= from a site that doesn\'t allow it says so; the reader\'s policy refuses http from a policy site; a site can turn ?get= off (E-24)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.PLAIN}/reader/index.html?get=${h.SOFT}/nocors/doc.md`);
-  assert.match(await noticeText(page), /didn't let this page read it \(the site has to allow it, with CORS headers\)/);
+  assert.match(await noticeText(page), /didn't let this page read it \(the site has to allow it, with CORS headers/);
   await h.openReader(page, `${h.READER}?get=${h.SOFT}/reader/books/notes.md`);
   assert.match(await noticeText(page), /couldn't be opened/);
   await h.openReader(page, `${h.SITE}/folder-noget/index.html?get=/reader/books/notes.md`);
   assert.match(await noticeText(page), /doesn't open files by their address/);
+});
+
+// Round 24 review, loop 3.
+test('?get= takes only web addresses; a site address sent on to another site is refused by ?book= and named by ?get= (round 24 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?get=${encodeURIComponent('data:text/markdown,# Fake notice')}`);
+  assert.match(await noticeText(page), /Only web addresses \(http or https\) can be opened/);
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?book=/redirect/8791/reader/books/notes.md`);
+  assert.match(await noticeText(page), /sent on to localhost:8791, another site/);
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?get=/redirect/8791/reader/books/notes.md`);
+  assert.equal(await page.textContent('#bookTitle'), 'Notes');
+  assert.match(await noticeText(page), /This comes from localhost:8791/);
+  await page.click('#editBtn'); await page.click('#editThis'); await ready(page);
+  assert.match(await page.textContent('#editNote'), /From localhost:8791/);
+});
+
+test('?edit= starts a new Markdown file on a site that answers missing files with a page; a query after the name is fine (round 24 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SOFT}/reader/index.html?edit=books/brand-new.md`);
+  await ready(page);
+  assert.equal(await text(page), '');
+  await h.openReader(page, `${h.READER}?edit=books/notes.md?y=1`);
+  await ready(page);
+  assert.equal(await text(page), NOTES);
 });
