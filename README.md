@@ -152,15 +152,20 @@ the same way (its XHTML, in WYSIWYG or raw), and the page stays on it until
 Done. Done keeps the chapter as edited, so several chapters can be edited
 before saving; the reader shows them as edited, and asks before another book
 is opened while some aren't saved. **Save** (in the editor) saves the whole
-book, re-packed: every file as it was, the edited chapters replaced, the
-`mimetype` file first and uncompressed (as readers require), and the
-package's `dcterms:modified` set to now. A book opened with the Open button in
-Chrome or Edge is saved over its file; otherwise Save asks where, or
-downloads it. A book read from a folder on the server is saved as a packed
-`.epub`. **Chapter** downloads just the chapter's file. An XHTML chapter has
-to be well-formed XML: if it isn't, saving and switching to WYSIWYG stop with
-the error and its line, and the cursor goes there. Adding, removing and
-reordering chapters isn't possible yet (E-25).
+book, re-packed: every file as it was, the edited chapters replaced (written
+as UTF-8, their declaration saying so), the `mimetype` file first and
+uncompressed (as readers require), and the package's own `dcterms:modified`
+set to now (added to an EPUB 3 package without one; the package is read in
+its own encoding and written as UTF-8 only then). A book opened with the Open
+button in Chrome or Edge is saved over its file, and read on from it; otherwise
+Save asks where, or downloads it. A book read from a folder on the server is
+saved as a packed `.epub` of its container, package and listed files (and the
+usual `META-INF` files). **Chapter** downloads just the chapter's file. Every
+edited XHTML chapter has to be well-formed XML: if one isn't, saving and
+switching to WYSIWYG stop with the error and its line, and the cursor goes
+there. Fixed-layout and SVG pages are edited raw. A chapter encrypted with DRM
+can't be edited. Adding, removing and reordering chapters isn't possible yet
+(E-25).
 
 ## Opening a book from the address
 

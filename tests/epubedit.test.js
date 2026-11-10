@@ -47,7 +47,7 @@ test('a chapter of an EPUB is edited as its XHTML; Done keeps it edited; Save gi
   assert.ok(await h.waitFor(async () => /An edited paragraph\./.test(await pageText(page)), 5000), 'the page follows');
   await page.click('#editDone');
   await page.waitForFunction(() => document.querySelector('#editBar').hidden);
-  assert.match(await pageText(page), /An edited paragraph\./, 'shown as edited after Done');
+  assert.ok(await h.waitFor(async () => /An edited paragraph\./.test(await pageText(page)), 5000), 'shown as edited after Done');
   await page.waitForFunction(() => /1 chapter changed and not saved yet/.test(document.querySelector('#noticeText').textContent));
   // Save: the book re-packed.
   await startEditing(page);
@@ -62,7 +62,9 @@ test('a chapter of an EPUB is edited as its XHTML; Done keeps it edited; Save gi
   assert.equal(got.files.mimetype, 'application/epub+zip');
   assert.deepEqual([...got.order].sort(), [...before].sort());
   assert.equal(got.files[`OEBPS/${chapter}`], original.replace(para, 'An edited paragraph.'));
-  for (const other of before.filter(n => !n.endsWith(chapter) && n !== 'mimetype')) {
+  // (The package gains dcterms:modified, this EPUB 3 package having none; everything else is as it was.)
+  assert.match(unzip(file, ['OEBPS/content.opf']).files['OEBPS/content.opf'], /<meta property="dcterms:modified">\d{4}-/);
+  for (const other of before.filter(n => !n.endsWith(chapter) && n !== 'mimetype' && !n.endsWith('.opf'))) {
     const r = spawnSync('python3', ['-c', 'import zipfile,sys; a=zipfile.ZipFile(sys.argv[1]).read(sys.argv[3]); b=zipfile.ZipFile(sys.argv[2]).read(sys.argv[3]); sys.exit(0 if a==b else 1)', SRC, file, other]);
     assert.equal(r.status, 0, `${other} unchanged`);
   }
@@ -177,4 +179,73 @@ test('a folder book (an unpacked EPUB on the server) is saved as a packed EPUB (
   assert.equal(got.order[0], 'mimetype');
   assert.match(got.files['META-INF/container.xml'], /rootfile/);
   assert.ok(got.order.some(n => /\.opf$/.test(n)), JSON.stringify(got.order));
+});
+
+// Round 24 review, loop 5.
+async function editAndSave(page, book, from, to, files, { wysiwyg = false } = {}) {
+  await h.openReader(page, `${h.READER}?book=books/${book}`, { 'spine:editMode': wysiwyg ? 'wysiwyg' : 'raw' });
+  await startEditing(page);
+  if (wysiwyg) {
+    await page.waitForFunction(() => document.querySelector('#page').contentDocument?.querySelector('[contenteditable="true"]'));
+    await page.frameLocator('#page').locator('h1').first().click(); await page.keyboard.press('End'); await page.keyboard.type(to);
+    await page.waitForTimeout(600);
+  } else await replace(page, from, to);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  return unzip(await dl.path(), files);
+}
+
+test('a chapter with a wrapper keeps one wrapper; a UTF-16 or Latin-1 package and Latin-1 chapters stay readable; the package\'s own dcterms:modified is the one set (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  const w = await editAndSave(page, 'rv-wrap.epub', '', ' Typed', ['OEBPS/c1.xhtml'], { wysiwyg: true });
+  assert.equal(w.files['OEBPS/c1.xhtml'].split('class="calibre"').length - 1, 1, w.files['OEBPS/c1.xhtml']);
+  const u = await editAndSave(page, 'rv-u16.epub', 'Sixteen text.', 'Sixteen edited.', ['OEBPS/content.opf', 'OEBPS/c1.xhtml']);
+  assert.match(u.files['OEBPS/content.opf'], /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(u.files['OEBPS/content.opf'], /<dc:title>Sixteen<\/dc:title>/);
+  assert.match(u.files['OEBPS/content.opf'], /<meta property="dcterms:modified">\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ<\/meta><\/metadata>/, 'added, EPUB 3 having none');
+  const l = await editAndSave(page, 'rv-latin.epub', 'au lait', 'au lait chaud', ['OEBPS/content.opf', 'OEBPS/c1.xhtml']);
+  assert.match(l.files['OEBPS/c1.xhtml'], /^<\?xml version="1\.0" encoding="UTF-8"\?>.*Un café au lait chaud\./s);
+  assert.match(l.files['OEBPS/content.opf'], /Brontë/);
+  assert.match(l.files['OEBPS/content.opf'], /refines="#c" property="dcterms:modified">2001-01-01T00:00:00Z</);
+  assert.doesNotMatch(l.files['OEBPS/content.opf'], /2002-02-02/);
+  // (Python reads them as XML too.)
+  const r = spawnSync('python3', ['-c', `import zipfile,sys,xml.dom.minidom as m
+for f in sys.argv[1:]: pass`], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+});
+
+test('an XHTML chapter named .html keeps <br/> through WYSIWYG; chapters kept malformed stop the book\'s save; fixed or SVG pages and encrypted chapters (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  const x = await editAndSave(page, 'rv-html.epub', '', ' Typed', ['OEBPS/c1.html'], { wysiwyg: true });
+  assert.match(x.files['OEBPS/c1.html'], /<br ?\/>/); assert.match(x.files['OEBPS/c1.html'], /<hr ?\/>/);
+  // A chapter kept malformed, then another saved: refused.
+  await h.openReader(page, LONG, RAW);
+  await startEditing(page);
+  await replace(page, '</p>', '<b></p>');
+  page.once('dialog', d => d.accept());
+  await page.click('#editDone');
+  await page.waitForFunction(() => document.querySelector('#editBar').hidden);
+  await page.keyboard.press('PageDown'); await page.keyboard.press('PageDown'); await page.keyboard.press('PageDown');
+  await page.waitForTimeout(600);
+  const pos = await page.textContent('#spinePos');
+  if (!/spine 1\//.test(pos)) {
+    await startEditing(page);
+    let saved = false; page.on('download', () => { saved = true; });
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(500);
+    assert.equal(saved, false);
+    assert.match(await page.textContent('#noticeText'), /an edited chapter, isn't well-formed XHTML/);
+  }
+  // A fixed-layout page: raw only.
+  await h.openReader(page, `${h.READER}?book=books/fixed.epub`, { 'spine:editMode': 'wysiwyg', 'spine:layout': 'one' });
+  await startEditing(page);
+  assert.equal(await page.isDisabled('[data-mode="wysiwyg"]'), true);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-mode="raw"]').getAttribute('aria-pressed')), 'true');
+  // An encrypted chapter isn't edited.
+  await h.openReader(page, `${h.READER}?book=books/rv-drm.epub`);
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForTimeout(400);
+  assert.match(await page.textContent('#noticeText'), /encrypted \(DRM\)/);
+  assert.equal(await page.isHidden('#editBar'), true);
 });

@@ -47,8 +47,13 @@ test('the Edit button sits between Settings and Open; its menu edits a document 
     [['Edit this document', false], ['New Markdown document', false], ['New HTML document', false]]);
   await page.keyboard.press('Escape');
   assert.equal(await page.isHidden('#editMenu'), true);
-  // An EPUB can't be edited (yet): only new documents.
+  // An EPUB: its chapter (E-23); a comic: only new documents.
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.click('#editBtn');
+  assert.equal(await page.textContent('#editThis'), 'Edit this chapter');
+  assert.equal(await page.isDisabled('#editThis'), false);
+  await page.keyboard.press('Escape');
+  await h.openReader(page, `${h.READER}?book=books/comic.cbz`);
   await page.click('#editBtn');
   assert.equal(await page.isDisabled('#editThis'), true);
   // A site that turns editing off.

@@ -723,6 +723,30 @@ def main():
     (books / "ids.html").write_text('<!DOCTYPE html>\n<html>\n<head><title>I</title></head>\n<body>\n<h2 id="hh" class="big">Heading</h2>\n<p>Start.</p>\n</body>\n</html>\n')
     (SITE / "nocors").mkdir(exist_ok=True)
     (SITE / "nocors" / "doc.md").write_text("# Not shared\n\nThis site doesn't let other sites read it.\n")
+    # (Round 24 review, loop 5) EPUBs for chapter editing: a Calibre-style wrapper, a UTF-16 package, Latin-1 files,
+    # an XHTML chapter named .html without a declaration, an encrypted (DRM) chapter, a refined dcterms:modified.
+    def raw_epub(name, files, opf="OEBPS/content.opf"):
+        with zipfile.ZipFile(books / name, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
+            z.writestr("META-INF/container.xml", f'<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="{opf}" media-type="application/oebps-package+xml"/></rootfiles></container>')
+            for n, d in files.items(): z.writestr(n, d)
+    def opf3(title, items, extra_meta="", enc="utf-8"):
+        man = "".join(f'<item id="i{k}" href="{h}" media-type="{t}"/>' for k, (h, t) in enumerate(items))
+        spine = "".join(f'<itemref idref="i{k}"/>' for k, (h, t) in enumerate(items) if "html" in t)
+        return (f'<?xml version="1.0" encoding="{enc}"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="u"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+                f'<dc:identifier id="u">urn:{title}</dc:identifier><dc:title>{title}</dc:title><dc:language>en</dc:language>{extra_meta}</metadata><manifest>{man}</manifest><spine>{spine}</spine></package>')
+    chap = lambda body, decl='<?xml version="1.0" encoding="utf-8"?>': f'{decl}<html xmlns="http://www.w3.org/1999/xhtml"><head><title>C</title></head><body>{body}</body></html>'
+    raw_epub("rv-wrap.epub", {"OEBPS/content.opf": opf3("Wrapped", [("c1.xhtml", "application/xhtml+xml")]),
+             "OEBPS/c1.xhtml": chap('<div class="calibre"><h1>Chapter 1</h1><p>Wrapped text.</p></div>')})
+    raw_epub("rv-u16.epub", {"OEBPS/content.opf": "﻿".encode("utf-16-le") + opf3("Sixteen", [("c1.xhtml", "application/xhtml+xml")], enc="utf-16").encode("utf-16-le"),
+             "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Sixteen text.</p>')})
+    raw_epub("rv-latin.epub", {"OEBPS/content.opf": opf3("Latin", [("c1.xhtml", "application/xhtml+xml")], '<dc:creator id="c">Brontë</dc:creator><meta refines="#c" property="dcterms:modified">2001-01-01T00:00:00Z</meta><meta property="dcterms:modified">2002-02-02T00:00:00Z</meta>', enc="ISO-8859-1").encode("latin-1"),
+             "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Un café au lait.</p>', '<?xml version="1.0" encoding="ISO-8859-1"?>').encode("latin-1")})
+    raw_epub("rv-html.epub", {"OEBPS/content.opf": opf3("Named html", [("c1.html", "application/xhtml+xml")]),
+             "OEBPS/c1.html": chap('<h1>Chapter 1</h1><p>Line one<br/>line two.</p><hr/>', '')})
+    raw_epub("rv-drm.epub", {"OEBPS/content.opf": opf3("Locked", [("c1.xhtml", "application/xhtml+xml")]),
+             "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Pretend this is ciphertext.</p>'),
+             "META-INF/encryption.xml": '<?xml version="1.0"?><encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#"><enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><enc:CipherData><enc:CipherReference URI="OEBPS/c1.xhtml"/></enc:CipherData></enc:EncryptedData></encryption>'})
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

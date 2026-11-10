@@ -39,13 +39,13 @@ test('?edit= for a file that isn\'t there starts a new, empty one with that name
   assert.equal(fs.readFileSync(await dl.path(), 'utf8'), '# Fresh\n\nWords.');
 });
 
-test('?edit= refuses other kinds of file; an EPUB opens to read; with editing turned off the document opens to read and nothing is made (E-24)', async () => {
+test('?edit= refuses other kinds of file and missing EPUBs; with editing turned off the document opens to read and nothing is made (E-24)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?edit=books/thing.pdf`);
   assert.match(await noticeText(page), /can't be edited: \?edit= takes \.md, \.markdown, \.html, \.htm and \.txt files/);
-  await h.openReader(page, `${h.READER}?edit=books/long.epub`);
-  assert.equal(await h.title(page), 'The Long Book');
-  assert.match(await noticeText(page), /EPUB's chapters can't be edited yet/);
+  // An EPUB that isn't there: the default book is shown with the error, not put in the editor (round 24 review).
+  await h.openReader(page, `${h.READER}?edit=books/nope.epub`);
+  assert.match(await noticeText(page), /couldn't be opened/);
   assert.equal(await page.isHidden('#editBar'), true);
   const off = `${h.SITE}/folder-noedit/index.html`;
   await h.openReader(page, `${off}?edit=/reader/books/notes.md`);
