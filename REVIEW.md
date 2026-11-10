@@ -165,7 +165,16 @@ code before it except where marked *read*:
 
 Round 22 built E-9, right-to-left manga (`cc60fa5`), and E-15, fixed-layout books (`20d2582`). It also closed
 T-16 and most of T-20 with tests (`9172885` to `9be8cdd`). One of those tests found a bug, fixed with it in
-`fea7773` (L-208). Reviews of this round follow below.
+`fea7773` (L-208).
+
+Two independent reviewers then went over it: one on manga and fixed-layout books, one on the new tests and the
+test server. The second put each original bug back into a copy and checked whether its test failed. They found
+two high bugs in fixed-layout books, and that several new tests passed with their bug restored. The fixes came in
+`6f6bc97` and `5dafde4`, with tests that fail on the code before them:
+- **High:** H-18, H-19.
+- **Medium:** M-76 to M-80.
+- **Low:** L-209 to L-215. **Tests:** T-34. **Documentation:** D-15.
+Owner questions, and fixed-layout features left for later, are filed as E-20.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
@@ -202,7 +211,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Tests:** T-20 (in part).
-- **Enhancements:** E-1 to E-4 and E-6 to E-8.
+- **Enhancements:** E-1 to E-4, E-6 to E-8 and E-20.
 
 ## Open items
 
@@ -210,7 +219,7 @@ No critical, high or medium items are open. The open items are:
 |---|---|---|
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app), [E-20](#e-20-fixed-layout-spreads-and-right-to-left-choices) | Enhancements | — |
 
 ## Low
 
@@ -257,6 +266,22 @@ Save positions (and later bookmarks) on your server, so each device picks up whe
 ### E-8. Install as an offline app
 A web app manifest and service worker, so the reader can be installed and open saved books offline.
 
+### E-20. Fixed-layout spreads and right-to-left choices
+
+*Partly needs your decision.* Left for later from round 22's review:
+- **Fixed-layout spreads.** Fixed-layout pages are shown one at a time. `rendition:spread` and
+  `page-spread-left`/`page-spread-right` could show two pages side by side in the two-column layout.
+- **Right-to-left fixed-layout books.** A fixed-layout EPUB with `page-progression-direction="rtl"` (manga made
+  as an EPUB) doesn't reverse the arrow keys yet; only comics with ComicInfo do.
+- **EPUB 2 fixed layout.** Apple's display-options file and the `fixed-layout` meta aren't read.
+- **A real page for each fixed page.** Each fixed page could be rendered in a frame of its own size. Then `vw`/`vh`
+  units and `position: fixed` would measure the page, not the reader's frame. They measure the frame now, as the
+  README says.
+- **Manga spreads, your choice:**
+  - With an odd number of pages, the last page sits alone in the left column.
+  - The cover is paired with page 2.
+  - Many manga readers show the cover alone and put a lone page on the right.
+
 ## Suggested order
 
 1. **T-16, T-20:** test coverage.
@@ -284,6 +309,8 @@ From all reviews so far, with the commits that fixed them.
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
 | H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
+| H-18 | Fixed-layout pages in the page layouts never saved the reading position or updated progress | `6f6bc97` |
+| H-19 | The reader's base styles (Literata, sizes, theme ink) applied to fixed-layout pages: overflowing text, and light text on white pages in dark themes | `6f6bc97` |
 | H-17 | A comic left on the last page of a section reopened a section later, and a larger section size drifted (a regression from M-65's fix); its place is now the first page on screen | `7bbe17b` |
 | H-16 | Settings: once a reload-only setting (remote content, full-precision voices) was saved, the dialog couldn't turn it back, and Restore defaults showed it wrong | `3c07e06` |
 | M-1 | A `%` in `?book=` left the reader stuck on "Loading…" | `46a112b` |
@@ -349,6 +376,11 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-76 | A fixed page's own html sizing or body padding put it off-centre, clipped it, or made part of it unreachable | `6f6bc97` |
+| M-77 | A fixed page's html background was replaced by the theme's | `6f6bc97` |
+| M-78 | The reader's wrappers in a fixed page's body broke the book's "body > ..." selectors (positions, colours) | `6f6bc97` |
+| M-79 | In the scroll layout with the read-aloud bar open, the bottom of a fixed page couldn't be scrolled into view | `6f6bc97` |
+| M-80 | `vw`/`vh` and `position: fixed` in a fixed page measure the reader's frame; documented, a real fix filed as E-20 (*read*) | `6f6bc97` |
 | M-75 | A folder locking KEEP_POSITIONS_DAYS applied its time to the whole site, over the reader's own ("keep forever" included); there the longest of the folders' times and the reader's now applies | `96e5832` |
 | M-74 | Turning off full-precision voices broke Pocket TTS on a site without CDNs that self-hosts only the full-precision files, with a message for the site owner; the reader is now told which setting to change | `fd47b98` |
 | M-72 | A comic in the scroll layout reopened at the top of its page, not as far down it as the reader was (a regression from H-17's fix) | `e7d1096` |
@@ -544,6 +576,13 @@ From all reviews so far, with the commits that fixed them.
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
 | L-205 | With shortcuts locked, the arrow keys stopped at the end of the Aa menu (a disabled item can't take focus); it is now aria-disabled | `96e5832` |
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
+| L-209 | A manga's odd last page and its cover's pairing: left for your decision in E-20 (*read*) | — |
+| L-210 | The text size, spacing and font buttons do nothing on fixed pages; documented (*read*) | `6f6bc97` |
+| L-211 | A spine item shown through a manifest fallback wasn't treated as fixed (*read*) | `6f6bc97` |
+| L-212 | The information panel said "Reflowable" for a book whose pages are fixed one by one (*read*) | `6f6bc97` |
+| L-213 | A comic switched into the scroll layout went by fraction, not the page it was on | `6f6bc97` |
+| L-214 | A comment said fixed pages are scaled "up to their full size" (they go up to twice) (*read*) | `6f6bc97` |
+| L-215 | lookObf's new rule could unobfuscate a plain font differing in case from the listed one; now only the file the book opens for that name | `5dafde4` |
 | L-208 | An obfuscated font whose name in encryption.xml differs in case from the file was left obfuscated when the page named the file exactly (found by a T-20 test) | `fea7773` |
 | L-207 | The measured engine-list width may clip text in Safari, whose arrows take more room; `field-sizing: content` where supported (*read*) | `96e5832` |
 | L-201 | Settings could be opened before the site's values were known ("this site's default is undefined"; Restore defaults left `data-theme="undefined"`) | `fd47b98` |
@@ -590,6 +629,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-34 | New tests that passed with their bug restored: stalled streams (no time limit), the 409 export (never left the voice's own retries), the Cancel timer, reading past the non-page note and an untyped item, the voices folder, the server's types; and fixed waits | `5dafde4` |
 | T-33 | T-20, most of it: stalled server streams before any audio and partway (L-75, L-100), with a test setting for the time allowed; fallback-page pictures (L-90); the range probe on this site and another (L-91, L-103); narration before a picture page (L-93); the sleep timer in a newly opened book (L-96); the non-page note (L-153, L-172) and ZIP64 records (L-153); obfuscated fonts by folded name (L-137); the Cancel question (L-158) and a busy (409) server during an export; the export's saved-audio room; refusals checked after a wait (T-18) | `fea7773` to `9be8cdd` |
 | T-16 | Coverage gaps: config files' TTS_SERVER, SPAN_MAX, SAVED_AUDIO_MB, SEARCH_MAX, COMIC_PART, BOOKSHELF and KEEP_POSITIONS_DAYS 0; If-Range on range requests; the checksum lists against each script's `--list`; the test server now takes nginx.conf.example's types | `9172885` |
 | T-32 | A locked days-to-keep against other folders' positions, the Aa menu with shortcuts locked, the engine list never narrower than its text | `96e5832` |
@@ -607,6 +647,7 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-15 | README: what fixed-layout pages don't do; SPAN_MAX's wording for sentences over 220 characters | `6f6bc97`, `5dafde4` |
 | D-14 | README: "any of them" can be locked (only the ⚙ ones can); a locked shortcuts and days-to-keep | `96e5832` |
 | D-13 | README: themes didn't mention a folder's default; values now whole numbers; what a reader's precision choice needs on a self-hosted site | `fd47b98` |
 | D-12 | The settings code comment and REVIEW.md said a reader's value is dropped when it equals the site's | `e7d1096` |
