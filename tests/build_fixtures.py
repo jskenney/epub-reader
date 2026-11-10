@@ -691,6 +691,15 @@ def main():
     fx2 = xhtml("Styled", '<p class="cap">Styled caption</p><p class="plain">Plain words</p>',
         '<meta name="viewport" content="width=600, height=800"/><style>html{width:600px;height:800px;background:#fdd}'
         'body{padding:50px;background:#fff}body > p.cap{position:absolute;top:700px;left:20px;margin:0;color:#c00}</style>')
+    # (Round 22, third review) A fixed page that paints no background of its own.
+    epub_items(books / "fixed-plain.epub", "Fixed Plain", [("q1", "q1.xhtml", "application/xhtml+xml", "")], ["q1"],
+        {"q1.xhtml": xhtml("Plain", "<p>Unpainted page words</p>", '<meta name="viewport" content="width=600, height=800"/>')}, "urn:fixed-plain")
+    with zipfile.ZipFile(books / "fixed-plain.epub") as z0:
+        parts = {n: z0.read(n) for n in z0.namelist()}
+    parts["OEBPS/content.opf"] = parts["OEBPS/content.opf"].replace(b"</metadata>", b'<meta property="rendition:layout">pre-paginated</meta></metadata>')
+    with zipfile.ZipFile(books / "fixed-plain.epub", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
+        for n, d in parts.items(): z.writestr(n, d)
     # (Round 22, second review) A vertically written page (Japanese fixed-layout books), and one that clears html's background.
     fx3 = xhtml("Vertical", '<p class="v">縦書きのページ</p>', '<meta name="viewport" content="width=600, height=1600"/><style>html{writing-mode:vertical-rl}body{background:#fff}</style>')
     fx4 = xhtml("Clear", '<p>Clear html</p>', '<meta name="viewport" content="width=600, height=800"/><style>html{background:transparent}body{background:#ff0}</style>')

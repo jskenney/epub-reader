@@ -47,7 +47,7 @@ made as EPUB) are shown a page at a time, each at the size the book gives it
 (its `viewport`, an SVG page's `viewBox`, or the book's
 `rendition:viewport`), scaled to fit the screen, with the book's own styles
 and positions (not the reader's fonts or colours: the theme colours only the
-space around the page); the scroll layout fits each page to the width. Their
+space around the page); the scroll layout fits each page to the width (up to twice its size). Their
 text can still be searched and read aloud. A page whose size isn't given, or
 marked `rendition:layout-reflowable`, is reflowed like any other. Limits: the
 text size, line spacing and font buttons don't change these pages; one page

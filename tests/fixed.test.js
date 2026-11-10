@@ -7,6 +7,13 @@ test.afterEach(h.closePages);
 test.after(h.close);
 
 const FIXED = `${h.READER}?book=books/fixed.epub`;
+// Turn to the next section and wait for it to be shown (a key pressed while a section loads is passed over).
+async function turn(page) {
+  const was = await page.textContent('#spinePos');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(was => document.querySelector('#spinePos').textContent !== was && document.querySelector('#status').hidden, was, { timeout: 15000 });
+  await page.waitForTimeout(200);
+}
 const shown = page => page.evaluate(() => {
   const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
   // (Rectangles include the zoom, as browsers now apply CSS zoom.)
@@ -27,13 +34,13 @@ test('a fixed-layout page is shown whole at its own size, scaled to fit and cent
   // (Its caption at 700 px of 800, as the book placed it.)
   assert.ok(Math.abs((s.cap.top - s.top) / s.height - 700 / 800) < 0.02, JSON.stringify(s));
   // One page per screen: the next page is the next file.
-  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(600);
+  await turn(page);
   assert.match(await page.textContent('#spinePos'), /spine 2\/4/);
   // The SVG page is sized by its viewBox.
-  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(600);
+  await turn(page);
   assert.equal((await shown(page)).fxl, '400 300');
   // A page marked reflowable is reflowed in columns.
-  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(600);
+  await turn(page);
   const r = await shown(page);
   assert.equal(r.fxl, null); assert.equal(r.columns, '2');
 });
@@ -56,7 +63,7 @@ test('a fixed-layout page refits when the window changes, and in the scroll layo
 test('a fixed-layout page\'s place is saved: after a page turn and a reload it reopens there (round 22 review)', async () => {
   const page = await h.newPage();
   await h.openReader(page, FIXED);
-  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
+  await turn(page);
   assert.match(await page.textContent('#spinePos'), /spine 2\/4/);
   await page.reload(); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 2\/4/);
@@ -101,7 +108,7 @@ test('in the scroll layout with the read-aloud bar open, the bottom of a fixed p
 test('a vertically written fixed page is centred and reachable; a page that clears html\'s colour has the theme\'s around it (round 22 review)', async () => {
   const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
   await h.openReader(page, `${h.READER}?book=books/fixed-styled.epub`, { 'spine:theme': 'black', 'spine:layout': 'one' });
-  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
+  await turn(page);
   const box = () => page.evaluate(() => { const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow; const b = d.body.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, vw: w.innerWidth }; });
   let b = await box();
   assert.ok(Math.abs((b.left + b.right) / 2 - b.vw / 2) < 2, `centred: ${JSON.stringify(b)}`);
@@ -111,6 +118,20 @@ test('a vertically written fixed page is centred and reachable; a page that clea
   assert.ok(b.top >= 0, `its top can be reached: ${JSON.stringify(b)}`);
   assert.ok(Math.abs((b.left + b.right) / 2 - b.vw / 2) < 2, `centred when scrolling: ${JSON.stringify(b)}`);
   await page.click('#layoutBtn'); await page.waitForTimeout(500);   // (scroll → two)
-  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
+  await turn(page);
   assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#page').contentDocument.documentElement).backgroundColor), 'rgb(0, 0, 0)', 'the theme around the page, not its yellow');
+});
+
+test('in a dark theme a fixed page without a background of its own is a white page with dark text, and the read-aloud highlight is a light one (round 22 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/fixed-plain.epub`, { 'spine:theme': 'black' });
+  const c = await page.evaluate(() => {
+    const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
+    return { body: w.getComputedStyle(d.body).backgroundColor, text: w.getComputedStyle(d.querySelector('p')).color, html: w.getComputedStyle(d.documentElement).backgroundColor,
+      css: [...d.querySelectorAll('style')].map(s => s.textContent).join('') };
+  });
+  assert.equal(c.body, 'rgb(255, 255, 255)');
+  assert.equal(c.text, 'rgb(0, 0, 0)');
+  assert.equal(c.html, 'rgb(0, 0, 0)', 'the theme around the page');
+  assert.match(c.css, /::highlight\(tts-sentence\)\{background-color:#F0DCDF\}/i);
 });

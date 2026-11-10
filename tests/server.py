@@ -227,8 +227,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body = self.rfile.read(int(self.headers["Content-Length"]))
         msg = BytesParser(policy=default).parsebytes(b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + body)
         f = {p.get_param("name", header="content-disposition"): p.get_payload(decode=True) for p in msg.iter_parts()}
-        if stall_next:   # (a stalled stream: it doesn't hold the server busy, so the reader's next request is answered)
-            mode = stall_next.pop(0)
+        try:
+            mode = stall_next.pop(0)   # (a stalled stream: it doesn't hold the server busy, so the reader's next request is answered)
+        except IndexError:
+            mode = None
+        if mode:
             entry = {"text": f["text"].decode(), "stalled": mode, "path": path}
             breeze_log.append(entry)
             self.send_response(200)

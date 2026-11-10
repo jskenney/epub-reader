@@ -77,3 +77,23 @@ test('a comic switched into the scroll layout opens at the page it was on (round
   });
   assert.equal(top, 'Page 21');
 });
+
+test('manga: a sideways trackpad swipe goes the same way as a touch swipe; a layout change right after scrolling keeps the page (round 22 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, MANGA, { 'spine:layout': 'two' });
+  const frameBox = await page.locator('#page').boundingBox();
+  await page.mouse.move(frameBox.x + frameBox.width / 2, frameBox.y + frameBox.height / 2);
+  await page.mouse.wheel(-120, 0);   // (a swipe to the right, as a finger moves: goes on in a manga)
+  await page.waitForTimeout(600);
+  assert.deepEqual(await onScreen(page), ['Page 4', 'Page 3']);
+  // A comic scrolled and switched at once.
+  const p2 = await h.newPage();
+  await h.openReader(p2, `${h.READER}?book=books/comic.cbz`, { 'spine:layout': 'scroll' });
+  await p2.evaluate(() => { const se = document.querySelector('#page').contentDocument.scrollingElement; se.scrollTop = document.querySelector('#page').contentDocument.querySelector('#cbz-p20').offsetTop; se.dispatchEvent(new Event('scroll')); });
+  await p2.waitForTimeout(800);
+  await p2.evaluate(() => { const se = document.querySelector('#page').contentDocument.scrollingElement; se.scrollTop = document.querySelector('#page').contentDocument.querySelector('#cbz-p31').offsetTop; se.dispatchEvent(new Event('scroll')); });
+  await p2.waitForTimeout(50);
+  await p2.click('#layoutBtn'); await p2.waitForTimeout(800);   // (scroll → two, before the scroll's place is saved)
+  const shown = await onScreen(p2);
+  assert.ok(shown.includes('Page 31'), JSON.stringify(shown));
+});
