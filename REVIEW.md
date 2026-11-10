@@ -254,24 +254,13 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-No critical, high or medium items are open. The open items are:
-- **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
-- **Enhancements:** E-1 to E-4 and E-6 to E-8.
+Only enhancements are open: E-1 to E-4 and E-6 to E-8. L-110 is left as it is, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
-| [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
-
-## Low
-
-### L-110. No edit list for the encoder's delay
-
-*Read.* AAC encoders put 1024 to 2112 samples of delay at the start, and the file doesn't mark them, so each file
-starts with 20 to 45 ms of silence and chapter marks fall that much early. Harmless for speech; WebCodecs
-doesn't report the delay, so an `elst` would have to guess it.
 
 ## Tests
 
@@ -304,7 +293,7 @@ A web app manifest and service worker, so the reader can be installed and open s
 
 ## Resolved
 
-From all reviews so far, with the commits that fixed them.
+From all reviews so far, with the commits that fixed them. An item left as it is says so in place of a commit.
 
 | ID | Title | Fixed in |
 |---|---|---|
@@ -601,6 +590,7 @@ From all reviews so far, with the commits that fixed them.
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
 | L-228 | A fixed page with a slow picture from another site stayed blank until its load event (up to 6 s); it is now shown once parsed | `dea8a59` |
 | L-229 | A fixed page coloured only under a media query kept its first judgement when the query stopped applying: black text on black | `dea8a59` |
+| L-110 | No edit list for the AAC encoder's delay: each .m4b file starts with 20 to 45 ms of silence and its chapter marks fall that much early. WebCodecs doesn't report the delay, so an `elst` would have to guess it (too much clips speech) or measure it with a test encode; inaudible in speech | Left as is, by your decision |
 | L-234 | EPUB 2's fixed-layout meta or Apple's display options turned an EPUB 3 book marked reflowable into a fixed one; every reflowable folder book asked for Apple's file (a 404) | `526c63e` |
 | L-233 | In full screen the facing page kept its shadow while the page lost it | `526c63e` |
 | L-232 | A spread whose facing page couldn't be shown reloaded the page on every resize, theme change or opening of the read-aloud bar | `526c63e` |
