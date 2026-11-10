@@ -9,9 +9,10 @@ test.after(h.close);
 const FIXED = `${h.READER}?book=books/fixed.epub`;
 // Turn to the next section and wait for it to be shown (a key pressed while a section loads is passed over).
 async function turn(page) {
-  const was = await page.textContent('#spinePos');
+  // (The section number changes at once; the page is shown when the frame has a new document, laid out.)
+  await page.evaluate(() => { document.querySelector('#page').contentDocument.__old = true; });
   await page.keyboard.press('ArrowRight');
-  await page.waitForFunction(was => document.querySelector('#spinePos').textContent !== was && document.querySelector('#status').hidden, was, { timeout: 15000 });
+  await page.waitForFunction(() => { const d = document.querySelector('#page').contentDocument; return d && !d.__old && d.readyState === 'complete' && d.body?.childElementCount > 0; }, null, { timeout: 15000 });
   await page.waitForTimeout(200);
 }
 const shown = page => page.evaluate(() => {
@@ -133,5 +134,38 @@ test('in a dark theme a fixed page without a background of its own is a white pa
   assert.equal(c.body, 'rgb(255, 255, 255)');
   assert.equal(c.text, 'rgb(0, 0, 0)');
   assert.equal(c.html, 'rgb(0, 0, 0)', 'the theme around the page');
-  assert.match(c.css, /::highlight\(tts-sentence\)\{background-color:#F0DCDF\}/i);
+  assert.match(c.css, /::highlight\(tts-sentence\)\{background-color:#F0DCDF[;}]/i);
+});
+
+test('a fixed page coloured on its html, or by bgcolor, keeps its colours; one whose body is "none" is white in a dark theme; the highlight has dark text (round 22 review)', async () => {
+  const colours = page => page.evaluate(() => {
+    const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
+    return { body: w.getComputedStyle(d.body).backgroundColor, html: w.getComputedStyle(d.documentElement).backgroundColor, text: w.getComputedStyle(d.querySelector('p')).color,
+      css: [...d.querySelectorAll('style')].map(s => s.textContent).join('') };
+  });
+  for (const theme of ['light', 'black']) {
+    const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+    await h.openReader(page, `${h.READER}?book=books/fixed-colours.epub`, { 'spine:theme': theme });
+    let c = await colours(page);
+    assert.equal(c.html, 'rgb(0, 51, 102)', `${theme}: the page's navy`);
+    assert.match(c.body, /^rgba\(0, 0, 0, 0\)$|^transparent$/, `${theme}: the body left clear, so the navy shows: ${c.body}`);
+    assert.equal(c.text, 'rgb(255, 255, 255)');
+    assert.match(c.css, /::highlight\(tts-sentence\)\{background-color:#F0DCDF;color:#1a1408\}/i);
+    await turn(page);
+    c = await colours(page);
+    assert.equal(c.body, 'rgb(0, 0, 0)', `${theme}: bgcolor kept`);
+    assert.equal(c.text, 'rgb(255, 255, 255)');
+    await turn(page);
+    c = await colours(page);
+    assert.equal(c.body, 'rgb(255, 255, 255)', `${theme}: a page with no colour of its own is white`);
+    assert.equal(c.text, 'rgb(0, 0, 0)');
+  }
+});
+
+test('a fixed-layout book reaches 100% on its last page (round 22 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/fixed-colours.epub`);
+  await turn(page); await turn(page);
+  assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
+  assert.equal(await page.textContent('#pct'), '100%');
 });

@@ -46,8 +46,9 @@ saved position) works as for EPUBs.
 made as EPUB) are shown a page at a time, each at the size the book gives it
 (its `viewport`, an SVG page's `viewBox`, or the book's
 `rendition:viewport`), scaled to fit the screen, with the book's own styles
-and positions (not the reader's fonts or colours: the theme colours only the
-space around the page); the scroll layout fits each page to the width (up to twice its size). Their
+and positions (not the reader's fonts or colours). A page with no colour of
+its own is shown white, and the theme colours the space around it, unless the
+book colours its whole page; the scroll layout fits each page to the width (up to twice its size). Their
 text can still be searched and read aloud. A page whose size isn't given, or
 marked `rendition:layout-reflowable`, is reflowed like any other. Limits: the
 text size, line spacing and font buttons don't change these pages; one page
@@ -65,7 +66,7 @@ contents entry per folder. A ZIP with images and no EPUB container is
 opened as a comic whatever its name. Right-to-left manga (`ComicInfo.xml`'s
 `<Manga>YesAndRightToLeft</Manga>`) is read right to left: in the two-column
 layout each spread shows its later page on the left, and the left arrow key
-(or a swipe to the right) goes on. Page Down, Next and the single-column and
+(or a swipe to the right, on a touch screen or a trackpad) goes on. Page Down, Next and the single-column and
 scroll layouts keep the pages in order.
 
 ## Opening a book from the address

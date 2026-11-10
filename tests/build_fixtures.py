@@ -700,6 +700,20 @@ def main():
     with zipfile.ZipFile(books / "fixed-plain.epub", "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
         for n, d in parts.items(): z.writestr(n, d)
+    # (Round 22, fourth review) Pages coloured on html with the body left unset, a body with bgcolor, and a body
+    # whose background is none.
+    vp = '<meta name="viewport" content="width=600, height=800"/>'
+    epub_items(books / "fixed-colours.epub", "Fixed Colours", [(f"k{i}", f"k{i}.xhtml", "application/xhtml+xml", "") for i in (1, 2, 3)], ["k1", "k2", "k3"],
+        {"k1.xhtml": xhtml("Navy", "<p>Navy page words</p>", vp + "<style>html{background:#036;color:#fff}</style>"),
+         "k2.xhtml": xhtml("Bgcolor", "<p>Black page words</p>", vp).replace("<body>", '<body bgcolor="#000000" text="#ffffff">'),
+         "k3.xhtml": xhtml("None", "<p>Unpainted words</p>", vp + "<style>body{background:none}</style>")}, "urn:fixed-colours")
+    with zipfile.ZipFile(books / "fixed-colours.epub") as z0:
+        parts = {n: z0.read(n) for n in z0.namelist()}
+    parts["OEBPS/content.opf"] = parts["OEBPS/content.opf"].replace(b"</metadata>", b'<meta property="rendition:layout">pre-paginated</meta></metadata>')
+    with zipfile.ZipFile(books / "fixed-colours.epub", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
+        for n, d in parts.items(): z.writestr(n, d)
+
     # (Round 22, second review) A vertically written page (Japanese fixed-layout books), and one that clears html's background.
     fx3 = xhtml("Vertical", '<p class="v">縦書きのページ</p>', '<meta name="viewport" content="width=600, height=1600"/><style>html{writing-mode:vertical-rl}body{background:#fff}</style>')
     fx4 = xhtml("Clear", '<p>Clear html</p>', '<meta name="viewport" content="width=600, height=800"/><style>html{background:transparent}body{background:#ff0}</style>')
