@@ -269,7 +269,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .edit-bar .seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
 .edit-bar .seg .btn{border:0;border-radius:0}
 .edit-bar .seg .btn[aria-pressed="true"]{background:var(--ribbon-soft)}
-.edit-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px/1.3 var(--font-ui);color:var(--muted)}
+.edit-name{flex:1 1 140px;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px/1.3 var(--font-ui);color:var(--muted)}
 .edit-note{font:400 12px/1.3 var(--font-ui);color:var(--muted)}
 .edit-src{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
 .edit-src .CodeMirror,.edit-plain{flex:1;min-height:0;height:auto;font:var(--ed-size,14px)/1.55 var(--font-mono);background:var(--surface);color:var(--ink)}
@@ -1420,11 +1420,14 @@ async function markdownToHtml(md){
 // Text, Markdown and HTML documents read as one continuous page (headings become contents entries that
 // jump within it), split only when very long. headings: true would split at the main headings instead.
 // The element whose children a document's sections are made of: the body, or the one wrapper it holds.
-function docRoot(body){
+// skip: elements not counted (the editor's write-back, where what the page shows as marks is still elements).
+function docRoot(body, skip = ''){
   let root = body;
-  while (root.children.length === 1 && /^(div|main|article|section)$/i.test(root.firstElementChild.localName)
-         && ![...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) root = root.firstElementChild;
-  return root;
+  for (;;) {
+    const kids = [...root.children].filter(c => !(skip && c.matches(skip)));
+    if (kids.length !== 1 || !/^(div|main|article|section)$/i.test(kids[0].localName) || [...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return root;
+    root = kids[0];
+  }
 }
 function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   const root = docRoot(doc.body);
@@ -1474,7 +1477,7 @@ async function openDocument(buffer, name, kind, { base = null, key, seq, charset
     title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
     manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
     urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}`,
-    doc: { text, kind, name, base, handle, fresh, created, foreign } });
+    doc: { text, source: text, kind, name, base, handle, fresh, created, foreign } });
   if (!isStale(seq)) editOffered();
 }
 // A document as the reader's sections, files and contents. whole: one section however long, as the editor
@@ -3796,7 +3799,7 @@ function speakable(raw){
   return { out, map };
 }
 function ttsGo(ci, pos, { speak = tts.playing, keepFollow = false, jump = !keepFollow } = {}){
-  if (ed.previewWaiting && ed.on && speak) { editPreviewAt(ci); return; }   // (the editor's page made again first: E-21)
+  if (ed.previewWaiting && ed.on && ed.mode === 'raw' && speak) { editPreviewAt(ci, pos); return; }   // (the editor's page made again first: E-21)
   if (keepFollow && speak && sleepDue()) speak = false;   // the sleep timer ran out: stop here, ready to go on
   const chunks = ttsChunks();
   // Past the last sentence: the end of the chapter only while reading; a click there while paused (on a
@@ -4173,8 +4176,9 @@ async function ttsAfterRender(){
     const r = tts.resumeAt, ch = ttsBuild(); tts.resumeAt = null;
     let at = -1;
     ch.forEach((c, j) => { if (c.b.text.slice(c.s, c.e) === r.text && (at < 0 || Math.abs(j - r.ci) < Math.abs(at - r.ci))) at = j; });
+    const same = at >= 0;
     if (at < 0) at = Math.min(r.ci, Math.max(0, ch.length - 1));
-    ttsGo(at, null, { jump: false }); return;
+    ttsGo(at, same && r.off != null && ch[at] ? ch[at].s + r.off : null, { jump: false }); return;
   }
   if (tts.awaitChapter) { tts.awaitChapter = false; tts.mo ? moGo(0) : ttsGo(0, null, { jump: false }); return; }
   if (tts.mo) moGo(moPageStart());                       // the reader navigated to a new chapter while listening
@@ -6785,7 +6789,13 @@ const EDIT_TYPES = { markdown: { mime: 'text/markdown', ext: ['.md', '.markdown'
 const docDraftKey = (doc, b = book) => !doc ? '' : doc.fresh ? `new:${doc.kind}` : doc.base ? (b?.key || '') : `file:${doc.kind}:${doc.name}`;
 const draftKey = () => docDraftKey(book?.doc);
 const textHash = t => { let h = 0x811c9dc5; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + ':' + t.length; };
-const draftFits = (d, base) => !!d && d.from === textHash(base) && d.text !== base;
+// (A draft lists the texts it fits: where the document came from, and the copy last saved, which may be
+// opened instead.)
+const draftFits = (d, base) => !!d && [].concat(d.from).includes(textHash(base)) && d.text !== base;
+const draftFrom = () => [...new Set([textHash(docSource(book.doc)), textHash(ed.saved)])];
+// The text a document has where it came from (its file, the site): what a draft is made against. A save that
+// downloads a copy doesn't change it (round 24 review).
+const docSource = doc => doc.source ?? doc.text;
 
 // Drafts: the text being edited, a moment after each change, in IndexedDB (documents can be large).
 let draftDb = null;
@@ -6809,13 +6819,16 @@ async function draftPending(){
 }
 const draftGet = key => key ? draftPending().then(() => draftDo('readonly', st => st.get(key))) : Promise.resolve(null);
 const draftPut = d => draftDo('readwrite', st => st.put(d));
-const draftDel = key => key ? draftDo('readwrite', st => st.delete(key)) : Promise.resolve(null);
+const draftDel = key => {
+  try { if (JSON.parse(localStorage.getItem('spine:draftPending'))?.key === key) localStorage.removeItem('spine:draftPending'); } catch {}
+  return key ? draftDo('readwrite', st => st.delete(key)) : Promise.resolve(null);
+};
 
 // A document just opened that has a draft: said, with Edit to see it.
 async function editOffered(){
   if (!editable() || book.doc.fresh) return;
   const b = book, d = await draftGet(draftKey());
-  if (book !== b || ed.on || !draftFits(d, b.doc.text)) return;
+  if (book !== b || ed.on || !draftFits(d, docSource(b.doc))) return;
   showNotice(`This document has unsaved changes from ${new Date(d.t).toLocaleString()}, kept in this browser.`, 'info', { label: 'Edit', run: () => editStart() });
 }
 
@@ -6903,7 +6916,7 @@ async function editStart({ mode } = {}){
     Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: d.text, blocks: null, blocksFor: null });
     const draft = await draftGet(draftKey());
     if (book !== b) return;
-    if (draftFits(draft, d.text)) {
+    if (draftFits(draft, docSource(d))) {
       if (confirm(`${d.fresh || d.created ? 'A new document' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
       else draftDel(draftKey());
     }
@@ -6938,7 +6951,7 @@ async function editSetMode(mode, split = ed.split, save = true){
   const was = ed.mode, changed = ed.on && was !== mode && $('#editBar').hasAttribute('data-ready');
   if (changed && was === 'wysiwyg') editFlush();
   if (ed.mode !== mode || !$('#editBar').hasAttribute('data-ready')) ed.tab = mode === 'wysiwyg' ? 'page' : 'src';   // (a narrow screen shows what is edited: round 24 review)
-  ed.mode = mode; ed.split = split;
+  ed.mode = mode; ed.split = split; ed.previewWaiting = false;
   if (save) { store.set('spine:editMode', mode); store.set('spine:editSplit', split); }
   for (const btn of $('#editBar').querySelectorAll('[data-mode]')) { btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode)); btn.disabled = ed.kind === 'text' && btn.dataset.mode === 'wysiwyg'; }
   $('#editSplit').setAttribute('aria-pressed', String(split));
@@ -6958,11 +6971,12 @@ function editFocus(){
   if (ed.mode !== 'wysiwyg') { ed.api?.focus(); return; }
   const d = frame.contentDocument, flow = d?.getElementById(RID.flow), se = scroller();
   if (!flow?.isContentEditable) return;
+  const y = se?.scrollTop;
   frame.contentWindow.focus(); flow.focus({ preventScroll: true });
   const top = [...flow.children].find(el => el.getBoundingClientRect().bottom > 4) || flow;
   const r = d.createRange(); r.setStart(top, 0); r.collapse(true);
   const sel = d.getSelection(); sel.removeAllRanges(); sel.addRange(r);
-  if (se) se.scrollTop = se.scrollTop;   // (no jump)
+  if (se && se.scrollTop !== y) se.scrollTop = y;   // (where it was: the caret placed, the page not moved)
 }
 // The views' panes: a narrow screen has no room for two, so split shows one at a time, chosen by tabs.
 function editLayout(){
@@ -6998,7 +7012,7 @@ function editChanged(){
 }
 function editDraftSoon(){
   clearTimeout(ed.draftTimer);
-  const key = draftKey(), text = ed.text, kind = ed.kind, name = ed.name, from = textHash(ed.saved);
+  const key = draftKey(), text = ed.text, kind = ed.kind, name = ed.name, from = draftFrom();
   ed.draftTimer = setTimeout(() => { if (ed.on && ed.text !== ed.saved) draftPut({ key, text, kind, name, from, t: Date.now() }); else if (ed.on) draftDel(key); }, 800);
 }
 async function editPreview(){
@@ -7076,10 +7090,10 @@ function editPageScrolled(){
   ed.expectSrc = ed.api.scrollTop() !== before ? ed.api.scrollTop() : null;
 }
 
-async function editPreviewAt(ci){
+async function editPreviewAt(ci, pos){
   ed.previewWaiting = false;
   const c = ttsChunks()[ci];
-  tts.resumeAt = { text: c ? c.b.text.slice(c.s, c.e) : '', ci };
+  tts.resumeAt = { text: c ? c.b.text.slice(c.s, c.e) : '', ci, off: c && pos != null ? pos - c.s : null };
   await editRebuild({ fraction: fraction() });
   if (ed.on && ed.split) editSyncToPage();
 }
@@ -7089,7 +7103,8 @@ async function editPreviewAt(ci){
 function utf8Declared(text){
   const utf = v => /^utf-?8$/i.test(v);
   let out = text.replace(/^(\uFEFF?\s*<\?xml\b[^>]*?\sencoding\s*=\s*["'])([\w.:-]+)/i, (m, a, v) => utf(v) ? m : a + 'UTF-8');
-  const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)/g)].map(m => [m.index, m.index + m[0].length]);
+  // (Not in comments, nor in a script's, style's or textarea's text: round 24 review.)
+  const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)|<(script|style|textarea)\b[^>]*>[\s\S]*?(?:<\/\1|$)/gi)].map(m => [m.index + (m[1] ? m[0].indexOf('>') + 1 : 0), m.index + m[0].length]);
   return out.replace(/<meta\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi, (tag, at) => {
     if (comments.some(([a, z]) => at >= a && at < z)) return tag;
     const attrs = [...tag.matchAll(/\s([^\s"'=\/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g)];
@@ -7117,12 +7132,9 @@ async function editWrite(handle, blob){
 async function editSave(as = false){
   if (!ed.on || ed.saving) return;
   editFlush();
-  const b = book, keyBefore = draftKey();
-  let text = ed.text;
-  if (ed.kind === 'html') {
-    const fixed = utf8Declared(text);
-    if (fixed !== text) { text = fixed; editSetText(text); if (ed.mode === 'wysiwyg') ed.wBase = utf8Declared(ed.wBase); }
-  }
+  const b = book, keyBefore = draftKey(), typed = ed.text;
+  // (The charset changed in what is written; in the text only once it is: a cancelled Save as leaves it: round 24 review.)
+  const text = ed.kind === 'html' ? utf8Declared(typed) : typed;
   const type = EDIT_TYPES[ed.kind], blob = new Blob([text], { type: `${type.mime};charset=utf-8` });
   let handle = as ? null : ed.handle, how = '';
   // (While it writes, another book or Done waits: a save finishing later mustn't land in another document:
@@ -7139,13 +7151,18 @@ async function editSave(as = false){
   } catch (e) { if (book === b) showNotice(`${ed.name} couldn't be saved: ${e.message}`, 'error'); return; }
   finally { ed.saving = false; if (book === b && ed.on) editSyncBar(); }
   if (book !== b || !ed.on) return;
+  if (text !== typed && ed.text === typed) { editSetText(text); if (ed.mode === 'wysiwyg') ed.wBase = utf8Declared(ed.wBase); }
   if (handle) { ed.handle = handle; if (handle.name) ed.name = handle.name; }
   ed.saved = text; ed.fresh = false;
   Object.assign(b.doc, { text, name: ed.name, handle: ed.handle, fresh: false });
+  // (Written to a file: that file is now where it comes from (its drafts by its name). Downloaded: the site's
+  // or the file's text stays what drafts are made against.)
+  if (how === 'saved') Object.assign(b.doc, { source: text, base: null, foreign: '', created: false });
   b.opfPath = ed.name; renderMeta();   // (the information's file name too)
   // (The draft goes, unless something was typed while it was being written: round 24 review.)
   draftDel(keyBefore);
   if (ed.text === text) { clearTimeout(ed.draftTimer); if (draftKey() !== keyBefore) draftDel(draftKey()); }
+  else if (how === 'downloaded') editDraftSoon();
   else editDraftSoon();
   editSyncBar();
   $('#editNote').textContent = how === 'saved' ? `Saved to ${ed.name}.` : `Downloaded ${ed.name}.`;
@@ -7167,7 +7184,7 @@ async function editDone(){
 // Edit mode off, without making the page again (another book is coming).
 function editQuit(){
   if (!ed.on) return;
-  ed.on = false;
+  ed.on = false; ed.previewWaiting = false; tts.resumeAt = null;
   clearTimeout(ed.timer); clearTimeout(ed.draftTimer); clearTimeout(ed.wTimer);
   $('#editTools').hidden = true;
   $('.app').classList.remove('editing');
@@ -7231,7 +7248,7 @@ $('#editBar').addEventListener('click', e => {
 });
 // (The editor bar is a toolbar: the arrow keys move along it, rather than turning the page.)
 $('#editBar').addEventListener('keydown', e => {
-  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) || e.target.tagName === 'SELECT') return;
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;   // (a select's Up and Down stay its own)
   const items = [...$('#editBar').querySelectorAll('button, select')].filter(x => !x.disabled && x.offsetParent);
   const i = items.indexOf(e.target); if (i < 0) return;
   e.preventDefault(); e.stopPropagation();
@@ -7242,12 +7259,14 @@ $('#editSaveAs').addEventListener('click', () => editSave(true));
 $('#editDone').addEventListener('click', () => editDone());
 window.addEventListener('beforeunload', e => { if (editDirty() || (ed.on && ed.wdirty)) { e.preventDefault(); e.returnValue = ''; } });
 // (Leaving within a moment of typing: the page's edits written and kept as a draft at once: round 24 review.)
+// (Back from the browser's page cache: the editor is still here, so the draft kept for leaving isn't wanted.)
+window.addEventListener('pageshow', e => { if (e.persisted && ed.on) { try { localStorage.removeItem('spine:draftPending'); } catch {} } });
 window.addEventListener('pagehide', () => {
   if (!ed.on) return;
   editFlush();
   if (editDirty()) {
     clearTimeout(ed.draftTimer);
-    const d = { key: draftKey(), text: ed.text, kind: ed.kind, name: ed.name, from: textHash(ed.saved), t: Date.now() };
+    const d = { key: draftKey(), text: ed.text, kind: ed.kind, name: ed.name, from: draftFrom(), t: Date.now() };
     try { localStorage.setItem('spine:draftPending', JSON.stringify(d)); } catch { draftPut(d); }   // (too big for it: as usual)
   }
 });
@@ -7287,7 +7306,9 @@ function editMarkup(d){
     if (/^(set|animate)$/i.test(el.localName) && !/href/i.test(el.getAttribute('attributeName') || '')) continue;
     // (Put aside as a comment, which a parser takes anywhere, in an SVG or a table too; the page shows a chip
     // for it where one can go: editWysiwygReady.)
-    el.replaceWith(d.createComment(edKeepMark(ed.kept.push(el.outerHTML) - 1)));
+    // (In XHTML, without the namespace declaration serializing it alone adds.)
+    const markup = d.contentType === 'application/xhtml+xml' ? el.outerHTML.replace(/^(<[^\s>/]+)\s+xmlns="[^"]*"/, '$1') : el.outerHTML;
+    el.replaceWith(d.createComment(edKeepMark(ed.kept.push(markup) - 1)));
   }
   for (const el of d.body.querySelectorAll('*')) {
     const o = { tag: el.localName, attrs: [...el.attributes].map(a => [a.name, a.value, a.namespaceURI]) };
@@ -7303,7 +7324,7 @@ async function editMarkupText(){
   if (ed.kind === 'markdown') {
     const m = await markdownToHtml(ed.text);
     // (Front matter as it is now: written back in front of what the page becomes.)
-    ed.wFront = ed.text.replace(/^\uFEFF/, '').match(/^---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)\r?\n/)?.[0] || '';
+    ed.wFront = ed.text.replace(/^\uFEFF/, '').match(/^---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)\r?\n(?:[ \t]*\r?\n)*/)?.[0] || '';
     d = new DOMParser().parseFromString(`<!DOCTYPE html><html${m.language ? ` lang="${escHtml(m.language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(m.title || '')}</title>${m.author ? `<meta name="author" content="${escHtml(m.author)}">` : ''}</head><body>${m.html}</body></html>`, 'text/html');
     editMarkup(d);
     ed.wDoc = d;
@@ -7367,13 +7388,21 @@ function bodyRange(t, xml){
     if (t[lt + 1] === '!' || t[lt + 1] === '?') { const e = t.indexOf('>', lt); i = e < 0 ? t.length : e + 1; continue; }
     const m = /^<(\/?)([a-zA-Z][\w:.-]*)/.exec(t.slice(lt, lt + 80));
     if (!m) { i = lt + 1; continue; }
-    let j = lt + m[0].length, q = '';
-    for (; j < t.length; j++) { const ch = t[j]; if (q) { if (ch === q) q = ''; } else if (ch === '"' || ch === "'") q = ch; else if (ch === '>') break; }
+    // (A quote opens a value only after "=": an apostrophe in an unquoted value doesn't: round 24 review.)
+    let j = lt + m[0].length, q = '', eq = false;
+    for (; j < t.length; j++) {
+      const ch = t[j];
+      if (q) { if (ch === q) q = ''; continue; }
+      if ((ch === '"' || ch === "'") && eq) q = ch; else if (ch === '>') break;
+      if (ch === '=') eq = true; else if (!/\s/.test(ch)) eq = false;
+    }
     const name = m[2].toLowerCase().replace(/^.*:/, ''); i = j + 1;
     if (!m[1] && name === 'body' && start < 0) start = i;
     else if (m[1] && name === 'body') { close = lt; closeEnd = i; }
     else if (m[1] && name === 'html') htmlClose = lt;
-    if (!m[1] && !xml && raw.test(name) && t[j - 1] !== '/') { const e = t.toLowerCase().indexOf('</' + name, i); i = e < 0 ? t.length : e; }
+    // (A <noscript> before the body is skipped too: a <body> inside it isn't the body. Found by a pattern from
+    // here on, not by lowering the whole text each time: round 24 review.)
+    if (!m[1] && !xml && (raw.test(name) || (name === 'noscript' && start < 0)) && t[j - 1] !== '/') { const re = new RegExp('</' + name + '(?=[\\s>/])', 'gi'); re.lastIndex = i; const e = re.exec(t); i = e ? e.index : t.length; }
   }
   if (start < 0) return null;
   const end = close >= start ? close : htmlClose >= start ? htmlClose : t.length;
@@ -7384,32 +7413,31 @@ function editSerialize(){
   if (!flow || !ed.wBase) return ed.text;
   const nodes = [...flow.childNodes].filter(nd => nd.id !== RID.end);
   if (ed.kind === 'markdown') {
-    const holder = editRestore(nodes, document.implementation.createHTMLDocument(''), false);
-    // (The one wrapper the content sat in, a centred <div> say, put back around it, as HTML: round 24 review.)
-    const chain = [];
-    if (ed.wDoc) for (let el = docRoot(ed.wDoc.body); el && el !== ed.wDoc.body; el = el.parentElement) chain.unshift(el);
-    if (chain.length) {
-      let top = null, inner = null;
-      for (const w of chain) {
-        const c = holder.ownerDocument.createElement(w.localName);
-        for (const [name, v] of ed.orig[w.getAttribute('data-ed')]?.attrs || []) { try { c.setAttribute(name, v); } catch {} }
-        inner ? inner.append(c) : (top = c); inner = c;
-      }
-      inner.append(...holder.childNodes); holder.append(top);
-    }
+    // (The page's content put back where it sat in the document: inside its wrapper, with what was beside the
+    // wrapper (a script, a comment) kept: round 24 review.)
+    const body = ed.wDoc.body.cloneNode(true);
+    docRoot(body).replaceChildren(...nodes.map(nd => ed.wDoc.importNode(nd, true)));
+    const holder = editRestore([...body.childNodes], ed.wDoc, false);
     return (ed.wFront || '') + htmlToMarkdown(holder);
   }
   const t = ed.wBase, { d: model, xml, frag } = editParse(t);
-  docRoot(model.body).replaceChildren(...editRestore(nodes, model, true).childNodes);
+  // (The wrapper found as the page found it: a script or style beside it is a mark there: round 24 review.)
+  docRoot(model.body, ED_KEEP).replaceChildren(...editRestore(nodes, model, true).childNodes);
   let inner;
-  if (xml) { const s = new XMLSerializer().serializeToString(model.body); inner = s.slice(s.indexOf('>') + 1, s.lastIndexOf('</')); }
+  // (XHTML: the whole document serialized and its body taken, so prefixes declared on <html> aren't declared again.)
+  if (xml) { const s = new XMLSerializer().serializeToString(model.documentElement), r = bodyRange(s, true); inner = r ? s.slice(r.start, r.end) : model.body.innerHTML; }
   else inner = model.body.innerHTML;
-  if (frag) return inner.replace(/\s+$/, '') + t.match(/\s*$/)[0];
+  if (frag) return (t.match(/^\uFEFF?\s*<!DOCTYPE[^>]*>/i)?.[0] || '') + inner.replace(/\s+$/, '') + t.match(/\s*$/)[0];   // (its doctype too: round 24 review)
   const r = bodyRange(t, xml);
   if (r) {
     const ws = t.slice(r.start, r.end).match(/\s*$/)[0], after = t.slice(r.after);
     // (Markup after </body> is moved into the body by a parser: written inside it, once: round 24 review.)
-    if (/\S/.test(after.replace(/<\/html\s*>/gi, '').replace(/<!--[\s\S]*?-->/g, ''))) return t.slice(0, r.start) + inner.replace(/\s+$/, '') + '\n</body>\n</html>\n';
+    if (/\S/.test(after.replace(/<\/html\s*>/gi, '').replace(/<!--[\s\S]*?-->/g, ''))) {
+      // (Comments there stay after the body: a parser keeps them outside it.)
+      const end = after.search(/<\/html\s*>/i), mid = end < 0 ? after : after.slice(0, end), last = end < 0 ? '' : after.slice(end).replace(/^<\/html\s*>/i, '');
+      const notes = (mid.match(/<!--[\s\S]*?-->/g) || []).join('\n');
+      return t.slice(0, r.start) + inner.replace(/\s+$/, '') + '\n</body>\n' + (notes ? notes + '\n' : '') + '</html>' + (/\S/.test(last.replace(/<!--[\s\S]*?-->/g, '')) ? '\n' : last || '\n');
+    }
     return t.slice(0, r.start) + inner.replace(/\s+$/, '') + ws + t.slice(r.end);
   }
   // (No <body> tag: what comes before <html> as it was, the document as the browser writes it.)
@@ -7467,6 +7495,12 @@ function mdBlock(el){
   if (t === 'blockquote' && mdPlain(el)) return mdBlocks(el).split('\n').map(l => l ? '> ' + l : '>').join('\n');
   if ((t === 'ul' || t === 'ol') && mdPlain(el, t === 'ol' ? ['start'] : [])) { const l = mdList(el); if (l != null) return l; }
   if (t === 'table' && mdPlain(el)) { const tb = mdTable(el); if (tb != null) return tb; }
+  // (A container holding only blocks, a centred <div> say: its tags as HTML, its content as Markdown, which
+  // Markdown reads between them when blank lines set them apart: round 24 review.)
+  if (/^(div|section|article|header|footer|main|aside|nav|figure|center)$/.test(t) && [...el.childNodes].every(c => c.nodeType === 8 || (c.nodeType === 3 && !c.data.trim()) || (c.nodeType === 1 && mdIsBlock(c)))) {
+    const o = el.cloneNode(false).outerHTML, close = `</${t}>`, inner = mdBlocks(el);
+    if (o.endsWith(close)) return `${o.slice(0, -close.length)}\n\n${inner}\n\n${close}`;
+  }
   return el.outerHTML;
 }
 function mdList(el){
@@ -7502,8 +7536,15 @@ function mdTable(el){
 }
 // Text that would otherwise be read as Markdown is escaped. (Only ASCII white space is collapsed: a no-break
 // space stays one: round 24 review.)
-const mdEsc = s => s.replace(/[\\`*_[\]<>~|]/g, '\\$&').replace(/&(?=#?\w+;)/g, '&amp;');
-const mdOkSide = c => c === '' || /\s/.test(c) || (/[\p{P}\p{S}]/u.test(c) && !'*_~'.includes(c));
+// (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
+// could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
+const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~])/g, '\\\\').replace(/[`*[~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
+  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;');
+// Whether Markdown reads delimiters around core, between the characters before and after (CommonMark's flanking
+// rules, which let * and ~~ work inside a word); a delimiter right beside another isn't risked.
+const mdPunct = c => /[\p{P}\p{S}]/u.test(c), mdSpace = c => c === '' || /\s/.test(c);
+const mdFlanks = (core, before, after) => !'*_~\\'.includes(before || ' ') && !'*_~'.includes(after || ' ')
+  && (!mdPunct(core[0]) || mdSpace(before) || mdPunct(before)) && (!mdPunct(core.at(-1)) || mdSpace(after) || mdPunct(after));
 function mdInline(nodes, { top = false, br = '\\\n' } = {}){
   const parts = [];
   for (const nd of nodes) {
@@ -7543,7 +7584,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     const lead = p.inner.match(/^\s*/)[0], tail = p.inner.match(/\s*$/)[0];
     const before = (out + lead).slice(-1), after = tail ? ' ' : first(i + 1);
     // (The delimiters only where Markdown reads them as such; otherwise the HTML tags: round 24 review.)
-    out += lead + (mdOkSide(before) && mdOkSide(after) ? p.wrap + core + p.wrap : `<${p.tag}>${core}</${p.tag}>`) + tail;
+    out += lead + (mdFlanks(core, before, after) ? p.wrap + core + p.wrap : `<${p.tag}>${core}</${p.tag}>`) + tail;
   });
   return out;
 }
@@ -7551,7 +7592,7 @@ const mdUrl = u => /[\s()<>]/.test(u) ? `<${u.replace(/[<>]/g, c => encodeURICom
 const mdTitle = el => el.hasAttribute('title') ? ` "${el.getAttribute('title').replace(/["\\]/g, '\\$&')}"` : '';
 // A paragraph's lines: trimmed, with what would start a heading, list, quote or rule, or underline a heading, escaped.
 const mdLines = s => s.split('\n').map(l => l.replace(/^ +| +$/g, '')
-  .replace(/^(#{1,6}(?=\s|$)|>|[-+](?=\s|$)|[-=*_](?=[\s=*_-]*$))/, '\\$1')
+  .replace(/^(#{1,6}(?=\s|$)|>|[-+](?=\s|$)|([-=*_])(?=(?:[ \t]*\2)*[ \t]*$))/, '\\$1')
   .replace(/^(\d+)([.)])(?=\s|$)/, '$1\\$2')).join('\n').trim();
 
 // The text editor's text set from the page (WYSIWYG), without that counting as typing in it.
@@ -7729,13 +7770,15 @@ function editCommand(cmd){
   const sel = d.getSelection();
   if (cmd === 'link') {
     const a = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement)?.closest('a');
-    const url = prompt('Link address', a?.getAttribute('data-ed') != null ? (ed.orig[a.getAttribute('data-ed')].attrs.find(x => x[0] === 'href')?.[1] ?? '') : a?.getAttribute('href') || 'https://');
+    const url = prompt('Link address', a?.getAttribute('data-ed') != null ? (ed.orig[a.getAttribute('data-ed')].attrs.find(x => x[0] === 'href')?.[1] ?? '') : a?.getAttribute('data-ed-href') ?? a?.getAttribute('href') ?? 'https://');
     if (url == null) return;
     if (url.trim() && !editSafeUrl(url)) { showNotice('Links can go to web and e-mail addresses, or to files beside the document.', 'error'); return; }
     if (a) {
       const o = a.getAttribute('data-ed') != null ? ed.orig[a.getAttribute('data-ed')] : null;
       if (o) { o.attrs = o.attrs.filter(x => x[0] !== 'href'); if (url) o.attrs.push(['href', url]); }
+      a.removeAttribute('data-ed-href');
       url ? a.setAttribute('href', url) : a.replaceWith(...a.childNodes);
+      if (!o) editNewLinks(d);
       editWysiwygInput();
     } else if (url) {
       if (sel.isCollapsed) d.execCommand('insertHTML', false, `<a href="${escHtml(url)}">${escHtml(url)}</a>`);

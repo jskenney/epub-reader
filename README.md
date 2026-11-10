@@ -116,7 +116,8 @@ document**, **New Markdown document** and **New HTML document**.
   so it stays well-formed. Comments are kept. Markdown comes back in one
   consistent style (`#` headings, `-` bullets, `*` and `**` emphasis, `***`
   rules, fenced code), with anything Markdown can't say kept as HTML; front
-  matter is kept as it was.
+  matter is kept as it was. A paragraph's lines are joined into one, and
+  reference links become inline links.
 - The raw text is edited in CodeMirror, with Markdown or HTML highlighting,
   line numbers, Ctrl+F to find and replace, and Tab to indent. If CodeMirror
   can't be loaded, a plain text box does the same, and the editor bar says why.
