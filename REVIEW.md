@@ -274,6 +274,10 @@ a test that fails on the code before it, except L-276 and L-277 (checked by read
 That was the last of the six loops. The reviews since E-21 was built found nothing open that doesn't need you:
 E-25 and E-22 are next in TODO.md.
 
+Then E-26, which you asked for: the contents, the bottom bar and the top bar as settings (in Settings and in
+`reader-config.json`, lockable), with C, P and N to show or hide them, remembered; a tap at the top right corner
+brings a hidden top bar back.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -848,6 +852,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
 | E-23 | Editing an EPUB's existing chapters with the editor; the book saved re-packed (mimetype first and stored, `dcterms:modified` updated; over its file where the browser allows it) or the chapter downloaded alone; XHTML kept well-formed | `d4922f4` |
+| E-26 | The contents (C), the bottom bar (P) and the top bar (N) as settings, in Settings and `reader-config.json` (`SHOW_CONTENTS`, `SHOW_PROGRESS`, `SHOW_TOPBAR`), the keys remembered; a tap at the top right corner brings a hidden top bar back | this update |
 | E-24 | `?edit=path` opens a document into the editor (a new, empty one if missing); `?get=address` opens a book or document by its address, on this site or another that allows it (CORS); `GET_URLS` turns it off | `54916c8` |
 | E-21 | Editing Markdown, HTML and text documents: WYSIWYG and raw (CodeMirror) with the page beside, new documents, saving in place or as a copy, drafts (plan and as-built notes in TODO.md) | `0ee38a7`, `efae5f8`, `9a6889f` |
 | E-20 | Fixed-layout follow-ups: a frame of its own for each page in the page layouts (vw/vh, fixed positions and media queries the page's own), two-page spreads by the pages' sides or with the cover alone, right-to-left fixed-layout books, EPUB 2 fixed layout; manga spreads kept as they are, by your decision | `6c5cc87` |

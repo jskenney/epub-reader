@@ -175,6 +175,8 @@ def main():
                         ("folder-cfg", {"LIB_FILES": "/reader/", "SEARCH_MAX": 2, "COMIC_PART": 10, "KEEP_POSITIONS_DAYS": 0, "BOOKSHELF": "/shelf2"}),
                         ("folder-noedit", {"LIB_FILES": "/reader/", "EDITING": False}),
                         ("folder-noget", {"LIB_FILES": "/reader/", "GET_URLS": False}),
+                        ("folder-bare", {"LIB_FILES": "/reader/", "SHOW_CONTENTS": False, "SHOW_PROGRESS": False, "SHOW_TOPBAR": False}),
+                        ("folder-barelock", {"LIB_FILES": "/reader/", "SHOW_TOPBAR": False, "LOCKED": ["SHOW_TOPBAR"]}),
                         ("folder-alttts", {"LIB_FILES": "/reader/", "TTS_SERVER": {"api": "/alt-tts/", "voices": "/alt-voices/"},
                                            "SPAN_MAX": {"server": 60}, "SAVED_AUDIO_MB": 0})):
         (SITE / folder).mkdir()

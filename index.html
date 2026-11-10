@@ -158,6 +158,12 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 /* full-screen reading: only the page remains */
 .app.fs{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
 .app.fs .bar,.app.fs .foot,.app.fs .toc,.app.fs .notice{display:none !important}
+/* The top and bottom bars turned off (SHOW_TOPBAR, SHOW_PROGRESS): an unseen corner at the top right brings the
+   top bar back with a tap or click. */
+.app.no-bar .bar,.app.no-foot .foot{display:none}
+.bar-corner{position:fixed;top:0;right:0;z-index:40;width:64px;height:64px;padding:0;border:0;background:transparent;cursor:pointer;opacity:0}
+.bar-corner:focus-visible{opacity:1;outline:2px solid var(--ribbon);outline-offset:-4px}
+.app.fs ~ .bar-corner,.app.fs .bar-corner{display:none}
 .app.fs .main{padding-block:0;gap:0}
 .app.fs #page,.app.fs #page2,.app.fs .stage.fxl{border:0;border-radius:0;box-shadow:none}
 .fs-pill{position:fixed;z-index:15;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));
@@ -529,6 +535,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </button>
   </footer>
 
+  <button class="bar-corner" id="barCorner" title="Show the top bar (N)" aria-label="Show the top bar" hidden></button>
   <div class="fs-pill" id="fsPill">
     <span class="mono" id="fsPos"></span>
     <button class="btn" id="fsExit" title="Exit full screen (Esc)">Exit full screen <kbd>Esc</kbd></button>
@@ -584,12 +591,17 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         </div>
         <p class="ab-muted set-locked" id="setThemeLocked" hidden>The theme is set by this site.</p>
       </fieldset>
+      <fieldset class="set-group"><legend>Layout</legend>
+        <div class="set-row"><span><label for="set-SHOW_CONTENTS">Contents beside the page</label><small>C shows or hides them. On a narrow screen they start closed.</small><small class="set-def"></small></span><input id="set-SHOW_CONTENTS" type="checkbox" data-set="SHOW_CONTENTS"></div>
+        <div class="set-row"><span><label for="set-SHOW_PROGRESS">Bottom bar: progress, Previous and Next</label><small>P shows or hides it. Pages still turn with the arrows, swipes and clicks.</small><small class="set-def"></small></span><input id="set-SHOW_PROGRESS" type="checkbox" data-set="SHOW_PROGRESS"></div>
+        <div class="set-row"><span><label for="set-SHOW_TOPBAR">Top bar</label><small>N shows or hides it. While it's hidden, a tap at the top right corner brings it back.</small><small class="set-def"></small></span><input id="set-SHOW_TOPBAR" type="checkbox" data-set="SHOW_TOPBAR"></div>
+      </fieldset>
       <fieldset class="set-group"><legend>Reading</legend>
         <div class="set-row"><span><label for="set-TIME_LEFT">Reading time left in the footer</label><small class="set-def"></small></span><input id="set-TIME_LEFT" type="checkbox" data-set="TIME_LEFT"></div>
         <div class="set-row"><span><label for="set-FORCE_LTR">Turn every book left to right</label><small>For books marked right to left by mistake: off, those (and manga) turn right to left, the left arrow going on.</small><small class="set-def"></small></span><input id="set-FORCE_LTR" type="checkbox" data-set="FORCE_LTR"></div>
         <div class="set-row"><span><label for="set-ALLOW_EXTERNAL_LINKS">Web links in books open in a new tab</label><small>Off: they are plain text.</small><small class="set-def"></small></span><input id="set-ALLOW_EXTERNAL_LINKS" type="checkbox" data-set="ALLOW_EXTERNAL_LINKS"></div>
         <div class="set-row"><span><label for="set-ALLOW_REMOTE_CONTENT">Pictures and media from other websites</label><small>A book can name files on other sites, which lets them see when it's read. The site's own security policy may still block them. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-ALLOW_REMOTE_CONTENT" type="checkbox" data-set="ALLOW_REMOTE_CONTENT"></div>
-        <div class="set-row"><span><label for="set-shortcuts">Single-letter shortcuts (C F T L I R /)</label><small>Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.</small><small class="set-def"></small></span><input id="set-shortcuts" type="checkbox" data-set="shortcuts"></div>
+        <div class="set-row"><span><label for="set-shortcuts">Single-letter shortcuts (C F T L I R N P /)</label><small>Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.</small><small class="set-def"></small></span><input id="set-shortcuts" type="checkbox" data-set="shortcuts"></div>
         <div class="set-row"><span><label for="set-KEEP_POSITIONS_DAYS">Forget reading positions after (days)</label><small>For books not opened in that time. 0 keeps them.</small><small class="set-def"></small></span><input id="set-KEEP_POSITIONS_DAYS" type="number" min="0" max="36500" step="1" data-set="KEEP_POSITIONS_DAYS"></div>
         <div class="set-row"><span><label for="set-SEARCH_MAX">Search matches listed, at most</label><small class="set-def"></small></span><input id="set-SEARCH_MAX" type="number" min="1" max="100000" step="1" data-set="SEARCH_MAX"></div>
         <div class="set-row"><span><label for="set-COMIC_PART">Comic pages per section</label><small>For comics opened after the change; your place stays on the same page.</small><small class="set-def"></small></span><input id="set-COMIC_PART" type="number" min="2" max="1000" step="2" data-set="COMIC_PART"></div>
@@ -659,6 +671,9 @@ let SLEEP_TIMER = false;
 // left under older keys don't pile up in the browser. 0 keeps them forever.
 let KEEP_POSITIONS_DAYS = 730;
 let TIME_LEFT = false;
+// The contents beside the page (C), the bottom bar with the progress and Previous/Next (P), and the top bar (N):
+// shown unless a reader or the site turns them off. On a narrow screen the contents always start closed.
+let SHOW_CONTENTS = true, SHOW_PROGRESS = true, SHOW_TOPBAR = true;
 // Right-to-left books (page-progression-direction="rtl", or manga marked so in ComicInfo.xml) turn right to left:
 // the left arrow and a swipe to the right go on, and spreads show the later page on the left. true turns every book
 // left to right, for books marked right to left by mistake.
@@ -3173,7 +3188,9 @@ function onKey(e){
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); toggleTheme(); }
-  else if ((e.key === 'c' || e.key === 'C') && !isFs()) { e.preventDefault(); setToc(!tocIsOpen()); }
+  else if ((e.key === 'c' || e.key === 'C') && !isFs()) { e.preventDefault(); tocToggle(); }
+  else if ((e.key === 'p' || e.key === 'P') && !isFs()) { e.preventDefault(); barToggle('SHOW_PROGRESS'); }
+  else if ((e.key === 'n' || e.key === 'N') && !isFs()) { e.preventDefault(); barToggle('SHOW_TOPBAR'); }
   else if ((e.key === 'i' || e.key === 'I') && !isFs()) { e.preventDefault(); toggleInfo(); }
   else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); if (!ed.on) setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]); }   // (the editor's page is one long page)
   else if (scrolling() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {   // scroll a little, like a normal page
@@ -3397,8 +3414,30 @@ function toggleInfo(){
   if (show) { if (!tocIsOpen()) setToc(true); sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
 }
 const tocIsOpen = () => narrow.matches ? $('#toc').classList.contains('open') : !$('#toc').classList.contains('collapsed');
-$('#tocBtn').addEventListener('click', () => setToc(!tocIsOpen()));
-narrow.addEventListener('change', () => setToc(!narrow.matches));
+// C and the Contents button: on a wide screen, the choice is kept (SHOW_CONTENTS); on a narrow one, where the
+// contents cover the page, only opened or closed.
+function tocToggle(){
+  const open = !tocIsOpen();
+  if (!narrow.matches && !LOCKED.has('SHOW_CONTENTS')) { setChange('SHOW_CONTENTS', open); if (tocIsOpen() !== open) setToc(open); }
+  else setToc(open);
+}
+$('#tocBtn').addEventListener('click', tocToggle);
+narrow.addEventListener('change', () => setToc(!narrow.matches && SHOW_CONTENTS));
+// The bars shown as the settings say (full screen hides both anyway).
+function syncBars(){
+  const app = $('.app');
+  app.classList.toggle('no-bar', !SHOW_TOPBAR);
+  app.classList.toggle('no-foot', !SHOW_PROGRESS);
+  $('#barCorner').hidden = SHOW_TOPBAR || LOCKED.has('SHOW_TOPBAR');
+  if (!SHOW_TOPBAR) { setMenu(false); editMenu(false); }   // (a menu open in the bar goes with it)
+}
+// P and N: the bars shown or hidden, and kept so; a site that sets one says so.
+function barToggle(name){
+  if (LOCKED.has(name)) { showNotice(`This site sets whether the ${name === 'SHOW_TOPBAR' ? 'top' : 'bottom'} bar is shown.`, 'info', { label: 'OK', run(){} }); return; }
+  setChange(name, !SET_VARS[name][0]());
+  if ($('#setDialog').open) setSync();
+}
+$('#barCorner').addEventListener('click', () => { barToggle('SHOW_TOPBAR'); $('#tocBtn').focus(); });
 
 // Cycle the layout, keeping the reader's place (as a fraction of the section) across the change.
 function setLayout(next, save = true){
@@ -3497,7 +3536,7 @@ function buildFontMenu(){
   const k = document.createElement('button');
   k.className = 'opt'; k.type = 'button'; k.id = 'keysOpt'; k.setAttribute('role', 'menuitemcheckbox');
   const kn = document.createElement('span'); kn.textContent = 'Single-key shortcuts';
-  const ks = document.createElement('small'); ks.textContent = 'C F T L I R /';
+  const ks = document.createElement('small'); ks.textContent = 'C F T L I R N P /';
   k.append(kn, ks);
   k.title = 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.';
   k.addEventListener('click', () => { if (!LOCKED.has('shortcuts')) setSingleKeys(!singleKeys); });
@@ -3539,7 +3578,7 @@ function menuKey(e){
     opts[n].focus(); return true;
   }
   if (e.key === 'Tab') { setMenu(false); return false; }
-  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(e.key) || (singleKeys && ['f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']', 'l', 'L'].includes(e.key));
+  return ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(e.key) || (singleKeys && ['f', 'F', 't', 'T', 'c', 'C', 'r', 'R', '[', ']', 'l', 'L', 'n', 'N', 'p', 'P'].includes(e.key));
 }
 $('#fontBtn').addEventListener('click', () => setMenu(!menuOpen()));
 document.addEventListener('click', e => { if (menuOpen() && !e.target.closest('.font-pick')) setMenu(false); });
@@ -6695,6 +6734,9 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
+  SHOW_CONTENTS: ['boolean', v => { SHOW_CONTENTS = v; }],
+  SHOW_PROGRESS: ['boolean', v => { SHOW_PROGRESS = v; }],
+  SHOW_TOPBAR: ['boolean', v => { SHOW_TOPBAR = v; }],
   EDITING: ['boolean', v => { EDITING = v; }],
   GET_URLS: ['boolean', v => { GET_URLS = v; }],
   FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
@@ -8051,6 +8093,9 @@ async function openPicked(){
    even when it equals this folder's value, as other folders' defaults can differ. Restore defaults drops them. What only makes sense for the
    whole site (paths, the CDN policy, the voice server, default books) stays in reader-config.json. */
 const SET_VARS = {   // name: [the value now, what to do once it changes ('reload': only when the page is reloaded)]
+  SHOW_CONTENTS: [() => SHOW_CONTENTS, () => { if (!narrow.matches) setToc(SHOW_CONTENTS); }],
+  SHOW_PROGRESS: [() => SHOW_PROGRESS, () => syncBars()],
+  SHOW_TOPBAR: [() => SHOW_TOPBAR, () => syncBars()],
   TIME_LEFT: [() => TIME_LEFT, () => updateTimeLeft()],
   // (Spreads paired and placed again, and a manga's pages put in the other order: the page shown again.)
   FORCE_LTR: [() => FORCE_LTR, () => { if (!book) return; book.spreads = null; renderMeta(); if (frame.contentDocument && cur.shown && !tts.open) renderChapter(cur.i, { fraction: fraction() }); else relayout(); }],
@@ -8203,7 +8248,8 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   syncFontMenu();
   { const t = store.get('spine:theme'); if (THEMES.includes(t) && !LOCKED.has('theme')) document.documentElement.setAttribute('data-theme', t); }
   syncThemeBtn();
-  setToc(!narrow.matches);
+  setToc(!narrow.matches && SHOW_CONTENTS);
+  syncBars();
   const q = new URLSearchParams(location.search), ref = q.get('book'), editRef = q.get('edit'), getRef = q.get('get');
   await (editRef ? openForEdit(editRef) : getRef ? openByAddress(getRef) : ref ? openFromUrl(ref) : openDefault());
 })();

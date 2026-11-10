@@ -404,8 +404,14 @@ Two more parameters open files by address:
 - The browser tab shows the book's cover as its icon (EPUB 3 `cover-image`,
   EPUB 2 `<meta name="cover">`, an image named "cover", or the first image on
   a cover page), and the site's favicon for books without one.
-- Single-key shortcuts (C contents, I information, F full screen, T theme,
-  L layout, R read aloud, / search, [ and ] speed) can be turned off under
+- The contents beside the page, the bottom bar (progress, Previous and Next)
+  and the top bar are shown unless turned off in Settings or by their keys:
+  C, P and N, which are remembered. With the top bar hidden, a tap or click
+  at the top right corner brings it back. On a narrow screen the contents
+  start closed and C only opens or closes them.
+- Single-key shortcuts (C contents, P bottom bar, N top bar, I information,
+  F full screen, T theme, L layout, R read aloud, / search, [ and ] speed) can
+  be turned off under
   Keyboard in the Aa menu or in Settings if they clash with a screen reader;
   arrow keys, Page Up/Down, Space and Ctrl+F keep working.
 - Themes: System, Light, Sepia, Dark and Black (for OLED screens), in
@@ -414,7 +420,8 @@ Two more parameters open files by address:
   you pick one, the page uses the folder's default theme if its
   `reader-config.json` sets one, otherwise your system setting.
 - Settings (the gear button in the top bar): the theme, and reader options
-  that otherwise only the site sets: the time left in the footer, turning
+  that otherwise only the site sets: the contents, bottom bar and top bar,
+  the time left in the footer, turning
   every book left to right, web links,
   pictures from other sites, shortcuts, how long positions are kept, how many
   search matches are listed, comic section size, the sleep timer, how much
@@ -646,6 +653,9 @@ default books and the memory and request sizes stay the site's to set.
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
+| `SHOW_CONTENTS` ✓ ⚙ | `true` | `false` starts with the contents closed (on a narrow screen they always start closed). C shows or hides them, and is remembered. |
+| `SHOW_PROGRESS` ✓ ⚙ | `true` | `false` hides the bottom bar (progress, position, Previous and Next). P shows or hides it, and is remembered. |
+| `SHOW_TOPBAR` ✓ ⚙ | `true` | `false` hides the top bar. N shows or hides it, and is remembered; while it's hidden, a tap or click at the top right corner brings it back (unless the site locks it). |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site (except in a folder that locks it). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
