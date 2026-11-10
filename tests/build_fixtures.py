@@ -772,7 +772,7 @@ def main():
 
     # E-20: fixed-layout books with hand-written packages: right to left, EPUB 2 (a meta, or Apple's display
     # options), and a page using vw units and a fixed position.
-    def fxl_book(name, uid, pages, meta="", props=None, version="3.0", ppd="", extra=None):
+    def fxl_book(name, uid, pages, meta="", props=None, version="3.0", ppd="", extra=None, heads=None):
         items = "".join(f'<item id="f{i}" href="f{i}.xhtml" media-type="application/xhtml+xml"/>' for i in range(len(pages)))
         refs = "".join(f'<itemref idref="f{i}"{(" properties=" + chr(34) + props[i] + chr(34)) if props and props[i] else ""}/>' for i in range(len(pages)))
         opf = (f'<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="{version}" unique-identifier="uid">'
@@ -787,7 +787,7 @@ def main():
 <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
             z.writestr("OEBPS/content.opf", opf); z.writestr("OEBPS/toc.ncx", ncx)
             for i, body in enumerate(pages):
-                z.writestr(f"OEBPS/f{i}.xhtml", xhtml(f"P{i + 1}", body, vp))
+                z.writestr(f"OEBPS/f{i}.xhtml", xhtml(f"P{i + 1}", body, vp if heads is None or heads[i] is None else heads[i]))
             for n, d in (extra or {}).items(): z.writestr(n, d)
     pg = lambda n: f'<p class="n">Page {n} text</p>'
     fxl_book("fixed-rtl", "urn:fixed-rtl", [pg(1), pg(2), pg(3)], '<meta property="rendition:layout">pre-paginated</meta>', ppd="rtl")
@@ -795,6 +795,12 @@ def main():
              props=["page-spread-left", "page-spread-right", "page-spread-center", ""])
     fxl_book("fixed-epub2", "urn:fixed-epub2", [pg(1), pg(2)], '<meta name="fixed-layout" content="true"/>', version="2.0")
     fxl_book("fixed-apple", "urn:fixed-apple", [pg(1), pg(2)], "", version="2.0",
+             extra={"META-INF/com.apple.ibooks.display-options.xml": '<?xml version="1.0"?><display_options><platform name="*"><option name="fixed-layout">true</option></platform></display_options>'})
+    # (Round 23 review) A spread whose facing page has no size (so it can't be shown); an EPUB 3 book marked
+    # reflowable that also has EPUB 2's fixed-layout meta and Apple's display options (reflowable all the same).
+    fxl_book("fixed-many", "urn:fixed-many", [pg(n) for n in range(1, 7)], '<meta property="rendition:layout">pre-paginated</meta>')
+    fxl_book("fixed-nosize", "urn:fixed-nosize", [pg(1), pg(2), pg(3)], '<meta property="rendition:layout">pre-paginated</meta>', heads=[None, None, ""])
+    fxl_book("fixed-epub3-reflow", "urn:fixed-epub3-reflow", [pg(1), pg(2)], '<meta property="rendition:layout">reflowable</meta><meta name="fixed-layout" content="true"/>',
              extra={"META-INF/com.apple.ibooks.display-options.xml": '<?xml version="1.0"?><display_options><platform name="*"><option name="fixed-layout">true</option></platform></display_options>'})
     fxl_book("fixed-units", "urn:fixed-units", ['<div id="half" style="width:50vw;height:10vh;background:#c00"></div><div id="pin" style="position:fixed;right:0;bottom:0;width:40px;height:40px;background:#00c"></div><p>Units page</p>'],
              '<meta property="rendition:layout">pre-paginated</meta>')

@@ -286,3 +286,78 @@ test('a fixed page coloured by a stylesheet that arrives late is shown in its co
   const x = await colours(page);
   assert.equal(x.html, 'rgba(0, 0, 0, 0)'); assert.equal(x.text, 'rgb(0, 0, 0)');
 });
+
+test('the facing page of a spread takes swipes, wakes the full-screen controls, and has the same frame as the page (round 23 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, book('fixed-many'), { 'spine:layout': 'two' });
+  await turn(page);
+  assert.ok((await shown(page)).facing, 'a spread');
+  assert.match(await page.textContent('#spinePos'), /spine 2\/6/);
+  // A swipe to the left on the facing page goes on, as on the page.
+  await page.evaluate(() => { document.querySelector('#page').contentDocument.__old = true; });
+  await page.evaluate(() => {
+    const d = document.querySelector('#page2').contentDocument, t = d.body;
+    const touch = x => new Touch({ identifier: 1, target: t, clientX: x, clientY: 300 });
+    t.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(500)], changedTouches: [touch(500)], bubbles: true }));
+    t.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [touch(200)], bubbles: true }));
+  });
+  await h.waitFor(() => page.evaluate(() => !document.querySelector('#page').contentDocument.__old), 5000);
+  await page.waitForTimeout(400);
+  assert.match(await page.textContent('#spinePos'), /spine 4\/6/);
+  // Full screen: no shadow on either page; moving the mouse over the facing page shows the controls.
+  await page.keyboard.press('f');
+  await page.waitForTimeout(3000);
+  assert.equal(await page.evaluate(() => document.querySelector('.app').classList.contains('awake')), false);
+  const r = await page.evaluate(() => {
+    const f2 = document.querySelector('#page2');
+    f2.contentDocument.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 10 }));
+    return { awake: document.querySelector('.app').classList.contains('awake'), shadows: [getComputedStyle(document.querySelector('#page')).boxShadow, getComputedStyle(f2).boxShadow] };
+  });
+  assert.equal(r.awake, true);
+  assert.deepEqual(r.shadows, ['none', 'none']);
+});
+
+test('turning from spread to spread never shows pages of two spreads together (round 23 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, book('fixed-many'), { 'spine:layout': 'two' });
+  await turn(page);
+  assert.equal((await shown(page)).facingText, 'Page 3 text');
+  await page.evaluate(() => {
+    window.__seen = [];
+    const title = f => (f.contentDocument?.body?.innerText.match(/Page (\d)/) || ['', ''])[1];
+    const look = () => {
+      const f = document.querySelector('#page'), f2 = document.querySelector('#page2');
+      window.__seen.push({ a: title(f), b: f2.hidden ? '' : title(f2), left: Math.round(f.getBoundingClientRect().left) });
+      if (window.__seen.length < 3000) requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look); window.__look = setInterval(look, 4);   // (every frame painted, and between tasks)
+  });
+  await turn(page);
+  assert.equal((await shown(page)).facingText, 'Page 5 text');
+  const seen = await page.evaluate(() => { clearInterval(window.__look); return window.__seen; });
+  const mixed = seen.filter(s => s.b && !['2|3', '4|5'].includes(`${s.a}|${s.b}`));
+  assert.deepEqual(mixed, [], 'only pages of one spread side by side');
+  const p4 = [...new Set(seen.filter(s => s.a === '4').map(s => s.left))];
+  assert.equal(p4.length, 1, `the new page placed once, on its side of the spread: ${p4}`);
+});
+
+test('a spread whose facing page can\'t be shown isn\'t reloaded on every resize (round 23 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, book('fixed-nosize'), { 'spine:layout': 'two' });
+  await turn(page);
+  assert.match(await page.textContent('#spinePos'), /spine 2\/3/);
+  assert.equal((await shown(page)).facing, false, 'the facing page has no size: one page');
+  await page.evaluate(() => { window.__loads = 0; document.querySelector('#page').addEventListener('load', () => window.__loads++); });
+  for (const width of [1200, 1300, 1250]) { await page.setViewportSize({ width, height: 800 }); await page.waitForTimeout(400); }
+  assert.equal(await page.evaluate(() => window.__loads), 0);
+  assert.equal((await shown(page)).fxl, '600 800');
+});
+
+test('an EPUB 3 book marked reflowable stays reflowable whatever EPUB 2\'s marks say; reflowable EPUB 3 books don\'t ask for Apple\'s file (round 23 review)', async () => {
+  const page = await h.newPage();
+  const asked = []; page.on('request', r => asked.push(r.url()));
+  await h.openReader(page, book('fixed-epub3-reflow'), { 'spine:layout': 'one' });
+  assert.equal((await shown(page)).fxl, null);
+  await h.openReader(page, `${h.READER}?book=books/abc`);
+  assert.ok(!asked.some(u => /display-options/i.test(u)), asked.filter(u => /display-options/i.test(u)).join(' '));
+});

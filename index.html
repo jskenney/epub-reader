@@ -159,7 +159,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .app.fs{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
 .app.fs .bar,.app.fs .foot,.app.fs .toc,.app.fs .notice{display:none !important}
 .app.fs .main{padding-block:0;gap:0}
-.app.fs #page,.app.fs .stage.fxl{border:0;border-radius:0;box-shadow:none}
+.app.fs #page,.app.fs #page2,.app.fs .stage.fxl{border:0;border-radius:0;box-shadow:none}
 .fs-pill{position:fixed;z-index:15;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));
   display:flex;align-items:center;gap:10px;padding:5px 5px 5px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--rule);
   box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s}
@@ -1560,7 +1560,9 @@ function readInfo(md, ids, spineEl){
   }
 
   // (EPUB 2 books mark fixed layout with a meta named fixed-layout, or Apple's display-options file: openBook.)
-  const layout = textOf(prop('rendition:layout', undefined).find(m => !m.getAttribute('refines'))) === 'pre-paginated' || /^true$/i.test(named('fixed-layout')) ? 'Fixed layout' : 'Reflowable';
+  // (Only when the book doesn't say rendition:layout, which EPUB 3 books do: round 23 review.)
+  const rl = textOf(prop('rendition:layout', undefined).find(m => !m.getAttribute('refines')));
+  const layout = (rl ? rl === 'pre-paginated' : /^true$/i.test(named('fixed-layout'))) ? 'Fixed layout' : 'Reflowable';
   const spread = textOf(prop('rendition:spread', undefined).find(m => !m.getAttribute('refines')));   // (none: one page at a time)
   // (The page size of fixed-layout pages without one of their own: EPUB 3.0's rendition:viewport.)
   const viewport = viewportSize(textOf(prop('rendition:viewport', undefined).find(m => !m.getAttribute('refines'))));
@@ -1638,7 +1640,8 @@ async function openBook(zip, { sample = false, name = '', seq } = {}){
   const uidAttr = pkg.getAttribute('unique-identifier');
   const uid = textOf(ids.find(e => e.getAttribute('id') === uidAttr) || ids[0]);
   const info = readInfo(md, ids, opf.getElementsByTagNameNS('*', 'spine')[0]);
-  if (info.layout !== 'Fixed layout') {   // (EPUB 2: Apple's display options)
+  // (EPUB 2: Apple's display options. Not looked for in EPUB 3 books, which say rendition:layout: round 23 review.)
+  if (info.layout !== 'Fixed layout' && !(parseFloat(pkg.getAttribute('version')) >= 3)) {
     const opts = await readText(zip, 'META-INF/com.apple.ibooks.display-options.xml').catch(() => null);
     if (opts && /<option\s+name\s*=\s*["']fixed-layout["']\s*>\s*true\s*</i.test(opts)) info.layout = 'Fixed layout';
   }
@@ -2291,7 +2294,8 @@ function fxlFit(){
 
 // The page's frame (and the facing page's, in a spread) at the page's size, scaled to fit the stage, side by side.
 function placePages(fx){
-  const other = !frame2.hidden && fxlOf(frame2.contentDocument), pad = 16;
+  // (While the facing page loads, its place is kept, taken to be the size of this one.)
+  const other = (!frame2.hidden && fxlOf(frame2.contentDocument)) || (frame2.hidden && cur.spreadOther >= 0 ? fx : null), pad = 16;
   const w = fx[0] + (other ? other[0] : 0), h = Math.max(fx[1], other ? other[1] : 0);
   const cw = stage.clientWidth - pad * 2, ch = stage.clientHeight - pad * 2 - (tts.open ? tts.barH : 0);
   const s = Math.max(0.05, Math.min(cw / w, ch / h, 2));
@@ -2300,7 +2304,7 @@ function placePages(fx){
   const firstLeft = !other || (cur.spreadOther > cur.i) !== rtlPages();
   const put = (f, size, x) => Object.assign(f.style, { width: size[0] + 'px', height: size[1] + 'px', transform: `scale(${s})`, left: x + 'px', top: top + (h - size[1]) * s / 2 + 'px' });
   put(frame, fx, firstLeft ? left : left + other[0] * s);
-  if (other) put(frame2, other, firstLeft ? left + fx[0] * s : left);
+  if (other && !frame2.hidden) put(frame2, other, firstLeft ? left + fx[0] * s : left);
 }
 // Two-page spreads of fixed-layout pages (E-20): the page that faces page i in the two-column layout, or -1. Pages
 // say which side they go on (page-spread-left/right/center); without that the first page (the cover) is alone
@@ -2331,12 +2335,11 @@ async function showPartner(i, token){
     await new Promise(res => { const t = setTimeout(res, 6000); frame2.addEventListener('load', () => { clearTimeout(t); res(); }, { once: true }); frame2.srcdoc = html; frame2.hidden = false; });
     if (token !== renderToken) return;
     const d = frame2.contentDocument;
-    if (!fxlOf(d)) { frame2.hidden = true; cur.spreadOther = -1; return; }   // (its size wasn't found: one page)
-    // (The facing page only shows: a click on it goes to it; the reader's keys work there too.)
+    if (!fxlOf(d)) { frame2.hidden = true; cur.spreadOther = -1; cur.spreadFailed = p; return; }   // (its size wasn't found: one page)
+    // (The facing page only shows: a click on it goes to it; the reader's keys, swipes and so on work there too.)
     d.addEventListener('click', e => { e.preventDefault(); if (cur.spreadOther >= 0) renderChapter(cur.spreadOther); });
-    d.addEventListener('keydown', onKey);
-    d.addEventListener('wheel', onWheel, { passive: false });
-  } catch { frame2.hidden = true; cur.spreadOther = -1; }
+    wirePageInput(d);
+  } catch { frame2.hidden = true; cur.spreadOther = -1; cur.spreadFailed = p; }
 }
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
@@ -2695,6 +2698,9 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
     if (token !== renderToken) return;
     // (A fixed-layout page is hidden until its colours are judged: as soon as it is parsed, not at its load event,
     // which waits for every picture.)
+    // (The facing page before is hidden while this page and its own partner load, and this page is placed on its
+    // side of the spread from the start, so pages from two spreads never show together: round 23 review.)
+    frame2.hidden = true; frame2.removeAttribute('srcdoc'); cur.spreadOther = spreadPartner(i);
     const before = frame.contentDocument;
     const early = setInterval(() => { const d = frame.contentDocument; if (d && d !== before && d.readyState !== 'loading' && fxlOf(d) && token === renderToken) { clearInterval(early); fxlFit(); } }, 30);
     try { await loadFrame(html); } finally { clearInterval(early); }
@@ -2729,6 +2735,8 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
       cur = back; cur.failed = new Set([...(back.failed || []), i]);
       if (scrolling()) cur.f = fraction(); else position('', cur.f);
       updateChrome(); savePos();
+      // (Its facing page, hidden when this render began, back beside it.)
+      if (back.spreadOther >= 0) showPartner(back.i, token).then(() => { if (token === renderToken) fxlFit(); });
       ttsRestore();
     } else {
       await loadFrame('<!doctype html><meta charset="utf-8"><title></title><body></body>');
@@ -2794,7 +2802,9 @@ function relayout(){
   comicOrder(); fxlFit();
   if (!book || cur.f == null) return;
   // (A fixed page whose spread now shows, or no longer does, after a layout change or a resize: shown again.)
-  if (cur.shown && cur.doc === frame.contentDocument && fxlOf(cur.doc) && !scrolling() && (spreadPartner(cur.i) >= 0) !== !frame2.hidden) { renderChapter(cur.i); return; }
+  // (A facing page that couldn't be shown isn't tried again on every resize: round 23 review.)
+  const want = spreadPartner(cur.i);
+  if (cur.shown && cur.doc === frame.contentDocument && fxlOf(cur.doc) && !scrolling() && (want >= 0 && want !== cur.spreadFailed) !== !frame2.hidden) { renderChapter(cur.i); return; }
   // (A comic in a page layout: back to the first page that was on screen, not the same fraction, which lands on
   // another page or spread when the number of columns changes.)
   // (Into the scroll layout too, after a layout change; a resize while scrolling keeps the place within the page.)
@@ -2883,13 +2893,7 @@ function onWheel(e){
 function wireFrame(){
   const doc = frame.contentDocument; if (!doc) return;
   doc.addEventListener('click', onFrameClick);
-  doc.addEventListener('pointerdown', () => { if (narrow.matches && tocIsOpen()) setToc(false); });   // (L-79)
-  // Middle-click opens links in a new tab without a click event: only web links meant to (target=_blank) may.
-  doc.addEventListener('auxclick', e => { const l = e.target.closest?.('a, area'); if (l && l.getAttribute('target') !== '_blank') e.preventDefault(); });
-  doc.addEventListener('keydown', onKey);
-  doc.addEventListener('wheel', onWheel, { passive: false });
-  doc.addEventListener('dragenter', onDragEnter);
-  doc.addEventListener('dragover', onDragOver);
+  wirePageInput(doc);
   let scrollSave = 0;
   doc.addEventListener('scroll', e => {
     const t = e.target.nodeType === 9 ? e.target.scrollingElement : e.target;
@@ -2903,6 +2907,18 @@ function wireFrame(){
     // Page layouts: focus or text selection can scroll the clipped area; pages move only by transform, so undo it.
     if (t && (t.scrollLeft || t.scrollTop)) { t.scrollLeft = 0; t.scrollTop = 0; }
   }, true);
+  doc.fonts?.addEventListener?.('loadingdone', relayout);
+}
+// The reader's keys, wheel, swipes, dropping a book, waking the full-screen controls, and closing the menus: on
+// the page, and on the facing page of a spread too (round 23 review). Clicks and links are the page's own.
+function wirePageInput(doc){
+  doc.addEventListener('pointerdown', () => { if (narrow.matches && tocIsOpen()) setToc(false); });   // (L-79)
+  // Middle-click opens links in a new tab without a click event: only web links meant to (target=_blank) may.
+  doc.addEventListener('auxclick', e => { const l = e.target.closest?.('a, area'); if (l && l.getAttribute('target') !== '_blank') e.preventDefault(); });
+  doc.addEventListener('keydown', onKey);
+  doc.addEventListener('wheel', onWheel, { passive: false });
+  doc.addEventListener('dragenter', onDragEnter);
+  doc.addEventListener('dragover', onDragOver);
   let tx = 0, ty = 0;
   doc.addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
   doc.addEventListener('touchmove', () => { if (scrolling()) ttsUserNav(); }, { passive: true });
@@ -2911,7 +2927,6 @@ function wireFrame(){
     const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) (dx < 0) !== rtlPages() ? pageNext() : pagePrev();   // (manga: a swipe to the right goes on)
   }, { passive: true });
-  doc.fonts?.addEventListener?.('loadingdone', relayout);
   doc.addEventListener('mousemove', wake);
   doc.addEventListener('pointerdown', () => setMenu(false));
   doc.addEventListener('touchstart', wake, { passive: true });
@@ -3227,7 +3242,7 @@ function setToc(open){
     t.classList.toggle('open', open); t.classList.remove('collapsed');
     if (open && !was) requestAnimationFrame(() => {
       const a = document.activeElement;   // (unless something else took the focus meanwhile, the search box say: round 13 review)
-      if (!a || a === document.body || a === $('#tocBtn') || a === frame) ($('#tocList a[aria-current]') || $('#tocList a'))?.focus();
+      if (!a || a === document.body || a === $('#tocBtn') || a === frame || a === frame2) ($('#tocList a[aria-current]') || $('#tocList a'))?.focus();
     });
     if (!open && was && t.contains(document.activeElement)) $('#tocBtn').focus();
   }
