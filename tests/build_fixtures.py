@@ -724,6 +724,18 @@ def main():
         z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
         for n, d in parts.items(): z.writestr(n, d)
 
+    # (Round 22, final review) A page coloured by a stylesheet from another site (which arrives late), and one
+    # coloured only while the window is wide (a media query).
+    epub_items(books / "fixed-late.epub", "Fixed Late", [("l1", "l1.xhtml", "application/xhtml+xml", ""), ("l2", "l2.xhtml", "application/xhtml+xml", "")], ["l1", "l2"],
+        {"l1.xhtml": xhtml("Late", "<p>Late sheet words</p>", vp + '<link rel="stylesheet" href="http://localhost:8792/late.css"/>'),
+         "l2.xhtml": xhtml("Wide", "<p>Wide only words</p>", vp + "<style>@media (min-width:900px){html{background:#036;color:#fff}}</style>")}, "urn:fixed-late")
+    with zipfile.ZipFile(books / "fixed-late.epub") as z0:
+        parts = {n: z0.read(n) for n in z0.namelist()}
+    parts["OEBPS/content.opf"] = parts["OEBPS/content.opf"].replace(b"</metadata>", b'<meta property="rendition:layout">pre-paginated</meta></metadata>')
+    with zipfile.ZipFile(books / "fixed-late.epub", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
+        for n, d in parts.items(): z.writestr(n, d)
+
     # (Round 22, second review) A vertically written page (Japanese fixed-layout books), and one that clears html's background.
     fx3 = xhtml("Vertical", '<p class="v">縦書きのページ</p>', '<meta name="viewport" content="width=600, height=1600"/><style>html{writing-mode:vertical-rl}body{background:#fff}</style>')
     fx4 = xhtml("Clear", '<p>Clear html</p>', '<meta name="viewport" content="width=600, height=800"/><style>html{background:transparent}body{background:#ff0}</style>')

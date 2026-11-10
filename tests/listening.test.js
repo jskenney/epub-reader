@@ -280,3 +280,4 @@ for (const mode of ['headers', 'mid']) {
     assert.ok(log.slice(1).some(e => e.text === log[0].text && !e.stalled), JSON.stringify(log.map(e => [e.text.slice(0, 20), e.stalled])));
   });
 }
+test.afterEach(() => h.clearBreezeLog());   // (a stall queued by a test that failed early mustn't stall the next one)

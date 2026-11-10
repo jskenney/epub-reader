@@ -2230,19 +2230,28 @@ function fxlFit(){
   const pad = 16, room = [w.innerWidth - pad * 2, w.innerHeight - pad * 2 - (tts.open ? tts.barH : 0)];
   const s = Math.max(0.05, Math.min(scrolling() ? room[0] / fx[0] : Math.min(room[0] / fx[0], room[1] / fx[1]), 2));
   doc.body.style.setProperty('zoom', String(Math.round(s * 1000) / 1000), 'important');
-  // The page's colours, worked out once per page: a page coloured on its html (or its body, or by bgcolor) keeps
-  // its colours; one with none of its own is a white page, as books made for fixed layout expect, and the theme's
-  // colour goes around it. (A book that clears html's background would otherwise have its body's colour spread
-  // over the whole frame.)
-  const html = doc.documentElement, clear = c => /^(transparent|rgba\(0, 0, 0, 0\))$/.test(c);
-  if (!html.hasAttribute('data-spine-colours')) {
-    const hs = w.getComputedStyle(html), bs = w.getComputedStyle(doc.body);
-    const own = hs.backgroundImage !== 'none' || !clear(hs.backgroundColor);
+  // The page's colours, worked out on every fit (a stylesheet that arrives late, or a media query that stops
+  // applying, changes them): a page coloured on its html (or its body, or by bgcolor) keeps its colours; one with
+  // none of its own is a white page, as books made for fixed layout expect, and the theme's colour goes around it.
+  // (A book that clears html's background would otherwise have its body's colour spread over the whole frame.)
+  // The reader's own colours come off for the measuring and go back on in the same task, so nothing flashes.
+  const html = doc.documentElement, body = doc.body, clear = c => /^(transparent|rgba\(0, 0, 0, 0\))$/.test(c);
+  html.style.removeProperty('background-color');
+  if (body.hasAttribute('data-spine-white')) { body.style.removeProperty('background-color'); body.removeAttribute('data-spine-white'); }
+  const hs = w.getComputedStyle(html), bs = w.getComputedStyle(body);
+  const own = hs.backgroundImage !== 'none' || !clear(hs.backgroundColor);
+  if (!own) {
+    html.style.setProperty('background-color', tokens().bg);
     // (White under a clear body, under its background image too, which may be partly transparent.)
-    if (!own && clear(bs.backgroundColor)) doc.body.style.setProperty('background-color', '#fff');
-    html.setAttribute('data-spine-colours', own ? 'own' : 'theme');
+    if (clear(bs.backgroundColor)) { body.style.setProperty('background-color', '#fff'); body.setAttribute('data-spine-white', ''); }
   }
-  if (html.getAttribute('data-spine-colours') === 'theme') html.style.setProperty('background-color', tokens().bg);   // (kept up to date with the theme)
+  html.setAttribute('data-spine-colours', own ? 'own' : 'theme');   // (and the page is shown: fixedCss)
+  // Judged again when a stylesheet from another site arrives, and when everything has loaded.
+  if (!doc.__spineWatch) {
+    doc.__spineWatch = true;
+    for (const l of doc.querySelectorAll('link[rel~="stylesheet"]')) { l.addEventListener('load', fxlFit); l.addEventListener('error', fxlFit); }
+    w.addEventListener('load', fxlFit, { once: true });
+  }
 }
 
 function sanitize(doc){
@@ -2600,7 +2609,11 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
     const src = await chapterSource(item);
     const html = await buildPage(src, src.readerPath, item);
     if (token !== renderToken) return;
-    await loadFrame(html);
+    // (A fixed-layout page is hidden until its colours are judged: as soon as it is parsed, not at its load event,
+    // which waits for every picture.)
+    const before = frame.contentDocument;
+    const early = setInterval(() => { const d = frame.contentDocument; if (d && d !== before && d.readyState !== 'loading' && fxlOf(d) && token === renderToken) { clearInterval(early); fxlFit(); } }, 30);
+    try { await loadFrame(html); } finally { clearInterval(early); }
     if (token !== renderToken) return;
     cur.doc = frame.contentDocument;   // (savePos: what's in the frame is this page, not the one before)
     wireFrame();
@@ -2657,6 +2670,9 @@ function geom(){
 }
 const scrolling = () => layout === 'scroll';
 const scroller = () => frame.contentDocument?.scrollingElement || null;
+// How much of the section is read: a fixed-layout page counts as read once shown (in any layout), so progress
+// reaches 100% on the last one; otherwise the place in it.
+const readFraction = () => cur.doc && cur.doc === frame.contentDocument && fxlOf(cur.doc) ? 1 : fraction();
 function fraction(){
   if (scrolling()) { const se = scroller(); if (!se) return 0; const max = se.scrollHeight - se.clientHeight; return max > 0 ? Math.min(1, se.scrollTop / max) : 0; }
   return cur.pages > 1 ? cur.page / (cur.pages - 1) : 0;
@@ -3020,7 +3036,7 @@ function updateProgress(){
   turnedPage();
   updateTimeLeft();
   // (A fixed-layout page counts as read once shown, in any layout: progress reaches 100% on the last one.)
-  const overall = (cur.i + (fxlOf(frame.contentDocument) ? 1 : fraction())) / book.spine.length;
+  const overall = (cur.i + readFraction()) / book.spine.length;
   const pct = Math.round(overall * 100);
   $('#ribbonFill').style.width = (overall * 100).toFixed(2) + '%';
   $('#ribbon').setAttribute('aria-valuenow', pct);
@@ -6347,15 +6363,15 @@ async function updateTimeLeft(){
   if (!L || !book || !L[cur.i]) { el.textContent = ''; return; }
   const listening = tts.open && !tts.mo && (tts.playing || n.paused);
   const done = listening ? listenedChars() : null;
-  const inChapter = Math.max(0, done != null ? L[cur.i] - done : L[cur.i] * (1 - fraction()));
+  const inChapter = Math.max(0, done != null ? L[cur.i] - done : L[cur.i] * (1 - readFraction()));
   const after = L.slice(cur.i + 1).reduce((a, b) => a + b, 0);
   const perSec = listening ? (pace.listen || 14 * tts.rate) : pace.read / 60;
   const ch = fmtLeft(inChapter / perSec), bk = fmtLeft((inChapter + after) / perSec);
   el.replaceChildren();
-  if (!ch) return;
-  const ctx = document.createElement('span'); ctx.className = 'ctx'; ctx.textContent = ' in chapter';
-  el.append(` · ${ch} left`, ctx);
-  if (after > 0) { const s = document.createElement('span'); s.className = 'book'; s.textContent = ` · ${bk} in book`; el.append(s); }
+  // (Nothing left in this section, a fixed-layout page shown, say: the book's time only.)
+  if (!ch && !(after > 0 && bk)) return;
+  if (ch) { const ctx = document.createElement('span'); ctx.className = 'ctx'; ctx.textContent = ' in chapter'; el.append(` · ${ch} left`, ctx); }
+  if (after > 0) { const s = document.createElement('span'); s.className = 'book'; s.textContent = ` · ${bk} ${ch ? 'in book' : 'left in book'}`; el.append(s); }
   el.title = listening ? 'At the read-aloud speed' : `At your reading speed (about ${Math.round(pace.read / 5)} words a minute)`;
 }
 // Once a second: the sleep timer, the read-aloud pace and (every few seconds) the time left.

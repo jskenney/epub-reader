@@ -21,6 +21,7 @@ const shown = page => page.evaluate(() => {
   const b = d.body.getBoundingClientRect(), z = Number(getComputedStyle(d.body).zoom) || 1;
   return { fxl: d.documentElement.getAttribute('data-spine-fxl'), zoom: z, left: b.left, top: b.top, width: b.width, height: b.height,
     vw: w.innerWidth, vh: w.innerHeight, columns: d.querySelector('[id^="spine-flow-"]') && getComputedStyle(d.querySelector('[id^="spine-flow-"]')).columnCount,
+    visible: getComputedStyle(d.body).visibility,
     cap: d.querySelector('.cap') && (() => { const r = d.querySelector('.cap').getBoundingClientRect(); return { left: r.left, top: r.top }; })() };
 });
 
@@ -29,6 +30,7 @@ test('a fixed-layout page is shown whole at its own size, scaled to fit and cent
   await h.openReader(page, FIXED);
   const s = await shown(page);
   assert.equal(s.fxl, '600 800');
+  assert.equal(s.visible, 'visible', 'shown once its colours are judged');
   assert.ok(s.height <= s.vh && s.height > s.vh * 0.8, `fits the height: ${s.height} of ${s.vh}`);
   assert.ok(Math.abs(s.width / s.height - 0.75) < 0.01, 'keeps its shape');
   assert.ok(Math.abs(s.left + s.width / 2 - s.vw / 2) < 2, 'centred');
@@ -141,12 +143,13 @@ test('a fixed page coloured on its html, or by bgcolor, keeps its colours; one w
   const colours = page => page.evaluate(() => {
     const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
     return { body: w.getComputedStyle(d.body).backgroundColor, html: w.getComputedStyle(d.documentElement).backgroundColor, text: w.getComputedStyle(d.querySelector('p')).color,
-      css: [...d.querySelectorAll('style')].map(s => s.textContent).join('') };
+      css: [...d.querySelectorAll('style')].map(s => s.textContent).join(''), visible: w.getComputedStyle(d.body).visibility };
   });
   for (const theme of ['light', 'black']) {
     const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
     await h.openReader(page, `${h.READER}?book=books/fixed-colours.epub`, { 'spine:theme': theme });
     let c = await colours(page);
+    assert.equal(c.visible, 'visible');
     assert.equal(c.html, 'rgb(0, 51, 102)', `${theme}: the page's navy`);
     assert.match(c.body, /^rgba\(0, 0, 0, 0\)$|^transparent$/, `${theme}: the body left clear, so the navy shows: ${c.body}`);
     assert.equal(c.text, 'rgb(255, 255, 255)');
@@ -191,4 +194,20 @@ test('a fixed page switched into the scroll layout, or reopened in it, starts at
   await page.evaluate(() => localStorage.setItem('spine:layout', '"scroll"'));
   await page.reload(); await h.waitForBook(page);
   assert.equal(await page.evaluate(() => document.querySelector('#page').contentDocument.scrollingElement.scrollTop), 0);
+});
+
+test('a fixed page coloured by a stylesheet that arrives late, or by a media query, has its colours judged again (round 22 final review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.route('http://localhost:8792/late.css', async route => { await new Promise(r => setTimeout(r, 1500)); await route.fulfill({ contentType: 'text/css', body: 'html{background:#036;color:#fff}' }); });
+  // (On the plain server, with pictures and styles from other sites allowed.)
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?book=books/fixed-late.epub`, { 'spine:theme': 'black', 'spine:set:ALLOW_REMOTE_CONTENT': true });
+  const c = () => page.evaluate(() => { const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
+    return [w.getComputedStyle(d.documentElement).backgroundColor, w.getComputedStyle(d.body).backgroundColor, w.getComputedStyle(d.querySelector('p')).color, w.getComputedStyle(d.body).visibility].join(' | '); });
+  await page.waitForFunction(() => document.querySelector('#page').contentDocument?.querySelector('p')?.textContent === 'Late sheet words');
+  assert.ok(await h.waitFor(async () => (await c()) === 'rgb(0, 51, 102) | rgba(0, 0, 0, 0) | rgb(255, 255, 255) | visible', 8000), await c());
+  // A media query: navy while wide; narrower, a white page with dark text.
+  await turn(page);
+  assert.ok(await h.waitFor(async () => (await c()).startsWith('rgb(0, 51, 102)'), 5000), await c());
+  await page.setViewportSize({ width: 800, height: 800 });
+  assert.ok(await h.waitFor(async () => (await c()) === 'rgb(0, 0, 0) | rgb(255, 255, 255) | rgb(0, 0, 0) | visible', 5000), await c());
 });
