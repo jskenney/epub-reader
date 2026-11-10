@@ -477,6 +477,8 @@ test('the dialog says why there is no encoder: a page that isn\'t secure, or non
   await none.route('**/libs/lame.min.js', r => r.abort());
   await none.route('**/cdnjs.cloudflare.com/**', r => r.abort());
   await openExport(none);
+  // (The MP3 encoder is looked for after the dialog opens: its answer waited for, which takes longer under load.)
+  await none.waitForFunction(() => !/checking/.test(document.querySelector('#abNote').textContent), null, { timeout: 30000 });
   assert.match(await none.textContent('#abNote'), /No audiobook format can be made in this browser: \.m4b \(AAC\): this browser has no AAC encoder \(Chrome on Linux has none\); \.opus \(Opus\): this browser can't encode Opus; \.mp3 \(MP3\): the MP3 encoder couldn't be loaded/);
   assert.equal(await none.isDisabled('#abStart'), true);
 });
