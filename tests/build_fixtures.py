@@ -198,6 +198,24 @@ def main():
     (model / "bundle.json").write_text('{"bundle_name": "english_2026-04"}')
     for f in ("tokenizer.model", "voices.bin", "text_conditioner_int8.onnx", "flow_lm_main_int8.onnx", "flow_lm_flow_int8.onnx", "mimi_decoder_int8.onnx"):
         (model / f).write_bytes(b"stand-in")
+    # (T-20, L-165) A Pocket TTS stand-in that starts, then crashes when asked to speak; every file self-hosted.
+    (SITE / "folder-pocket-crash").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-pocket-crash" / "index.html")
+    (SITE / "folder-pocket-crash" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "VOICE_FILES": "/pocket-crash/", "ALLOW_CDN": False}))
+    pc = SITE / "pocket-crash" / "pocket"
+    for f in ("lib/binary.js", "lib/tokenizer.js", "ort/ort.min.mjs", "ort/ort-wasm-simd-threaded.mjs", "ort/ort-wasm-simd-threaded.wasm"):
+        (pc / f).parent.mkdir(parents=True, exist_ok=True); (pc / f).write_text("// stand-in\n")
+    (pc / "lib/worker.js").write_text(
+        "self.onmessage = e => { const m = e.data;\n"
+        "  if (m.type === 'init') { self.postMessage({ type: 'ready', bundle: { predefinedVoices: ['alba'], sampleRate: 24000 } }); self.postMessage({ type: 'result', id: m.id, result: {} }); }\n"
+        "  else if (m.type === 'generate') setTimeout(() => { throw new Error('stand-in crash'); });\n"
+        "  else if (m.type === 'loadBuiltinVoice') self.postMessage({ type: 'result', id: m.id, result: { ref: 1 } });\n"
+        "  else self.postMessage({ type: 'result', id: m.id, result: {} }); };\n")
+    cm = pc / "model" / "english_2026-04"
+    cm.mkdir(parents=True)
+    (cm / "bundle.json").write_text('{"bundle_name": "english_2026-04"}')
+    for f in ("tokenizer.model", "voices.bin", "text_conditioner.onnx", "flow_lm_main.onnx", "flow_lm_flow.onnx", "mimi_decoder.onnx"):
+        (cm / f).write_bytes(b"stand-in")
     # An empty default book name, which would be the reader's own page (REVIEW.md L-83).
     (SITE / "folder-emptydefault").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-emptydefault" / "index.html")

@@ -101,3 +101,17 @@ test('a folder book closed while its obfuscated font is still downloading leaves
   const live = await page.evaluate(() => window.__fonts.filter(([, revoked]) => !revoked).map(([u]) => u));
   assert.deepEqual(live, [], 'no copy of the closed book\'s font left');
 });
+
+test('a Pocket TTS worker that crashes is marked as stopped working, and loaded again on the next try (L-165)', async () => {
+  const page = await h.newPage();
+  let loads = 0;
+  page.on('request', r => { if (/\/pocket-crash\/pocket\/lib\/worker\.js$/.test(r.url())) loads++; });
+  await h.openReader(page, `${h.SITE}/folder-pocket-crash/index.html?book=/reader/books/long.epub`, { 'spine:ttsEngine': 'pocket' });
+  await page.keyboard.press('r');
+  await page.click('#ttsDownload', { timeout: 3000 }).catch(() => {});
+  const said = async () => `${await page.textContent('#ttsStatus')} ${await page.textContent('#notice')}`;
+  assert.ok(await h.waitFor(async () => /the voice stopped working \(/.test(await said()), 20000), await said());
+  // The voice is loaded afresh rather than the crashed worker tried again (it would never answer).
+  if (loads < 2) { await page.click('#ttsPlay'); await page.click('#ttsDownload', { timeout: 3000 }).catch(() => {}); }
+  assert.ok(await h.waitFor(async () => loads >= 2, 15000), `worker loads: ${loads}`);
+});
