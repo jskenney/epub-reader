@@ -1,7 +1,7 @@
 # Plan: editing, server saving and EPUB editing (E-21 to E-25)
 
 This file is the plan for five enhancements listed in REVIEW.md. REVIEW.md only names them; the design, the
-decisions behind it and the work to do are here. Nothing in this file is built yet.
+decisions behind it and the work to do are here. E-21 is built (phases 1 to 3; its review is under way); the rest isn't yet.
 
 | ID | What | Depends on |
 |---|---|---|
@@ -173,45 +173,55 @@ into the file.
   view falls back to a plain text box, and says so.
 - The nginx example needs no change for E-21.
 
+### As built (differences from the plan above)
+
+- The views are a mode, **WYSIWYG** or **Raw**, and a **Split** toggle, rather than three buttons: Split
+  in WYSIWYG puts the page on the left and the source on the right; in Raw, the text on the left and the page
+  on the right.
+- `EDITING` is a reader-config.json setting only (the site's choice); `LOCKED` doesn't apply, as it isn't in
+  the Settings dialog.
+- The Open button uses the system file picker where the browser has one (so Save can write back); a dropped
+  file's handle is used too where the browser gives one.
+
 ### Phases and tasks
 
 **Phase 1: raw editor, split preview, new documents, saving, drafts**
-- [ ] Edit button (between Settings and Open), editor bar, Done; edit mode state, entered and left cleanly
+- [x] Edit button (between Settings and Open), editor bar, Done; edit mode state, entered and left cleanly
       (the reading view restored at the same section).
-- [ ] CodeMirror 5 (5.65, the last release, pinned): core, Markdown, GFM (and the overlay add-on it needs), XML,
+- [x] CodeMirror 5 (5.65, the last release, pinned): core, Markdown, GFM (and the overlay add-on it needs), XML,
       HTML, CSS and JavaScript modes, search and dialog add-ons; in `fetch-libs.sh`, `checksums/libs.sha256`,
       `LIBS` in index.html (local first, CDN second); plain text box fallback.
-- [ ] Raw view: theme colours, text size, Tab, Ctrl+S, line wrapping.
-- [ ] Rendered side: the document as one long page through the existing pipeline (conversion, cleaning, the
+- [x] Raw view: theme colours, text size, Tab, Ctrl+S, line wrapping.
+- [x] Rendered side: the document as one long page through the existing pipeline (conversion, cleaning, the
       frame's policy), the reader's font, theme, size, spacing and width; updated after typing pauses.
-- [ ] Split view and the two-tab layout on narrow screens; scrolling kept together.
-- [ ] Contents panel rebuilt from the rendered side; entries scroll within it.
-- [ ] Keys: single-letter shortcuts and arrows off while typing; Escape and Ctrl+S.
-- [ ] New Markdown / New HTML in the Open menu.
-- [ ] Save in place (file handle from the file picker), Save as (save picker or download).
-- [ ] Drafts in IndexedDB, restore offer, unsaved-changes prompts (leaving, opening another book, Done).
-- [ ] Read aloud on the rendered side in split view.
-- [ ] `EDITING` in reader-config.json and `LOCKED`.
-- [ ] Tests (see below); README: an "Editing" section, `EDITING` in the settings table.
+- [x] Split view and the two-tab layout on narrow screens; scrolling kept together.
+- [x] Contents panel rebuilt from the rendered side; entries scroll within it.
+- [x] Keys: single-letter shortcuts and arrows off while typing; Escape and Ctrl+S.
+- [x] New Markdown / New HTML in the Open menu.
+- [x] Save in place (file handle from the file picker), Save as (save picker or download).
+- [x] Drafts in IndexedDB, restore offer, unsaved-changes prompts (leaving, opening another book, Done).
+- [x] Read aloud on the rendered side in split view.
+- [x] `EDITING` in reader-config.json and `LOCKED`.
+- [x] Tests (see below); README: an "Editing" section, `EDITING` in the settings table.
 
 **Phase 2: WYSIWYG for HTML**
-- [ ] Editable rendered page (`contenteditable` on the long page in the frame), editor toolbar commands.
-- [ ] Keeping what the cleaner removes (placeholders, handlers, remote addresses) and removing the reader's
+- [x] Editable rendered page (`contenteditable` on the long page in the frame), editor toolbar commands.
+- [x] Keeping what the cleaner removes (placeholders, handlers, remote addresses) and removing the reader's
       additions when writing back.
-- [ ] Cleaning pasted content.
-- [ ] Writing back only after an edit (otherwise the original text, exactly).
-- [ ] WYSIWYG split (editable page left, read-only source right).
-- [ ] Read aloud continuing while typing (changed blocks re-split and re-prepared).
-- [ ] Tests; README.
+- [x] Cleaning pasted content.
+- [x] Writing back only after an edit (otherwise the original text, exactly).
+- [x] WYSIWYG split (editable page left, read-only source right).
+- [x] Read aloud continuing while typing (changed blocks re-split and re-prepared).
+- [x] Tests; README.
 
 **Phase 3: WYSIWYG for Markdown**
-- [ ] The HTML-to-Markdown converter, with round-trip tests over a corpus.
-- [ ] Front matter kept as it was.
-- [ ] Tests; README.
+- [x] The HTML-to-Markdown converter, with round-trip tests over a corpus.
+- [x] Front matter kept as it was.
+- [x] Tests; README.
 
 **Phase 4: polish**
-- [ ] Undo and redo across the toolbar commands, keyboard shortcuts for the toolbar (Ctrl+B, Ctrl+I, Ctrl+K).
-- [ ] Accessibility: the editor bar and toolbar reachable and labelled; focus handling between the two sides.
+- [x] Undo and redo across the toolbar commands, keyboard shortcuts for the toolbar (Ctrl+B, Ctrl+I, Ctrl+K).
+- [x] Accessibility: the editor bar and toolbar reachable and labelled; focus handling between the two sides.
 - [ ] A review of the whole of E-21.
 
 ### Tests (E-21)

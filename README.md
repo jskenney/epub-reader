@@ -93,20 +93,40 @@ Markdown, HTML and plain text documents can be edited in the reader. The
 **Edit** button (the pencil, between Settings and Open) has **Edit this
 document**, **New Markdown document** and **New HTML document**.
 
-- **Split** shows the text on the left and the page on the right, made from
-  the text a moment after you stop typing, the way the reader would show the
-  file. **Raw** shows the text alone. On a narrow screen Split shows one at a
-  time, with Text and Page tabs.
-- The text is edited in CodeMirror, with Markdown or HTML highlighting, line
-  numbers, Ctrl+F to find and replace, and Tab to indent. If CodeMirror can't
-  be loaded, a plain text box does the same, and the editor bar says why.
-- While editing, the page is one long page (the layout button is off), and
-  the text and the page scroll together: block by block for Markdown, in
+- **WYSIWYG** (the default) edits the page itself; **Raw** edits the Markdown
+  or HTML in a text editor. **Split** shows both side by side: in WYSIWYG the
+  page is on the left and the source on the right (read-only, following your
+  edits); in Raw the text is on the left and the page on the right, made from
+  the text a moment after you stop typing. On a narrow screen Split shows one
+  at a time, with Text and Page tabs. Plain text is edited raw.
+- In WYSIWYG the toolbar sets the paragraph style (paragraph, headings, quote,
+  code block) and has bold, italic, code, link (Ctrl+K), picture (by its
+  address), bulleted and numbered lists, a horizontal rule, undo and redo.
+  Pasted or dropped content keeps only text and simple formatting: no styles,
+  classes, scripts or handlers.
+- What the reader would leave out of a page (scripts, frames, embedded
+  objects, templates and the like) shows in WYSIWYG as a small locked chip,
+  and is saved exactly as it was; so are the attributes the reader changes for
+  display (link and picture addresses, handlers).
+- WYSIWYG writes the text again only once you've typed something: switching
+  between WYSIWYG and Raw without typing keeps the file exactly as it was.
+  Once written from the page, HTML keeps everything outside its body as it
+  was, but the body is written out by the browser (attribute quotes and
+  entities normalised). Markdown comes back in one consistent style (`#`
+  headings, `-` bullets, `*` and `**` emphasis, fenced code), with anything
+  Markdown can't say kept as HTML; front matter is kept as it was.
+- The raw text is edited in CodeMirror, with Markdown or HTML highlighting,
+  line numbers, Ctrl+F to find and replace, and Tab to indent. If CodeMirror
+  can't be loaded, a plain text box does the same, and the editor bar says why.
+- While editing, the page is one long page (the layout button is off), and in
+  Split the two sides scroll together: block by block for Markdown, in
   proportion for HTML. The contents list follows the headings as you write,
   and its entries take both sides there. The font, theme, text size, line
   spacing and width apply to the page as usual; the text follows the theme
   and the text size. None of these are written into the file.
-- Reading aloud reads the page beside the text.
+- Reading aloud reads the page (it isn't available in Raw without Split), and
+  keeps going while you edit the page: the sentence being spoken finishes, and
+  the ones after it are read as they now are.
 - The reader's single-letter shortcuts don't fire while you type. Ctrl+S
   saves, Ctrl+Shift+S saves as, and Escape (or Done) goes back to reading.
 - **Save** writes back to the file where the browser allows it: a document
@@ -118,8 +138,8 @@ document**, **New Markdown document** and **New HTML document**.
   change. Opening the document again offers it back (Edit restores it), and
   so does starting a new document after an unsaved one. Done, opening another
   book, or leaving the page asks first when there are unsaved changes.
-- Nothing in the document runs while it is edited: the page beside the text
-  is made exactly as the reader makes any page, scripts removed.
+- Nothing in the document runs while it is edited: the page is made exactly
+  as the reader makes any page, scripts removed, in the same locked-down frame.
 - A site can turn editing off with `EDITING` in `reader-config.json`.
 
 ## Opening a book from the address

@@ -283,7 +283,11 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .edit-src .cm-string,.edit-src .cm-url,.edit-src .cm-link,.edit-src .cm-attribute,.edit-src .cm-property,.edit-src .cm-qualifier,.edit-src .cm-number,
 .edit-src .cm-comment,.edit-src .cm-meta,.edit-src .cm-formatting,.edit-src .cm-quote,.edit-src .cm-bracket{color:var(--muted)}
 .edit-src .cm-keyword,.edit-src .cm-variable-2,.edit-src .cm-variable-3,.edit-src .cm-def,.edit-src .cm-atom{color:var(--ink)}
-.work.v-raw .stage,.work.tab-src .stage,.work.tab-page .edit-src{display:none}
+.work.v-raw .stage,.work.v-page .edit-src,.work.tab-src .stage,.work.tab-page .edit-src{display:none}
+.work.v-swap .edit-src{order:2}
+.edit-bar #editSplit[aria-pressed="true"]{background:var(--ribbon-soft)}
+.ed-tools select{font:500 13px/1 var(--font-ui);color:var(--ink);background:var(--surface);border:0;border-right:1px solid var(--rule);padding:0 6px}
+.ed-tools .btn{min-width:30px;padding:0 7px}
 
 @media (max-width:820px){
   .hide-sm{display:none}
@@ -422,9 +426,26 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <button class="btn" id="noticeAction"></button>
       </div>
       <div class="edit-bar" id="editBar" role="toolbar" aria-label="Editor" hidden>
-        <div class="seg" role="group" aria-label="View">
-          <button class="btn" data-view="raw" aria-pressed="false" title="The text only">Raw</button>
-          <button class="btn" data-view="split" aria-pressed="false" title="The text beside the page">Split</button>
+        <div class="seg" role="group" aria-label="Edit as">
+          <button class="btn" data-mode="wysiwyg" aria-pressed="false" title="Edit the page itself">WYSIWYG</button>
+          <button class="btn" data-mode="raw" aria-pressed="false" title="Edit the Markdown or HTML">Raw</button>
+        </div>
+        <button class="btn" id="editSplit" aria-pressed="false" title="The text and the page side by side">Split</button>
+        <div class="seg ed-tools" id="editTools" role="group" aria-label="Formatting" hidden>
+          <select id="editBlock" aria-label="Paragraph style" title="Paragraph style">
+            <option value="p">Paragraph</option><option value="h1">Heading 1</option><option value="h2">Heading 2</option>
+            <option value="h3">Heading 3</option><option value="h4">Heading 4</option><option value="blockquote">Quote</option><option value="pre">Code block</option>
+          </select>
+          <button class="btn" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><b>B</b></button>
+          <button class="btn" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic"><i>I</i></button>
+          <button class="btn" data-cmd="code" title="Code" aria-label="Code">&lt;/&gt;</button>
+          <button class="btn" data-cmd="link" title="Link (Ctrl+K)" aria-label="Link">Link</button>
+          <button class="btn" data-cmd="image" title="Picture, by its address" aria-label="Picture">Pic</button>
+          <button class="btn" data-cmd="insertUnorderedList" title="Bulleted list" aria-label="Bulleted list">•≡</button>
+          <button class="btn" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list">1≡</button>
+          <button class="btn" data-cmd="insertHorizontalRule" title="Horizontal rule" aria-label="Horizontal rule">―</button>
+          <button class="btn" data-cmd="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+          <button class="btn" data-cmd="redo" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
         </div>
         <div class="seg" id="editTabs" role="group" aria-label="Show" hidden>
           <button class="btn" data-tab="src" aria-pressed="true">Text</button>
@@ -1397,10 +1418,15 @@ async function markdownToHtml(md){
 // at a size limit, and build the contents list from h1-h3.
 // Text, Markdown and HTML documents read as one continuous page (headings become contents entries that
 // jump within it), split only when very long. headings: true would split at the main headings instead.
-function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
-  let root = doc.body;
+// The element whose children a document's sections are made of: the body, or the one wrapper it holds.
+function docRoot(body){
+  let root = body;
   while (root.children.length === 1 && /^(div|main|article|section)$/i.test(root.firstElementChild.localName)
          && ![...root.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) root = root.firstElementChild;
+  return root;
+}
+function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
+  const root = docRoot(doc.body);
   const headOf = el => el?.nodeType !== 1 ? null : /^h[12]$/i.test(el.localName) ? el
     : (/^(section|div|header|article)$/i.test(el.localName) && /^h[12]$/i.test(el.firstElementChild?.localName || '') ? el.firstElementChild : null);
   const nodes = [...root.childNodes];
@@ -3024,6 +3050,7 @@ function setFs(on){
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isFs()) setFs(false); });
 function onFrameClick(e){
+  if (ed.on && ed.mode === 'wysiwyg') { if (e.target.closest?.('a, area')) e.preventDefault(); return; }   // (the page is being edited: E-21)
   const link = e.target.closest?.('a, area');
   // Only marked links do anything: in-book links go through goTo, web links open in a new tab. Anything else
   // (a link without a usable target) mustn't navigate the page frame away from the book.
@@ -3092,6 +3119,8 @@ function pagePrev(){
 }
 function onKey(e){
   if ($('#abDialog').open || $('#setDialog').open) return;   // (the dialogs are modal: the reader's keys wait)
+  // (Typing in the page being edited: only saving and leaving are the reader's: E-21.)
+  if (e.target.isContentEditable && !((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) && e.key !== 'Escape') return;
   if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs() && !e.defaultPrevented && e.target.id !== 'searchBox') { e.preventDefault(); setToc(false); $('#tocBtn').focus(); return; }
   const tag = (e.target.tagName || '').toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox' && !e.target.closest?.('.edit-src')) { e.preventDefault(); searchOpen(); return; }
@@ -3638,7 +3667,7 @@ const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
   barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
-const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],[data-spine-note],#' + RID.end + ',' +
+const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[hidden],[aria-hidden="true"],[data-spine-note],[data-ed-keep],#' + RID.end + ',' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
 const hasWords = t => /[\p{L}\p{N}]/u.test(t);
@@ -6229,7 +6258,7 @@ window.addEventListener('beforeunload', e => { if (ab.running) { e.preventDefaul
    splits the page in the frame) and searched ignoring case, accents and curly-vs-straight quotes. A match
    is kept as (chapter, block, offset), so after the chapter renders the same block in the frame gives its
    DOM range: matches in the chapter are highlighted, the chosen one more strongly, and the page turns to it. */
-const SEARCH_SKIP = 'script,style,noscript,template,[hidden],[data-spine-note],#' + RID.end;
+const SEARCH_SKIP = 'script,style,noscript,template,[hidden],[data-spine-note],[data-ed-keep],#' + RID.end;
 let SEARCH_MAX = 500;
 const search = { q: '', hits: [], cur: -1, token: 0, timer: 0, shown: false };
 const foldMap = new Map();
@@ -6731,7 +6760,8 @@ function loadCodeMirror(){
   })().catch(e => { cmLoading = null; throw e; });
 }
 
-const ed = { on: false, view: 'split', tab: 'src', text: '', saved: '', kind: '', name: '', handle: null, fresh: false, api: null,
+const ed = { on: false, mode: 'wysiwyg', split: true, tab: 'src', text: '', saved: '', kind: '', name: '', handle: null, fresh: false, api: null,
+  wBase: '', wdirty: false, wTimer: 0, orig: [], kept: [], setting: false,
   timer: 0, draftTimer: 0, prevLayout: null, expectPage: null, expectSrc: null, blocks: null, blocksFor: null, starting: false };
 const editable = () => EDITING && !!book?.doc;
 const editDirty = () => ed.on && ed.text !== ed.saved;
@@ -6822,8 +6852,9 @@ function editTopHeading(){
 
 // The document made again from the text: one section while editing, the usual sections after.
 async function editRebuild({ frag = '', fraction: f = 0 } = {}){
-  const b = book;
-  const built = await buildDocument(ed.text, ed.name, ed.kind, { whole: ed.on });
+  const b = book, wys = ed.on && ed.mode === 'wysiwyg';
+  if (wys) { ed.wBase = ed.text; ed.wdirty = false; }
+  const built = await buildDocument(wys ? await editMarkupText() : ed.text, ed.name, wys ? 'html' : ed.kind, { whole: ed.on });
   if (book !== b) return;
   b.src.files = built.files; b.spine = built.spine; b.toc = built.toc;
   b.manifest = new Map(built.spine.map(x => [x.id, x])); b.byPath = new Map(built.spine.map(x => [x.path, x]));
@@ -6832,10 +6863,12 @@ async function editRebuild({ frag = '', fraction: f = 0 } = {}){
   renderMeta(); renderToc(); editTitle();
   const i = frag && built.where.has(frag) ? built.where.get(frag) : 0;
   await renderChapter(i, frag ? { frag } : { fraction: f });
-  if (book === b && search.q.trim().length >= 2) searchRun(search.q);
+  if (book !== b) return;
+  if (wys && ed.on && ed.mode === 'wysiwyg') editWysiwygReady();
+  if (search.q.trim().length >= 2) searchRun(search.q);
 }
 
-async function editStart({ view } = {}){
+async function editStart({ mode } = {}){
   if (!editable() || ed.on || ed.starting) return;
   ed.starting = true;
   try {
@@ -6857,7 +6890,8 @@ async function editStart({ view } = {}){
     ed.api = await editMakeApi($('#editSrc'));
     if (!ed.on || book !== b) return;
     ed.api.onChange(editChanged); ed.api.onScroll(editSrcScrolled);
-    editSetView(view || (EDIT_VIEWS.includes(store.get('spine:editView')) ? store.get('spine:editView') : 'split'), false);
+    const m = store.get('spine:editMode'), sp = store.get('spine:editSplit');
+    editSetMode(mode || (m === 'raw' ? 'raw' : 'wysiwyg'), typeof sp === 'boolean' ? sp : true, false);
     editStyle();
     await editRebuild({ frag });
     if (!ed.on) return;
@@ -6868,23 +6902,33 @@ async function editStart({ view } = {}){
     $('#editBar').dataset.ready = '';
   } finally { ed.starting = false; }
 }
-const EDIT_VIEWS = ['raw', 'split'];
-function editSetView(v, save = true){
-  if (!EDIT_VIEWS.includes(v)) v = 'split';
-  ed.view = v;
-  if (save) store.set('spine:editView', v);
-  for (const btn of $('#editBar').querySelectorAll('[data-view]')) btn.setAttribute('aria-pressed', String(btn.dataset.view === v));
+// The mode (WYSIWYG: the page is edited; Raw: the text is) and whether the other is shown beside it. Text has
+// no WYSIWYG. Changing mode makes the page again: from the page's edits (WYSIWYG to Raw), or for editing.
+const pageShown = () => !(ed.mode === 'raw' && !ed.split);
+async function editSetMode(mode, split = ed.split, save = true){
+  if (ed.kind === 'text') mode = 'raw';
+  const was = ed.mode, changed = ed.on && was !== mode && $('#editBar').hasAttribute('data-ready');
+  if (changed && was === 'wysiwyg') editFlush();
+  ed.mode = mode; ed.split = split;
+  if (save) { store.set('spine:editMode', mode); store.set('spine:editSplit', split); }
+  for (const btn of $('#editBar').querySelectorAll('[data-mode]')) { btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode)); btn.disabled = ed.kind === 'text' && btn.dataset.mode === 'wysiwyg'; }
+  $('#editSplit').setAttribute('aria-pressed', String(split));
+  $('#editTools').hidden = mode !== 'wysiwyg';
+  ed.api?.cm?.setOption('readOnly', mode === 'wysiwyg');
   editLayout();
-  // (Raw: no page beside the text, so nothing to read aloud.)
-  $('#ttsBtn').disabled = v === 'raw';
-  if (v === 'raw' && tts.open) ttsClose();
+  // (Raw alone: no page, so nothing to read aloud.)
+  $('#ttsBtn').disabled = !pageShown();
+  if (!pageShown() && tts.open) ttsClose();
   ed.api?.refresh();
-  if (v === 'split') requestAnimationFrame(editSyncToPage);
+  if (changed) { await editRebuild({ fraction: fraction() }); if (ed.on && ed.split) editSyncToPage(); }
+  else if (split) requestAnimationFrame(editSyncToPage);
 }
 // The views' panes: a narrow screen has no room for two, so split shows one at a time, chosen by tabs.
 function editLayout(){
-  const w = $('#work'), tabs = ed.on && ed.view === 'split' && narrow.matches;
-  w.classList.toggle('v-raw', ed.on && ed.view === 'raw');
+  const w = $('#work'), tabs = ed.on && ed.split && narrow.matches;
+  w.classList.toggle('v-raw', ed.on && ed.mode === 'raw' && !ed.split);
+  w.classList.toggle('v-page', ed.on && ed.mode === 'wysiwyg' && !ed.split);
+  w.classList.toggle('v-swap', ed.on && ed.mode === 'wysiwyg' && ed.split);
   w.classList.toggle('tab-src', tabs && ed.tab === 'src');
   w.classList.toggle('tab-page', tabs && ed.tab === 'page');
   $('#editTabs').hidden = !tabs;
@@ -6902,7 +6946,7 @@ function editSyncBar(){
 }
 
 function editChanged(){
-  if (!ed.on) return;
+  if (!ed.on || ed.setting) return;
   const was = editDirty();
   ed.text = ed.api.get();
   if (was !== editDirty()) editSyncBar();
@@ -6916,9 +6960,9 @@ function editDraftSoon(){
   ed.draftTimer = setTimeout(() => { if (ed.on && ed.text !== ed.saved) draftPut({ key, text, kind, name, t: Date.now() }); else if (ed.on) draftDel(key); }, 800);
 }
 async function editPreview(){
-  if (!ed.on) return;
+  if (!ed.on || ed.mode !== 'raw') return;
   await editRebuild({ fraction: fraction() });
-  if (ed.on && ed.view === 'split') editSyncToPage();
+  if (ed.on && ed.split) editSyncToPage();
 }
 
 // Keeping the two sides together: by top-level block for Markdown (marked's tokens know their lines), and
@@ -6946,7 +6990,7 @@ function pageBlocks(){
 // Element k of the page for block j of the text (the same, when the counts agree).
 const blockMap = (j, from, to) => Math.min(to - 1, Math.round(j * (to - 1) / Math.max(1, from - 1)));
 function editSyncToPage(){
-  if (!ed.on || ed.view !== 'split' || !ed.api) return;
+  if (!ed.on || !ed.split || !ed.api) return;
   const se = scroller(); if (!se) return;
   const x = ed.api.topLine(), lines = Math.max(1, ed.api.lines()), blocks = editBlocks(), els = pageBlocks();
   let y;
@@ -6968,7 +7012,7 @@ function editSrcScrolled(){
   editSyncToPage();
 }
 function editPageScrolled(){
-  if (!ed.on || ed.view !== 'split' || !ed.api) return;
+  if (!ed.on || !ed.split || !ed.api) return;
   const se = scroller(); if (!se) return;
   if (ed.expectPage != null) { const was = ed.expectPage; ed.expectPage = null; if (Math.abs(se.scrollTop - was) < 2) return; }
   const lines = Math.max(1, ed.api.lines()), blocks = editBlocks(), els = pageBlocks();
@@ -7000,10 +7044,11 @@ async function editWrite(handle, blob){
 // Save: back to the file where possible; Save as (or no file to write to): the save picker, or a download.
 async function editSave(as = false){
   if (!ed.on) return;
+  editFlush();
   let text = ed.text;
   if (ed.kind === 'html') {
     const fixed = utf8Declared(text);
-    if (fixed !== text) { text = fixed; ed.api.cm ? ed.api.cm.setValue(text) : (($('#editSrc .edit-plain') || {}).value = text); ed.text = text; }
+    if (fixed !== text) { text = fixed; editSetText(text); if (ed.mode === 'wysiwyg') ed.wBase = utf8Declared(ed.wBase); }
   }
   const type = EDIT_TYPES[ed.kind], blob = new Blob([text], { type: `${type.mime};charset=utf-8` });
   let handle = as ? null : ed.handle, how = '';
@@ -7028,6 +7073,7 @@ async function editSave(as = false){
 // Leaving the editor: the page made again from the text saved (what isn't saved is let go, after asking).
 async function editDone(){
   if (!ed.on) return;
+  editFlush();
   if (editDirty() && !confirm('Leave the editor? Your unsaved changes will be lost.')) return;
   if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
   const frag = editTopHeading();
@@ -7039,7 +7085,8 @@ async function editDone(){
 function editQuit(){
   if (!ed.on) return;
   ed.on = false;
-  clearTimeout(ed.timer); clearTimeout(ed.draftTimer);
+  clearTimeout(ed.timer); clearTimeout(ed.draftTimer); clearTimeout(ed.wTimer);
+  $('#editTools').hidden = true;
   $('.app').classList.remove('editing');
   $('#editBar').hidden = true; $('#editSrc').hidden = true; $('#editSrc').replaceChildren(); ed.api = null;
   delete $('#editBar').dataset.ready;
@@ -7050,6 +7097,7 @@ function editQuit(){
 }
 // Before opening another book: unsaved changes are let go only if the reader agrees.
 function editLeaveOk(){
+  if (ed.on) editFlush();
   if (editDirty() && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return false;
   if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
   editQuit();
@@ -7091,8 +7139,10 @@ $('#editThis').addEventListener('click', () => { editMenu(false); editStart(); }
 $('#editNewMd').addEventListener('click', () => { editMenu(false); editNew('markdown'); });
 $('#editNewHtml').addEventListener('click', () => { editMenu(false); editNew('html'); });
 $('#editBar').addEventListener('click', e => {
-  const v = e.target.closest('[data-view]')?.dataset.view, t = e.target.closest('[data-tab]')?.dataset.tab;
-  if (v) editSetView(v);
+  const v = e.target.closest('[data-mode]')?.dataset.mode, t = e.target.closest('[data-tab]')?.dataset.tab, c = e.target.closest('[data-cmd]')?.dataset.cmd;
+  if (v && v !== ed.mode) editSetMode(v);
+  if (e.target.closest('#editSplit')) editSetMode(ed.mode, !ed.split);
+  if (c) editCommand(c);
   if (t) { ed.tab = t; editLayout(); ed.api?.refresh(); if (t === 'page') requestAnimationFrame(editSyncToPage); }
 });
 $('#editSave').addEventListener('click', () => editSave());
@@ -7105,6 +7155,364 @@ window.addEventListener('beforeunload', e => { if (editDirty()) { e.preventDefau
 const OPEN_TYPES = [{ description: 'Books and documents', accept: {
   'application/epub+zip': ['.epub'], 'application/vnd.comicbook+zip': ['.cbz'], 'text/plain': ['.txt', '.text'],
   'text/markdown': ['.md', '.markdown', '.mdown', '.mkd'], 'text/html': ['.html', '.htm', '.xhtml'] } }];
+// WYSIWYG (E-21, phases 2 and 3): the page itself is edited. It is made from the text as any page is, but first
+// every element is given an index (data-ed) into a table of its attributes as written, and what the page's
+// cleaning removes (scripts, frames, embedded objects, templates and the like) is put aside in a table too, shown
+// as a locked chip. Written back, each element takes its own attributes again (so links, picture addresses and
+// handlers the cleaning changed come back as they were), the chips their markup, and the reader's additions
+// (heading ids, link marks) go. HTML is written into the document's body, the rest of the file as it was;
+// Markdown goes through htmlToMarkdown. The text is only made again after something was typed.
+const ED_KEEP = 'script,style,object,embed,iframe,frame,frameset,template,base,link,meta,noscript,set,animate';
+function editMarkup(d){
+  ed.orig = []; ed.kept = [];
+  for (const el of [...d.body.querySelectorAll(ED_KEEP)]) {
+    if (!el.isConnected) continue;   // (inside one already put aside)
+    if (/^(set|animate)$/i.test(el.localName) && !/href/i.test(el.getAttribute('attributeName') || '')) continue;
+    const chip = d.createElement('span');
+    chip.setAttribute('data-ed-keep', String(ed.kept.push(el.outerHTML) - 1));
+    chip.setAttribute('contenteditable', 'false');
+    chip.setAttribute('title', `This document's ${el.localName}: kept as it is`);
+    chip.textContent = el.localName;
+    el.replaceWith(chip);
+  }
+  for (const el of d.body.querySelectorAll('*')) {
+    if (el.hasAttribute('data-ed-keep')) continue;
+    el.setAttribute('data-ed', String(ed.orig.push({ tag: el.localName, attrs: [...el.attributes].map(a => [a.name, a.value]) }) - 1));
+  }
+}
+// The text the page is made from in WYSIWYG: the document marked up as above (Markdown: its HTML, with its title).
+async function editMarkupText(){
+  let d;
+  if (ed.kind === 'markdown') {
+    const m = await markdownToHtml(ed.text);
+    d = new DOMParser().parseFromString(`<!DOCTYPE html><html${m.language ? ` lang="${escHtml(m.language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(m.title || '')}</title>${m.author ? `<meta name="author" content="${escHtml(m.author)}">` : ''}</head><body>${m.html}</body></html>`, 'text/html');
+  } else d = new DOMParser().parseFromString(ed.text, 'text/html');
+  editMarkup(d);
+  return '<!DOCTYPE html>\n' + d.documentElement.outerHTML;
+}
+// The page's content, written back: each element with its own attributes, chips as their markup (HTML) or
+// left for htmlToMarkdown (Markdown), and nothing the reader or the browser's editing added.
+function editRestore(nodes, model, html){
+  const used = new Set();
+  const fix = el => {
+    const k = el.getAttribute('data-ed-keep');
+    if (k != null) {
+      if (!html) return;
+      const t = model.createElement('template'); t.innerHTML = ed.kept[k] ?? '';
+      el.replaceWith(t.content); return;
+    }
+    const n = el.getAttribute('data-ed'), o = n != null ? ed.orig[n] : null, noid = el.hasAttribute('data-ed-noid');
+    if (o && o.tag === el.localName) {
+      const again = used.has(n); used.add(n);   // (a block split in two by Enter: both had its index)
+      for (const a of [...el.attributes]) el.removeAttribute(a.name);
+      for (const [name, v] of o.attrs) if (!(again && name === 'id')) { try { el.setAttribute(name, v); } catch {} }
+    } else {
+      for (const a of [...el.attributes]) if (/^data-(ed|spine)/.test(a.name) || /^(contenteditable|style)$/.test(a.name) || (noid && a.name === 'id')) el.removeAttribute(a.name);
+    }
+    for (const c of [...el.children]) fix(c);
+    // (Spans and font tags the browser's editing leaves, with nothing to say: their content.)
+    if (!(o && o.tag === el.localName) && /^(span|font)$/.test(el.localName) && !el.attributes.length) el.replaceWith(...el.childNodes);
+  };
+  const out = nodes.map(nd => model.importNode(nd, true));
+  const holder = model.createElement('div'); holder.append(...out);
+  for (const c of [...holder.children]) fix(c);
+  return holder;
+}
+function editSerialize(){
+  const flow = frame.contentDocument?.getElementById(RID.flow);
+  if (!flow || !ed.wBase) return ed.text;
+  const nodes = [...flow.childNodes].filter(nd => nd.id !== RID.end);
+  if (ed.kind === 'markdown') {
+    const front = ed.wBase.replace(/^\uFEFF/, '').match(/^---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)\r?\n/)?.[0] || '';
+    return front + htmlToMarkdown(editRestore(nodes, document.implementation.createHTMLDocument(''), false));
+  }
+  const model = new DOMParser().parseFromString(ed.wBase, 'text/html');
+  docRoot(model.body).replaceChildren(...editRestore(nodes, model, true).childNodes);
+  let inner = model.body.innerHTML;
+  const t = ed.wBase, open = t.match(/<body(?=[\s>/])[^>]*>/i), close = t.toLowerCase().lastIndexOf('</body');
+  // (The white space before </body> as written: a parser moves what follows </body> into the body.)
+  if (open && close > open.index) return t.slice(0, open.index + open[0].length) + inner.replace(/\s+$/, '') + t.slice(open.index + open[0].length, close).match(/\s*$/)[0] + t.slice(close);
+  if (/<(html|head)(?=[\s>/])/i.test(t)) return '<!DOCTYPE html>\n' + model.documentElement.outerHTML;
+  return inner;   // (a fragment of HTML, with no document around it)
+}
+
+/* Markdown from the page's HTML (E-21 phase 3): what marked makes from GFM comes back as Markdown; anything else
+   is written as HTML inside the Markdown, which Markdown allows, so nothing is lost. */
+const MD_BLOCKS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'hr', 'table', 'div', 'section', 'article',
+  'header', 'footer', 'main', 'aside', 'nav', 'figure', 'figcaption', 'dl', 'dt', 'dd', 'details', 'summary', 'address', 'form', 'fieldset', 'center']);
+const mdPlain = (el, ok = []) => [...el.attributes].every(a => ok.includes(a.name));
+function htmlToMarkdown(root){
+  const md = mdBlocks(root).replace(/\n{3,}/g, '\n\n').replace(/^\n+|\s+$/g, '');
+  return md ? md + '\n' : '';
+}
+function mdBlocks(node, sep = '\n\n'){
+  const parts = []; let run = [];
+  const flush = () => { const t = mdLines(mdInline(run)); if (t) parts.push(t); run = []; };
+  for (const c of node.childNodes) {
+    if (c.nodeType === 1 && (MD_BLOCKS.has(c.localName) || (c.hasAttribute('data-ed-keep') && /^(script|style|iframe|object|embed|template|noscript|frameset|frame)\b/i.test(ed.kept[c.getAttribute('data-ed-keep')] ?? '') && !c.parentElement?.closest('p, li, td, th, h1, h2, h3, h4, h5, h6')))) { flush(); const b = mdBlock(c); if (b) parts.push(b); }
+    else if (c.nodeType === 1 || c.nodeType === 3) run.push(c);
+  }
+  flush();
+  return parts.join(sep);
+}
+const mdKept = el => (ed.kept[el.getAttribute('data-ed-keep')] ?? '');
+function mdBlock(el){
+  const t = el.localName;
+  if (el.hasAttribute('data-ed-keep')) return mdKept(el);
+  if (/^h[1-6]$/.test(t) && mdPlain(el)) { const s = mdInline([...el.childNodes]).replace(/\s*\n\s*/g, ' ').trim(); return s ? '#'.repeat(+t[1]) + ' ' + s : ''; }
+  if (t === 'p' && mdPlain(el)) return mdLines(mdInline([...el.childNodes]));
+  if (t === 'hr' && mdPlain(el)) return '---';
+  if (t === 'pre' && mdPlain(el)) {
+    const code = el.children.length === 1 && el.firstElementChild.localName === 'code' && mdPlain(el.firstElementChild, ['class']) ? el.firstElementChild : null;
+    if (code || !el.children.length) {
+      const text = (code || el).textContent.replace(/\n$/, ''), lang = (code?.className.match(/(?:^|\s)language-(\S+)/) || [])[1] || '';
+      const fence = '`'.repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map(m => m[0].length + 1)));
+      return `${fence}${lang}\n${text}\n${fence}`;
+    }
+  }
+  if (t === 'blockquote' && mdPlain(el)) return mdBlocks(el).split('\n').map(l => l ? '> ' + l : '>').join('\n');
+  if ((t === 'ul' || t === 'ol') && mdPlain(el, t === 'ol' ? ['start'] : [])) { const l = mdList(el); if (l != null) return l; }
+  if (t === 'table' && mdPlain(el)) { const tb = mdTable(el); if (tb != null) return tb; }
+  return el.outerHTML;
+}
+function mdList(el){
+  const items = [...el.children];
+  if (items.some(li => li.localName !== 'li' || !mdPlain(li))) return null;
+  const ordered = el.localName === 'ol';
+  let n = ordered ? (parseInt(el.getAttribute('start'), 10) || 1) : 0;
+  const loose = items.some(li => [...li.children].some(c => c.localName === 'p'));
+  const out = items.map(li => {
+    const clone = li.cloneNode(true);
+    let task = '';
+    const box = clone.firstElementChild;
+    if (box?.localName === 'input' && box.getAttribute('type') === 'checkbox' && ![...clone.childNodes].slice(0, [...clone.childNodes].indexOf(box)).some(x => x.textContent.trim())) {
+      task = box.hasAttribute('checked') ? '[x] ' : '[ ] '; box.remove();
+    }
+    // (A tight list item's text, and any list inside it, as blocks.)
+    const marker = ordered ? `${n++}. ` : '- ', pad = ' '.repeat(marker.length);
+    const body = mdBlocks(clone, loose ? '\n\n' : '\n').replace(/^\s+/, '');
+    return (marker + task + body).split('\n').map((l, i) => i && l ? pad + l : l).join('\n');
+  });
+  return out.join(loose ? '\n\n' : '\n');
+}
+function mdTable(el){
+  const rows = [...el.querySelectorAll(':scope > thead > tr, :scope > tbody > tr, :scope > tr')];
+  const head = el.querySelector(':scope > thead > tr');
+  if (!head || rows[0] !== head || rows.some(r => !mdPlain(r) || [...r.children].some(c => !/^t[hd]$/.test(c.localName) || !mdPlain(c, ['align', 'style']) || c.querySelector(':scope ' + [...MD_BLOCKS].join(', :scope '))))) return null;
+  if ([...el.children].some(c => !/^(thead|tbody)$/.test(c.localName)) || [...el.querySelectorAll(':scope > thead, :scope > tbody')].some(s => !mdPlain(s))) return null;
+  // (A | in a cell must be escaped, inside code too; one escaped as text already is.)
+  const cells = r => [...r.children].map(c => mdInline([...c.childNodes]).replace(/\s*\n\s*/g, ' ').replace(/\\\|/g, '\0').replace(/\|/g, '\\|').replace(/\0/g, '\\|').trim());
+  const align = c => (c.getAttribute('align') || (c.getAttribute('style') || '').match(/text-align:\s*(\w+)/)?.[1] || '').toLowerCase();
+  const sep = [...head.children].map(c => ({ left: ':---', center: ':---:', right: '---:' }[align(c)] || '---'));
+  const line = a => `| ${a.join(' | ')} |`;
+  return [line(cells(head)), line(sep), ...rows.slice(1).map(r => line(cells(r)))].join('\n');
+}
+// Text that would otherwise be read as Markdown is escaped.
+const mdEsc = s => s.replace(/[\\`*_[\]<>~|]/g, '\\$&').replace(/&(?=#?\w+;)/g, '&amp;');
+function mdInline(nodes){
+  let out = '';
+  for (const nd of nodes) {
+    if (nd.nodeType === 3) { out += mdEsc(nd.textContent.replace(/\s+/g, ' ')); continue; }
+    if (nd.nodeType !== 1) continue;
+    const t = nd.localName, inner = () => mdInline([...nd.childNodes]);
+    const wrap = m => { const s = inner(), core = s.trim(); if (!core) return s; const lead = s.match(/^\s*/)[0], tail = s.match(/\s*$/)[0]; return lead + m + core + m + tail; };
+    if (nd.hasAttribute('data-ed-keep')) out += mdKept(nd);
+    else if (t === 'br' && mdPlain(nd)) out += '\\\n';
+    else if ((t === 'strong' || t === 'b') && mdPlain(nd)) out += wrap('**');
+    else if ((t === 'em' || t === 'i') && mdPlain(nd)) out += wrap('*');
+    else if ((t === 'del' || t === 's' || t === 'strike') && mdPlain(nd)) out += wrap('~~');
+    else if (t === 'code' && mdPlain(nd) && !nd.children.length) {
+      const s = nd.textContent, fence = '`'.repeat(Math.max(1, ...[...s.matchAll(/`+/g)].map(m => m[0].length + 1)));
+      out += fence + (/^`|`$|^\s.*\S|\S.*\s$/.test(s) && s.trim() ? ' ' + s + ' ' : s) + fence;
+    }
+    else if (t === 'a' && nd.hasAttribute('href') && mdPlain(nd, ['href', 'title'])) out += `[${inner()}](${mdUrl(nd.getAttribute('href'))}${mdTitle(nd)})`;
+    else if (t === 'img' && mdPlain(nd, ['src', 'alt', 'title'])) out += `![${mdEsc(nd.getAttribute('alt') || '')}](${mdUrl(nd.getAttribute('src') || '')}${mdTitle(nd)})`;
+    else out += nd.outerHTML;
+  }
+  return out;
+}
+const mdUrl = u => /[\s()<>]/.test(u) ? `<${u.replace(/[<>]/g, c => encodeURIComponent(c))}>` : u;
+const mdTitle = el => el.hasAttribute('title') ? ` "${el.getAttribute('title').replace(/["\\]/g, '\\$&')}"` : '';
+// A paragraph's lines: trimmed, with what would start a heading, list, quote or rule escaped.
+const mdLines = s => s.split('\n').map(l => l.replace(/^ +| +$/g, '').replace(/^(#{1,6}(?=\s|$)|>|[-+](?=\s|$)|=+(?=\s*$))/, '\\$1').replace(/^(\d+)([.)])(?=\s|$)/, '$1\\$2')).join('\n').trim();
+
+// The text editor's text set from the page (WYSIWYG), without that counting as typing in it.
+function editSetText(t){
+  ed.text = t;
+  if (!ed.api) return;
+  ed.setting = true;
+  try { if (ed.api.cm) { const top = ed.api.scrollTop(); ed.api.cm.setValue(t); ed.api.cm.scrollTo(null, top); } else { const ta = $('#editSrc .edit-plain'); if (ta) ta.value = t; } }
+  finally { ed.setting = false; }
+  ed.blocks = null; ed.blocksFor = null;
+}
+// The page made editable, once shown.
+function editWysiwygReady(){
+  const d = frame.contentDocument, flow = d?.getElementById(RID.flow);
+  if (!flow) return;
+  flow.setAttribute('contenteditable', 'true'); flow.setAttribute('spellcheck', 'true');
+  flow.setAttribute('role', 'textbox'); flow.setAttribute('aria-multiline', 'true'); flow.setAttribute('aria-label', 'Document, editable');
+  try { d.execCommand('styleWithCSS', false, false); d.execCommand('defaultParagraphSeparator', false, 'p'); } catch {}
+  const st = d.createElement('style');
+  st.textContent = `[data-ed-keep]{font:500 11px/1.6 ui-monospace,monospace;padding:0 5px;margin:0 2px;border-radius:4px;background:rgb(127 127 127 / .18);color:inherit;cursor:default;user-select:none}
+#${RID.flow}[contenteditable]{outline:none;caret-color:currentColor}`;
+  d.head.append(st);
+  if (d.__edWired) return;
+  d.__edWired = true;
+  d.addEventListener('input', editWysiwygInput);
+  d.addEventListener('paste', editPaste);
+  d.addEventListener('drop', editDrop);
+  d.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (e.key === 'k' || e.key === 'K') { e.preventDefault(); editCommand('link'); }
+  });
+}
+function editWysiwygInput(){
+  if (!ed.on || ed.mode !== 'wysiwyg') return;
+  ed.wdirty = true;
+  if (!editDirty()) { $('#editName').textContent = ed.name + ' (unsaved)'; document.title = `• ${ed.name} — editing`; }
+  clearTimeout(ed.wTimer);
+  ed.wTimer = setTimeout(editFlush, 300);
+}
+// The page's edits written into the text: the text editor, the draft, the contents, search and reading aloud follow.
+function editFlush(){
+  clearTimeout(ed.wTimer);
+  if (!ed.on || ed.mode !== 'wysiwyg' || !ed.wdirty) return;
+  ed.wdirty = false;
+  const was = editDirty();
+  editSetText(editSerialize());
+  ed.wBase = ed.text;
+  if (was !== editDirty() || !editDirty()) editSyncBar(); else editTitle();
+  editSyncBar();
+  editDraftSoon();
+  editTocFromPage();
+  editRefreshFiles();
+  editRechunk();
+}
+// The contents from the page's headings (new ones are given ids, taken off again when written back).
+function editTocFromPage(){
+  const d = frame.contentDocument, flow = d?.getElementById(RID.flow), path = book?.spine[0]?.path;
+  if (!flow || !path) return;
+  const used = new Set([...d.querySelectorAll('[id]')].map(e => e.id)), toc = [], stack = [];
+  for (const h of flow.querySelectorAll('h1, h2, h3')) {
+    const label = h.textContent.replace(/\s+/g, ' ').trim();
+    if (!label) continue;
+    if (!h.id) { let id = label.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s/g, '-') || 'section', k = 1; const b = id; while (used.has(id)) id = `${b}-${k++}`; used.add(id); h.id = id; h.setAttribute('data-ed-noid', ''); }
+    const level = +h.localName[1], entry = { label, path, frag: h.id, children: [], level };
+    while (stack.length && stack.at(-1).level >= level) stack.pop();
+    (stack.length ? stack.at(-1).children : toc).push(entry);
+    stack.push(entry);
+  }
+  book.toc = toc.length ? toc : [{ label: book.title, path, frag: '', children: [] }];
+  renderToc();
+}
+// Search reads the document's files: made again from the text, not shown.
+async function editRefreshFiles(){
+  const b = book, text = ed.text;
+  const built = await buildDocument(text, ed.name, ed.kind, { whole: true }).catch(() => null);
+  if (!built || book !== b || !ed.on || ed.text !== text) return;
+  b.src.files = built.files; b.search = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
+}
+// Reading aloud while the page is edited goes on: the sentences are found again, and it carries on from the one
+// it was at (the sentence being spoken finishes as it was; the ones after are read as they now are).
+function editRechunk(){
+  const d = frame.contentDocument;
+  if (!tts.open || tts.doc !== d || !tts.chunks || tts.mo) return;
+  const old = tts.chunks[tts.ci], fresh = chunksOf(d);
+  let at = Math.min(tts.ci, Math.max(0, fresh.chunks.length - 1));
+  if (old) {
+    const said = old.b.text.slice(old.s, old.e);
+    let best = -1;
+    fresh.chunks.forEach((c, j) => { if (c.b.text.slice(c.s, c.e) === said && (best < 0 || Math.abs(j - tts.ci) < Math.abs(best - tts.ci))) best = j; });
+    if (best >= 0) at = best;
+  }
+  const delta = tts.pos - (old?.s ?? 0), c = fresh.chunks[at];
+  tts.chunks = fresh.chunks; tts.nodes = fresh.nodes; tts.ci = at;
+  if (c) tts.pos = Math.min(c.e - 1, c.s + Math.max(0, delta));
+}
+// Pasted and dropped content: only what a document's text is made of (headings, paragraphs, emphasis, links,
+// lists, tables, code, pictures by address), with no styles, classes, handlers or scripts.
+const PASTE_OK = { p: [], br: [], h1: [], h2: [], h3: [], h4: [], h5: [], h6: [], strong: [], b: [], em: [], i: [], s: [], del: [], code: [], pre: [],
+  blockquote: [], ul: [], ol: ['start'], li: [], a: ['href', 'title'], img: ['src', 'alt', 'title'], table: [], thead: [], tbody: [], tr: [], th: [], td: [],
+  hr: [], sup: [], sub: [] };
+function editCleanHtml(html){
+  const d = new DOMParser().parseFromString(html, 'text/html');
+  d.querySelectorAll('script,style,meta,link,title,template,iframe,frame,object,embed,noscript,svg,math,form,input,button,select,textarea,head').forEach(e => e.remove());
+  const walk = el => {
+    for (const c of [...el.childNodes]) {
+      if (c.nodeType === 8) { c.remove(); continue; }
+      if (c.nodeType !== 1) continue;
+      walk(c);
+      const ok = PASTE_OK[c.localName];
+      if (!ok) { c.replaceWith(...c.childNodes); continue; }
+      for (const a of [...c.attributes]) {
+        const bad = !ok.includes(a.name) || ((a.name === 'href' || a.name === 'src') && /^[a-z][\w+.-]*:/i.test(urlText(a.value)) && !/^(https?|mailto):/i.test(urlText(a.value)));
+        if (bad) c.removeAttribute(a.name);
+      }
+    }
+  };
+  walk(d.body);
+  return d.body.innerHTML;
+}
+function editInsert(d, html, text){
+  if (html) d.execCommand('insertHTML', false, editCleanHtml(html));
+  else if (text) d.execCommand('insertText', false, text);
+  // (The browser gives what it inserts the styles around it: taken off again.)
+  const flow = d.getElementById(RID.flow);
+  for (const el of flow?.querySelectorAll('[style]:not([data-ed])') || []) el.removeAttribute('style');
+  for (const el of flow?.querySelectorAll('span:not([data-ed]):not([data-ed-keep])') || []) if (!el.attributes.length) el.replaceWith(...el.childNodes);
+}
+function editPaste(e){
+  if (!ed.on || ed.mode !== 'wysiwyg') return;
+  e.preventDefault();
+  editInsert(e.target.ownerDocument || frame.contentDocument, e.clipboardData?.getData('text/html'), e.clipboardData?.getData('text/plain'));
+}
+function editDrop(e){
+  if (!ed.on || ed.mode !== 'wysiwyg' || hasFiles(e)) return;
+  e.preventDefault();
+  const d = frame.contentDocument, at = d.caretRangeFromPoint?.(e.clientX, e.clientY);
+  if (at) { const sel = d.getSelection(); sel.removeAllRanges(); sel.addRange(at); }
+  editInsert(d, e.dataTransfer?.getData('text/html'), e.dataTransfer?.getData('text/plain'));
+}
+// The formatting buttons, on the page's selection.
+function editCommand(cmd){
+  if (!ed.on || ed.mode !== 'wysiwyg') return;
+  const d = frame.contentDocument, w = frame.contentWindow; if (!d) return;
+  w.focus();
+  const sel = d.getSelection();
+  if (cmd === 'link') {
+    const a = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement)?.closest('a');
+    const url = prompt('Link address', a?.getAttribute('data-ed') != null ? (ed.orig[a.getAttribute('data-ed')].attrs.find(x => x[0] === 'href')?.[1] ?? '') : a?.getAttribute('href') || 'https://');
+    if (url == null) return;
+    if (/^\s*javascript:/i.test(url)) return;
+    if (a) {
+      const o = a.getAttribute('data-ed') != null ? ed.orig[a.getAttribute('data-ed')] : null;
+      if (o) { o.attrs = o.attrs.filter(x => x[0] !== 'href'); if (url) o.attrs.push(['href', url]); }
+      url ? a.setAttribute('href', url) : a.replaceWith(...a.childNodes);
+      editWysiwygInput();
+    } else if (url) {
+      if (sel.isCollapsed) d.execCommand('insertHTML', false, `<a href="${escHtml(url)}">${escHtml(url)}</a>`);
+      else d.execCommand('createLink', false, url);
+    }
+    return;
+  }
+  if (cmd === 'image') {
+    const src = prompt('Picture address'); if (!src || /^\s*javascript:/i.test(src)) return;
+    const alt = prompt('Description of the picture (for those who can\'t see it)', '') ?? '';
+    d.execCommand('insertHTML', false, `<img src="${escHtml(src)}" alt="${escHtml(alt)}">`);
+    return;
+  }
+  if (cmd === 'code') { const t = sel.toString(); d.execCommand('insertHTML', false, `<code>${escHtml(t || 'code')}</code>`); return; }
+  d.execCommand(cmd, false, null);
+}
+$('#editBlock').addEventListener('change', e => {
+  const d = frame.contentDocument; if (!d || !ed.on || ed.mode !== 'wysiwyg') return;
+  frame.contentWindow.focus();
+  d.execCommand('formatBlock', false, `<${e.target.value}>`);
+  e.target.value = 'p';
+});
+// (The buttons don't take the focus from the page, so its selection stays where it was.)
+$('#editTools').addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+
 async function openPicked(){
   let handle;
   try { [handle] = await window.showOpenFilePicker({ types: OPEN_TYPES, excludeAcceptAllOption: false }); }
