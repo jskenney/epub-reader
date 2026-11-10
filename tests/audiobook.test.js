@@ -62,7 +62,8 @@ async function openExport(page, url = ABC, settings = { 'spine:ttsEngine': 'serv
   await page.waitForTimeout(500);
   await page.keyboard.press(' ');   // (pause: export is started from the bar)
   await page.click('#ttsExport');
-  await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
+  // (Measuring every chapter, and the format check, can take a while when the whole suite runs at once.)
+  await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats, null, { timeout: 60000 });
 }
 async function exportAll(page, mode, count) {
   await page.check(`input[name="abMode"][value="${mode}"]`);

@@ -46,9 +46,14 @@ saved position) works as for EPUBs.
 made as EPUB) are shown a page at a time, each at the size the book gives it
 (its `viewport`, an SVG page's `viewBox`, or the book's
 `rendition:viewport`), scaled to fit the screen, with the book's own styles
-and positions; the scroll layout fits each page to the width. Their text can
-still be searched and read aloud. A page whose size isn't given, or marked
-`rendition:layout-reflowable`, is reflowed like any other.
+and positions (not the reader's fonts or colours: the theme colours only the
+space around the page); the scroll layout fits each page to the width. Their
+text can still be searched and read aloud. A page whose size isn't given, or
+marked `rendition:layout-reflowable`, is reflowed like any other. Limits: the
+text size, line spacing and font buttons don't change these pages; one page
+is shown at a time (no two-page spreads); and `vw`/`vh` units and
+`position: fixed` in a page's styles measure the reader's frame, not the
+page.
 
 **Comic books** (`.cbz`, a ZIP of page images) open too. Pages are shown in
 name order (page2 before page10), each as large as fits: a two-page spread

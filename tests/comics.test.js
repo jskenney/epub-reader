@@ -62,3 +62,18 @@ test('right-to-left manga: the place kept is the spread\'s first page (on the ri
   await page.click('#layoutBtn'); await page.waitForTimeout(500);   // (one column)
   assert.deepEqual(await onScreen(page), ['Page 3']);
 });
+
+test('a comic switched into the scroll layout opens at the page it was on (round 22 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/comic.cbz`, { 'spine:layout': 'one' });
+  for (let k = 0; k < 20; k++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(600);
+  const before = await onScreen(page);
+  assert.deepEqual(before, ['Page 21']);
+  await page.click('#layoutBtn'); await page.waitForTimeout(800);   // (one → scroll)
+  const top = await page.evaluate(() => {
+    const d = document.querySelector('#page').contentDocument;
+    return [...d.querySelectorAll('.cbz-page')].find(p => p.getBoundingClientRect().bottom > 40)?.querySelector('img').alt;
+  });
+  assert.equal(top, 'Page 21');
+});

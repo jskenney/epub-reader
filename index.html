@@ -2203,18 +2203,22 @@ a,a *{color:${t.ribbon} !important}` : ''}`;
 // A fixed-layout page: its own size and styles, centred in the frame on the theme's background (scaled by fxlFit).
 function fixedCss(fx, t, dark){
   const scroll = layout === 'scroll';
-  return `html{background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;margin:0 !important;padding:0 0 ${tts.barH}px !important;box-sizing:border-box !important;
+  // (The theme's colour around the page, unless the book colours its html: a background of lower precedence
+  // than the book's own. The page itself keeps the book's colours, light controls included.)
+  return `:where(html){background-color:${t.bg};color:#000}
+html{color-scheme:${dark ? 'dark' : 'light'};width:auto !important;min-width:0 !important;max-width:none !important;${scroll ? 'height:auto !important;min-height:100% !important' : 'height:100% !important;min-height:0 !important'};max-height:none !important;
+  margin:0 !important;padding:0 0 ${scroll ? 12 + tts.barH : tts.barH}px !important;box-sizing:border-box !important;transform:none !important;
   display:flex !important;align-items:${scroll ? 'flex-start' : 'center'} !important;justify-content:center !important;overflow:${scroll ? 'auto' : 'hidden'} !important}
-body{width:${fx.w}px !important;height:${fx.h}px !important;min-width:0 !important;max-width:none !important;margin:${scroll ? '12px' : '0'} 0 !important;flex:none !important;
+body{width:${fx.w}px !important;height:${fx.h}px !important;min-width:0 !important;max-width:none !important;min-height:0 !important;max-height:none !important;box-sizing:border-box !important;
+  margin:${scroll ? '12px 0 0' : '0'} !important;flex:none !important;transform:none !important;color-scheme:light;
   overflow:hidden !important;position:relative !important;box-shadow:0 1px 8px rgb(0 0 0 / .25)}
-#${RID.clip},#${RID.flow}{display:contents !important}
 #${RID.end}{display:none !important}
 ::highlight(tts-sentence){background-color:${t.soft}}
 ::highlight(tts-word){background-color:${t.ribbon};color:${t.onRibbon}}
 ::highlight(search-hit){background-color:rgb(250 205 70 / .45)}
 ::highlight(search-current){background-color:#F2B630;color:#1a1408}`;
 }
-// Scale the fixed-layout page in the frame to fit it (the width only, when scrolling), up to its full size.
+// Scale the fixed-layout page in the frame to fit it (the width only, when scrolling), up to twice its size.
 const fxlOf = doc => doc?.documentElement?.getAttribute('data-spine-fxl')?.split(' ').map(Number) || null;
 function fxlFit(){
   const doc = frame.contentDocument, w = frame.contentWindow, fx = fxlOf(doc);
@@ -2338,7 +2342,7 @@ function viewportSize(t){
   return w >= 10 && h >= 10 && w <= 20000 && h <= 20000 ? { w: Math.round(w), h: Math.round(h) } : null;
 }
 function fixedSize(src, path){
-  const item = book.spine?.find(s => s.path === path);
+  const item = book.spine?.find(s => s.path === path) || book.spine?.find(s => s.readerPath === path);   // (or shown through its fallback)
   if (!item || !(item.fixed ?? book.info?.layout === 'Fixed layout')) return null;
   const meta = [...src.getElementsByTagNameNS('*', 'meta')].find(m => (m.getAttribute('name') || '').toLowerCase() === 'viewport');
   const svg = src.getElementsByTagNameNS('*', 'body')[0]?.firstElementChild;
@@ -2356,8 +2360,9 @@ async function buildPage(src, path){
     const v = sHtml.getAttribute(a); if (v) out.documentElement.setAttribute(a === 'xml:lang' ? 'lang' : a, v);
   }
   const head = out.head, budget = cssBudget(), linked = new Set();
-  head.innerHTML = `<meta charset="utf-8"><link id="${RID.font}" rel="stylesheet" href="${fontHref()}"><style id="${RID.base}"></style>`;
-  head.querySelector('#' + RID.base).textContent = baseCss();
+  // (A fixed-layout page has the book's styles only: none of the reader's fonts, sizes or colours.)
+  head.innerHTML = `<meta charset="utf-8"><link id="${RID.font}" rel="stylesheet" href="${fx ? NO_CSS : fontHref()}"><style id="${RID.base}"></style>`;
+  head.querySelector('#' + RID.base).textContent = fx ? '' : baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
     if (n.localName === 'link') {
       const rel = n.getAttribute('rel') || '', href = n.getAttribute('href');
@@ -2382,11 +2387,14 @@ async function buildPage(src, path){
   if (sBody) {
     for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.value);
   }
+  // (A fixed-layout page keeps the book's structure, with no wrappers in its body, so selectors such as
+  // "body > p" still match: search and reading aloud read its body then: textBlocks.)
   const clip = out.createElement('div'); clip.id = RID.clip;
   const flow = out.createElement('div'); flow.id = RID.flow;
-  if (sBody) for (const c of [...sBody.childNodes]) flow.append(out.importNode(c, true));
-  const end = out.createElement('span'); end.id = RID.end; flow.append(end);
-  clip.append(flow); out.body.append(clip);
+  const into = fx ? out.body : flow;
+  if (sBody) for (const c of [...sBody.childNodes]) into.append(out.importNode(c, true));
+  const end = out.createElement('span'); end.id = RID.end; into.append(end);
+  if (!fx) { clip.append(flow); out.body.append(clip); }
   // Chapters parsed as XHTML keep the case of names (<IMG SRC>, <IFRAME>), which the checks below wouldn't
   // match, yet the frame's HTML parser would turn them into working elements. So parse the page as HTML
   // first, exactly as the frame will, and clean that.
@@ -2551,11 +2559,14 @@ async function chapterSource(item){
 async function chapterDoc(i){
   const src = await chapterSource(book.spine[i]);
   const out = document.implementation.createHTMLDocument('');
+  const fx = fixedSize(src, src.readerPath);   // (built like the page: a fixed-layout page has no wrapper)
+  if (fx) out.documentElement.setAttribute('data-spine-fxl', `${fx.w} ${fx.h}`);
   const flow = out.createElement('div'); flow.id = RID.flow;
+  const into = fx ? out.body : flow;
   const body = src.getElementsByTagNameNS('*', 'body')[0];
-  if (body) for (const c of [...body.childNodes]) flow.append(out.importNode(c, true));
-  const end = out.createElement('span'); end.id = RID.end; flow.append(end);
-  out.body.append(flow);
+  if (body) for (const c of [...body.childNodes]) into.append(out.importNode(c, true));
+  const end = out.createElement('span'); end.id = RID.end; into.append(end);
+  if (!fx) out.body.append(flow);
   sanitize(out);
   // Serialize and parse again, as the frame's srcdoc does, so the text splits the same way.
   return new DOMParser().parseFromString('<!doctype html>\n' + out.documentElement.outerHTML, 'text/html');
@@ -2647,6 +2658,8 @@ function showPage(n){
   updateProgress(); savePos();
 }
 function position(frag, f){
+  // (A fixed-layout page in a page layout is one page: nothing to turn to, but the place is saved as any.)
+  if (!scrolling() && fxlOf(frame.contentDocument)) { cur.page = 0; cur.pages = 1; cur.f = 0; updateProgress(); savePos(); return; }
   if (scrolling()) {
     const doc = frame.contentDocument, se = scroller(); if (!se) return;
     const el = frag && (doc.getElementById(frag) || doc.getElementsByName(frag)[0]);
@@ -2663,7 +2676,9 @@ function relayout(){
   if (!book || cur.f == null) return;
   // (A comic in a page layout: back to the first page that was on screen, not the same fraction, which lands on
   // another page or spread when the number of columns changes.)
-  if (cur.comicPage && !scrolling() && frame.contentDocument?.getElementById(`cbz-p${cur.comicPage}`)) position(`cbz-p${cur.comicPage}`);
+  // (Into the scroll layout too, after a layout change; a resize while scrolling keeps the place within the page.)
+  const switched = cur.layoutSwitch; cur.layoutSwitch = false;
+  if (cur.comicPage && (!scrolling() || switched) && frame.contentDocument?.getElementById(`cbz-p${cur.comicPage}`)) position(`cbz-p${cur.comicPage}`);
   else position('', cur.f);
   ttsRefollow();
 }
@@ -2821,10 +2836,11 @@ function goTo(path, frag = ''){
 function restyleFrame(){
   const doc = frame.contentDocument; if (!doc) return;
   const b = doc.getElementById(RID.base), o = doc.getElementById(RID.override);
-  if (b) b.textContent = baseCss();
+  const fixed = !!fxlOf(doc);
+  if (b) b.textContent = fixed ? '' : baseCss();
   if (o) { const fx = fxlOf(doc); o.textContent = overrideCss(fx && { w: fx[0], h: fx[1] }); }
   const l = doc.getElementById(RID.font), h = fontHref();
-  if (l && l.getAttribute('href') !== h) {
+  if (l && !fixed && l.getAttribute('href') !== h) {
     l.addEventListener('load', () => (doc.fonts?.ready || Promise.resolve()).then(relayout), { once: true });
     l.setAttribute('href', h);
   }
@@ -2899,7 +2915,7 @@ function renderMeta(){
   $('#metaDesc').open = false;
   const rows = [
     ['Publisher', i.publisher], ['Published', i.published], ['ISBN', i.isbn], ['Series', i.series],
-    ['Subjects', i.subjects], ['Narrator', i.narrator], ['Narration', i.duration], ['Language', book.language], ['Layout', i.layout], ['Direction', i.direction],
+    ['Subjects', i.subjects], ['Narrator', i.narrator], ['Narration', i.duration], ['Language', book.language], ['Layout', i.layout === 'Reflowable' && book.spine.some(s => s.fixed) ? 'Fixed layout (some pages)' : i.layout], ['Direction', i.direction],
     ...(book.format
       ? [['Format', book.format], ...(book.comic ? [['Pages', plural(book.pageCount, 'page')]] : []), ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
       : [['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
@@ -3098,7 +3114,7 @@ narrow.addEventListener('change', () => setToc(!narrow.matches));
 
 // Cycle the layout, keeping the reader's place (as a fraction of the section) across the change.
 function setLayout(next, save = true){
-  if (book && frame.contentDocument) cur.f = fraction();
+  if (book && frame.contentDocument) { cur.f = fraction(); cur.layoutSwitch = true; }
   layout = next;
   if (save) store.set('spine:layout', layout);
   const b = $('#layoutBtn');
@@ -3407,7 +3423,7 @@ function ttsBuild(){
 // The text of a page, block by block (paragraphs, headings, list items…), with where each text node sits,
 // leaving out elements matching skip. Line breaks and images count as one space.
 function textBlocks(doc, skip, nodes = null){
-  const flow = doc?.getElementById(RID.flow), blocks = [];
+  const flow = doc?.getElementById(RID.flow) || (doc?.documentElement?.hasAttribute('data-spine-fxl') ? doc.body : null), blocks = [];
   if (!flow) return blocks;
   let b = null;
   const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: n =>

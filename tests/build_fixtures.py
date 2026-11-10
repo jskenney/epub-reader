@@ -684,6 +684,18 @@ def main():
         z.writestr("OEBPS/p2.xhtml", fxl_page(2, "#33c"))
         z.writestr("OEBPS/p3.xhtml", xhtml("Page 3", '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300"><rect width="400" height="300" fill="#3c3"/><text x="20" y="150">Drawn page</text></svg>'))
         z.writestr("OEBPS/p4.xhtml", xhtml("Page 4", paragraphs("Reflowed", 6)))
+    # (Round 22 review) A fixed page whose own CSS sizes html, pads the body, colours html, places a caption with
+    # "body > p", and leaves its text uncoloured on a white body.
+    fx2 = xhtml("Styled", '<p class="cap">Styled caption</p><p class="plain">Plain words</p>',
+        '<meta name="viewport" content="width=600, height=800"/><style>html{width:600px;height:800px;background:#fdd}'
+        'body{padding:50px;background:#fff}body > p.cap{position:absolute;top:700px;left:20px;margin:0;color:#c00}</style>')
+    epub_items(books / "fixed-styled.epub", "Fixed Styled", [("s1", "s1.xhtml", "application/xhtml+xml", "")], ["s1"], {"s1.xhtml": fx2}, "urn:fixed-styled")
+    with zipfile.ZipFile(books / "fixed-styled.epub") as z0:
+        parts = {n: z0.read(n) for n in z0.namelist()}
+    parts["OEBPS/content.opf"] = parts["OEBPS/content.opf"].replace(b"</metadata>", b'<meta property="rendition:layout">pre-paginated</meta></metadata>')
+    with zipfile.ZipFile(books / "fixed-styled.epub", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
+        for n, d in parts.items(): z.writestr(n, d)
 
     # Right-to-left manga (E-9): five pages, ComicInfo's Manga "YesAndRightToLeft".
     with zipfile.ZipFile(books / "manga.cbz", "w") as z:
