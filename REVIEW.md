@@ -267,6 +267,13 @@ before it (the read-only ones checked by reading):
 - **Medium:** M-109 to M-113.
 - **Low:** L-266 to L-273.
 
+The sixth and last loop's review found no critical or high items. What it found was fixed in `ec32ab0`, each with
+a test that fails on the code before it, except L-276 and L-277 (checked by reading):
+- **Medium:** M-114.
+- **Low:** L-274 to L-279.
+That was the last of the six loops. The reviews since E-21 was built found nothing open that doesn't need you:
+E-25 and E-22 are next in TODO.md.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -451,6 +458,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | M-111 | WYSIWYG wrote an XHTML chapter named `.html` (no XML declaration) as HTML, so `<br/>` became `<br>` and the book couldn't be saved | `917bda1` |
 | M-110 | A chapter kept malformed (Done, "keep it like this") was saved in the book unchecked when another chapter was saved | `917bda1` |
 | M-109 | Files in another encoding were spoiled on save: an edited Latin-1 chapter written as UTF-8 under its old declaration, and the package (never edited) re-read as UTF-8, losing its accented letters | `917bda1` |
+| M-114 | A folder book on a site that answers missing files with a "not found" page saved those pages into the packed EPUB as `META-INF/rights.xml`, `encryption.xml` and the like (which some readers take for DRM) | `ec32ab0` |
 | M-105 | Changing the address of a link added while editing was ignored when written back (and the prompt didn't show its address) | `7634901` |
 | M-104 | A draft made after a save that downloaded a copy (a document from the site, or opened with the file input) was kept but never offered again: it was tied to the copy, which the site or the file didn't have | `7634901` |
 | M-103 | HTML with no `<html>`, `<head>` or `<body>` tags lost its doctype when written back (quirks mode) | `7634901` |
@@ -694,6 +702,12 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-268 | One unreadable entry stopped the whole save with a message that didn't say what to do | `917bda1` |
 | L-267 | Folder books lost META-INF files other than the container, encryption and Apple files when packed | `917bda1` |
 | L-266 | `dcterms:modified`: the first matching meta was changed, even one refining something else; an EPUB 3 package without one didn't get one | `917bda1` |
+| L-279 | The unreadable-entry message had no full stop | `ec32ab0` |
+| L-278 | Switching Split on a fixed-layout page saved Raw (forced there) as the editing mode chosen | `ec32ab0` |
+| L-277 | `?get=` of a folder book sent on to another site said only that it had no container.xml (*read*) | `ec32ab0` |
+| L-276 | The redirect check let any https port on the same host, and a move from https to http, count as the same site (*read*) | `ec32ab0` |
+| L-275 | A package named in container.xml in another case than in the archive didn't get its date updated | `ec32ab0` |
+| L-274 | A package written with an `opf:` prefix kept its old date and got a second, unprefixed `dcterms:modified` | `ec32ab0` |
 | L-258 | `editFocus` didn't keep the page's scroll; a draft kept for leaving came back after the page returned from the browser's cache, or after Done discarded it; a site document saved to a file kept the site's draft key (*read*) | `7634901` |
 | L-257 | An apostrophe in an unquoted attribute value made the body unfindable, and the whole document was written out again | `7634901` |
 | L-256 | The charset rewrite changed `<meta charset>` inside a script's string or a textarea | `7634901` |
