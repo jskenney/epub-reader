@@ -496,7 +496,7 @@ default books and the memory and request sizes stay the site's to set.
 | `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
-| `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. |
+| `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings: to keep other sites out for everyone, send the reader policy from `nginx.conf.example`, which blocks them whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
@@ -510,7 +510,7 @@ default books and the memory and request sizes stay the site's to set.
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
 | `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |
-| `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. |
+| `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. A comic's place is kept as a page number, so changing it doesn't move readers to another page. |
 
 External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
 3.10.1 and marked 15.0.12, with their SRI hashes), the `lib`/`ort` URLs and

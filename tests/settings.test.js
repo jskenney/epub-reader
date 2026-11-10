@@ -148,3 +148,99 @@ test('a time to keep positions chosen in Settings is used as it is, not the long
   assert.equal(await stored(page, 'spine:pos:url:/old.epub'), null);
   assert.equal(await stored(page, 'spine:keepDays'), '3650', 'the site-wide value is left as it was');
 });
+
+test('a reload-only setting can be turned back, and Restore defaults shows what the next load will use (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG, { 'spine:set:FULL_PRECISION': false, 'spine:set:ALLOW_REMOTE_CONTENT': true });
+  await openSettings(page);
+  assert.equal(await row(page, 'FULL_PRECISION').isChecked(), false);
+  assert.equal(await page.isHidden('#setReload'), true, 'in use since the page loaded');
+  await row(page, 'FULL_PRECISION').check();
+  assert.equal(await row(page, 'FULL_PRECISION').isChecked(), true);
+  assert.equal(await changedNote(page, 'FULL_PRECISION'), '');
+  assert.equal(await stored(page, 'spine:set:FULL_PRECISION'), null);
+  assert.equal(await page.isVisible('#setReload'), true);
+  assert.match(await page.textContent('#setStatus'), /Reload now/);
+  await page.click('#setReset');
+  assert.equal(await row(page, 'ALLOW_REMOTE_CONTENT').isChecked(), false);
+  assert.equal(await changedNote(page, 'ALLOW_REMOTE_CONTENT'), '');
+  assert.equal(await page.isVisible('#setReload'), true);
+});
+
+test('the page isn\'t shown again for a setting that didn\'t change, or while reading aloud (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG, { 'spine:ttsEngine': 'server' });
+  const mark = () => page.evaluate(() => { document.querySelector('#page').contentDocument.documentElement.dataset.mark = '1'; });
+  const same = () => page.evaluate(() => document.querySelector('#page').contentDocument.documentElement.dataset.mark === '1');
+  await mark();
+  await openSettings(page);
+  await page.click('#setReset');   // (nothing to change)
+  await page.waitForTimeout(500);
+  assert.equal(await same(), true, 'Restore defaults with nothing changed');
+  await page.click('#setClose');
+  await page.click('#ttsBtn'); await page.waitForTimeout(500);
+  await openSettings(page);
+  await row(page, 'ALLOW_EXTERNAL_LINKS').uncheck();
+  await page.waitForTimeout(500);
+  assert.equal(await same(), true, 'while reading aloud');
+  assert.equal(await stored(page, 'spine:set:ALLOW_EXTERNAL_LINKS'), 'false');
+});
+
+test('a comic opens at the same page after its section size changes (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/comic.cbz`);
+  const firstAlt = () => page.evaluate(() => document.querySelector('#page').contentDocument?.querySelector('.cbz-page img')?.alt);
+  await page.click('#tocList a >> nth=2');
+  await page.waitForFunction(() => document.querySelector('#page').contentDocument?.querySelector('.cbz-page img')?.alt === 'Page 81');
+  await page.waitForTimeout(800);
+  await openSettings(page);
+  await row(page, 'COMIC_PART').fill('10'); await row(page, 'COMIC_PART').press('Tab');
+  await page.click('#setClose');
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#tocList a').length), 9);
+  assert.equal(await firstAlt(), 'Page 81');
+});
+
+test('days to keep positions: kept even when the same as the folder\'s, and whole days only (round 20 review)', async () => {
+  const page = await h.newPage();
+  const old = { i: 0, f: 0, t: Date.now() - 1000 * 86400000 };
+  await h.openReader(page, LONG, { 'spine:keepDays': 0, 'spine:pos:url:/old.epub': old });
+  await openSettings(page);
+  for (const v of ['700', '730']) { await row(page, 'KEEP_POSITIONS_DAYS').fill(v); await row(page, 'KEEP_POSITIONS_DAYS').press('Tab'); }   // (730 is this folder's)
+  assert.equal(await stored(page, 'spine:set:KEEP_POSITIONS_DAYS'), '730');
+  await page.evaluate(() => localStorage.setItem('spine:posSweep', '0'));
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await stored(page, 'spine:pos:url:/old.epub'), null, 'the reader\'s 730 days, not another folder\'s "keep forever"');
+  await openSettings(page);
+  await row(page, 'KEEP_POSITIONS_DAYS').fill('0.001'); await row(page, 'KEEP_POSITIONS_DAYS').press('Tab');
+  assert.equal(await stored(page, 'spine:set:KEEP_POSITIONS_DAYS'), '0');
+  assert.equal(await row(page, 'KEEP_POSITIONS_DAYS').inputValue(), '0');
+});
+
+test('T and the theme button: a folder\'s default theme is the fallback, and the button names where it goes (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-sepia/index.html?book=/reader/books/long.epub`);
+  assert.equal(await theme(page), 'sepia');
+  assert.equal(await page.getAttribute('#themeBtn', 'aria-label'), 'Switch to dark mode');
+  await page.keyboard.press('t'); assert.equal(await theme(page), 'dark');
+  assert.equal(await page.getAttribute('#themeBtn', 'aria-label'), 'Switch to Sepia');
+  await page.keyboard.press('t'); assert.equal(await theme(page), 'sepia');
+});
+
+test('the dialog: focus on the chosen theme, short names with notes as descriptions; the stored theme is there before the page draws (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG, { 'spine:theme': 'black' });
+  await openSettings(page);
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.name, document.activeElement.value]), ['theme', 'black']);
+  assert.equal(await page.getByRole('checkbox', { name: 'Full-precision voice models', exact: true }).count(), 1);
+  assert.match(await page.evaluate(() => { const i = document.querySelector('[data-set="FULL_PRECISION"]'); return i.getAttribute('aria-describedby').split(' ').map(id => document.getElementById(id).textContent).join(' '); }), /Larger downloads/);
+  await page.keyboard.press('Escape');
+  // Shortcuts set back to the site's value aren't saved.
+  await openSettings(page);
+  await row(page, 'shortcuts').uncheck(); await row(page, 'shortcuts').check();
+  assert.equal(await stored(page, 'spine:shortcuts'), null);
+  await page.keyboard.press('Escape');
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__early = document.documentElement.getAttribute('data-theme'); }));
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await page.evaluate(() => window.__early), 'black');
+});

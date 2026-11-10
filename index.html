@@ -6,10 +6,12 @@
 <title>Spine Reader</title>
 <!-- The interface fonts: fonts/ui.css when self-hosted (fetch-fonts.sh), otherwise Google Fonts; set at start-up. -->
 <link id="uiFonts" rel="stylesheet" href="data:text/css,">
+<!-- The reader's theme before anything is drawn (a flash of the light theme is worst with Black at night). -->
+<script>try { const t = JSON.parse(localStorage.getItem('spine:theme')); if (['light', 'sepia', 'dark', 'black'].includes(t)) document.documentElement.setAttribute('data-theme', t); } catch {}</script>
 <style>
 /* Layout: one-screen reading app. Top bar, contents rail on the left, the page as the one framed object, a segmented spine ribbon along the bottom. */
 :root{
-  --paper:#EEF0EC; --surface:#F7F8F5; --ink:#1C2120; --muted:#5C6661; --rule:#D3D8D2;
+  --field:#848D88; --paper:#EEF0EC; --surface:#F7F8F5; --ink:#1C2120; --muted:#5C6661; --rule:#D3D8D2;
   --ribbon:#8B2A3B; --on-ribbon:#FFFFFF; --ribbon-soft:#F0DCDF; --warn-soft:#F7E6CF;
   --page-bg:#FDFDFB; --page-ink:#1C2120;
   --shadow:0 1px 2px rgb(20 30 25 / .05), 0 10px 30px -14px rgb(20 30 25 / .22);
@@ -19,7 +21,7 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme]){
-    --paper:#121514; --surface:#1A1E1C; --ink:#DCE2DE; --muted:#939D97; --rule:#2C3330;
+    --field:#69736E; --paper:#121514; --surface:#1A1E1C; --ink:#DCE2DE; --muted:#939D97; --rule:#2C3330;
     --ribbon:#E27D8E; --on-ribbon:#1E0E12; --ribbon-soft:#3A2228; --warn-soft:#3B2C17;
     --page-bg:#171A19; --page-ink:#D6DCD8;
     --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 30px -14px rgb(0 0 0 / .7);
@@ -27,7 +29,7 @@
   }
 }
 :root[data-theme="dark"]{
-  --paper:#121514; --surface:#1A1E1C; --ink:#DCE2DE; --muted:#939D97; --rule:#2C3330;
+  --field:#69736E; --paper:#121514; --surface:#1A1E1C; --ink:#DCE2DE; --muted:#939D97; --rule:#2C3330;
   --ribbon:#E27D8E; --on-ribbon:#1E0E12; --ribbon-soft:#3A2228; --warn-soft:#3B2C17;
   --page-bg:#171A19; --page-ink:#D6DCD8;
   --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 30px -14px rgb(0 0 0 / .7);
@@ -35,13 +37,13 @@
 }
 /* Sepia and true black (E-5): warm paper for long reading, and black for OLED screens. */
 :root[data-theme="sepia"]{
-  --paper:#EDE4D0; --surface:#F5EEDD; --ink:#2F261B; --muted:#6B5D49; --rule:#D9CDB4;
+  --field:#8F7F62; --paper:#EDE4D0; --surface:#F5EEDD; --ink:#2F261B; --muted:#6B5D49; --rule:#D9CDB4;
   --ribbon:#8E3B2C; --on-ribbon:#FFFFFF; --ribbon-soft:#EBD5C8; --warn-soft:#F1DDB8;
   --page-bg:#F8F1E1; --page-ink:#3A2E20;
   --shadow:0 1px 2px rgb(60 40 20 / .06), 0 10px 30px -14px rgb(60 40 20 / .25);
 }
 :root[data-theme="black"]{
-  --paper:#000000; --surface:#0C0D0D; --ink:#E2E4E3; --muted:#8F9592; --rule:#262A28;
+  --field:#6B7570; --paper:#000000; --surface:#0C0D0D; --ink:#E2E4E3; --muted:#8F9592; --rule:#262A28;
   --ribbon:#E27D8E; --on-ribbon:#1E0E12; --ribbon-soft:#331C21; --warn-soft:#2F2412;
   --page-bg:#000000; --page-ink:#D2D6D4;
   --shadow:none;
@@ -195,17 +197,20 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-row small.set-def{color:var(--ribbon)}
 .set-row small:empty{display:none}
 .set-row input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--ribbon);flex:none}
-.set-row input[type=number]{width:6.5em;height:30px;box-sizing:border-box;flex:none;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:0 6px}
+.set-row input[type=number]{width:6.5em;height:30px;box-sizing:border-box;flex:none;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--field);border-radius:6px;padding:0 6px}
 .set-row input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
 .set-themes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
-.set-theme{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border:1px solid var(--rule);border-radius:8px;cursor:pointer;font-size:12.5px}
+.set-theme{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border:1px solid var(--field);border-radius:8px;cursor:pointer;font-size:12.5px}
 .set-theme input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
 .set-theme:has(input:checked){border-color:var(--ribbon);box-shadow:0 0 0 1px var(--ribbon)}
 .set-theme:has(input:focus-visible){outline:2px solid var(--ribbon);outline-offset:2px}
 .sw{width:100%;max-width:58px;height:34px;box-sizing:border-box;border-radius:5px;border:1px solid var(--rule);display:grid;place-items:center;font:600 14px var(--font-read)}
 .sw-light{background:#FDFDFB;color:#1C2120}.sw-sepia{background:#F8F1E1;color:#3A2E20}.sw-dark{background:#171A19;color:#D6DCD8}.sw-black{background:#000;color:#D2D6D4}
-.sw-system{background:linear-gradient(135deg,#FDFDFB 50%,#171A19 50%);color:#8B2A3B}
+.sw-system{background:linear-gradient(135deg,#FDFDFB 50%,#171A19 50%)}
 @media (max-width:520px){.set-themes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:400px){#setDialog .ab-actions .btn{flex:1 1 auto}}
+/* (Black can't be darkened by a backdrop and has no shadow: the dialogs get a clearer edge.) */
+:root[data-theme="black"] dialog{border-color:var(--field)}
 .ab-col{display:flex;flex-direction:column;gap:10px;min-height:0}
 .ab-list{list-style:none;margin:0;padding:6px;border:1px solid var(--rule);border-radius:6px;overflow:auto;max-height:42vh;background:var(--paper)}
 .ab-list label{display:flex;gap:8px;align-items:baseline;padding:4px 6px;border-radius:4px;cursor:pointer;user-select:none}
@@ -502,6 +507,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <label class="set-row"><span>Full-precision voice models<small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input type="checkbox" data-set="FULL_PRECISION"></label>
       </fieldset>
       <p class="ab-muted">Saved in this browser. Settings for the whole site go in reader-config.json (see the README).</p>
+      <p class="sr-only" id="setStatus" aria-live="polite"></p>
     </div>
     <div class="ab-actions">
       <button type="button" class="btn" id="setReload" hidden>Reload now</button>
@@ -567,6 +573,7 @@ const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css
   gif:'image/gif',svg:'image/svg+xml',webp:'image/webp',ttf:'font/ttf',otf:'font/otf',woff:'font/woff',woff2:'font/woff2',
   mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'video/mp4',ogg:'audio/ogg',webm:'video/webm'};
 
+let readerConfig = null;   // the folder's reader-config.json as loaded, for reference
 const store = {
   get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -583,7 +590,7 @@ let fontPct = Number(store.get('spine:font')) || 100;
 // Single-letter shortcuts (C, F, T, L, I, R, /, [ and ]) can clash with screen readers' browse-mode keys, so
 // they can be turned off (the Aa menu, or "shortcuts": false in reader-config.json as the starting choice).
 // Arrow keys, Page Up/Down, Space, Escape and Ctrl+F keep working.
-let singleKeys = store.get('spine:shortcuts') ?? true;
+let singleKeys = typeof store.get('spine:shortcuts') === 'boolean' ? store.get('spine:shortcuts') : true;
 let lineH = Number(store.get('spine:line')) || 1.65;
 const LAYOUTS = { two: 'Two columns', one: 'One column', scroll: 'Scrolling' };
 // Text width: the widest the text may get; anything beyond becomes side margin. [name, one column/scroll, two columns]
@@ -1695,6 +1702,12 @@ async function startBook(next){
   // another copy's, as the old file may still be read.)
   const loose = !saved && book.looseKey ? store.get(book.looseKey) : null;
   if (loose && loose.i < spine.length) { saved = { i: loose.i, f: loose.f }; store.set(book.key, saved); }
+  const lens = comicLens();
+  if (lens && Number.isFinite(saved?.p) && saved.p >= 0) {   // (a comic: its page, wherever the sections now fall)
+    let i = 0, start = 0;
+    while (i < lens.length - 1 && saved.p >= start + lens[i]) start += lens[i++];
+    saved = { i, f: lens[i] ? Math.min(1, (saved.p - start) / lens[i]) : 0 };
+  }
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
 }
@@ -2593,9 +2606,14 @@ function sweepPositions(){
     else if (now - v.t > days * 86400000) store.del(k);
   }
 }
+// A comic's sections follow COMIC_PART, which can change (Settings), so its place is also kept as a page
+// number through the whole comic (p), which is what is used to come back to it.
+const comicLens = () => book?.comicParts ? book.spine.map(s => book.comicParts.get(s.path)?.length || 0) : null;
 function savePos(){
   if (!book) return;
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
+  const lens = comicLens();
+  if (lens) pos.p = Math.round((lens.slice(0, cur.i).reduce((a, n) => a + n, 0) + pos.f * lens[cur.i]) * 1000) / 1000;
   store.set(book.key, pos);
   if (book.writeLoose) store.set(book.looseKey, pos);
 }
@@ -3105,8 +3123,8 @@ buildFontMenu();
 /* Light/dark toggle: sets data-theme on the root, which the CSS tokens already honour.
    Until the reader picks one, the page follows the system setting. */
 function syncThemeBtn(){
-  const dark = isDark(), b = $('#themeBtn');
-  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  const dark = isDark(), b = $('#themeBtn'), next = themeTarget();
+  const label = `Switch to ${next === 'light' ? 'light mode' : next === 'dark' ? 'dark mode' : next[0].toUpperCase() + next.slice(1)}`;
   b.classList.toggle('dark', dark);
   b.title = label + ' (T)'; b.setAttribute('aria-label', label);
 }
@@ -3118,10 +3136,14 @@ function setTheme(mode){
   if (THEMES.includes(mode)) store.set(DARK_THEMES.includes(mode) ? 'spine:themeDark' : 'spine:themeLight', mode);
   syncThemeBtn();
 }
-function toggleTheme(){
-  const pick = (key, fallback, dark) => { const t = store.get(key); return THEMES.includes(t) && DARK_THEMES.includes(t) === dark ? t : fallback; };
-  setTheme(isDark() ? pick('spine:themeLight', 'light', false) : pick('spine:themeDark', 'dark', true));
+// The theme the button and T switch to: the last one of the other kind chosen, else the folder's default theme
+// if it is of that kind, else plain light or dark.
+function themeTarget(){
+  const dark = !isDark(), fit = t => THEMES.includes(t) && DARK_THEMES.includes(t) === dark;
+  const t = store.get(dark ? 'spine:themeDark' : 'spine:themeLight'), site = readerConfig?.theme;
+  return fit(t) ? t : fit(site) ? site : dark ? 'dark' : 'light';
 }
+const toggleTheme = () => setTheme(themeTarget());
 $('#themeBtn').addEventListener('click', toggleTheme);
 new MutationObserver(restyleFrame).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
@@ -6209,9 +6231,9 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
-  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = Math.min(36500, Math.max(0, v)); }],
-  LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, v)); }],
-  SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, v)); }],
+  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = Math.min(36500, Math.max(0, Math.round(v))); }],
+  LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
+  SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, Math.round(v))); }],
   NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.min(86400, Math.max(30, v)); }],
   SPAN_MAX: ['object', v => { SPAN_MAX = { ...SPAN_MAX, ...Object.fromEntries(Object.entries(v).filter(([k, n]) => k in SPAN_MAX && Number.isFinite(n) && n > 20 && n <= 5000)) }; }],
   SEARCH_MAX: ['number', v => { SEARCH_MAX = Math.min(100000, Math.max(1, Math.round(v))); }],
@@ -6227,7 +6249,6 @@ const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
   readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'server'].includes(v), v => { tts.engine = v; }],
   shortcuts: ['spine:shortcuts', v => typeof v === 'boolean', v => { singleKeys = v; }],
 };
-let readerConfig = null;   // the folder's config as loaded, for reference
 async function loadConfig(){
   let cfg = null;
   try {
@@ -6264,7 +6285,9 @@ async function loadConfig(){
    whole site (paths, the CDN policy, the voice server, default books) stays in reader-config.json. */
 const SET_VARS = {   // name: [the value now, what to do once it changes ('reload': only when the page is reloaded)]
   TIME_LEFT: [() => TIME_LEFT, () => updateTimeLeft()],
-  ALLOW_EXTERNAL_LINKS: [() => ALLOW_EXTERNAL_LINKS, () => { if (book && frame.contentDocument && cur.shown) renderChapter(cur.i, { fraction: fraction() }); }],
+  // (Shown again at once, except while reading aloud, which a new page would send back to its top: then from
+  // the next chapter shown.)
+  ALLOW_EXTERNAL_LINKS: [() => ALLOW_EXTERNAL_LINKS, () => { if (book && frame.contentDocument && cur.shown && !tts.open) renderChapter(cur.i, { fraction: fraction() }); }],
   // (Pages and the book's styles are prepared with it as the book opens, and kept: a change mid-book would apply
   // to some parts and not others.)
   ALLOW_REMOTE_CONTENT: [() => ALLOW_REMOTE_CONTENT, 'reload'],
@@ -6277,7 +6300,10 @@ const SET_VARS = {   // name: [the value now, what to do once it changes ('reloa
   // (The voice models in use, and the names their saved speech is kept under, follow it.)
   FULL_PRECISION: [() => FULL_PRECISION, 'reload'],
 };
-const siteValue = {};
+// Kept even when it's the same as this folder's: the time to keep positions covers the whole site, and the
+// site-wide time can differ from this folder's (sweepPositions).
+const SET_ALWAYS_KEEP = new Set(['KEEP_POSITIONS_DAYS']);
+const siteValue = {}, loadedValue = {};   // the site's values, and those in use since the page loaded
 const setKey = name => `spine:set:${name}`;
 // Through reader-config.json's checks and limits; false if the value isn't the right kind.
 function setVar(name, v){
@@ -6285,11 +6311,16 @@ function setVar(name, v){
   if (typeof v !== type || (type === 'number' && !Number.isFinite(v))) return false;
   apply(v); return true;
 }
+// The reader's value saved as it is now in use (after the limits), or dropped when it's the site's.
+function setSave(name, v){
+  if (v === siteValue[name] && !SET_ALWAYS_KEEP.has(name)) store.del(setKey(name)); else store.set(setKey(name), v);
+}
 function loadUserSettings(){
   for (const [name, [get]] of Object.entries(SET_VARS)) {
     siteValue[name] = get();
     const v = store.get(setKey(name));
-    if (v != null && !setVar(name, v)) store.del(setKey(name));
+    if (v != null) { if (setVar(name, v)) setSave(name, get()); else store.del(setKey(name)); }
+    loadedValue[name] = get();
   }
   siteValue.shortcuts = typeof readerConfig?.shortcuts === 'boolean' ? readerConfig.shortcuts : true;
   siteValue.theme = THEMES.includes(readerConfig?.theme) ? readerConfig.theme : 'system';
@@ -6297,8 +6328,8 @@ function loadUserSettings(){
 // The value shown: for those that wait for a reload, what will apply then.
 function setShown(name){
   if (name === 'shortcuts') return singleKeys;
-  const [get, after] = SET_VARS[name], saved = store.get(setKey(name));
-  return after === 'reload' && saved != null ? saved : get();
+  const [get, after] = SET_VARS[name];
+  return after === 'reload' ? store.get(setKey(name)) ?? siteValue[name] : get();
 }
 const setText = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v);
 function setSync(){
@@ -6311,28 +6342,33 @@ function setSync(){
     if (el.type === 'checkbox') el.checked = now;
     else if (document.activeElement !== el || Number(el.value) !== now) el.value = now;
     el.closest('.set-row').querySelector('.set-def').textContent = now === site ? '' : `Changed: this site's default is ${setText(site)}.`;
-    if (SET_VARS[name]?.[1] === 'reload' && now !== SET_VARS[name][0]()) reload = true;
+    if (SET_VARS[name]?.[1] === 'reload' && now !== loadedValue[name]) reload = true;
   }
+  if (reload !== !$('#setReload').hidden) $('#setStatus').textContent = reload ? 'Takes effect when the page is reloaded: Reload now is available.' : '';
   $('#setReload').hidden = !reload;
 }
 function setChange(name, v){
-  if (name === 'shortcuts') { setSingleKeys(v); return; }
-  const [get, after] = SET_VARS[name];
+  if (name === 'shortcuts') {
+    setSingleKeys(v);
+    if (v === siteValue.shortcuts) store.del('spine:shortcuts');   // (so a later change to the site's default reaches them)
+    return;
+  }
+  const [get, after] = SET_VARS[name], before = setShown(name);
   if (after === 'reload') {   // (saved now, used from the next page load)
-    const [type] = CONFIG_SETTINGS[name];
-    if (typeof v !== type) return;
-    if (v === siteValue[name]) store.del(setKey(name)); else store.set(setKey(name), v);
+    if (typeof v === CONFIG_SETTINGS[name][0]) setSave(name, v);
     return;
   }
   if (!setVar(name, v)) return;
-  const now = get();   // (after reader-config.json's limits)
-  if (now === siteValue[name]) store.del(setKey(name)); else store.set(setKey(name), now);
-  after?.();
+  setSave(name, get());
+  if (get() !== before) after?.();   // (only for a real change: a new page or search loses the reader's place)
 }
 function setReset(){
-  for (const [name, [, after]] of Object.entries(SET_VARS)) {
+  for (const [name, [get, after]] of Object.entries(SET_VARS)) {
     store.del(setKey(name));
-    if (after !== 'reload') { setVar(name, siteValue[name]); after?.(); }
+    if (after === 'reload') continue;
+    const before = get();
+    setVar(name, siteValue[name]);
+    if (get() !== before) after?.();
   }
   store.del('spine:shortcuts'); singleKeys = siteValue.shortcuts; syncFontMenu();
   store.del('spine:theme'); store.del('spine:themeLight'); store.del('spine:themeDark');
@@ -6341,9 +6377,15 @@ function setReset(){
   syncThemeBtn();
   setSync();
 }
+// Each option's name is its title; the notes under it are its description (not part of the name).
+$('#setForm').querySelectorAll('.set-row').forEach((row, k) => {
+  const ids = [...row.querySelectorAll('small')].map((sm, j) => { sm.id = `setNote${k}-${j}`; sm.setAttribute('aria-hidden', 'true'); return sm.id; });
+  row.querySelector('input').setAttribute('aria-describedby', ids.join(' '));
+});
 function setOpen(){
   setSync();
   const d = $('#setDialog'); if (!d.open) d.showModal();
+  $('#setForm').querySelector('input[name="theme"]:checked')?.focus();   // (not the scrolling list around it)
 }
 $('#setBtn').addEventListener('click', setOpen);
 $('#setClose').addEventListener('click', () => $('#setDialog').close());

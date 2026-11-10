@@ -164,7 +164,8 @@ def main():
                         ("folder-partial", {"LIB_FILES": "/reader/", "VOICE_FILES": "/partial/"}),
                         ("folder-badlib", {"ALLOW_CDN": False, "LIB_FILES": "/badlibs/"}),
                         ("folder-keys", {"LIB_FILES": "/reader/", "VOICE_FILES": "/reader/", "shortcuts": False}),
-                        ("folder-listen", {"LIB_FILES": "/reader/", "VOICE_FILES": "/reader/", "SLEEP_TIMER": True, "TIME_LEFT": True})):
+                        ("folder-listen", {"LIB_FILES": "/reader/", "VOICE_FILES": "/reader/", "SLEEP_TIMER": True, "TIME_LEFT": True}),
+                        ("folder-sepia", {"LIB_FILES": "/reader/", "theme": "sepia"})):
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
