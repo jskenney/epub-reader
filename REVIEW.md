@@ -176,6 +176,11 @@ two high bugs in fixed-layout books, and that several new tests passed with thei
 - **Low:** L-209 to L-215. **Tests:** T-34. **Documentation:** D-15.
 Owner questions, and fixed-layout features left for later, are filed as E-20.
 
+A second review, of those fixes, found no regressions in reading aloud, search, the font keys or comics. It found
+one older medium gap and two low ones, fixed in `59c5761` with a test that fails on the code before it:
+- **Medium:** M-81 (vertically written fixed pages).
+- **Low:** L-216, L-217. **Tests:** T-35. **Documentation:** D-16.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -376,6 +381,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-81 | A vertically written fixed page (html writing-mode: vertical-rl, common in Japanese fixed-layout books) sat flush right, and in the scroll layout its top couldn't be reached | `59c5761` |
 | M-76 | A fixed page's own html sizing or body padding put it off-centre, clipped it, or made part of it unreachable | `6f6bc97` |
 | M-77 | A fixed page's html background was replaced by the theme's | `6f6bc97` |
 | M-78 | The reader's wrappers in a fixed page's body broke the book's "body > ..." selectors (positions, colours) | `6f6bc97` |
@@ -576,6 +582,8 @@ From all reviews so far, with the commits that fixed them.
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
 | L-205 | With shortcuts locked, the arrow keys stopped at the end of the Aa menu (a disabled item can't take focus); it is now aria-disabled | `96e5832` |
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
+| L-216 | A fixed page that clears html's background spread its body's colour over the whole frame (a regression from M-77's fix) | `59c5761` |
+| L-217 | fixedSize looked the item up by path, so a fallback page shared by two items could take the other's layout (*read*) | `59c5761` |
 | L-209 | A manga's odd last page and its cover's pairing: left for your decision in E-20 (*read*) | — |
 | L-210 | The text size, spacing and font buttons do nothing on fixed pages; documented (*read*) | `6f6bc97` |
 | L-211 | A spine item shown through a manifest fallback wasn't treated as fixed (*read*) | `6f6bc97` |
@@ -629,6 +637,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-35 | Vertical writing and a cleared html background in fixed pages; the Cancel test's timing margin | `59c5761` |
 | T-34 | New tests that passed with their bug restored: stalled streams (no time limit), the 409 export (never left the voice's own retries), the Cancel timer, reading past the non-page note and an untyped item, the voices folder, the server's types; and fixed waits | `5dafde4` |
 | T-33 | T-20, most of it: stalled server streams before any audio and partway (L-75, L-100), with a test setting for the time allowed; fallback-page pictures (L-90); the range probe on this site and another (L-91, L-103); narration before a picture page (L-93); the sleep timer in a newly opened book (L-96); the non-page note (L-153, L-172) and ZIP64 records (L-153); obfuscated fonts by folded name (L-137); the Cancel question (L-158) and a busy (409) server during an export; the export's saved-audio room; refusals checked after a wait (T-18) | `fea7773` to `9be8cdd` |
 | T-16 | Coverage gaps: config files' TTS_SERVER, SPAN_MAX, SAVED_AUDIO_MB, SEARCH_MAX, COMIC_PART, BOOKSHELF and KEEP_POSITIONS_DAYS 0; If-Range on range requests; the checksum lists against each script's `--list`; the test server now takes nginx.conf.example's types | `9172885` |
@@ -647,6 +656,7 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-16 | A code comment had moved to the wrong line | `59c5761` |
 | D-15 | README: what fixed-layout pages don't do; SPAN_MAX's wording for sentences over 220 characters | `6f6bc97`, `5dafde4` |
 | D-14 | README: "any of them" can be locked (only the ⚙ ones can); a locked shortcuts and days-to-keep | `96e5832` |
 | D-13 | README: themes didn't mention a folder's default; values now whole numbers; what a reader's precision choice needs on a self-hosted site | `fd47b98` |
