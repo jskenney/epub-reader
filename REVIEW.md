@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-10, round 23): `index.html` (about 6,900 lines), the fetch scripts,
+Review of the repository (2026-11-10, round 24): `index.html` (about 8,000 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -222,6 +222,23 @@ book with some fixed pages. You chose that every right-to-left book turns right 
 every book left to right; that is in `24298ff`. One part of T-41 can't be told apart from the outside, and the
 row says so.
 
+Round 24 built E-21, editing Markdown, HTML and text documents, as planned in TODO.md:
+- phase 1 (`0ee38a7`): the raw editor (CodeMirror 5, self-hosted with pinned hashes), the page beside it,
+  new documents, saving in place or as a copy, and drafts;
+- phases 2 and 3 (`efae5f8`): WYSIWYG editing of HTML and Markdown, with what the page's cleaning removes kept
+  aside and written back, and a Markdown writer of its own.
+
+Two reviewers then looked at it: one at the write-back and its security, one at the editor's flows. They found
+no critical items. What they found was fixed in `9a6889f`, each fix with a test that fails on the code before
+it:
+- **High:** H-21 to H-25.
+- **Medium:** M-88 to M-101.
+- **Low:** L-235 to L-245.
+
+Two things they noted are left as designed: the code button makes plain-text code of a selection (Markdown's
+inline code holds no formatting), and pasted pictures from other sites are kept in the text (the frame's policy
+keeps them from loading while remote content is off).
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -254,14 +271,14 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Only enhancements are open: E-1 to E-4, E-6 to E-8, and E-21 to E-25 (planned in TODO.md). L-110 is left as it is, by your decision (see Resolved).
+Only enhancements are open: E-1 to E-4, E-6 to E-8, and E-22 to E-25 (planned in TODO.md). L-110 is left as it is, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
-| [E-21](#e-21-edit-markdown-and-html-documents) to [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Editing, server saving and EPUB editing (plan in TODO.md) | — |
+| [E-22](#e-22-a-server-api) to [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB editing, opening files to edit (plan in TODO.md) | — |
 
 ## Tests
 
@@ -288,10 +305,6 @@ Save positions (and later bookmarks) on your server, so each device picks up whe
 ### E-8. Install as an offline app
 A web app manifest and service worker, so the reader can be installed and open saved books offline.
 
-### E-21. Edit Markdown and HTML documents
-Edit a document in a WYSIWYG view, a raw view (CodeMirror) or a split view, create new Markdown and HTML documents,
-and save them to your computer (in place where the browser allows it). The plan is in TODO.md.
-
 ### E-22. A server API
 Optional, multi-user server calls: saving files and EPUBs, reading progress and completion (for E-7), notes and
 bookmarks (for E-3), settings, and sign-in. The plan is in TODO.md.
@@ -309,7 +322,7 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. E-21, E-24, E-23, E-25, E-22, as laid out in TODO.md.
+1. E-24, E-23, E-25, E-22, as laid out in TODO.md.
 2. The other enhancements, as wanted.
 
 ## Resolved
@@ -334,6 +347,11 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
 | H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
+| H-25 | WYSIWYG Markdown: an empty paragraph (Enter at a paragraph's end) or a line break at a paragraph's end became a literal backslash | `9a6889f` |
+| H-24 | WYSIWYG Markdown: a document starting with a rule had it written as `---`, then read as front matter, which hid the text after it and was written again (duplicated) on every flush | `9a6889f` |
+| H-23 | WYSIWYG HTML: the body was found by a pattern that matched `<body` in a comment or the title, or stopped at a `>` inside an attribute: the file came back with its head turned into a comment or its body inside an attribute | `9a6889f` |
+| H-22 | WYSIWYG HTML: a kept element (style, script) inside an SVG or a table was put aside as an HTML `<span>`, which the next parse moved out: the SVG lost its contents after the chip, the table its script | `9a6889f` |
+| H-21 | A save still being written when another document was opened (or Done pressed) finished into the new document: it took the old one's text and name, and its next save wrote into the old file | `9a6889f` |
 | H-20 | A fixed page coloured black on its html, in the black theme, was taken for one with no colour (the theme's colour was on html too) and shown white on white, even after a theme change | `165e1ba` |
 | H-18 | Fixed-layout pages in the page layouts never saved the reading position or updated progress | `6f6bc97` |
 | H-19 | The reader's base styles (Literata, sizes, theme ink) applied to fixed-layout pages: overflowing text, and light text on white pages in dark themes | `6f6bc97` |
@@ -402,6 +420,20 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-101 | Editing could start during an audiobook export, replacing the sections the export was reading (*read*) | `9a6889f` |
+| M-100 | Saving HTML as UTF-8 changed `charset=` inside a description meta's text, a `data-charset` attribute or a commented-out meta, and could leave the real declaration as it was | `9a6889f` |
+| M-99 | WYSIWYG Markdown escaping: `!` before a link made an image, a heading's trailing `#` vanished, `---` and setext lines became rules and headings, `*` inside inline HTML became emphasis, adjacent or intraword emphasis broke, two lists merged, a list starting at 0 started at 1, a line break in a cell left a backslash, no-break spaces were lost | `9a6889f` |
+| M-98 | WYSIWYG on XHTML wrote HTML: `<br/>` became `<br>` and `<div/>` swallowed what followed; the XML declaration's encoding wasn't updated | `9a6889f` |
+| M-97 | WYSIWYG HTML without `</body>`, or a fragment with no document around it, lost what was outside the body (the doctype, a comment before `<html>`, a fragment's leading comment and style) | `9a6889f` |
+| M-96 | WYSIWYG HTML with markup after `</body>` (which a parser moves into the body) wrote it twice | `9a6889f` |
+| M-95 | WYSIWYG HTML: a kept element inside a table's rows moved in front of the table | `9a6889f` |
+| M-94 | WYSIWYG: comments directly in the body or its wrapper were lost (HTML and Markdown), and a comment between two lists no longer kept them apart | `9a6889f` |
+| M-93 | WYSIWYG Markdown: a wrapper the whole document sat in (a centred `<div>`, a common README pattern) was dropped | `9a6889f` |
+| M-92 | On a narrow screen WYSIWYG opened on the read-only text tab, with the toolbar acting on the hidden page; the toolbar was clipped and "(unsaved)" cut off | `9a6889f` |
+| M-91 | R opened reading aloud in Raw with no page shown (a check on a field that didn't exist) | `9a6889f` |
+| M-90 | Reading aloud while typing in Raw beside the page repeated sentences: each new page started reading again from the top of what was shown | `9a6889f` |
+| M-89 | WYSIWYG gave the focus to the read-only text (or nothing): typing right after Edit fired the reader's shortcuts (T switched the theme) or was lost | `9a6889f` |
+| M-88 | Drafts were keyed by the position key: lost after a save (the size changed), shared by two files of one name and size, kept under the old name after Save as, and never offered for a new document once saved | `9a6889f` |
 | M-87 | The facing page of a spread took clicks, keys and the wheel but not swipes; moving the mouse over it didn't wake the full-screen controls; it didn't close the menus or take a dropped book; C left the focus on it | `526c63e` |
 | M-86 | Arrows in a right-to-left book's reflowable chapters went one way or the other depending on whether any page was fixed. Every right-to-left book now turns right to left, by your decision, and Settings' "Turn every book left to right" (`FORCE_LTR`) overrides it for books marked so by mistake | `24298ff` |
 | M-85 | A fixed page's colours were judged once, possibly before a stylesheet from another site had arrived (with remote content allowed): white text on a white page; they are now judged on every fit and again when such a sheet loads | `dea8a59` |
@@ -612,6 +644,17 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-228 | A fixed page with a slow picture from another site stayed blank until its load event (up to 6 s); it is now shown once parsed | `dea8a59` |
 | L-229 | A fixed page coloured only under a media query kept its first judgement when the query stopped applying: black text on black | `dea8a59` |
 | L-110 | No edit list for the AAC encoder's delay: each .m4b file starts with 20 to 45 ms of silence and its chapter marks fall that much early. WebCodecs doesn't report the delay, so an `elst` would have to guess it (too much clips speech) or measure it with a test encode; inaudible in speech | Left as is, by your decision |
+| L-245 | Text dragged within the page being edited was copied rather than moved (*read*) | `9a6889f` |
+| L-244 | Changing a block's style (paragraph to heading) dropped its id and class; splitting a block at its start left the id on the empty half | `9a6889f` |
+| L-243 | A `<pre>` starting with blank lines lost them when written back | `9a6889f` |
+| L-242 | A document's own `data-ed-keep` attribute was taken for one of the editor's chips: the element was lost and a kept script written twice | `9a6889f` |
+| L-241 | The link and picture prompts accepted `java\tscript:` and similar (they never ran, but were written into the file) | `9a6889f` |
+| L-240 | The editor bar, a toolbar, had no arrow-key movement; the arrows turned the page instead | `9a6889f` |
+| L-239 | Open fell back to the file input after the picker failed, without the click a browser asks for; the notice's Open a book used the file input, so a document opened there couldn't be saved in place (*read*) | `9a6889f` |
+| L-238 | Ctrl+F in the page being edited went to the browser's find, not the reader's search (*read*) | `9a6889f` |
+| L-237 | Leaving the page within a moment of typing in WYSIWYG gave no prompt and kept no draft (*read*) | `9a6889f` |
+| L-236 | Done while CodeMirror loaded left an unused editor behind; after Save as the information kept the old file name; Done left the focus nowhere | `9a6889f` |
+| L-235 | Text typed while a save was being written lost its draft | `9a6889f` |
 | L-234 | EPUB 2's fixed-layout meta or Apple's display options turned an EPUB 3 book marked reflowable into a fixed one; every reflowable folder book asked for Apple's file (a 404) | `526c63e` |
 | L-233 | In full screen the facing page kept its shadow while the page lost it | `526c63e` |
 | L-232 | A spread whose facing page couldn't be shown reloaded the page on every resize, theme change or opening of the read-aloud bar | `526c63e` |
@@ -727,6 +770,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
+| E-21 | Editing Markdown, HTML and text documents: WYSIWYG and raw (CodeMirror) with the page beside, new documents, saving in place or as a copy, drafts (plan and as-built notes in TODO.md) | `0ee38a7`, `efae5f8`, `9a6889f` |
 | E-20 | Fixed-layout follow-ups: a frame of its own for each page in the page layouts (vw/vh, fixed positions and media queries the page's own), two-page spreads by the pages' sides or with the cover alone, right-to-left fixed-layout books, EPUB 2 fixed layout; manga spreads kept as they are, by your decision | `6c5cc87` |
 | E-9 | Right-to-left manga: spreads read right to left in two columns, the left arrow and a swipe to the right go on | `cc60fa5` |
 | E-15 | Fixed-layout books: pre-paginated pages shown a page at a time at their own size, scaled to fit, with their own styles | `20d2582` |
