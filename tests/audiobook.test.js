@@ -574,3 +574,45 @@ test('.opus and .mp3 through the browser\'s file picker: the type offered, the t
     assert.equal(decodes(file), '');
   }
 });
+
+test('a busy voice server (409) is waited for during an export, and nothing is left silent (T-20, M-58)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/short-lines.epub`);
+  // Busy for 4 s from line 20 on, as when someone else is using the server.
+  let until = 0, busy = 0;
+  await page.route('**/tts/v1/audio/speech', route => {
+    if (!until && /Line 20 /.test(spoken(route))) until = Date.now() + 4000;
+    return Date.now() < until ? (busy++, fail500(route, 'An inference request is already running.', 409)) : route.continue();
+  });
+  await exportAll(page, 'one', 1);
+  assert.ok(busy > 0, 'the server was busy during the export');
+  assert.match(await page.textContent('#abNow'), /^The audiobook is ready\.$/, 'nothing left silent');
+});
+
+test('Cancel after a few minutes of audio asks again, keeps its question up, and starts afresh next time (T-20, L-158)', { skip: noFfmpeg, timeout: 150000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/long.epub`);
+  await h.clearBreezeLog();
+  await page.click('#abStart');
+  // (Over two minutes of speech made: the mock voice speaks 0.3 s a word.)
+  const secs = async () => (await h.breezeLog()).filter(e => !e.aborted).reduce((t, e) => t + 0.3 * e.text.split(/\s+/).length + 0.3, 0);
+  assert.ok(await h.waitFor(async () => (await secs()) > 170, 90000, 250), `only ${await secs()} s made`);
+  await page.click('#abCancel');
+  assert.equal(await page.textContent('#abCancel'), 'Click again to stop');
+  await page.waitForTimeout(2500);   // (progress keeps being shown meanwhile)
+  assert.match(await page.textContent('#abLeft'), /What is finished so far is kept/);
+  await page.waitForTimeout(3500);   // (the question goes after five seconds)
+  assert.equal(await page.textContent('#abCancel'), 'Cancel export');
+  await page.click('#abCancel'); await page.click('#abCancel');
+  await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
+  // A new export starts without the question (the speech saved last time counts as made, so it asks at once).
+  await page.click('#abStart');
+  await page.waitForTimeout(500);
+  assert.equal(await page.textContent('#abCancel'), 'Cancel export');
+  await page.click('#abCancel'); await page.click('#abCancel');
+  await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
+});
