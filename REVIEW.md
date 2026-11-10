@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-09, round 19): `index.html` (about 6,100 lines), the fetch scripts,
+Review of the repository (2026-11-10, round 20): `index.html` (about 6,300 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -117,6 +117,21 @@ where marked *read*:
   the chosen one was being checked), M-63 (more than 255 MP3 chapters).
 - **Low:** L-174 to L-183. **Tests:** T-27.
 
+Round 20 built E-5 and E-11 together (`21c0be9`): a Settings dialog, opened from a gear button between the
+text width and Open, in the style of the audiobook export dialog. It has the themes (System, Light, and the new
+Sepia, Dark and the new Black) and the reader options that were only in `index.html` or `reader-config.json`.
+Each option starts at the site's value (index.html, then reader-config.json). A reader's own value is saved in
+their browser, and dropped again when it equals the site's. The site-wide ones stay in reader-config.json: the
+paths, the CDN policy, the voice server, default books, and the memory and request sizes. Two independent
+reviewers then went over it. One looked at the settings logic, the other at the themes, contrast, accessibility
+and layout; every contrast pair of the new themes passes 4.5:1. What they found was fixed in `3c07e06`, with
+tests that fail on the code before it:
+- **High:** H-16 (a reload-only setting couldn't be turned back).
+- **Medium:** M-64 to M-69.
+- **Low:** L-185 to L-196. **Tests:** T-28. **Documentation:** D-10.
+One finding was kept as designed: choosing a theme in the dialog, by keyboard too, also makes it the light or
+dark theme T switches to.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -152,7 +167,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Tests:** T-16 and T-20 (in part).
-- **Enhancements:** E-1 to E-9, E-11 and E-15.
+- **Enhancements:** E-1 to E-4, E-6 to E-9 and E-15.
 
 ## Open items
 
@@ -161,7 +176,7 @@ No critical, high or medium items are open. The open items are:
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-9](#e-9-right-to-left-manga), [E-11](#e-11-a-settings-panel), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-9](#e-9-right-to-left-manga), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
 ## Low
 
@@ -208,9 +223,6 @@ Select text, highlight it in a colour, add a note, and list them in a sidebar ta
 ### E-4. Dictionary lookup
 Double-click a word for its definition, from a free dictionary API or a downloadable offline list.
 
-### E-5. More themes
-Sepia and a true-black theme for OLED screens, alongside light and dark.
-
 ### E-6. A bookshelf page
 A page listing the books in `/bookshelf/` with covers, progress and last-read dates.
 
@@ -222,10 +234,6 @@ A web app manifest and service worker, so the reader can be installed and open s
 
 ### E-9. Right-to-left manga
 Use ComicInfo's `Manga` value to show comic pages right to left, including spreads.
-
-### E-11. A settings panel
-A panel in the page for the options that are now only in `index.html` or `reader-config.json`: look-ahead,
-saved-audio limit, remote content, shortcuts and so on.
 
 ### E-15. Fixed-layout books
 
@@ -260,6 +268,7 @@ From all reviews so far, with the commits that fixed them.
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
 | H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
+| H-16 | Settings: once a reload-only setting (remote content, full-precision voices) was saved, the dialog couldn't turn it back, and Restore defaults showed it wrong | `3c07e06` |
 | M-1 | A `%` in `?book=` left the reader stuck on "Loading…" | `46a112b` |
 | M-2 | The "not found" check for HTML documents only worked for identical pages | `33813a3` |
 | M-3 | The sleep timer could stop right after resuming | `33813a3` |
@@ -323,6 +332,12 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-64 | Settings: changing web links, or Restore defaults, while reading aloud sent the voice back to the top of the page; follow-ups now run only on a real change, and links wait for the next chapter while reading aloud | `3c07e06` |
+| M-65 | Settings: a new comic section size moved saved comic positions to other pages; a comic's place is now also kept as a page number | `3c07e06` |
+| M-66 | Settings: days to keep positions equal to the folder's value fell back to the site-wide longest (a folder's "keep forever") | `3c07e06` |
+| M-67 | Settings: the dialog opened with focus on its unnamed scrolling list, not a control | `3c07e06` |
+| M-68 | The stored theme was applied after the config and fonts loaded: a flash of the light theme before Black (an inline script in `<head>` now applies it) | `3c07e06` |
+| M-69 | Settings: a site can't keep remote content off for its readers any more; documented that the reader policy from nginx.conf.example still blocks other sites (*read*) | `3c07e06` |
 | L-1 | Relative URLs not in the book requested the reader's own site | `2e5345f` |
 | L-2 | SVG animation could set a remote address | `2e5345f` |
 | L-3 | `verify()` failed open without a SHA-256 tool | `770c237` |
@@ -504,6 +519,18 @@ From all reviews so far, with the commits that fixed them.
 | L-181 | `libs/LICENSES/lamejs.txt` was LAME's licence FAQ, not the LGPL; fetch-libs.sh now saves the LGPL-3.0 text (with the GPL) | `0a4902b` |
 | L-182 | Stale messages: the export button said `.m4b`; formats being checked were greyed out; a note for a format that can't be made; the AAC size estimate used the wrong setting (*read*) | `0a4902b` |
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
+| L-185 | Settings: fractional days, seconds and MB were saved (0.001 days forgot positions after 90 seconds); now whole numbers | `3c07e06` |
+| L-186 | Settings: Escape in the search-limit field re-ran the search and lost the current match, with nothing changed | `3c07e06` |
+| L-187 | T and the theme button ignored the folder's default theme as the one to switch to (*read*) | `3c07e06` |
+| L-188 | Shortcuts set back to the site's value stayed saved; a stored non-boolean was taken as a choice | `3c07e06` |
+| L-189 | A saved setting that came to equal the site's value (or was out of range) was kept as it was on load (*read*) | `3c07e06` |
+| L-190 | Settings: every option's notes were part of its accessible name; now descriptions | `3c07e06` |
+| L-191 | Settings: "Reload now" appearing wasn't announced; now a polite status | `3c07e06` |
+| L-192 | The theme button said "light mode" when it went to Sepia (and "dark mode" for Black) | `3c07e06` |
+| L-193 | Settings: field and theme-card borders were under 3:1, and Black's dialog had no visible edge | `3c07e06` |
+| L-194 | Settings: the buttons wrapped untidily on phones (*read*) | `3c07e06` |
+| L-195 | A colour rule on the System swatch did nothing (*read*) | `3c07e06` |
+| L-196 | The README's ALLOW_REMOTE_CONTENT entry didn't say readers can turn it on | `3c07e06` |
 | L-184 | With many search matches, going to the next one scrolled the whole sidebar, so the next-match button moved out from under the pointer (user report); the results now scroll on their own under fixed controls | `14a0e2b` |
 | T-1 | The hostile-book test missed most leaks | `2e5345f` |
 | T-2 | The soft-404 test server always returned the same page | `33813a3` |
@@ -528,6 +555,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-28 | Settings test gaps: reload-only settings turned back, reading aloud through a change, comic pages, days to keep positions, a folder's theme, focus and names, the early theme | `3c07e06` |
 | T-27 | E-17 test gaps: the checking window, `.opus` and `.mp3` through the file picker, the MP3 retry; Node tests of both writers with real ffmpeg frames (lamejs from cdnjs is covered by the SRI check only) | `8af5e59`, `0a4902b` |
 | T-14 | The hostile-book tests only ran behind the reader's own policy | `2baae6a` |
 | D-1 | The README overstated the remote-content protection | `2e5345f` |
@@ -538,10 +566,13 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-10 | README: "a time a reader sets in Settings is used as it is" wasn't true when it equalled the folder's | `3c07e06` |
 | D-9 | REVIEW.md: stale round, line count, test counts and "open" sentences; L-18's removal unexplained | this update |
 | E-12 | Hide French from Pocket TTS until it works | `590aab6` |
 | E-13 | A quieter read-aloud bar: short voice names (Device, Kokoro, Pocket, Server); the sleep timer off unless `SLEEP_TIMER` | `23100cb` |
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
 | E-16 | Default book: `default.epub`, else `default.md` (an ordered `DEFAULT_BOOK` list, with "not found" page checks) | `a29374c` |
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
+| E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9`, `3c07e06` |
+| E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9`, `3c07e06` |
 | E-17 | Audiobook formats: `.opus` (Opus in Ogg, chapter comments) and `.mp3` (lamejs, ID3 chapters) as well as `.m4b`; those this browser can't make greyed out with the reason | `2c7386b`, `895bafa`, `8af5e59`, `0a4902b` |
