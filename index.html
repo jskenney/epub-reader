@@ -193,6 +193,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-group legend{font:500 11px/1 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0;margin-bottom:8px}
 .set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 0;border-top:1px solid var(--rule)}
 .set-row label{cursor:pointer}
+.set-row:has(input[type=checkbox]){cursor:pointer}
 .set-row>span{display:flex;flex-direction:column;gap:2px;min-width:0}
 .set-row small{color:var(--muted);font-size:12px;line-height:1.35}
 .set-row small.set-def{color:var(--ribbon)}
@@ -1708,7 +1709,11 @@ async function startBook(next){
   if (lens && Number.isInteger(saved?.page) && saved.page >= 1) {   // (a comic: its page, wherever the sections now fall)
     let i = 0, end = lens[0];
     while (i < lens.length - 1 && saved.page > end) end += lens[++i];
-    await renderChapter(i, { frag: `cbz-p${Math.min(saved.page, end)}` });
+    const frag = `cbz-p${Math.min(saved.page, end)}`;
+    await renderChapter(i, { frag });
+    // (Scrolling: as far down that page as it was.)
+    const el = frame.contentDocument?.getElementById(frag), se = scroller();
+    if (scrolling() && saved.off > 0 && saved.off <= 1 && el && se && cur.i === i) scrollTo(el.getBoundingClientRect().top + se.scrollTop - 24 + saved.off * el.getBoundingClientRect().height);
     return;
   }
   const i = saved && saved.i < spine.length ? saved.i : 0;
@@ -2505,6 +2510,7 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
     if (token !== renderToken) return;
     await loadFrame(html);
     if (token !== renderToken) return;
+    cur.doc = frame.contentDocument;   // (savePos: what's in the frame is this page, not the one before)
     wireFrame();
     const fonts = frame.contentDocument.fonts;
     if (fonts) await Promise.race([fonts.ready, new Promise(r => setTimeout(r, 1500))]);
@@ -2612,19 +2618,21 @@ function sweepPositions(){
 // A comic's sections follow COMIC_PART, which can change (Settings), so its place is also kept as the number
 // of the first page on screen (page, counted through the whole comic), which is what it comes back to.
 const comicLens = () => book?.comicParts ? book.spine.map(s => book.comicParts.get(s.path)?.length || 0) : null;
+// { page, off }: off, when scrolling, how far down that page the view starts (pages are often taller than it).
 function comicPageShown(){
-  const doc = frame.contentDocument, w = frame.contentWindow; if (!doc || !w) return 0;
+  const doc = frame.contentDocument, w = frame.contentWindow; if (!doc || !w || cur.doc !== doc) return null;
   for (const el of doc.querySelectorAll('.cbz-page[id^="cbz-p"]')) {
     const r = el.getBoundingClientRect();
     // (Scrolling: a page shown is scrolled to with a margin above it, so the bottom of the one before shows there.)
-    if (scrolling() ? r.bottom > 40 : r.right > 1 && r.left < w.innerWidth - 1) return Number(el.id.slice(5)) || 0;
+    if (scrolling() ? r.bottom > 40 : r.right > 1 && r.left < w.innerWidth - 1)
+      return { page: Number(el.id.slice(5)) || 0, off: scrolling() && r.height > 0 ? Math.round(Math.min(1, Math.max(0, (24 - r.top) / r.height)) * 10000) / 10000 : 0 };
   }
-  return 0;
+  return null;
 }
 function savePos(){
   if (!book) return;
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
-  if (comicLens()) { const n = comicPageShown(); if (n) pos.page = n; }
+  if (comicLens()) { const at = comicPageShown(); if (at?.page) { pos.page = at.page; if (at.off) pos.off = at.off; } }
   store.set(book.key, pos);
   if (book.writeLoose) store.set(book.looseKey, pos);
 }
@@ -6291,8 +6299,8 @@ async function loadConfig(){
 
 /* ---------- settings dialog (E-5, E-11) ----------
    Options a reader can change for themselves. Each is the site's value (index.html, then reader-config.json)
-   until they change it; theirs is saved in this browser as spine:set:NAME, and dropped again when it's the
-   same as the site's, so a later change to the site's default reaches them. What only makes sense for the
+   until they change it; theirs is saved in this browser as spine:set:NAME for the whole site (every folder),
+   even when it equals this folder's value, as other folders' defaults can differ. Restore defaults drops them. What only makes sense for the
    whole site (paths, the CDN policy, the voice server, default books) stays in reader-config.json. */
 const SET_VARS = {   // name: [the value now, what to do once it changes ('reload': only when the page is reloaded)]
   TIME_LEFT: [() => TIME_LEFT, () => updateTimeLeft()],
@@ -6311,9 +6319,6 @@ const SET_VARS = {   // name: [the value now, what to do once it changes ('reloa
   // (The voice models in use, and the names their saved speech is kept under, follow it.)
   FULL_PRECISION: [() => FULL_PRECISION, 'reload'],
 };
-// Kept even when it's the same as this folder's: the time to keep positions covers the whole site, and the
-// site-wide time can differ from this folder's (sweepPositions).
-const SET_ALWAYS_KEEP = new Set(['KEEP_POSITIONS_DAYS']);
 const siteValue = {}, loadedValue = {};   // the site's values, and those in use since the page loaded
 const setKey = name => `spine:set:${name}`;
 // Through reader-config.json's checks and limits; false if the value isn't the right kind.
@@ -6322,10 +6327,8 @@ function setVar(name, v){
   if (typeof v !== type || (type === 'number' && !Number.isFinite(v))) return false;
   apply(v); return true;
 }
-// The reader's value saved as it is now in use (after the limits), or dropped when it's the site's.
-function setSave(name, v){
-  if (v === siteValue[name] && !SET_ALWAYS_KEEP.has(name)) store.del(setKey(name)); else store.set(setKey(name), v);
-}
+// The reader's value, saved as it is in use (after the limits).
+const setSave = (name, v) => store.set(setKey(name), v);
 function loadUserSettings(){
   for (const [name, [get]] of Object.entries(SET_VARS)) {
     siteValue[name] = get();
@@ -6363,7 +6366,6 @@ function setSync(){
 function setChange(name, v){
   if (name === 'shortcuts') {
     setSingleKeys(v);
-    if (v === siteValue.shortcuts) store.del('spine:shortcuts');   // (so a later change to the site's default reaches them)
     return;
   }
   const [get, after] = SET_VARS[name], before = setShown(name);
@@ -6390,6 +6392,12 @@ function setReset(){
   syncThemeBtn();
   setSync();
 }
+// The whole row of an on/off option toggles it (a bigger target than the label and box), as it did when the row
+// was the label.
+$('#setForm').addEventListener('click', e => {
+  const row = e.target.closest('.set-row'), box = row?.querySelector('input[type=checkbox]');
+  if (box && !e.target.closest('input, label')) box.click();
+});
 // Each option's name is its title (its label); the notes under it are its description.
 $('#setForm').querySelectorAll('.set-row').forEach((row, k) => {
   const ids = [...row.querySelectorAll('small')].map((sm, j) => { sm.id = `setNote${k}-${j}`; return sm.id; });

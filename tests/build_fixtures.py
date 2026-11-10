@@ -638,6 +638,11 @@ def main():
         z.writestr("ComicInfo.xml", "<ComicInfo><Title>Test Comic</Title><Series>Tests</Series><Number>1</Number>"
                                     "<Writer>A. Writer</Writer><LanguageISO>en</LanguageISO></ComicInfo>")
 
+    # A comic of tall pages (taller than the screen once scaled to its width in the scroll layout).
+    with zipfile.ZipFile(books / "tall.cbz", "w") as z:
+        for i in range(1, 7):
+            z.writestr(f"page{i}.png", png(100, 750, ((i * 40) % 255, 120, 200)))
+
     # A server voice for the mock Breeze API.
     wav(SITE / "tts-voices" / "narrator.wav", 2.0)
     wav(SITE / "tts-voices" / "second.wav", 1.5)

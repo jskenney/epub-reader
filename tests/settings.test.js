@@ -85,12 +85,13 @@ test('reader options: changed here, marked against the site default, kept, and r
   assert.equal(await stored(page, 'spine:set:SEARCH_MAX'), '3');
   await page.fill('#searchBox', 'paragraph'); await page.waitForTimeout(800);
   assert.match(await page.textContent('#searchResults'), /Showing the first 3 matches/);
-  // Kept after a reload; back to the site's value, the saved one is dropped.
+  // Kept after a reload; set back to this folder's value, it is still the reader's (for every folder).
   await page.reload(); await h.waitForBook(page);
   await openSettings(page);
   assert.equal(await row(page, 'TIME_LEFT').isChecked(), false);
   await row(page, 'TIME_LEFT').check();
-  assert.equal(await stored(page, 'spine:set:TIME_LEFT'), null);
+  assert.equal(await stored(page, 'spine:set:TIME_LEFT'), 'true');
+  assert.equal(await changedNote(page, 'TIME_LEFT'), '');
   // Restore defaults: everything back to the site's.
   await row(page, 'SLEEP_TIMER').uncheck();
   assert.equal(await page.isHidden('#ttsSleep'), true);
@@ -158,7 +159,7 @@ test('a reload-only setting can be turned back, and Restore defaults shows what 
   await row(page, 'FULL_PRECISION').check();
   assert.equal(await row(page, 'FULL_PRECISION').isChecked(), true);
   assert.equal(await changedNote(page, 'FULL_PRECISION'), '');
-  assert.equal(await stored(page, 'spine:set:FULL_PRECISION'), null);
+  assert.equal(await stored(page, 'spine:set:FULL_PRECISION'), 'true');
   assert.equal(await page.isVisible('#setReload'), true);
   assert.match(await page.textContent('#setStatus'), /Reload now/);
   await page.click('#setReset');
@@ -235,10 +236,12 @@ test('the dialog: focus on the chosen theme, short names with notes as descripti
   assert.equal(await page.getByRole('checkbox', { name: 'Full-precision voice models', exact: true }).count(), 1);
   assert.match(await page.evaluate(() => { const i = document.querySelector('[data-set="FULL_PRECISION"]'); return i.getAttribute('aria-describedby').split(' ').map(id => document.getElementById(id).textContent).join(' '); }), /Larger downloads/);
   await page.keyboard.press('Escape');
-  // Shortcuts set back to the site's value aren't saved.
+  // Clicking anywhere on an on/off row toggles it, notes included.
   await openSettings(page);
-  await row(page, 'shortcuts').uncheck(); await row(page, 'shortcuts').check();
-  assert.equal(await stored(page, 'spine:shortcuts'), null);
+  await page.click('.set-row:has([data-set="shortcuts"]) small >> nth=0');
+  assert.equal(await row(page, 'shortcuts').isChecked(), false);
+  await page.click('.set-row:has([data-set="shortcuts"]) label');
+  assert.equal(await row(page, 'shortcuts').isChecked(), true);
   await page.keyboard.press('Escape');
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__early = document.documentElement.getAttribute('data-theme'); }));
   await page.reload(); await h.waitForBook(page);
@@ -295,4 +298,31 @@ test('a stored shortcuts value that isn\'t on or off doesn\'t stop the folder\'s
   assert.equal(await theme(page), before, 'the folder turns single-letter shortcuts off');
   await openSettings(page);
   assert.equal(await row(page, 'shortcuts').isChecked(), false);
+});
+
+test('a reader\'s choice set back to a folder\'s default is still theirs in every folder (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  await openSettings(page);
+  await row(page, 'TIME_LEFT').check();
+  await page.keyboard.press('Escape');
+  await page.goto(`${h.SITE}/folder-listen/index.html?book=/reader/books/long.epub`); await h.waitForBook(page);   // (TIME_LEFT on there)
+  await openSettings(page);
+  await row(page, 'TIME_LEFT').uncheck(); await row(page, 'TIME_LEFT').check();
+  await page.keyboard.press('Escape');
+  await page.goto(LONG); await h.waitForBook(page);
+  await openSettings(page);
+  assert.equal(await row(page, 'TIME_LEFT').isChecked(), true);
+});
+
+test('a comic with pages taller than the screen reopens as far down the page as it was, in the scroll layout (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/tall.cbz`, { 'spine:layout': 'scroll' });
+  const top = () => page.evaluate(() => document.querySelector('#page').contentDocument.scrollingElement.scrollTop);
+  await page.evaluate(() => { const se = document.querySelector('#page').contentDocument.scrollingElement; se.scrollTop = se.scrollHeight * 0.3; se.dispatchEvent(new Event('scroll')); });
+  await page.waitForTimeout(1000);
+  const was = await top();
+  await page.reload(); await h.waitForBook(page);
+  await page.waitForTimeout(500);
+  assert.ok(Math.abs((await top()) - was) < 30, `${await top()} vs ${was}`);
 });
