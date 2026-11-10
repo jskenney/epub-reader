@@ -645,6 +645,12 @@ def main():
         z.writestr("ComicInfo.xml", "<ComicInfo><Title>Test Comic</Title><Series>Tests</Series><Number>1</Number>"
                                     "<Writer>A. Writer</Writer><LanguageISO>en</LanguageISO></ComicInfo>")
 
+    # Right-to-left manga (E-9): five pages, ComicInfo's Manga "YesAndRightToLeft".
+    with zipfile.ZipFile(books / "manga.cbz", "w") as z:
+        for i in range(1, 6):
+            z.writestr(f"p{i:02}.png", png(60, 90, ((i * 50) % 255, 80, 160)))
+        z.writestr("ComicInfo.xml", "<ComicInfo><Title>Test Manga</Title><Manga>YesAndRightToLeft</Manga></ComicInfo>")
+
     # A comic of tall pages (taller than the screen once scaled to its width in the scroll layout).
     with zipfile.ZipFile(books / "tall.cbz", "w") as z:
         for i in range(1, 7):

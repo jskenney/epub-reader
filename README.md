@@ -49,8 +49,11 @@ continuous strip in the scroll layout. A `ComicInfo.xml` supplies the
 title, series and number, writer and artist, summary, year and language;
 the first page is the cover. Archives that keep chapters in folders get a
 contents entry per folder. A ZIP with images and no EPUB container is
-opened as a comic whatever its name. Right-to-left manga is shown in name
-order, left to right.
+opened as a comic whatever its name. Right-to-left manga (`ComicInfo.xml`'s
+`<Manga>YesAndRightToLeft</Manga>`) is read right to left: in the two-column
+layout each spread shows its later page on the left, and the left arrow key
+(or a swipe to the right) goes on. Page Down, Next and the single-column and
+scroll layouts keep the pages in order.
 
 ## Opening a book from the address
 

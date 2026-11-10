@@ -2522,6 +2522,7 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
     if (token !== renderToken) return;
     cur.doc = frame.contentDocument;   // (savePos: what's in the frame is this page, not the one before)
     wireFrame();
+    comicOrder();
     const fonts = frame.contentDocument.fonts;
     if (fonts) await Promise.race([fonts.ready, new Promise(r => setTimeout(r, 1500))]);
     if (token !== renderToken) return;
@@ -2603,7 +2604,31 @@ function position(frag, f){
   if (el) showPage(Math.floor((el.getBoundingClientRect().left - g.left + 1) / g.step));
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
-function relayout(){ if (book && cur.f != null) { position('', cur.f); ttsRefollow(); } }
+function relayout(){
+  comicOrder();
+  if (!book || cur.f == null) return;
+  // (A comic in a page layout: back to the first page that was on screen, not the same fraction, which lands on
+  // another page or spread when the number of columns changes.)
+  if (cur.comicPage && !scrolling() && frame.contentDocument?.getElementById(`cbz-p${cur.comicPage}`)) position(`cbz-p${cur.comicPage}`);
+  else position('', cur.f);
+  ttsRefollow();
+}
+// Right-to-left manga (E-9; ComicInfo's Manga "YesAndRightToLeft"): pages are read from right to left, so in two
+// columns each spread shows its later page on the left. The section's page elements are put in that order (and
+// back) whenever the layout or the width changes; the arrow keys and swipes go the other way.
+const comicRtl = () => !!book?.comicParts && book.info?.direction === 'Right to left';
+function comicOrder(){
+  const doc = frame.contentDocument; if (!doc || !comicRtl()) return;
+  const els = [...doc.querySelectorAll('.cbz-page[id^="cbz-p"]')], num = el => Number(el.id.slice(5));
+  if (els.length < 2) return;
+  const natural = [...els].sort((a, b) => num(a) - num(b));
+  const twoUp = layout === 'two' && frame.contentWindow.innerWidth > 640;   // (the frame's two-column rule)
+  const want = twoUp ? natural.flatMap((el, k) => k % 2 ? [] : natural[k + 1] ? [natural[k + 1], el] : [el]) : natural;
+  if (want.every((el, k) => el === els[k])) return;
+  // (In place: what follows the pages, such as the end marker page counting uses, stays after them.)
+  const parent = els[0].parentNode, after = els.at(-1).nextSibling;
+  for (const el of want) parent.insertBefore(el, after);
+}
 // Forget positions not read for KEEP_POSITIONS_DAYS (at most once a day). One saved before positions had a
 // time gets one now, so it is kept that long from today.
 function sweepPositions(){
@@ -2635,18 +2660,20 @@ const comicLens = () => book?.comicParts ? book.spine.map(s => book.comicParts.g
 // { page, off }: off, when scrolling, how far down that page the view starts (pages are often taller than it).
 function comicPageShown(){
   const doc = frame.contentDocument, w = frame.contentWindow; if (!doc || !w || cur.doc !== doc) return null;
+  let first = 0;
   for (const el of doc.querySelectorAll('.cbz-page[id^="cbz-p"]')) {
-    const r = el.getBoundingClientRect();
+    const r = el.getBoundingClientRect(), n = Number(el.id.slice(5)) || 0;
     // (Scrolling: a page shown is scrolled to with a margin above it, so the bottom of the one before shows there.)
-    if (scrolling() ? r.bottom > 40 : r.right > 1 && r.left < w.innerWidth - 1)
-      return { page: Number(el.id.slice(5)) || 0, off: scrolling() && r.height > 0 ? Math.round(Math.min(1, Math.max(0, (24 - r.top) / r.height)) * 10000) / 10000 : 0 };
+    if (scrolling()) { if (r.bottom > 40) return { page: n, off: r.height > 0 ? Math.round(Math.min(1, Math.max(0, (24 - r.top) / r.height)) * 10000) / 10000 : 0 }; }
+    // (Pages: the lowest number on screen, which in a right-to-left spread is the one on the right.)
+    else if (r.right > 1 && r.left < w.innerWidth - 1 && (!first || n < first)) first = n;
   }
-  return null;
+  return first ? { page: first, off: 0 } : null;
 }
 function savePos(){
   if (!book) return;
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
-  if (comicLens()) { const at = comicPageShown(); if (at?.page) { pos.page = at.page; if (at.off) pos.off = at.off; } }
+  if (comicLens()) { const at = comicPageShown(); if (at?.page) { pos.page = cur.comicPage = at.page; if (at.off) pos.off = at.off; } }
   store.set(book.key, pos);
   if (book.writeLoose) store.set(book.looseKey, pos);
 }
@@ -2689,7 +2716,7 @@ function wireFrame(){
   doc.addEventListener('touchend', e => {
     if (scrolling()) return;
     const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) dx < 0 ? pageNext() : pagePrev();
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) (dx < 0) !== comicRtl() ? pageNext() : pagePrev();   // (manga: a swipe to the right goes on)
   }, { passive: true });
   doc.fonts?.addEventListener?.('loadingdone', relayout);
   doc.addEventListener('mousemove', wake);
@@ -2802,8 +2829,8 @@ function onKey(e){
   else if (scrolling() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {   // scroll a little, like a normal page
     e.preventDefault(); ttsUserNav(); const se = scroller(); if (se) scrollTo(se.scrollTop + (e.key === 'ArrowDown' ? 60 : -60));
   }
-  else if (['ArrowRight', 'ArrowDown', 'PageDown'].includes(e.key)) { e.preventDefault(); pageNext(); }
-  else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); pagePrev(); }
+  else if (['ArrowRight', 'ArrowDown', 'PageDown'].includes(e.key)) { e.preventDefault(); e.key === 'ArrowRight' && comicRtl() ? pagePrev() : pageNext(); }
+  else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); e.key === 'ArrowLeft' && comicRtl() ? pageNext() : pagePrev(); }
 }
 
 /* ---------- chrome ---------- */
