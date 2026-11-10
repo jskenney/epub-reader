@@ -1,7 +1,7 @@
 # Plan: editing, server saving and EPUB editing (E-21 to E-25)
 
 This file is the plan for five enhancements listed in REVIEW.md. REVIEW.md only names them; the design, the
-decisions behind it and the work to do are here. E-21 and E-24 are built; the rest isn't yet.
+decisions behind it and the work to do are here. E-21, E-24 and E-23 are built; E-25 and E-22 aren't yet.
 
 | ID | What | Depends on |
 |---|---|---|
@@ -317,16 +317,16 @@ into the file.
 
 ### Tasks
 
-- [ ] Edit button for EPUB chapters; the chapter's text from the book; the rendered side with the book's styles
+- [x] Edit button for EPUB chapters; the chapter's text from the book; the rendered side with the book's styles
       and files.
-- [ ] XHTML well-formedness checks with errors shown in CodeMirror.
-- [ ] Several edited chapters kept until saved.
-- [ ] Download the chapter; re-pack and download the book (mimetype first, uncompressed; modified date).
-- [ ] Save in place for a picked `.epub`.
-- [ ] Tests: the re-packed book opens in the reader and passes a structural check (mimetype first and stored,
+- [x] XHTML well-formedness checks with errors shown in CodeMirror.
+- [x] Several edited chapters kept until saved.
+- [x] Download the chapter; re-pack and download the book (mimetype first, uncompressed; modified date).
+- [x] Save in place for a picked `.epub`.
+- [x] Tests: the re-packed book opens in the reader and passes a structural check (mimetype first and stored,
       container and package intact, the edited chapter changed and nothing else); malformed XHTML is refused
       with its line; folder books.
-- [ ] README.
+- [x] README.
 
 ---
 

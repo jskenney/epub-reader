@@ -147,6 +147,21 @@ document**, **New Markdown document** and **New HTML document**.
   as the reader makes any page, scripts removed, in the same locked-down frame.
 - A site can turn editing off with `EDITING` in `reader-config.json`.
 
+**EPUB chapters.** In an EPUB, **Edit this chapter** edits the chapter on screen
+the same way (its XHTML, in WYSIWYG or raw), and the page stays on it until
+Done. Done keeps the chapter as edited, so several chapters can be edited
+before saving; the reader shows them as edited, and asks before another book
+is opened while some aren't saved. **Save** (in the editor) saves the whole
+book, re-packed: every file as it was, the edited chapters replaced, the
+`mimetype` file first and uncompressed (as readers require), and the
+package's `dcterms:modified` set to now. A book opened with the Open button in
+Chrome or Edge is saved over its file; otherwise Save asks where, or
+downloads it. A book read from a folder on the server is saved as a packed
+`.epub`. **Chapter** downloads just the chapter's file. An XHTML chapter has
+to be well-formed XML: if it isn't, saving and switching to WYSIWYG stop with
+the error and its line, and the cursor goes there. Adding, removing and
+reordering chapters isn't possible yet (E-25).
+
 ## Opening a book from the address
 
 When `index.html` is served from a web server, a `book` query parameter opens

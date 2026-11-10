@@ -456,6 +456,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <span class="edit-note" id="editNote" role="status"></span>
         <button class="btn" id="editSave" title="Save (Ctrl+S)">Save</button>
         <button class="btn" id="editSaveAs" title="Save as (Ctrl+Shift+S)">Save as…</button>
+        <button class="btn" id="editChapter" title="Download this chapter on its own" hidden>Chapter</button>
         <button class="btn primary" id="editDone" title="Back to reading (Escape)">Done</button>
       </div>
       <div class="work" id="work">
@@ -1139,6 +1140,9 @@ function zipSource(zip){
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
   return {
     kind: 'zip',
+    // (The archive itself, for packing an edited book; swapped for the packed one once saved over the file: E-23.)
+    get raw(){ return zip; }, swap(z){ zip = z; },
+    async bytes(p){ const f = getFile(zip, p); return f ? f.async('uint8array') : null; },
     async text(p){ const f = getFile(zip, p); return f ? decodeText(await f.async('uint8array'), { fallback: 'utf-8' }) : null; },
     async exists(p){ return !!getFile(zip, p); },
     obf: null,   // obfuscated fonts: path -> key (fontKeys)
@@ -1173,6 +1177,8 @@ function dirSource(base){
       } catch { return null; }
     },
     async exists(p){ return !!abs(p); },
+    // (A file's bytes, for packing an edited book: E-23.)
+    async bytes(p){ const u = abs(p); if (!u) return null; try { const r = await fetch(u); return r.ok && !(r.redirected && new URL(r.url).origin !== new URL(root).origin) ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
     obf: null, blobs: new Set(),
     async url(p, type){
       const u = abs(p), key = lookObf(this.obf, p, pathKey); if (!u || !key) return u;   // (a folder on a server: names compared folded)
@@ -2749,7 +2755,8 @@ async function chapterSource(item){
   } else if (!isPage(it) && /^image\//.test(type)) {
     doc = parseDoc(`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body><p><img src="${escHtml(encodeURIComponent(it.path.split('/').pop()))}" alt=""/></p></body></html>`, 'application/xhtml+xml');
   } else {
-    const text = await readText(book.zip, it.path);
+    // (An edited chapter's text: the editor's page while editing, else the chapter as edited: E-23.)
+    const text = book.live?.get(it.path) ?? book.over?.get(it.path) ?? await readText(book.zip, it.path);
     if (text == null) throw new Error(`${it.path} couldn't be read`);   // (not shown as an empty page)
     const raw = withoutDocumentControls(text);
     // (By media type: many books name XHTML files .html. The extension decides only when there is no type.)
@@ -2787,6 +2794,12 @@ async function chapterDoc(i){
 }
 async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   // (not "fraction": that is the function: loop 5 review)
   if (!book) return;
+  // (Editing a chapter: the page stays on it; Done first: E-23.)
+  if (ed.on && ed.epub && i !== ed.epub.i) {
+    if (tts.awaitChapter) { tts.awaitChapter = false; tts.playing = false; ttsUpdateBar(); }
+    showNotice('This chapter is being edited: Done first, to go to another.', 'info', { label: 'OK', run(){} });
+    return;
+  }
   i = Math.max(0, Math.min(book.spine.length - 1, i));
   const token = ++renderToken;
   ttsBeforeRender();
@@ -3307,6 +3320,8 @@ async function openFile(file, { handle = null } = {}){
       let zip = await zipFromBlob(file).catch(() => null);   // in place when possible
       if (!zip) { zip = await zipLib().loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
       await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}`, seq });
+      // (What an edited EPUB is saved as, and over: E-23.)
+      if (!isStale(seq) && book && !book.doc && !book.comic) Object.assign(book, { fileName: file.name, fileHandle: handle?.kind === 'file' ? handle : null });
     }
   }
   catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, file.name), 'error'); } }
@@ -6782,7 +6797,11 @@ function loadCodeMirror(){
 const ed = { on: false, mode: 'wysiwyg', split: true, tab: 'src', text: '', saved: '', kind: '', name: '', handle: null, fresh: false, api: null,
   wBase: '', wdirty: false, wTimer: 0, orig: [], kept: [], setting: false,
   timer: 0, draftTimer: 0, prevLayout: null, expectPage: null, expectSrc: null, blocks: null, blocksFor: null, starting: false };
-const editable = () => EDITING && !!book?.doc;
+// An EPUB's chapter shown, which can be edited (E-23): a page of the book, not a comic.
+const edChapter = () => !book || book.doc || book.comic ? null : (book.spine?.[cur.i] && isPage(book.spine[cur.i]) ? book.spine[cur.i] : null);
+const editable = () => EDITING && (!!book?.doc || !!edChapter());
+// What is being edited: the document, or the EPUB chapter (E-23).
+const edDoc = () => ed.epub?.doc || book?.doc;
 const editDirty = () => ed.on && ed.text !== ed.saved;
 const EDIT_TYPES = { markdown: { mime: 'text/markdown', ext: ['.md', '.markdown'], label: 'Markdown' },
   html: { mime: 'text/html', ext: ['.html', '.htm'], label: 'HTML' }, text: { mime: 'text/plain', ext: ['.txt'], label: 'Plain text' } };
@@ -6790,12 +6809,12 @@ const EDIT_TYPES = { markdown: { mime: 'text/markdown', ext: ['.md', '.markdown'
 // name. Each says which text it was made from, so it is offered only on that text: a file saved since, or another
 // file of the same name, isn't given it (round 24 review).
 const docDraftKey = (doc, b = book) => !doc ? '' : doc.fresh ? `new:${doc.kind}` : doc.base ? (b?.key || '') : `file:${doc.kind}:${doc.name}`;
-const draftKey = () => docDraftKey(book?.doc);
+const draftKey = () => ed.epub ? `epub:${book?.key}:${ed.epub.path}` : docDraftKey(book?.doc);
 const textHash = t => { let h = 0x811c9dc5; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + ':' + t.length; };
 // (A draft lists the texts it fits: where the document came from, and the copy last saved, which may be
 // opened instead.)
 const draftFits = (d, base) => !!d && [].concat(d.from).includes(textHash(base)) && d.text !== base;
-const draftFrom = () => [...new Set([textHash(docSource(book.doc)), textHash(ed.saved)])];
+const draftFrom = () => [...new Set([textHash(docSource(edDoc())), textHash(ed.saved)])];
 // The text a document has where it came from (its file, the site): what a draft is made against. A save that
 // downloads a copy doesn't change it (round 24 review).
 const docSource = doc => doc.source ?? doc.text;
@@ -6893,6 +6912,7 @@ function editTopHeading(){
 
 // The document made again from the text: one section while editing, the usual sections after.
 async function editRebuild({ frag = '', fraction: f = 0 } = {}){
+  if (ed.on && ed.epub) return editRebuildChapter({ frag, fraction: f });
   const b = book, wys = ed.on && ed.mode === 'wysiwyg';
   if (wys) { ed.wBase = ed.text; ed.wdirty = false; }
   const built = await buildDocument(wys ? await editMarkupText() : ed.text, ed.name, wys ? 'html' : ed.kind, { whole: ed.on });
@@ -6909,18 +6929,55 @@ async function editRebuild({ frag = '', fraction: f = 0 } = {}){
   if (search.q.trim().length >= 2) searchRun(search.q);
 }
 
+// An EPUB's chapter shown from the editor's text (WYSIWYG: marked up for editing), in place of the book's (E-23).
+async function editRebuildChapter({ frag = '', fraction: f = 0 } = {}){
+  const b = book, wys = ed.mode === 'wysiwyg', i = ed.epub.i;
+  if (wys) { ed.wBase = ed.text; ed.wdirty = false; }
+  const t = wys ? await editMarkupText() : ed.text;
+  if (book !== b || !ed.on) return;
+  (b.live ??= new Map()).set(ed.epub.path, t);
+  b.search = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
+  editTitle();
+  await renderChapter(i, frag ? { frag } : { fraction: f });
+  if (book !== b) return;
+  if (wys && ed.on && ed.mode === 'wysiwyg') editWysiwygReady();
+  if (search.q.trim().length >= 2) searchRun(search.q);
+}
+// An XHTML chapter must stay well-formed XML: an error is shown with its line, and the cursor goes there (E-23).
+function editWellFormed(){
+  if (!ed.epub?.doc.xhtml) return true;
+  const err = new DOMParser().parseFromString(ed.text, 'application/xhtml+xml').getElementsByTagName('parsererror')[0];
+  if (!err) return true;
+  const m = err.textContent.match(/line (\d+) at column (\d+)/), what = err.textContent.split('\n').map(l => l.trim()).find(l => /error/i.test(l)) || '';
+  showNotice(`This chapter isn't well-formed XHTML${m ? ` (line ${m[1]}, column ${m[2]})` : ''}, which an EPUB needs. ${what}`.trim(), 'error');
+  if (m && ed.api?.cm) { ed.api.cm.setCursor({ line: +m[1] - 1, ch: Math.max(0, +m[2] - 1) }); ed.api.cm.focus(); }
+  return false;
+}
 async function editStart({ mode } = {}){
   if (!editable() || ed.on || ed.starting) return;
   // (An audiobook export reads the document's sections, which editing replaces: round 24 review.)
   if (ab.running) { showNotice('An audiobook of this document is being made: it can be edited once that is done.', 'error'); return; }
   ed.starting = true;
   try {
-    const b = book, d = b.doc;
-    Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: d.text, blocks: null, blocksFor: null });
+    const b = book;
+    let d = b.doc;
+    ed.epub = null;
+    if (!d) {   // (an EPUB's chapter: its text as edited so far, else as in the book: E-23)
+      const item = edChapter();
+      const orig = b.archive?.get(item.path) ?? await readText(b.zip, item.path);
+      if (book !== b) return;
+      if (orig == null) { showNotice(`${item.path} couldn't be read.`, 'error'); return; }
+      (b.archive ??= new Map()).set(item.path, orig);
+      const xhtml = !(item.type === 'text/html' || (!/xml/.test(item.type) && /\.html?$/i.test(item.path)));
+      d = { text: b.over?.get(item.path) ?? orig, source: orig, kind: 'html', name: item.path.split('/').pop(), handle: null, base: null, xhtml };
+      ed.epub = { i: cur.i, path: item.path, item, doc: d };
+    }
+    const last = ed.epub ? (b.savedText?.get(ed.epub.path) ?? d.source) : d.text;
+    Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: last, blocks: null, blocksFor: null });
     const draft = await draftGet(draftKey());
     if (book !== b) return;
     if (draftFits(draft, docSource(d))) {
-      if (confirm(`${d.fresh || d.created ? 'A new document' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
+      if (confirm(`${d.fresh || d.created ? 'A new document' : ed.epub ? 'This chapter' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
       else draftDel(draftKey());
     }
     hideNotice();
@@ -6951,6 +7008,7 @@ async function editStart({ mode } = {}){
 const pageShown = () => !(ed.mode === 'raw' && !ed.split);
 async function editSetMode(mode, split = ed.split, save = true){
   if (ed.kind === 'text') mode = 'raw';
+  if (ed.on && ed.epub && mode === 'wysiwyg' && ed.mode === 'raw' && $('#editBar').hasAttribute('data-ready') && !editWellFormed()) mode = 'raw';
   const was = ed.mode, changed = ed.on && was !== mode && $('#editBar').hasAttribute('data-ready');
   if (changed && was === 'wysiwyg') editFlush();
   if (ed.mode !== mode || !$('#editBar').hasAttribute('data-ready')) ed.tab = mode === 'wysiwyg' ? 'page' : 'src';   // (a narrow screen shows what is edited: round 24 review)
@@ -6998,8 +7056,12 @@ narrow.addEventListener('change', () => { editLayout(); ed.api?.refresh(); });
 function editStyle(){ $('#editSrc').style.setProperty('--ed-size', `${Math.round(14 * fontPct) / 100}px`); ed.api?.refresh(); }
 function editTitle(){ if (ed.on && book) document.title = `${editDirty() ? '• ' : ''}${ed.name} — editing`; }
 function editSyncBar(){
-  $('#editName').textContent = (editDirty() ? '• ' : '') + ed.name + (ed.saving ? ' (saving…)' : editDirty() ? ' (unsaved)' : '');
-  $('#editName').title = ed.handle ? 'Save writes to this file' : book?.doc?.foreign ? `From ${book.doc.foreign}: Save keeps a copy on this computer` : 'Save asks where to save a copy';
+  const others = ed.epub ? [...(book?.unsaved || [])].filter(p => p !== ed.epub.path).length : 0, dirty = editDirty() || others > 0;
+  $('#editName').textContent = (dirty ? '• ' : '') + ed.name + (ed.epub ? ` — ${book.fileName || book.title}` : '') + (ed.saving ? ' (saving…)' : dirty ? ' (unsaved)' : '');
+  $('#editName').title = ed.epub ? (book.fileHandle ? 'Save writes the book to its file' : 'Save asks where to save the book') + (others ? `; ${others} other chapter${others > 1 ? 's' : ''} changed too` : '')
+    : ed.handle ? 'Save writes to this file' : book?.doc?.foreign ? `From ${book.doc.foreign}: Save keeps a copy on this computer` : 'Save asks where to save a copy';
+  $('#editChapter').hidden = !ed.epub;
+  $('#editSave').title = ed.epub ? 'Save the book (Ctrl+S)' : 'Save (Ctrl+S)';
   $('#editNote').textContent = ed.plainWhy ? `A plain text box: the code editor couldn't be loaded (${ed.plainWhy}).` : book?.doc?.foreign ? `From ${book.doc.foreign}, another site.` : '';
   editTitle();
 }
@@ -7135,6 +7197,7 @@ async function editWrite(handle, blob){
 async function editSave(as = false){
   if (!ed.on || ed.saving) return;
   editFlush();
+  if (ed.epub) return editSaveBook(as);
   const b = book, keyBefore = draftKey(), typed = ed.text;
   // (The charset changed in what is written; in the text only once it is: a cancelled Save as leaves it: round 24 review.)
   const text = ed.kind === 'html' ? utf8Declared(typed) : typed;
@@ -7172,10 +7235,74 @@ async function editSave(as = false){
 }
 
 // Leaving the editor: the page made again from the text saved (what isn't saved is let go, after asking).
+// The book re-packed (E-23): every file as it is, the chapters edited replaced, mimetype first and stored
+// uncompressed (as readers require), and the package's dcterms:modified set to now. A folder book: its
+// container, package and manifest's files (and the META-INF files a book may have).
+async function epubPack(b, changes){
+  const Z = zipLib(), out = new Z(), enc = new TextEncoder(), dec = new TextDecoder();
+  out.file('mimetype', 'application/epub+zip', { compression: 'STORE', createFolders: false });
+  const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  const opfFix = t => t.replace(/(<meta\b[^>]*\bproperty\s*=\s*["']dcterms:modified["'][^>]*>)[^<]*(<\/meta>)/i, `$1${now}$2`);
+  const add = async (name, edited) => {
+    let data = edited != null ? enc.encode(edited) : await b.src.bytes(name);
+    if (data == null) return;
+    if (name === b.opfPath) data = enc.encode(opfFix(dec.decode(data)));
+    out.file(name, data, { compression: 'DEFLATE', createFolders: false });   // (no folder entries the book didn't have)
+  };
+  if (b.src.kind === 'zip') {
+    const raw = b.src.raw, byName = new Map();
+    for (const [p, t] of changes) { const f = getFile(raw, p); if (f) byName.set(f.name, t); }
+    for (const [name, f] of Object.entries(raw.files)) if (!f.dir && name !== 'mimetype') await add(name, byName.get(name));
+  } else {
+    const names = ['META-INF/container.xml', 'META-INF/encryption.xml', 'META-INF/com.apple.ibooks.display-options.xml', b.opfPath, ...[...b.manifest.values()].map(it => it.path)];
+    for (const name of new Set(names)) await add(name, changes.get(name));
+  }
+  return out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
+}
+async function editSaveBook(as = false){
+  if (!editWellFormed()) return;
+  const b = book, p = ed.epub.path, text = ed.text;
+  const changes = new Map(b.over || []); changes.set(p, text);
+  const name = b.fileName || `${b.title || 'book'}.epub`;
+  ed.saving = true; editSyncBar();
+  let handle = as ? null : b.fileHandle, how = '', blob;
+  try {
+    blob = await epubPack(b, changes);
+    if (handle) { await editWrite(handle, blob); how = 'saved'; }
+    else if (window.showSaveFilePicker) {
+      try { handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'EPUB', accept: { 'application/epub+zip': ['.epub'] } }] }); }
+      catch (e) { if (e?.name === 'AbortError') return; handle = null; }
+      if (handle) { await editWrite(handle, blob); how = 'saved'; }
+    }
+    if (!how) { abDownload(blob, name); how = 'downloaded'; }
+  } catch (e) { if (book === b) showNotice(`The book couldn't be saved: ${e.message}`, 'error'); return; }
+  finally { ed.saving = false; if (book === b && ed.on) editSyncBar(); }
+  if (book !== b) return;
+  // (Written over the file it was read from: read from the packed copy from now on, as the file has changed.)
+  if (how === 'saved') {
+    b.fileHandle = handle; b.fileName = handle.name || name;
+    if (b.src.kind === 'zip') { try { b.src.swap(await zipLib().loadAsync(blob)); b.archive = new Map(changes); } catch {} }
+  }
+  (b.over ??= new Map()).set(p, text);
+  b.savedText = new Map(changes);
+  for (const q of b.unsaved || []) draftDel(`epub:${b.key}:${q}`);
+  b.unsaved = new Set();
+  if (ed.on && ed.epub?.path === p) { ed.saved = text; if (ed.text === text) { clearTimeout(ed.draftTimer); draftDel(draftKey()); } else editDraftSoon(); }
+  editSyncBar();
+  $('#editNote').textContent = how === 'saved' ? `Saved the book to ${b.fileName}.` : `Downloaded the book as ${name}.`;
+}
+// Just the chapter, downloaded as its own file (E-23).
+function editSaveChapter(){
+  if (!ed.on || !ed.epub) return;
+  editFlush();
+  abDownload(new Blob([ed.text], { type: ed.epub.doc.xhtml ? 'application/xhtml+xml' : 'text/html' }), ed.name);
+  $('#editNote').textContent = `Downloaded the chapter as ${ed.name}.`;
+}
 const editWaitSave = () => { if (!ed.saving) return false; showNotice(`${ed.name} is still being saved: a moment.`, 'info', { label: 'OK', run(){} }); return true; };
 async function editDone(){
   if (!ed.on || editWaitSave()) return;
   editFlush();
+  if (ed.epub) return editDoneChapter();
   if (editDirty() && !confirm('Leave the editor? Your unsaved changes will be lost.')) return;
   if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
   const frag = editTopHeading();
@@ -7184,10 +7311,28 @@ async function editDone(){
   $('#editBtn').focus();
   await editRebuild({ frag });
 }
+// Leaving a chapter: it stays as edited (shown so, and saved with the book later); the bar says how many
+// chapters wait to be saved (E-23).
+async function editDoneChapter(){
+  if (!editWellFormed() && !confirm("This chapter isn't well-formed XHTML yet. Keep it like this for now?")) return;
+  const b = book, { path: p, i } = ed.epub, text = ed.text, key = draftKey(), frag = editTopHeading();
+  const last = b.savedText?.get(p) ?? b.archive.get(p);
+  editQuit();
+  b.live?.delete(p);
+  if (text === (b.archive.get(p))) b.over?.delete(p); else (b.over ??= new Map()).set(p, text);
+  (b.unsaved ??= new Set())[text !== last ? 'add' : 'delete'](p);
+  if (text === last) draftDel(key);
+  b.search = null; n.chapBook = null;
+  $('#editBtn').focus();
+  await renderChapter(i, frag ? { frag } : {});
+  if (book === b && b.unsaved.size) showNotice(`${b.unsaved.size} chapter${b.unsaved.size > 1 ? 's' : ''} changed and not saved yet: Edit, then Save, saves the book.`, 'info', { label: 'OK', run(){} });
+}
 // Edit mode off, without making the page again (another book is coming).
 function editQuit(){
   if (!ed.on) return;
   ed.on = false; ed.previewWaiting = false; tts.resumeAt = null;
+  if (ed.epub && book) book.live?.delete(ed.epub.path);
+  queueMicrotask(() => { if (!ed.on) ed.epub = null; });   // (after the leaving code has used it)
   clearTimeout(ed.timer); clearTimeout(ed.draftTimer); clearTimeout(ed.wTimer);
   $('#editTools').hidden = true;
   $('.app').classList.remove('editing');
@@ -7202,7 +7347,11 @@ function editQuit(){
 function editLeaveOk(){
   if (ed.on && editWaitSave()) return false;
   if (ed.on) editFlush();
-  if (editDirty() && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return false;
+  // (An EPUB with chapters edited and not saved, this one or others: asked about once: E-23.)
+  const waiting = [...(book?.unsaved || [])].filter(p => !(ed.on && ed.epub?.path === p)), count = waiting.length + (editDirty() && ed.epub ? 1 : 0);
+  if (count && !confirm(`${count} edited chapter${count > 1 ? 's' : ''} of this book ${count > 1 ? "aren't" : "isn't"} saved. Open the other book and lose ${count > 1 ? 'them' : 'it'}?`)) return false;
+  for (const p of waiting) draftDel(`epub:${book.key}:${p}`);
+  if (editDirty() && !ed.epub && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return false;
   if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
   editQuit();
   return true;
@@ -7225,7 +7374,7 @@ async function editNew(kind){
 const editMenuOpen = () => !$('#editMenu').hidden;
 function editMenu(open){
   if (open === editMenuOpen()) return;
-  if (open) { setMenu(false); $('#editThis').hidden = ed.on; $('#editThis').disabled = !editable(); }
+  if (open) { setMenu(false); $('#editThis').hidden = ed.on; $('#editThis').disabled = !editable(); $('#editThis').textContent = book?.doc || !edChapter() ? 'Edit this document' : 'Edit this chapter'; }
   $('#editMenu').hidden = !open;
   $('#editBtn').setAttribute('aria-expanded', String(open));
   if (open) [...$('#editMenu').querySelectorAll('.opt')].find(o => !o.hidden && !o.disabled)?.focus();
@@ -7258,9 +7407,10 @@ $('#editBar').addEventListener('keydown', e => {
   items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length].focus();
 });
 $('#editSave').addEventListener('click', () => editSave());
+$('#editChapter').addEventListener('click', () => editSaveChapter());
 $('#editSaveAs').addEventListener('click', () => editSave(true));
 $('#editDone').addEventListener('click', () => editDone());
-window.addEventListener('beforeunload', e => { if (editDirty() || (ed.on && ed.wdirty)) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (editDirty() || (ed.on && ed.wdirty) || book?.unsaved?.size) { e.preventDefault(); e.returnValue = ''; } });
 // (Leaving within a moment of typing: the page's edits written and kept as a draft at once: round 24 review.)
 // (Back from the browser's page cache: the editor is still here, so the draft kept for leaving isn't wanted.)
 window.addEventListener('pageshow', e => { if (e.persisted && ed.on) draftPending(); });
@@ -7668,8 +7818,7 @@ function editFlush(){
   if (was !== editDirty() || !editDirty()) editSyncBar(); else editTitle();
   editSyncBar();
   editDraftSoon();
-  editTocFromPage();
-  editRefreshFiles();
+  if (!ed.epub) { editTocFromPage(); editRefreshFiles(); }   // (a chapter: the book's own contents stay)
   editRechunk();
 }
 // The contents from the page's headings (new ones are given ids, taken off again when written back).
@@ -8060,7 +8209,7 @@ async function openForEdit(ref){
   // (A note after opening, unless opening failed and said why.)
   const note = msg => { if ($('#notice').hidden || noticeKind !== 'error') showNotice(msg, 'info', { label: 'OK', run(){} }); };
   if (!EDITING) { await openFromUrl(ref); note('Editing is turned off on this site: the document is open to read.'); return; }
-  if (/\.epub$/i.test(ref)) { await openFromUrl(ref); note("An EPUB's chapters can't be edited yet: the book is open to read."); return; }
+  if (/\.epub$/i.test(ref)) { await openFromUrl(ref); if (book && !book.doc && edChapter()) await editStart(); return; }   // (the chapter it opens at: E-23)
   const kind = docKind(ref.replace(/[?#].*$/, ''));
   if (!EDIT_EXT.test(ref.replace(/[?#].*$/, '')) || !kind) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} can't be edited: ?edit= takes .md, .markdown, .html, .htm and .txt files.`, 'error'); return; }
   const seq = ++openSeq;
@@ -8128,6 +8277,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
         await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq });
+        if (!isStale(seq) && book && !book.comic) book.fileName = safeDecode(u.pathname.split('/').pop());
         if (foreign && !isStale(seq)) showFrom(foreign);
         return;
       }
@@ -8138,6 +8288,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
         misses.push(foreign ? `${u.href} (${foreign} didn't give its META-INF/container.xml: not an EPUB folder, or not readable from here)` : `${u.pathname} (no META-INF/container.xml)`); continue;
       }
       await openBook(src, { name, seq });
+      if (!isStale(seq) && book) book.fileName = `${name || 'book'}.epub`;
       if (foreign && !isStale(seq)) showFrom(foreign);
       return;
     }
