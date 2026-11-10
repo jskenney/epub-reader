@@ -298,6 +298,13 @@ def main():
         epub(books / f"{name}.epub", name, [("c1.xhtml", "One", "<p>Obfuscated font text.</p>", style)], uid=uid,
              extra={"OEBPS/f.ttf": obfuscated(key, n), "META-INF/encryption.xml": enc(alg)})
     (books / "obf-font.bin").write_bytes(font)
+    # (T-20, L-94) A folder book: text, two picture pages, text.
+    epub(books / "pics-src.epub", "Pictures Folder", [("c1.xhtml", "Words", "<p>Opening words.</p>"), ("c2.xhtml", "Pic A", '<p><img src="pic.png" alt=""/></p>'),
+         ("c3.xhtml", "Pic B", '<p><img src="pic.png" alt=""/></p>'), ("c4.xhtml", "More", "<p>Closing words.</p>")], uid="urn:pics-dir",
+         extra={"OEBPS/pic.png": png(40, 30, (90, 160, 90))})
+    with zipfile.ZipFile(books / "pics-src.epub") as z0:
+        z0.extractall(books / "pics-dir")
+    (books / "pics-src.epub").unlink()
     # (T-20, L-170) A folder book of three chapters, for searches while it is still being indexed.
     epub(books / "search-src.epub", "Search Folder", [("c1.xhtml", "One", "<p>Alpha words here.</p>"), ("c2.xhtml", "Two", "<p>Zebra unique words.</p>"),
          ("c3.xhtml", "Three", "<p>Gamma words here.</p>")], uid="urn:search-dir")

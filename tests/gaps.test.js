@@ -138,3 +138,22 @@ test('searches typed while the book is first being indexed don\'t use up the ret
   await page.fill('#searchBox', 'zebra');
   assert.ok(await h.waitFor(async () => /1 of 1 match/.test(await status()), 10000), await status());
 });
+
+test('the sleep timer set to the chapter\'s end while reading aloud looks past picture pages stops there (L-94)', { timeout: 60000 }, async () => {
+  const page = await h.newPage();
+  let hold = false, release;
+  const gate = new Promise(r => { release = r; });
+  await page.route(/\/pics-dir\/OEBPS\/c[23]\.xhtml$/, async route => { if (hold) await gate; await route.continue(); });
+  // (folder-listen shows the sleep timer.)
+  await h.openReader(page, `${h.SITE}/folder-listen/index.html?book=/reader/books/pics-dir/`, { 'spine:ttsEngine': 'server' });
+  hold = true;   // (the picture pages wait, so reading looks past them for as long as the test needs)
+  await h.clearBreezeLog();
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => /Opening words/.test(e.text)), 15000), 'reading started');
+  await page.waitForTimeout(3000);   // (the sentence read: now looking past the picture pages)
+  await page.selectOption('#ttsSleep', 'chapter');
+  release();
+  assert.ok(await h.waitFor(async () => /Sleep timer: stopped at the end of the chapter/.test(await page.textContent('#ttsStatus')), 15000), await page.textContent('#ttsStatus'));
+  assert.match(await page.textContent('#spinePos'), /spine 1\/4/, 'not on to the next text');
+  assert.equal(await page.evaluate(() => document.querySelector('#ttsPlay').classList.contains('playing')), false, 'stopped');   // (the next text may be prepared ahead, not read)
+});
