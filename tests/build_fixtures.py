@@ -168,7 +168,11 @@ def main():
                         ("folder-sepia", {"LIB_FILES": "/reader/", "theme": "sepia"}),
                         ("folder-locked", {"LIB_FILES": "/reader/", "theme": "sepia", "TIME_LEFT": True,
                                            "LOCKED": ["theme", "TIME_LEFT", "shortcuts", "ALLOW_REMOTE_CONTENT", "bogus"]}),
-                        ("folder-keep", {"LIB_FILES": "/reader/", "KEEP_POSITIONS_DAYS": 30, "LOCKED": ["KEEP_POSITIONS_DAYS"]})):
+                        ("folder-keep", {"LIB_FILES": "/reader/", "KEEP_POSITIONS_DAYS": 30, "LOCKED": ["KEEP_POSITIONS_DAYS"]}),
+                        # (T-16: settings from a config file.)
+                        ("folder-cfg", {"LIB_FILES": "/reader/", "SEARCH_MAX": 2, "COMIC_PART": 10, "KEEP_POSITIONS_DAYS": 0, "BOOKSHELF": "/shelf2"}),
+                        ("folder-alttts", {"LIB_FILES": "/reader/", "TTS_SERVER": {"api": "/alt-tts/", "voices": "/alt-voices/"},
+                                           "SPAN_MAX": {"server": 60}, "SAVED_AUDIO_MB": 0})):
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
@@ -679,6 +683,11 @@ def main():
     with zipfile.ZipFile(books / "tall.cbz", "w") as z:
         for i in range(1, 7):
             z.writestr(f"page{i}.png", png(100, 750, ((i * 40) % 255, 120, 200)))
+
+    # A second bookshelf, named by folder-cfg's BOOKSHELF (T-16), and a second voice folder (TTS_SERVER).
+    (SITE / "shelf2").mkdir()
+    (SITE / "shelf2" / "second-shelf.md").write_text("# Second Shelf\n\nOnly on the second shelf.\n")
+    os.symlink("tts-voices", SITE / "alt-voices")
 
     # A server voice for the mock Breeze API.
     wav(SITE / "tts-voices" / "narrator.wav", 2.0)

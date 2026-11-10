@@ -64,10 +64,20 @@ if args.csp_from:
     assert POLICY, f"no {args.csp_variant} Content-Security-Policy in {args.csp_from}"
 
 
+# The types nginx.conf.example sets for the reader's files (location ~* \.ext$ { types { } default_type ...; }),
+# so the tests check the documented setup rather than types of the test server's own (REVIEW.md T-16).
+NGINX_TYPES = {}
+_conf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "nginx.conf.example")
+if os.path.isfile(_conf):
+    for m in re.finditer(r"location ~\*\s+\\\.\(?([a-z|]+)\)?\$\s*\{\s*types \{ \} default_type ([^;]+);", open(_conf).read()):
+        for ext in m.group(1).split("|"):
+            NGINX_TYPES["." + ext] = m.group(2).strip()
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm",
-                      ".json": "application/json", ".woff2": "font/woff2", ".css": "text/css"}
+                      ".json": "application/json", ".woff2": "font/woff2", ".css": "text/css", **NGINX_TYPES}
 
     def __init__(self, *a, **k):
         super().__init__(*a, directory=args.root, **k)
@@ -137,7 +147,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if args.breeze:
             if path == "/__breeze":
                 return self.json(200, breeze_log)
-            if path == "/tts/health":
+            if path in ("/tts/health", "/alt-tts/health"):   # (/alt-tts/: a folder whose config moves TTS_SERVER)
                 return self.json(200, {"status": "ok"})
             if path.startswith("/tts/"):
                 return self.json(404, {"detail": "Not Found"})
@@ -205,7 +215,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        if not (args.breeze and path == "/tts/v1/audio/speech"):
+        if not (args.breeze and path in ("/tts/v1/audio/speech", "/alt-tts/v1/audio/speech")):
             return self.json(404, {"detail": "Not Found"})
         body = self.rfile.read(int(self.headers["Content-Length"]))
         msg = BytesParser(policy=default).parsebytes(b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + body)
@@ -214,7 +224,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.json(409, {"detail": "An inference request is already running."})
         try:
             text = f["text"].decode()
-            entry = {"text": text, "ref_text": (f.get("ref_text") or b"").decode(), "ref_bytes": len(f.get("ref_audio") or b"")}
+            entry = {"text": text, "ref_text": (f.get("ref_text") or b"").decode(), "ref_bytes": len(f.get("ref_audio") or b""), "path": path}
             breeze_log.append(entry)
             seconds = 0.3 * len(text.split()) + 0.3
             n, step = int(24000 * seconds), 1920
