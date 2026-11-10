@@ -66,3 +66,17 @@ test('an archive with data before it (a self-extracting archive) is read in plac
   assert.equal(await z.file('a.txt').async('string'), 'hello world');
   assert.equal(await z.file('b.txt').async('string'), 'second file');
 });
+
+test('ZIP64 records between the directory and its end record are not taken for data before the archive (T-20, L-153)', async () => {
+  const [plain] = zip({ 'a.txt': Buffer.from('hello world'), 'b.txt': Buffer.from('second file') });
+  // Split at the end record and put a ZIP64 end record (56 bytes) and its locator (20) in between, as some tools
+  // write even when the 32-bit fields are enough.
+  const end = plain.subarray(plain.length - 22), body = plain.subarray(0, plain.length - 22);
+  const z64 = Buffer.alloc(56); z64.writeUInt32LE(0x06064b50, 0); z64.writeBigUInt64LE(44n, 4);
+  const loc = Buffer.alloc(20); loc.writeUInt32LE(0x07064b50, 0); loc.writeBigUInt64LE(BigInt(body.length), 8); loc.writeUInt32LE(1, 16);
+  const buf = Buffer.concat([body, z64, loc, end]);
+  const z = await lazyZip(reader(buf), buf.length);
+  assert.ok(z, 'read in place');
+  assert.equal(await z.file('a.txt').async('string'), 'hello world');
+  assert.equal(await z.file('b.txt').async('string'), 'second file');
+});

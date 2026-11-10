@@ -62,3 +62,11 @@ test('an obfuscated font named in another case in encryption.xml is still unobfu
   const got = Buffer.from(await page.evaluate(async u => [...new Uint8Array(await (await fetch(u)).arrayBuffer())], url));
   assert.ok(got.equals(want), `the font as it was before obfuscation (first bytes ${got.subarray(0, 8).toString('hex')})`);
 });
+
+test('publisher narration at the end of the text doesn\'t turn to a following picture page (L-93)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/narrated-pic.epub`);
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(async () => /End of book/.test(await page.textContent('#ttsStatus')), 20000), await page.textContent('#ttsStatus'));
+  assert.match(await page.textContent('#spinePos'), /spine 1\/2/);
+});

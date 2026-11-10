@@ -538,15 +538,15 @@ def main():
              uid=None, extra={"OEBPS/pic.png": png(30, 40, (90, 90, 90))})
     # Narrated books (Media Overlays, REVIEW.md T-3): three paragraphs, each a clip of one recording, then a
     # second chapter without narration. B has the same audio path with a longer recording (REVIEW.md M-17).
-    def narrated(dst, title, uid, clip):
+    def narrated(dst, title, uid, clip, after="<h1>After</h1><p>Not narrated.</p>", extra_files=None):
         wav(books / "narration.wav", 3 * clip)
         narr = [("c1.xhtml", "Narrated", '<h1>Narrated</h1><p id="n1">First narrated paragraph.</p><p id="n2">Second narrated paragraph.</p>'
-                 '<p id="n3">Third narrated paragraph.</p><p id="unnarrated">Not narrated, after the last clip.</p>'), ("c2.xhtml", "After", "<h1>After</h1><p>Not narrated.</p>")]
+                 '<p id="n3">Third narrated paragraph.</p><p id="unnarrated">Not narrated, after the last clip.</p>'), ("c2.xhtml", "After", after)]
         smil = ('<?xml version="1.0" encoding="utf-8"?><smil xmlns="http://www.w3.org/ns/SMIL" version="3.0"><body><seq>'
                 + "".join(f'<par id="p{i}"><text src="c1.xhtml#n{i}"/><audio src="narration.wav" clipBegin="{(i - 1) * clip:.1f}s" clipEnd="{i * clip:.1f}s"/></par>' for i in (1, 2, 3))
                 + '</seq></body></smil>')
         epub(books / "narrated-src.epub", title, narr, uid=uid,
-             extra={"OEBPS/c1.smil": smil.encode(), "OEBPS/narration.wav": (books / "narration.wav").read_bytes()})
+             extra={"OEBPS/c1.smil": smil.encode(), "OEBPS/narration.wav": (books / "narration.wav").read_bytes(), **(extra_files or {})})
         edited(books / "narrated-src.epub", books / dst,
                lambda o: o.replace('<item id="c0" href="c1.xhtml"', '<item id="c0" media-overlay="mo1" href="c1.xhtml"')
                           .replace("</manifest>", '<item id="mo1" href="c1.smil" media-type="application/smil+xml"/></manifest>')
@@ -554,6 +554,8 @@ def main():
         (books / "narrated-src.epub").unlink(); (books / "narration.wav").unlink()
     narrated("narrated.epub", "Narrated Book", "urn:narrated", 0.6)
     narrated("narrated-b.epub", "Narrated Book B", "urn:narrated-b", 2.0)
+    # (T-20, L-93) Narration followed by a page with only a picture.
+    narrated("narrated-pic.epub", "Narrated Pic", "urn:narrated-pic", 0.6, after='<p><img src="pic.png" alt=""/></p>', extra_files={"OEBPS/pic.png": png(40, 30, (90, 90, 200))})
     edited(books / "twin-a.epub", books / "twin-a-uid.epub",
            lambda o: o.replace('version="3.0">', 'version="3.0" unique-identifier="uid">')
                       .replace('<dc:title>', '<dc:identifier id="uid">urn:twin-a-given</dc:identifier><dc:title>'))
