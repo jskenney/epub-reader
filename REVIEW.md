@@ -217,8 +217,10 @@ test that fails on the code before it:
 - **Medium:** M-87.
 - **Low:** L-231 to L-234. **Tests:** T-40 to T-42. **Docs:** D-19.
 
-One item waits for your decision: M-86, which way the arrows go in the reflowable chapters of a right-to-left
-book with some fixed pages. One part of T-41 can't be told apart from the outside, and the row says so.
+One item waited for your decision: M-86, which way the arrows go in the reflowable chapters of a right-to-left
+book with some fixed pages. You chose that every right-to-left book turns right to left, with a setting to turn
+every book left to right; that is in `24298ff`. One part of T-41 can't be told apart from the outside, and the
+row says so.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
@@ -252,8 +254,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-No critical or high items are open. The open items are:
-- **Medium:** M-86 (needs your decision: arrows in a right-to-left book's reflowable chapters).
+No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Enhancements:** E-1 to E-4 and E-6 to E-8.
 
@@ -261,25 +262,8 @@ No critical or high items are open. The open items are:
 
 | ID | Title | Kind |
 |---|---|---|
-| [M-86](#m-86-arrows-in-a-right-to-left-books-reflowable-chapters-depend-on-whether-any-page-is-fixed) | Arrows in a right-to-left book's reflowable chapters depend on whether any page is fixed | Medium (your decision) |
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
-
-## Medium
-
-### M-86. Arrows in a right-to-left book's reflowable chapters depend on whether any page is fixed
-
-*Reproduced.* Pages turn right to left (the left arrow and a swipe to the right go on) in a book with
-`page-progression-direction="rtl"` if any of its pages is fixed. That applies in every chapter, the reflowable
-ones too. Many Japanese and Arabic books are reflowable with a fixed cover. In such a book the left arrow goes on
-through the reflowed text, while the same book without the fixed cover goes on with the right arrow.
-
-Three ways to settle it:
-- **Per page:** right to left only on fixed pages.
-- **Fixed books only:** right to left only when the whole book is fixed layout.
-- **All right-to-left books:** every right-to-left book, reflowable ones included, turns right to left.
-
-Which one is your call.
 
 ## Low
 
@@ -316,8 +300,7 @@ A web app manifest and service worker, so the reader can be installed and open s
 
 ## Suggested order
 
-1. **M-86:** once you've chosen how it should behave.
-2. The enhancements, as wanted.
+1. The enhancements, as wanted.
 
 ## Resolved
 
@@ -410,6 +393,7 @@ From all reviews so far, with the commits that fixed them.
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
 | M-87 | The facing page of a spread took clicks, keys and the wheel but not swipes; moving the mouse over it didn't wake the full-screen controls; it didn't close the menus or take a dropped book; C left the focus on it | `526c63e` |
+| M-86 | Arrows in a right-to-left book's reflowable chapters went one way or the other depending on whether any page was fixed. Every right-to-left book now turns right to left, by your decision, and Settings' "Turn every book left to right" (`FORCE_LTR`) overrides it for books marked so by mistake | `24298ff` |
 | M-85 | A fixed page's colours were judged once, possibly before a stylesheet from another site had arrived (with remote content allowed): white text on a white page; they are now judged on every fit and again when such a sheet loads | `dea8a59` |
 | M-84 | Switching a fixed page into the scroll layout, or reopening it there, landed at its bottom (a side effect of L-223's fix); the place stays at the top, and progress counts a shown fixed page as read separately | `165e1ba` |
 | M-83 | Making every fixed page's body white hid pages coloured on their html (or by bgcolor): white text on white (a regression from M-82's fix); the colours are now worked out once per page | `0e3ee93` |
