@@ -169,3 +169,26 @@ test('a fixed-layout book reaches 100% on its last page (round 22 review)', asyn
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
   assert.equal(await page.textContent('#pct'), '100%');
 });
+
+test('a page coloured black on its html stays black with white text in the black theme, and after a theme change (round 22 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/fixed-black.epub`, { 'spine:theme': 'black' });
+  const c = () => page.evaluate(() => { const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
+    return [w.getComputedStyle(d.documentElement).backgroundColor, w.getComputedStyle(d.body).backgroundColor, w.getComputedStyle(d.querySelector('p')).color]; });
+  assert.deepEqual(await c(), ['rgb(0, 0, 0)', 'rgba(0, 0, 0, 0)', 'rgb(255, 255, 255)']);
+  await page.click('#themeBtn'); await page.waitForTimeout(500);   // (to a light theme)
+  assert.deepEqual(await c(), ['rgb(0, 0, 0)', 'rgba(0, 0, 0, 0)', 'rgb(255, 255, 255)'], 'still the book\'s black');
+});
+
+test('a fixed page switched into the scroll layout, or reopened in it, starts at its top; the time left shows in page layouts (round 22 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, FIXED, { 'spine:layout': 'one', 'spine:set:TIME_LEFT': true });
+  await page.waitForFunction(() => document.querySelector('#timeLeft').textContent.trim(), null, { timeout: 10000 });
+  await page.click('#layoutBtn'); await page.waitForTimeout(800);   // (one → scroll)
+  assert.equal(await page.evaluate(() => document.querySelector('#page').contentDocument.scrollingElement.scrollTop), 0);
+  await page.evaluate(() => localStorage.setItem('spine:layout', '"one"'));
+  await page.reload(); await h.waitForBook(page);
+  await page.evaluate(() => localStorage.setItem('spine:layout', '"scroll"'));
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await page.evaluate(() => document.querySelector('#page').contentDocument.scrollingElement.scrollTop), 0);
+});

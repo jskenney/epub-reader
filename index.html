@@ -2206,7 +2206,10 @@ function fixedCss(fx, t, dark){
   const scroll = layout === 'scroll';
   // (The theme's colour around the page, unless the book colours its html: a background of lower precedence
   // than the book's own. The page itself keeps the book's colours, light controls included.)
-  return `:where(html){background-color:${t.bg};color:#000}
+  // (No colour on html here: fxlFit judges the book's own colours, and until it has, the page isn't shown, so a
+  // colour that happens to be the theme's isn't mistaken for none, and nothing flashes in the wrong colours.)
+  return `:where(html){color:#000}
+html:not([data-spine-colours]) body{visibility:hidden}
 html{color-scheme:${dark ? 'dark' : 'light'};width:100% !important;min-width:0 !important;max-width:none !important;${scroll ? 'height:auto !important;min-height:100% !important' : 'height:100% !important;min-height:0 !important'};max-height:none !important;
   margin:0 !important;padding:0 0 ${scroll ? 12 + tts.barH : tts.barH}px !important;box-sizing:border-box !important;transform:none !important;
   display:flex !important;align-items:safe center !important;justify-content:safe center !important;overflow:${scroll ? 'auto' : 'hidden'} !important}
@@ -2234,14 +2237,14 @@ function fxlFit(){
   const html = doc.documentElement, clear = c => /^(transparent|rgba\(0, 0, 0, 0\))$/.test(c);
   if (!html.hasAttribute('data-spine-colours')) {
     const hs = w.getComputedStyle(html), bs = w.getComputedStyle(doc.body);
-    const own = hs.backgroundImage !== 'none' || (!clear(hs.backgroundColor) && hs.backgroundColor !== cssColour(tokens().bg));
+    const own = hs.backgroundImage !== 'none' || !clear(hs.backgroundColor);
+    // (White under a clear body, under its background image too, which may be partly transparent.)
+    if (!own && clear(bs.backgroundColor)) doc.body.style.setProperty('background-color', '#fff');
     html.setAttribute('data-spine-colours', own ? 'own' : 'theme');
-    if (!own && clear(bs.backgroundColor) && bs.backgroundImage === 'none') doc.body.style.setProperty('background-color', '#fff');
   }
   if (html.getAttribute('data-spine-colours') === 'theme') html.style.setProperty('background-color', tokens().bg);   // (kept up to date with the theme)
 }
-// A colour as the browser writes it ("rgb(18, 21, 20)"), to compare with computed styles.
-function cssColour(c){ const el = document.createElement('i'); el.style.color = c; document.body.append(el); const v = getComputedStyle(el).color; el.remove(); return v; }
+
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
   // it into a live shadow root, links and all. Templates show nothing on their own, so nothing is lost.)
@@ -2656,7 +2659,6 @@ const scrolling = () => layout === 'scroll';
 const scroller = () => frame.contentDocument?.scrollingElement || null;
 function fraction(){
   if (scrolling()) { const se = scroller(); if (!se) return 0; const max = se.scrollHeight - se.clientHeight; return max > 0 ? Math.min(1, se.scrollTop / max) : 0; }
-  if (fxlOf(frame.contentDocument)) return 1;   // (a fixed-layout page, shown whole: the section read)
   return cur.pages > 1 ? cur.page / (cur.pages - 1) : 0;
 }
 function scrollTo(y){
@@ -2674,7 +2676,7 @@ function showPage(n){
 }
 function position(frag, f){
   // (A fixed-layout page in a page layout is one page: nothing to turn to, but the place is saved as any.)
-  if (!scrolling() && fxlOf(frame.contentDocument)) { cur.page = 0; cur.pages = 1; cur.f = 1; updateProgress(); savePos(); return; }   // (shown whole: the section read)
+  if (!scrolling() && fxlOf(frame.contentDocument)) { cur.page = 0; cur.pages = 1; cur.f = 0; updateProgress(); savePos(); return; }
   if (scrolling()) {
     const doc = frame.contentDocument, se = scroller(); if (!se) return;
     const el = frag && (doc.getElementById(frag) || doc.getElementsByName(frag)[0]);
@@ -3017,7 +3019,8 @@ function updateProgress(){
   updateSection();
   turnedPage();
   updateTimeLeft();
-  const overall = (cur.i + fraction()) / book.spine.length;
+  // (A fixed-layout page counts as read once shown, in any layout: progress reaches 100% on the last one.)
+  const overall = (cur.i + (fxlOf(frame.contentDocument) ? 1 : fraction())) / book.spine.length;
   const pct = Math.round(overall * 100);
   $('#ribbonFill').style.width = (overall * 100).toFixed(2) + '%';
   $('#ribbon').setAttribute('aria-valuenow', pct);

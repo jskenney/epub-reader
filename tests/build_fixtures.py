@@ -714,6 +714,16 @@ def main():
         z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
         for n, d in parts.items(): z.writestr(n, d)
 
+    # (Round 22, fifth review) A page coloured black on its html (manga, photo books), body unset.
+    epub_items(books / "fixed-black.epub", "Fixed Black", [("b1", "b1.xhtml", "application/xhtml+xml", "")], ["b1"],
+        {"b1.xhtml": xhtml("Black", "<p>White on black words</p>", vp + "<style>html{background:#000;color:#fff}</style>")}, "urn:fixed-black")
+    with zipfile.ZipFile(books / "fixed-black.epub") as z0:
+        parts = {n: z0.read(n) for n in z0.namelist()}
+    parts["OEBPS/content.opf"] = parts["OEBPS/content.opf"].replace(b"</metadata>", b'<meta property="rendition:layout">pre-paginated</meta></metadata>')
+    with zipfile.ZipFile(books / "fixed-black.epub", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
+        for n, d in parts.items(): z.writestr(n, d)
+
     # (Round 22, second review) A vertically written page (Japanese fixed-layout books), and one that clears html's background.
     fx3 = xhtml("Vertical", '<p class="v">縦書きのページ</p>', '<meta name="viewport" content="width=600, height=1600"/><style>html{writing-mode:vertical-rl}body{background:#fff}</style>')
     fx4 = xhtml("Clear", '<p>Clear html</p>', '<meta name="viewport" content="width=600, height=800"/><style>html{background:transparent}body{background:#ff0}</style>')
