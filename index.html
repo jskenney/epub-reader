@@ -1546,6 +1546,8 @@ function readInfo(md, ids, spineEl){
   }
 
   const layout = textOf(prop('rendition:layout', undefined).find(m => !m.getAttribute('refines'))) === 'pre-paginated' ? 'Fixed layout' : 'Reflowable';
+  // (The page size of fixed-layout pages without one of their own: EPUB 3.0's rendition:viewport.)
+  const viewport = viewportSize(textOf(prop('rendition:viewport', undefined).find(m => !m.getAttribute('refines'))));
   const dir = (spineEl?.getAttribute('page-progression-direction') || '').toLowerCase();
 
   return {
@@ -1554,7 +1556,7 @@ function readInfo(md, ids, spineEl){
     isbn,
     series,
     subjects: all('subject').map(textOf).filter(Boolean).join(', '),
-    layout,
+    layout, viewport,
     direction: dir === 'rtl' ? 'Right to left' : 'Left to right',
     description: all('description')[0]?.textContent || '',
     narrator: prop('media:narrator', undefined).filter(m => !m.getAttribute('refines')).map(textOf).filter(Boolean).join(', '),
@@ -1633,7 +1635,10 @@ async function openBook(zip, { sample = false, name = '', seq } = {}){
   const spine = [];
   for (const ref of opf.getElementsByTagNameNS('*', 'itemref')) {
     const item = manifest.get(ref.getAttribute('idref'));
-    if (item && await zip.exists(item.path)) spine.push({ ...item, linear: ref.getAttribute('linear') !== 'no' });
+    // (rendition:layout-* on an itemref overrides the book's layout for that page: E-15.)
+    const rp = (ref.getAttribute('properties') || '').split(/\s+/);
+    const fixed = rp.includes('rendition:layout-pre-paginated') ? true : rp.includes('rendition:layout-reflowable') ? false : null;
+    if (item && await zip.exists(item.path)) spine.push({ ...item, linear: ref.getAttribute('linear') !== 'no', fixed });
   }
   if (!spine.length) throw new Error('The package lists no readable files in its spine, so there is nothing to show.');
 
@@ -2150,8 +2155,9 @@ ${layout === 'two' ? `@media (min-width:641px){.cbz-page:nth-of-type(odd){justif
 ${layout === 'scroll' ? `.cbz-page{height:auto;break-after:auto;margin:0 auto 8px}
 .cbz-page img{max-height:none !important;max-width:min(100%,1100px) !important}` : ''}`;
 }
-function overrideCss(){
+function overrideCss(fx = null){
   const t = tokens(), dark = isDark();
+  if (fx) return fixedCss(fx, t, dark);
   // Side margin: at least a little, and whatever is left once the text reaches its width limit.
   const cap = WIDTHS[widthStep][layout === 'two' ? 2 : 1];
   const m = cap ? `max(20px,3.5vw,calc((100vw - ${cap}) / 2))` : 'max(20px,2vw)';
@@ -2189,6 +2195,29 @@ ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:t
 a,a *{color:${t.ribbon} !important}` : ''}`;
 }
 
+// A fixed-layout page: its own size and styles, centred in the frame on the theme's background (scaled by fxlFit).
+function fixedCss(fx, t, dark){
+  const scroll = layout === 'scroll';
+  return `html{background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;margin:0 !important;padding:0 0 ${tts.barH}px !important;box-sizing:border-box !important;
+  display:flex !important;align-items:${scroll ? 'flex-start' : 'center'} !important;justify-content:center !important;overflow:${scroll ? 'auto' : 'hidden'} !important}
+body{width:${fx.w}px !important;height:${fx.h}px !important;min-width:0 !important;max-width:none !important;margin:${scroll ? '12px' : '0'} 0 !important;flex:none !important;
+  overflow:hidden !important;position:relative !important;box-shadow:0 1px 8px rgb(0 0 0 / .25)}
+#${RID.clip},#${RID.flow}{display:contents !important}
+#${RID.end}{display:none !important}
+::highlight(tts-sentence){background-color:${t.soft}}
+::highlight(tts-word){background-color:${t.ribbon};color:${t.onRibbon}}
+::highlight(search-hit){background-color:rgb(250 205 70 / .45)}
+::highlight(search-current){background-color:#F2B630;color:#1a1408}`;
+}
+// Scale the fixed-layout page in the frame to fit it (the width only, when scrolling), up to its full size.
+const fxlOf = doc => doc?.documentElement?.getAttribute('data-spine-fxl')?.split(' ').map(Number) || null;
+function fxlFit(){
+  const doc = frame.contentDocument, w = frame.contentWindow, fx = fxlOf(doc);
+  if (!fx || !w || !doc.body) return;
+  const pad = 16, room = [w.innerWidth - pad * 2, w.innerHeight - pad * 2 - (tts.open ? tts.barH : 0)];
+  const s = Math.max(0.05, Math.min(scrolling() ? room[0] / fx[0] : Math.min(room[0] / fx[0], room[1] / fx[1]), 2));
+  doc.body.style.setProperty('zoom', String(Math.round(s * 1000) / 1000), 'important');
+}
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
   // it into a live shadow root, links and all. Templates show nothing on their own, so nothing is lost.)
@@ -2293,8 +2322,28 @@ function pointLinksHere(doc){
   }
 }
 
+/* Fixed-layout pages (E-15): a pre-paginated page has a size of its own (its viewport meta, an SVG page's
+   viewBox, or the book's rendition:viewport), and is shown at that size, scaled to fit the screen (fxlFit), one
+   page per screen, with the book's own styles rather than the reader's columns, fonts and colours. A page whose
+   size can't be found is reflowed like any other. */
+// "width=1200, height=1600" → { w, h }, or null.
+function viewportSize(t){
+  const n = k => Number((String(t || '').match(new RegExp(`(?:^|[,;\\s])${k}\\s*=\\s*([0-9.]+)`, 'i')) || [])[1]);
+  const w = n('width'), h = n('height');
+  return w >= 10 && h >= 10 && w <= 20000 && h <= 20000 ? { w: Math.round(w), h: Math.round(h) } : null;
+}
+function fixedSize(src, path){
+  const item = book.spine?.find(s => s.path === path);
+  if (!item || !(item.fixed ?? book.info?.layout === 'Fixed layout')) return null;
+  const meta = [...src.getElementsByTagNameNS('*', 'meta')].find(m => (m.getAttribute('name') || '').toLowerCase() === 'viewport');
+  const svg = src.getElementsByTagNameNS('*', 'body')[0]?.firstElementChild;
+  const vb = svg?.localName === 'svg' && (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  return viewportSize(meta?.getAttribute('content')) || (vb?.length === 4 ? viewportSize(`width=${vb[2]},height=${vb[3]}`) : null) || book.info?.viewport || null;
+}
 async function buildPage(src, path){
   const out = document.implementation.createHTMLDocument('');
+  const fx = fixedSize(src, path);
+  if (fx) out.documentElement.setAttribute('data-spine-fxl', `${fx.w} ${fx.h}`);
   const sHtml = src.documentElement;
   const sHead = src.getElementsByTagNameNS('*', 'head')[0];
   const sBody = src.getElementsByTagNameNS('*', 'body')[0];
@@ -2324,7 +2373,7 @@ async function buildPage(src, path){
       head.append(st);
     }
   }
-  const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(); head.append(ov);
+  const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(fx); head.append(ov);
   if (sBody) {
     for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.value);
   }
@@ -2522,7 +2571,7 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
     if (token !== renderToken) return;
     cur.doc = frame.contentDocument;   // (savePos: what's in the frame is this page, not the one before)
     wireFrame();
-    comicOrder();
+    comicOrder(); fxlFit();
     const fonts = frame.contentDocument.fonts;
     if (fonts) await Promise.race([fonts.ready, new Promise(r => setTimeout(r, 1500))]);
     if (token !== renderToken) return;
@@ -2605,7 +2654,7 @@ function position(frag, f){
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
 function relayout(){
-  comicOrder();
+  comicOrder(); fxlFit();
   if (!book || cur.f == null) return;
   // (A comic in a page layout: back to the first page that was on screen, not the same fraction, which lands on
   // another page or spread when the number of columns changes.)
@@ -2768,7 +2817,7 @@ function restyleFrame(){
   const doc = frame.contentDocument; if (!doc) return;
   const b = doc.getElementById(RID.base), o = doc.getElementById(RID.override);
   if (b) b.textContent = baseCss();
-  if (o) o.textContent = overrideCss();
+  if (o) { const fx = fxlOf(doc); o.textContent = overrideCss(fx && { w: fx[0], h: fx[1] }); }
   const l = doc.getElementById(RID.font), h = fontHref();
   if (l && l.getAttribute('href') !== h) {
     l.addEventListener('load', () => (doc.fonts?.ready || Promise.resolve()).then(relayout), { once: true });

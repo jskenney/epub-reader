@@ -42,6 +42,14 @@ saved position) works as for EPUBs.
   stylesheets and relative links load from its folder on the server; an
   uploaded single file can't bring those along.
 
+**Fixed-layout EPUBs** (pre-paginated: picture books, comics and magazines
+made as EPUB) are shown a page at a time, each at the size the book gives it
+(its `viewport`, an SVG page's `viewBox`, or the book's
+`rendition:viewport`), scaled to fit the screen, with the book's own styles
+and positions; the scroll layout fits each page to the width. Their text can
+still be searched and read aloud. A page whose size isn't given, or marked
+`rendition:layout-reflowable`, is reflowed like any other.
+
 **Comic books** (`.cbz`, a ZIP of page images) open too. Pages are shown in
 name order (page2 before page10), each as large as fits: a two-page spread
 in the two-column layout, one page in the single-column layout, and a

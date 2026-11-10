@@ -645,6 +645,30 @@ def main():
         z.writestr("ComicInfo.xml", "<ComicInfo><Title>Test Comic</Title><Series>Tests</Series><Number>1</Number>"
                                     "<Writer>A. Writer</Writer><LanguageISO>en</LanguageISO></ComicInfo>")
 
+    # A fixed-layout book (E-15): pages of 600x800 with their own styles and absolute positions, an SVG page
+    # sized by its viewBox, and one page marked reflowable.
+    fxl_page = lambda n, colour: xhtml(f"Page {n}", f'<div class="box" style="background:{colour}"></div><p class="cap" id="cap{n}">Fixed page {n} words</p>',
+        '<meta name="viewport" content="width=600, height=800"/><style>body{margin:0;background:#fff}.box{position:absolute;left:0;top:0;width:600px;height:400px}'
+        '.cap{position:absolute;left:20px;top:700px;font-size:30px;margin:0;color:#000}</style>')
+    fxl_opf = """<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" prefix="rendition: http://www.idpf.org/vocab/rendition/#">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">urn:fxl</dc:identifier><dc:title>Fixed Book</dc:title>
+<dc:language>en</dc:language><meta property="rendition:layout">pre-paginated</meta></metadata>
+<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+<item id="p1" href="p1.xhtml" media-type="application/xhtml+xml"/><item id="p2" href="p2.xhtml" media-type="application/xhtml+xml"/>
+<item id="p3" href="p3.xhtml" media-type="application/xhtml+xml"/><item id="p4" href="p4.xhtml" media-type="application/xhtml+xml"/></manifest>
+<spine><itemref idref="p1"/><itemref idref="p2"/><itemref idref="p3"/><itemref idref="p4" properties="rendition:layout-reflowable"/></spine></package>"""
+    with zipfile.ZipFile(books / "fixed.epub", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
+        z.writestr("META-INF/container.xml", """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
+        z.writestr("OEBPS/content.opf", fxl_opf)
+        z.writestr("OEBPS/nav.xhtml", xhtml("Contents", '<nav epub:type="toc"><ol><li><a href="p1.xhtml">One</a></li><li><a href="p3.xhtml">Three</a></li></ol></nav>'))
+        z.writestr("OEBPS/p1.xhtml", fxl_page(1, "#c33"))
+        z.writestr("OEBPS/p2.xhtml", fxl_page(2, "#33c"))
+        z.writestr("OEBPS/p3.xhtml", xhtml("Page 3", '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300"><rect width="400" height="300" fill="#3c3"/><text x="20" y="150">Drawn page</text></svg>'))
+        z.writestr("OEBPS/p4.xhtml", xhtml("Page 4", paragraphs("Reflowed", 6)))
+
     # Right-to-left manga (E-9): five pages, ComicInfo's Manga "YesAndRightToLeft".
     with zipfile.ZipFile(books / "manga.cbz", "w") as z:
         for i in range(1, 6):
