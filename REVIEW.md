@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-10, round 20): `index.html` (about 6,300 lines), the fetch scripts,
+Review of the repository (2026-11-10, round 21): `index.html` (about 6,300 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -156,6 +156,13 @@ What it found was fixed in `fd47b98`, with a test that fails on the code before 
 It also raised a question for the owner, filed as E-18: whether a site should be able to lock options. That was
 the fourth loop of the four allowed, so the review-and-fix loops stop here.
 
+Round 21 built E-18, a `LOCKED` list in reader-config.json for options readers can't change in that folder, and
+E-19, a read-aloud engine list only as wide as the engine chosen (`c7b0749`). An independent reviewer then went
+over both. It found no critical or high items. What it found was fixed in `96e5832`, with tests that fail on the
+code before it except where marked *read*:
+- **Medium:** M-75 (a locked days-to-keep deleted positions across the whole site).
+- **Low:** L-205 to L-207. **Tests:** T-32. **Documentation:** D-14.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -191,7 +198,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Tests:** T-16 and T-20 (in part).
-- **Enhancements:** E-1 to E-4, E-6 to E-9, E-15 and E-18.
+- **Enhancements:** E-1 to E-4, E-6 to E-9 and E-15.
 
 ## Open items
 
@@ -200,7 +207,7 @@ No critical, high or medium items are open. The open items are:
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-9](#e-9-right-to-left-manga), [E-15](#e-15-fixed-layout-books), [E-18](#e-18-let-a-site-lock-settings) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-9](#e-9-right-to-left-manga), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
 
 ## Low
 
@@ -264,14 +271,6 @@ Use ComicInfo's `Manga` value to show comic pages right to left, including sprea
 Pre-paginated (fixed-layout) EPUBs are shown reflowed in columns, and `linear="no"` items are read in order with
 the rest (which the spec allows). Laying out fixed-layout pages as pages (and optionally skipping non-linear
 items) would suit comics-style and picture books.
-
-### E-18. Let a site lock settings
-
-*Needs your decision.* Readers can now change, for themselves, options a site sets in reader-config.json,
-including turning on remote content (M-69) and web links where a folder turned them off. A site that needs
-them fixed (a kiosk, a school) can't keep them. A `LOCKED` list in reader-config.json could name options the
-dialog shows as set by the site and doesn't let readers change. Until then, the reader policy from
-nginx.conf.example still blocks other sites whatever the reader chooses.
 
 ## Suggested order
 
@@ -365,6 +364,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-75 | A folder locking KEEP_POSITIONS_DAYS applied its time to the whole site, over the reader's own ("keep forever" included); there the longest of the folders' times and the reader's now applies | `96e5832` |
 | M-74 | Turning off full-precision voices broke Pocket TTS on a site without CDNs that self-hosts only the full-precision files, with a message for the site owner; the reader is now told which setting to change | `fd47b98` |
 | M-72 | A comic in the scroll layout reopened at the top of its page, not as far down it as the reader was (a regression from H-17's fix) | `e7d1096` |
 | M-73 | Setting an option back to one folder's default deleted the reader's choice for every folder, and could turn remote content back on elsewhere (the rest of M-70) | `e7d1096` |
@@ -557,6 +557,9 @@ From all reviews so far, with the commits that fixed them.
 | L-181 | `libs/LICENSES/lamejs.txt` was LAME's licence FAQ, not the LGPL; fetch-libs.sh now saves the LGPL-3.0 text (with the GPL) | `0a4902b` |
 | L-182 | Stale messages: the export button said `.m4b`; formats being checked were greyed out; a note for a format that can't be made; the AAC size estimate used the wrong setting (*read*) | `0a4902b` |
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
+| L-205 | With shortcuts locked, the arrow keys stopped at the end of the Aa menu (a disabled item can't take focus); it is now aria-disabled | `96e5832` |
+| L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
+| L-207 | The measured engine-list width may clip text in Safari, whose arrows take more room; `field-sizing: content` where supported (*read*) | `96e5832` |
 | L-201 | Settings could be opened before the site's values were known ("this site's default is undefined"; Restore defaults left `data-theme="undefined"`) | `fd47b98` |
 | L-202 | Days to keep positions under one rounded to 0, "keep forever" | `fd47b98` |
 | L-203 | In forced-colours mode the chosen theme card couldn't be told apart | `fd47b98` |
@@ -601,6 +604,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-32 | A locked days-to-keep against other folders' positions, the Aa menu with shortcuts locked, the engine list never narrower than its text | `96e5832` |
 | T-31 | The Settings button before the config, under a day, forced colours, a folder's early theme, Pocket with only the 8-bit model and no CDNs | `fd47b98` |
 | T-30 | A choice set back in another folder, a tall-page comic in the scroll layout, the whole row as a target | `e7d1096` |
 | T-29 | Comic places at the end of a section and after a larger section size in every layout, settings across folders, Escape in an untouched field, a stored junk shortcuts value | `7bbe17b` |
@@ -615,6 +619,7 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-14 | README: "any of them" can be locked (only the ⚙ ones can); a locked shortcuts and days-to-keep | `96e5832` |
 | D-13 | README: themes didn't mention a folder's default; values now whole numbers; what a reader's precision choice needs on a self-hosted site | `fd47b98` |
 | D-12 | The settings code comment and REVIEW.md said a reader's value is dropped when it equals the site's | `e7d1096` |
 | D-11 | README: changing COMIC_PART "doesn't move readers" wasn't true yet, and places saved by earlier versions weren't mentioned | `7bbe17b` |
@@ -627,4 +632,6 @@ From all reviews so far, with the commits that fixed them.
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
+| E-18 | Let a site lock settings: a `LOCKED` list in reader-config.json names options readers can't change in that folder | `c7b0749`, `96e5832` |
+| E-19 | The read-aloud engine list only as wide as the engine chosen, not its longest option (user request) | `c7b0749`, `96e5832` |
 | E-17 | Audiobook formats: `.opus` (Opus in Ogg, chapter comments) and `.mp3` (lamejs, ID3 chapters) as well as `.m4b`; those this browser can't make greyed out with the reason | `2c7386b`, `895bafa`, `8af5e59`, `0a4902b` |
