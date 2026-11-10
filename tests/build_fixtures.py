@@ -298,6 +298,12 @@ def main():
         epub(books / f"{name}.epub", name, [("c1.xhtml", "One", "<p>Obfuscated font text.</p>", style)], uid=uid,
              extra={"OEBPS/f.ttf": obfuscated(key, n), "META-INF/encryption.xml": enc(alg)})
     (books / "obf-font.bin").write_bytes(font)
+    # (T-20, L-170) A folder book of three chapters, for searches while it is still being indexed.
+    epub(books / "search-src.epub", "Search Folder", [("c1.xhtml", "One", "<p>Alpha words here.</p>"), ("c2.xhtml", "Two", "<p>Zebra unique words.</p>"),
+         ("c3.xhtml", "Three", "<p>Gamma words here.</p>")], uid="urn:search-dir")
+    with zipfile.ZipFile(books / "search-src.epub") as z0:
+        z0.extractall(books / "search-dir")
+    (books / "search-src.epub").unlink()
     # (T-20) The IDPF one unpacked as a folder book, whose font is fetched from the server.
     with zipfile.ZipFile(books / "obf-idpf.epub") as z0:
         z0.extractall(books / "obf-dir")

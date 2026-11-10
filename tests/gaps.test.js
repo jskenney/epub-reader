@@ -115,3 +115,26 @@ test('a Pocket TTS worker that crashes is marked as stopped working, and loaded 
   if (loads < 2) { await page.click('#ttsPlay'); await page.click('#ttsDownload', { timeout: 3000 }).catch(() => {}); }
   assert.ok(await h.waitFor(async () => loads >= 2, 15000), `worker loads: ${loads}`);
 });
+
+test('searches typed while the book is first being indexed don\'t use up the retries of a chapter that couldn\'t be read (L-170)', async () => {
+  const page = await h.newPage();
+  let failTwo = true, release;
+  const gate = new Promise(r => { release = r; });
+  await page.route('**/search-dir/OEBPS/c2.xhtml', route => failTwo ? route.abort() : route.continue());
+  let holdThree = false;   // (from when the book has opened: opening reads the last chapter for its key)
+  await page.route('**/search-dir/OEBPS/c3.xhtml', async route => { if (holdThree) await gate; await route.continue(); });
+  await page.goto(`${h.READER}?book=books/search-dir/`);
+  await h.waitForBook(page);
+  assert.equal(await h.title(page), 'Search Folder');
+  holdThree = true;
+  // Three searches while indexing waits on chapter 3.
+  for (const q of ['zebra', 'zebr', 'zebra']) { await page.fill('#searchBox', q); await page.waitForTimeout(400); }
+  release();
+  const status = () => page.textContent('#searchStatus');
+  await h.waitFor(async () => /No matches/.test(await status()), 10000);
+  // A search after it: chapter 2 is tried again and still fails; then it can be read, and the next search finds it.
+  await page.fill('#searchBox', 'zebr'); await page.waitForTimeout(600);
+  failTwo = false;
+  await page.fill('#searchBox', 'zebra');
+  assert.ok(await h.waitFor(async () => /1 of 1 match/.test(await status()), 10000), await status());
+});
