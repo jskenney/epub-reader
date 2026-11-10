@@ -261,6 +261,12 @@ The fourth loop built E-23 (`d4922f4`): an EPUB's chapters can be edited with th
 across chapters, and the book saved re-packed (over its file when it came from the file picker), or the chapter
 downloaded alone; XHTML chapters must stay well-formed.
 
+A fifth review, of E-23 and loop 3's fixes, was fixed in `917bda1`, each with a test that fails on the code
+before it (the read-only ones checked by reading):
+- **High:** H-27, H-28.
+- **Medium:** M-109 to M-113.
+- **Low:** L-266 to L-273.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -361,6 +367,8 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
 | H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
+| H-28 | Saving an edited EPUB destroyed a UTF-16 package file (read as UTF-8 and written back); the saved book no longer opened, and for a book from the file picker that was the only copy | `917bda1` |
+| H-27 | WYSIWYG on an EPUB chapter with a wrapper (Calibre's `<div class="calibre">`, common) nested the wrapper inside itself, again on every editing session | `917bda1` |
 | H-26 | WYSIWYG: a body holding one wrapper with a kept element (a script, a style) or a comment beside it, the usual `<div id="app">…</div><script>`, lost both the wrapper and the script when written back (HTML and Markdown) | `7634901` |
 | H-25 | WYSIWYG Markdown: an empty paragraph (Enter at a paragraph's end) or a line break at a paragraph's end became a literal backslash | `9a6889f` |
 | H-24 | WYSIWYG Markdown: a document starting with a rule had it written as `---`, then read as front matter, which hid the text after it and was written again (duplicated) on every flush | `9a6889f` |
@@ -438,6 +446,11 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | M-108 | Saving a site document to a file deleted another file's draft kept under that file name | `d6ec28d` |
 | M-107 | Markdown written back after loop 2: a backslash at the end of a text lost the emphasis, link or code after it (written as `\<em>`, `\[`, `` \` ``) | `d6ec28d` |
 | M-106 | `?get=` took a `data:` address (which has no host) and showed it with no note that it came from elsewhere; `javascript:` and `file:` failed with misleading messages | `d6ec28d` |
+| M-113 | Saving over a picked EPUB then read the whole packed book into memory for the rest of the session; a failure to read it was swallowed, leaving reads from the overwritten file to fail (*read*) | `917bda1` |
+| M-112 | `?edit=` on an EPUB that couldn't be opened put the default book's chapter in the editor and hid the error | `917bda1` |
+| M-111 | WYSIWYG wrote an XHTML chapter named `.html` (no XML declaration) as HTML, so `<br/>` became `<br>` and the book couldn't be saved | `917bda1` |
+| M-110 | A chapter kept malformed (Done, "keep it like this") was saved in the book unchecked when another chapter was saved | `917bda1` |
+| M-109 | Files in another encoding were spoiled on save: an edited Latin-1 chapter written as UTF-8 under its old declaration, and the package (never edited) re-read as UTF-8, losing its accented letters | `917bda1` |
 | M-105 | Changing the address of a link added while editing was ignored when written back (and the prompt didn't show its address) | `7634901` |
 | M-104 | A draft made after a save that downloaded a copy (a document from the site, or opened with the file input) was kept but never offered again: it was tied to the copy, which the site or the file didn't have | `7634901` |
 | M-103 | HTML with no `<html>`, `<head>` or `<body>` tags lost its doctype when written back (quirks mode) | `7634901` |
@@ -673,6 +686,14 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-261 | The note that a document came from another site was replaced by the draft offer, and was gone once editing began | `d6ec28d` |
 | L-260 | `?edit=` couldn't start a new Markdown or text file on a site that answers missing files with a page | `d6ec28d` |
 | L-259 | A site address that redirects to another site opened its content with no note, through `?book=` too (the page policy's `https:` lets it through); `?get=` named the first site, not the one it came from | `d6ec28d` |
+| L-273 | The well-formedness notice carried the parser's whole page of text; the chapter being edited was cleared a moment late (*read*) | `917bda1` |
+| L-272 | Redirects on the reader's own site from http to https, or between `www.` and the bare name, counted as another site | `917bda1` |
+| L-271 | `?get=` of an EPUB redirected to another site showed no note naming it | `917bda1` |
+| L-270 | A chapter encrypted with DRM could be edited, and would have been saved in the clear under an entry still marked encrypted (*read*) | `917bda1` |
+| L-269 | Fixed-layout and SVG pages offered WYSIWYG, where typing did nothing; they are edited raw | `917bda1` |
+| L-268 | One unreadable entry stopped the whole save with a message that didn't say what to do | `917bda1` |
+| L-267 | Folder books lost META-INF files other than the container, encryption and Apple files when packed | `917bda1` |
+| L-266 | `dcterms:modified`: the first matching meta was changed, even one refining something else; an EPUB 3 package without one didn't get one | `917bda1` |
 | L-258 | `editFocus` didn't keep the page's scroll; a draft kept for leaving came back after the page returned from the browser's cache, or after Done discarded it; a site document saved to a file kept the site's draft key (*read*) | `7634901` |
 | L-257 | An apostrophe in an unquoted attribute value made the body unfindable, and the whole document was written out again | `7634901` |
 | L-256 | The charset rewrite changed `<meta charset>` inside a script's string or a textarea | `7634901` |
