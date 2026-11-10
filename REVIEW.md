@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-10, round 23): `index.html` (about 6,300 lines), the fetch scripts,
+Review of the repository (2026-11-10, round 23): `index.html` (about 6,900 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -210,7 +210,15 @@ E-20 brought:
 - two-page spreads, by the pages' sides or with the cover alone;
 - right-to-left fixed-layout books;
 - EPUB 2 fixed layout.
-T-16 was already closed in round 22. Its review follows below.
+T-16 was already closed in round 22.
+
+Its review found no critical or high items. What it found was fixed in `526c63e` and `09956a7`, each fix with a
+test that fails on the code before it:
+- **Medium:** M-87.
+- **Low:** L-231 to L-234. **Tests:** T-40 to T-42. **Docs:** D-19.
+
+One item waits for your decision: M-86, which way the arrows go in the reflowable chapters of a right-to-left
+book with some fixed pages. One part of T-41 can't be told apart from the outside, and the row says so.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
@@ -244,7 +252,8 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-No critical, high or medium items are open. The open items are:
+No critical or high items are open. The open items are:
+- **Medium:** M-86 (needs your decision: arrows in a right-to-left book's reflowable chapters).
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Enhancements:** E-1 to E-4 and E-6 to E-8.
 
@@ -252,8 +261,25 @@ No critical, high or medium items are open. The open items are:
 
 | ID | Title | Kind |
 |---|---|---|
+| [M-86](#m-86-arrows-in-a-right-to-left-books-reflowable-chapters-depend-on-whether-any-page-is-fixed) | Arrows in a right-to-left book's reflowable chapters depend on whether any page is fixed | Medium (your decision) |
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
+
+## Medium
+
+### M-86. Arrows in a right-to-left book's reflowable chapters depend on whether any page is fixed
+
+*Reproduced.* Pages turn right to left (the left arrow and a swipe to the right go on) in a book with
+`page-progression-direction="rtl"` if any of its pages is fixed. That applies in every chapter, the reflowable
+ones too. Many Japanese and Arabic books are reflowable with a fixed cover. In such a book the left arrow goes on
+through the reflowed text, while the same book without the fixed cover goes on with the right arrow.
+
+Three ways to settle it:
+- **Per page:** right to left only on fixed pages.
+- **Fixed books only:** right to left only when the whole book is fixed layout.
+- **All right-to-left books:** every right-to-left book, reflowable ones included, turns right to left.
+
+Which one is your call.
 
 ## Low
 
@@ -290,7 +316,7 @@ A web app manifest and service worker, so the reader can be installed and open s
 
 ## Suggested order
 
-1. **T-16, T-20:** test coverage.
+1. **M-86:** once you've chosen how it should behave.
 2. The enhancements, as wanted.
 
 ## Resolved
@@ -383,6 +409,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-87 | The facing page of a spread took clicks, keys and the wheel but not swipes; moving the mouse over it didn't wake the full-screen controls; it didn't close the menus or take a dropped book; C left the focus on it | `526c63e` |
 | M-85 | A fixed page's colours were judged once, possibly before a stylesheet from another site had arrived (with remote content allowed): white text on a white page; they are now judged on every fit and again when such a sheet loads | `dea8a59` |
 | M-84 | Switching a fixed page into the scroll layout, or reopening it there, landed at its bottom (a side effect of L-223's fix); the place stays at the top, and progress counts a shown fixed page as read separately | `165e1ba` |
 | M-83 | Making every fixed page's body white hid pages coloured on their html (or by bgcolor): white text on white (a regression from M-82's fix); the colours are now worked out once per page | `0e3ee93` |
@@ -590,6 +617,10 @@ From all reviews so far, with the commits that fixed them.
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
 | L-228 | A fixed page with a slow picture from another site stayed blank until its load event (up to 6 s); it is now shown once parsed | `dea8a59` |
 | L-229 | A fixed page coloured only under a media query kept its first judgement when the query stopped applying: black text on black | `dea8a59` |
+| L-234 | EPUB 2's fixed-layout meta or Apple's display options turned an EPUB 3 book marked reflowable into a fixed one; every reflowable folder book asked for Apple's file (a 404) | `526c63e` |
+| L-233 | In full screen the facing page kept its shadow while the page lost it | `526c63e` |
+| L-232 | A spread whose facing page couldn't be shown reloaded the page on every resize, theme change or opening of the read-aloud bar | `526c63e` |
+| L-231 | Turning from spread to spread (or reading aloud on into the facing page) showed the new page beside the old facing page, or on the wrong side, until its own facing page loaded | `526c63e` |
 | L-230 | Progress counted the page still in the frame while the next one loaded; the time left of a shown fixed page disagreed with the 100% bar and could vanish (*read*) | `dea8a59` |
 | L-224 | The time left vanished on fixed pages in page layouts (the same side effect) | `165e1ba` |
 | L-225 | A fixed page's first paint showed black text on the dark theme before its colours were judged; it is now hidden until then | `165e1ba` |
@@ -656,6 +687,9 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-42 | The L-94 test waited a fixed 3 s for reading to reach the chapter's end, and could pass without its fix on a slow machine; it now waits for a signal from the reader | `09956a7` |
+| T-41 | The first half of the keepPart test never reached keepPart. It now does, with a busy voice waited for until it counts as gone. An empty file fails to finish anyway, so the `fileSecs > 0` guard itself can't be told apart from the outside: what's checked is that no file appears. The second half's comment says why the files count as already there | `09956a7` |
+| T-40 | The L-170 test passed without its fix: it left the chapter its third retry either way | `09956a7` |
 | T-39 | No test checked that a fixed page becomes visible; a late stylesheet and a media query; comic tests waited set times; a stall queued by a failed test could reach the next | `dea8a59` |
 | T-38 | A black-html page in the black theme and after a theme change; a fixed page switched to, or reopened in, the scroll layout; the time left on fixed pages | `165e1ba` |
 | T-37 | The fixed tests' page-turn helper didn't wait for the new page; no test of pages coloured on html, by bgcolor, or with a body of "none", or of the last page's 100% | `0e3ee93` |
@@ -680,6 +714,7 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-19 | README: what the facing page of a spread does and doesn't do, right to left in mixed books, the scroll layout's colours | `09956a7` |
 | D-18 | README: when a fixed page is shown white; manga trackpad swipes | `0e3ee93` |
 | D-17 | README: the scroll layout fits a fixed page to the width up to twice its size | `8bda4f7` |
 | D-16 | A code comment had moved to the wrong line | `59c5761` |
