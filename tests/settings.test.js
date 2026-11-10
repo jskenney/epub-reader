@@ -1,0 +1,150 @@
+// The settings dialog (REVIEW.md E-11) and the sepia and black themes (E-5).
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const h = require('./helpers');
+
+test.afterEach(h.closePages);
+test.after(h.close);
+
+const LONG = `${h.READER}?book=books/long.epub`;
+const theme = page => page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+const pageBg = page => page.evaluate(() => { const d = document.querySelector('#page').contentDocument; return getComputedStyle(d.documentElement).backgroundColor; });
+const stored = (page, k) => page.evaluate(k => localStorage.getItem(k), k);
+async function openSettings(page) {
+  await page.click('#setBtn');
+  await page.waitForFunction(() => document.querySelector('#setDialog').open);
+}
+const row = (page, name) => page.locator(`[data-set="${name}"]`);
+const changedNote = (page, name) => page.evaluate(n => document.querySelector(`[data-set="${n}"]`).closest('.set-row').querySelector('.set-def').textContent, name);
+
+test('the settings button sits between the text width and Open, and opens a modal dialog the reader keys wait for', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  const order = await page.evaluate(() => [...document.querySelector('.tools').children].map(e => e.id || e.getAttribute('aria-label')));
+  const at = order.indexOf('setBtn');
+  assert.equal(order[at - 1], 'Text width'); assert.equal(order[at + 1], 'openBtn');
+  await openSettings(page);
+  assert.equal(await page.evaluate(() => document.querySelector('#setDialog').matches(':modal')), true);
+  const before = await theme(page);
+  await page.keyboard.press('t');   // (the theme key: not while the dialog is open)
+  assert.equal(await theme(page), before);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.querySelector('#setDialog').open), false);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'setBtn');
+  // On a phone the button is still there (the width buttons aren't).
+  await page.setViewportSize({ width: 380, height: 760 });
+  assert.equal(await page.isVisible('#setBtn'), true);
+});
+
+test('themes: sepia and black colour the page; T switches between the light and dark ones last chosen; System follows the device (E-5)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  await openSettings(page);
+  await page.click('.set-theme:has(input[value="sepia"])');
+  assert.equal(await theme(page), 'sepia');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#page').contentDocument.documentElement).backgroundColor === 'rgb(248, 241, 225)');
+  await page.click('.set-theme:has(input[value="black"])');
+  assert.equal(await theme(page), 'black');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#page').contentDocument.documentElement).backgroundColor === 'rgb(0, 0, 0)');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(0, 0, 0)');
+  await page.click('#setClose');
+  await page.keyboard.press('t'); assert.equal(await theme(page), 'sepia');
+  await page.keyboard.press('t'); assert.equal(await theme(page), 'black');
+  await page.click('#themeBtn'); assert.equal(await theme(page), 'sepia');
+  // Kept after a reload.
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await theme(page), 'sepia');
+  assert.equal(await pageBg(page), 'rgb(248, 241, 225)');
+  // System: no theme of its own, and it stays that way (not replaced by a folder's default).
+  await openSettings(page);
+  assert.equal(await page.isChecked('input[name="theme"][value="sepia"]'), true);
+  await page.click('.set-theme:has(input[value="system"])');
+  assert.equal(await theme(page), null);
+  assert.equal(await stored(page, 'spine:theme'), '"system"');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#page').contentDocument.documentElement).backgroundColor === 'rgb(23, 26, 25)');
+});
+
+test('reader options: changed here, marked against the site default, kept, and restored (E-11)', async () => {
+  const page = await h.newPage();
+  // folder-listen's config turns the sleep timer and the time left on.
+  await h.openReader(page, `${h.SITE}/folder-listen/index.html?book=/reader/books/long.epub`);
+  await page.waitForFunction(() => document.querySelector('#timeLeft').textContent.trim());
+  await openSettings(page);
+  assert.equal(await row(page, 'TIME_LEFT').isChecked(), true);
+  assert.equal(await changedNote(page, 'TIME_LEFT'), '');
+  await row(page, 'TIME_LEFT').uncheck();
+  assert.equal(await page.textContent('#timeLeft'), '');
+  assert.equal(await changedNote(page, 'TIME_LEFT'), "Changed: this site's default is on.");
+  assert.equal(await stored(page, 'spine:set:TIME_LEFT'), 'false');
+  // Numbers go through the same limits as reader-config.json: comic sections are an even number of pages.
+  await row(page, 'COMIC_PART').fill('7'); await row(page, 'COMIC_PART').press('Tab');
+  assert.equal(await row(page, 'COMIC_PART').inputValue(), '8');
+  await row(page, 'SEARCH_MAX').fill('3');
+  await page.keyboard.press('Escape');   // (what was typed is kept)
+  assert.equal(await stored(page, 'spine:set:SEARCH_MAX'), '3');
+  await page.fill('#searchBox', 'paragraph'); await page.waitForTimeout(800);
+  assert.match(await page.textContent('#searchResults'), /Showing the first 3 matches/);
+  // Kept after a reload; back to the site's value, the saved one is dropped.
+  await page.reload(); await h.waitForBook(page);
+  await openSettings(page);
+  assert.equal(await row(page, 'TIME_LEFT').isChecked(), false);
+  await row(page, 'TIME_LEFT').check();
+  assert.equal(await stored(page, 'spine:set:TIME_LEFT'), null);
+  // Restore defaults: everything back to the site's.
+  await row(page, 'SLEEP_TIMER').uncheck();
+  assert.equal(await page.isHidden('#ttsSleep'), true);
+  await page.click('.set-theme:has(input[value="dark"])');
+  await page.click('#setReset');
+  assert.equal(await row(page, 'SEARCH_MAX').inputValue(), '500');
+  assert.equal(await row(page, 'SLEEP_TIMER').isChecked(), true);
+  assert.equal(await theme(page), null);
+  assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(k => /^spine:(set:|theme)/.test(k))), []);
+});
+
+test('web links follow the setting at once; remote content and voice precision wait for a reload (E-11)', async () => {
+  const page = await h.newPage();
+  await h.clearRemoteLog();
+  // (On the plain server: the site policy from nginx.conf.example blocks other sites whatever the reader chooses.)
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?book=books/hostile.epub`);
+  const link = () => h.inFrame(page, doc => [doc.querySelector('#web-link').hasAttribute('href'), doc.querySelector('#web-link').getAttribute('target')]);
+  assert.deepEqual(await link(), [true, '_blank']);
+  await openSettings(page);
+  await row(page, 'ALLOW_EXTERNAL_LINKS').uncheck();
+  await page.waitForFunction(() => !document.querySelector('#page').contentDocument.querySelector('#web-link')?.hasAttribute('href'));
+  assert.equal(await page.isHidden('#setReload'), true);
+  await row(page, 'FULL_PRECISION').uncheck();
+  await row(page, 'ALLOW_REMOTE_CONTENT').check();
+  assert.equal(await page.isVisible('#setReload'), true);
+  await page.waitForTimeout(800);
+  assert.ok(!(await h.remoteLog()).includes('/pixel.png'), 'not used before the reload');
+  await page.click('#setReload'); await h.waitForBook(page); await page.waitForTimeout(1500);
+  await openSettings(page);
+  assert.equal(await page.isHidden('#setReload'), true);
+  assert.equal(await row(page, 'FULL_PRECISION').isChecked(), false);
+  assert.equal(await row(page, 'ALLOW_REMOTE_CONTENT').isChecked(), true);
+  assert.ok((await h.remoteLog()).includes('/pixel.png'), 'the book\'s remote picture was asked for after the reload');
+});
+
+test('a stored value of the wrong kind is dropped; a stored black theme is used and shown', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG, { 'spine:set:SEARCH_MAX': 'lots', 'spine:theme': 'black' });
+  assert.equal(await stored(page, 'spine:set:SEARCH_MAX'), null);
+  assert.equal(await theme(page), 'black');
+  await openSettings(page);
+  assert.equal(await row(page, 'SEARCH_MAX').inputValue(), '500');
+  assert.equal(await page.isChecked('input[name="theme"][value="black"]'), true);
+});
+
+test('a time to keep positions chosen in Settings is used as it is, not the longest any folder asked for (E-11)', async () => {
+  const page = await h.newPage();
+  const old = { i: 0, f: 0, t: Date.now() - 3 * 86400000 };
+  await h.openReader(page, LONG, { 'spine:keepDays': 3650, 'spine:pos:url:/old.epub': old });
+  assert.notEqual(await stored(page, 'spine:pos:url:/old.epub'), null, 'kept: the site keeps positions for years');
+  await openSettings(page);
+  await row(page, 'KEEP_POSITIONS_DAYS').fill('1'); await row(page, 'KEEP_POSITIONS_DAYS').press('Tab');
+  await page.evaluate(() => localStorage.setItem('spine:posSweep', '0'));   // (the sweep runs at most once a day)
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await stored(page, 'spine:pos:url:/old.epub'), null);
+  assert.equal(await stored(page, 'spine:keepDays'), '3650', 'the site-wide value is left as it was');
+});

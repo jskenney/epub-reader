@@ -267,10 +267,20 @@ This needs a real web server (for example `npx vite` or
   a cover page), and the site's favicon for books without one.
 - Single-key shortcuts (C contents, I information, F full screen, T theme,
   L layout, R read aloud, / search, [ and ] speed) can be turned off under
-  Keyboard in the Aa menu if they clash with a screen reader; arrow keys,
-  Page Up/Down, Space and Ctrl+F keep working.
-- Light/dark toggle in the top bar (or press T). Until you pick one, it
-  follows your system setting.
+  Keyboard in the Aa menu or in Settings if they clash with a screen reader;
+  arrow keys, Page Up/Down, Space and Ctrl+F keep working.
+- Themes: System, Light, Sepia, Dark and Black (for OLED screens), in
+  Settings. The moon/sun button in the top bar (or T) switches between the
+  light and dark themes you last chose (Light or Sepia, Dark or Black). Until
+  you pick one, the page follows your system setting.
+- Settings (the gear button in the top bar): the theme, and reader options
+  that otherwise only the site sets: the time left in the footer, web links,
+  pictures from other sites, shortcuts, how long positions are kept, how many
+  search matches are listed, comic section size, the sleep timer, how much
+  speech is prepared ahead and saved, and full-precision voice models. Each
+  starts at the site's value (see [Settings](#settings) below); one you change
+  is marked with the site's default beside it, and Restore defaults puts them
+  all back. They're saved in the browser.
 - Remembers your position, text size, line spacing, font and theme. An EPUB's
   position is kept by its identifier, so it resumes wherever the book is opened
   from; a book without one is kept by a fingerprint of its title and chapter
@@ -474,7 +484,10 @@ Caddy already serves `.mjs` and `.wasm` with the right types.
 These constants near the top of the script in `index.html` are meant to be
 changed. Edit the file and reload the page, or set them for one folder in a
 [`reader-config.json`](#per-folder-settings-reader-configjson) (the ones
-marked ✓).
+marked ✓). Readers can change some of them for themselves in the Settings
+dialog (marked ⚙): yours is then the default they start from, and their
+choice is saved in their browser. The paths, the CDN policy, the voice server,
+default books and the memory and request sizes stay the site's to set.
 
 | Constant | Default | What it does / when to change it |
 |---|---|---|
@@ -483,21 +496,21 @@ marked ✓).
 | `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
-| `ALLOW_REMOTE_CONTENT` ✓ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. |
-| `ALLOW_EXTERNAL_LINKS` ✓ | `true` | `false` turns a book's web and e-mail links into plain text. |
-| `SLEEP_TIMER` ✓ | `false` | `true` shows the sleep timer in the read-aloud bar. |
-| `TIME_LEFT` ✓ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
-| `KEEP_POSITIONS_DAYS` ✓ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. |
+| `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. |
+| `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
+| `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
+| `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site. |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
-| `FULL_PRECISION` ✓ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. |
-| `LOOKAHEAD_SEC` ✓ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
-| `SAVED_AUDIO_MB` ✓ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. |
+| `FULL_PRECISION` ✓ ⚙ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. |
+| `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. |
+| `SAVED_AUDIO_MB` ✓ ⚙ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
 | `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. |
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
-| `SEARCH_MAX` ✓ | `500` | Most search results listed. |
-| `COMIC_PART` ✓ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. |
+| `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |
+| `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. |
 
 External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
 3.10.1 and marked 15.0.12, with their SRI hashes), the `lib`/`ort` URLs and
@@ -525,7 +538,8 @@ each with its own `default.epub`:
 
 - Any setting marked ✓ in the table above, by name.
 - Starting preferences, used until the reader picks their own: `theme`
-  (`"light"` or `"dark"`), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
+  (`"light"`, `"sepia"`, `"dark"` or `"black"`; without one the page follows
+  the system), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
   such as `"literata"`), `fontSize` (percent, 70–200), `lineSpacing`
   (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`) and
