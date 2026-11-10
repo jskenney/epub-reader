@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-10, round 22): `index.html` (about 6,300 lines), the fetch scripts,
+Review of the repository (2026-11-10, round 23): `index.html` (about 6,300 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -203,6 +203,15 @@ in `dea8a59`, with a test that fails on the code before it:
 - **Low:** L-228 to L-230. **Tests:** T-39.
 It also confirmed every round 22 fix it re-checked. That was the last of the six loops allowed.
 
+Round 23 built E-20 (`6c5cc87`), and closed T-20 with tests for its last five items (`1ebfd84` to the L-94 test).
+E-20 brought:
+- in the page layouts, each fixed-layout page in a frame of its own size, scaled from outside, so `vw`/`vh`, fixed
+  positions and media queries are the page's own;
+- two-page spreads, by the pages' sides or with the cover alone;
+- right-to-left fixed-layout books;
+- EPUB 2 fixed layout.
+T-16 was already closed in round 22. Its review follows below.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -237,16 +246,14 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
-- **Tests:** T-20 (in part).
-- **Enhancements:** E-1 to E-4, E-6 to E-8 and E-20.
+- **Enhancements:** E-1 to E-4 and E-6 to E-8.
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
-| [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app), [E-20](#e-20-fixed-layout-spreads-and-right-to-left-choices) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 
 ## Low
 
@@ -257,18 +264,6 @@ starts with 20 to 45 ms of silence and chapter marks fall that much early. Harml
 doesn't report the delay, so an `elst` would have to guess it.
 
 ## Tests
-
-### T-20. Test gaps
-
-*Read.* Round 22 added tests for most of this list (see T-33). Still untested:
-- L-94: a sleep timer that runs out, or is set to the chapter end, during the moment reading looks past picture
-  pages. The window is too short to hit reliably.
-- L-170: a search typed during the first indexing. The same timing problem.
-- From rounds 16 and 17:
-  - folder books' font copies made after the book closed (the dispose guard);
-  - keepPart's limits (a partial file kept only if it holds speech, and never over a file that was already there);
-  - the voice label while the server is away mid-export;
-  - the Pocket crash, which needs a stand-in worker that starts and then crashes.
 
 ## Enhancements
 
@@ -292,19 +287,6 @@ Save positions (and later bookmarks) on your server, so each device picks up whe
 
 ### E-8. Install as an offline app
 A web app manifest and service worker, so the reader can be installed and open saved books offline.
-
-### E-20. Fixed-layout spreads and right-to-left choices
-
-Left for later from round 22's review:
-- **Fixed-layout spreads.** Fixed-layout pages are shown one at a time. `rendition:spread` and
-  `page-spread-left`/`page-spread-right` could show two pages side by side in the two-column layout.
-- **Right-to-left fixed-layout books.** A fixed-layout EPUB with `page-progression-direction="rtl"` (manga made
-  as an EPUB) doesn't reverse the arrow keys yet; only comics with ComicInfo do.
-- **EPUB 2 fixed layout.** Apple's display-options file and the `fixed-layout` meta aren't read.
-- **A real page for each fixed page.** Each fixed page could be rendered in a frame of its own size. Then `vw`/`vh`
-  units and `position: fixed` would measure the page, not the reader's frame. They measure the frame now, as the
-  README says.
-- **Manga spreads: decided.** The cover stays paired with page 2, and a lone last page stays in the left column (your choice, 2026-11-10).
 
 ## Suggested order
 
@@ -681,6 +663,7 @@ From all reviews so far, with the commits that fixed them.
 | T-35 | Vertical writing and a cleared html background in fixed pages; the Cancel test's timing margin | `59c5761` |
 | T-34 | New tests that passed with their bug restored: stalled streams (no time limit), the 409 export (never left the voice's own retries), the Cancel timer, reading past the non-page note and an untyped item, the voices folder, the server's types; and fixed waits | `5dafde4` |
 | T-33 | T-20, most of it: stalled server streams before any audio and partway (L-75, L-100), with a test setting for the time allowed; fallback-page pictures (L-90); the range probe on this site and another (L-91, L-103); narration before a picture page (L-93); the sleep timer in a newly opened book (L-96); the non-page note (L-153, L-172) and ZIP64 records (L-153); obfuscated fonts by folded name (L-137); the Cancel question (L-158) and a busy (409) server during an export; the export's saved-audio room; refusals checked after a wait (T-18) | `fea7773` to `9be8cdd` |
+| T-20 | Test gaps: the rest of the list: the sleep timer while looking past picture pages (L-94), a search during the first indexing (L-170), a folder book's font after closing (L-153), keepPart's limits, the voice label during an outage (L-161), and a crashed Pocket worker (L-165); each fails without its fix | `1ebfd84` and after |
 | T-16 | Coverage gaps: config files' TTS_SERVER, SPAN_MAX, SAVED_AUDIO_MB, SEARCH_MAX, COMIC_PART, BOOKSHELF and KEEP_POSITIONS_DAYS 0; If-Range on range requests; the checksum lists against each script's `--list`; the test server now takes nginx.conf.example's types | `9172885` |
 | T-32 | A locked days-to-keep against other folders' positions, the Aa menu with shortcuts locked, the engine list never narrower than its text | `96e5832` |
 | T-31 | The Settings button before the config, under a day, forced colours, a folder's early theme, Pocket with only the 8-bit model and no CDNs | `fd47b98` |
@@ -714,6 +697,7 @@ From all reviews so far, with the commits that fixed them.
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
+| E-20 | Fixed-layout follow-ups: a frame of its own for each page in the page layouts (vw/vh, fixed positions and media queries the page's own), two-page spreads by the pages' sides or with the cover alone, right-to-left fixed-layout books, EPUB 2 fixed layout; manga spreads kept as they are, by your decision | `6c5cc87` |
 | E-9 | Right-to-left manga: spreads read right to left in two columns, the left arrow and a swipe to the right go on | `cc60fa5` |
 | E-15 | Fixed-layout books: pre-paginated pages shown a page at a time at their own size, scaled to fit, with their own styles | `20d2582` |
 | E-18 | Let a site lock settings: a `LOCKED` list in reader-config.json names options readers can't change in that folder | `c7b0749`, `96e5832` |
