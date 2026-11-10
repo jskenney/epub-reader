@@ -1006,13 +1006,18 @@ async function fontKeys(src, uid, identifiers){
       const hex = (identifiers.find(t => /^urn:uuid:/i.test(t)) || '').replace(/^urn:uuid:/i, '').replace(/[^0-9a-f]/gi, '');
       if (hex.length === 32) key = { bytes: Uint8Array.from(hex.match(/../g), h => parseInt(h, 16)), length: 1024 };
     }
-    if (key) { const at = resolve('', uri); out.set(at, key); out.set('\0' + pathKey(at), key); }   // (exact, and folded: lookObf)
+    if (key) { const at = resolve('', uri); out.set(at, key); out.set('\0' + pathKey(at), { ...key, named: at }); }   // (exact, and folded: lookObf)
   }
   return out.size ? out : null;
 }
 // An obfuscated font's key: by its exact name, or (as getFile finds files) by its folded name, unless a file has
-// that exact name, which isn't the obfuscated one then (loop 4 review).
-function lookObf(obf, p, exactFile){ return obf ? obf.get(p) ?? (exactFile(p) ? null : obf.get('\0' + pathKey(p))) ?? null : null; }
+// that exact name, which isn't the obfuscated one then (loop 4 review); but when encryption.xml's own spelling
+// names no file, the one file it can mean is this one (T-20).
+function lookObf(obf, p, exactFile){
+  if (!obf) return null;
+  const k = obf.get(p) ?? obf.get('\0' + pathKey(p));
+  return !k || obf.get(p) || !exactFile(p) || !exactFile(k.named) ? k ?? null : null;
+}
 function unobfuscate(data, key){
   const out = data.slice(), n = Math.min(out.length, key.length);
   for (let i = 0; i < n; i++) out[i] ^= key.bytes[i % key.bytes.length];
@@ -4523,7 +4528,7 @@ function svVoiceHash(){
   return hashText(JSON.stringify([TTS_SERVER.api, v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
     String(v.cfg_scale ?? 1), String(v.seed ?? 42)]));
 }
-const SV_REPLY_SEC = 60;   // how long the server voice may take to start answering a request
+const SV_REPLY_SEC = Number(window.SPINE_TEST?.svReplySec) || 60;   // how long the server voice may take to start answering a request (tests set less)
 function svGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();

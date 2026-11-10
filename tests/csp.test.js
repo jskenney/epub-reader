@@ -18,7 +18,8 @@ test('the site sends the policy from nginx.conf.example', async () => {
 });
 
 test('books, documents, comics, fonts and search work under the policy, with nothing refused', async () => {
-  for (const ref of ['', '?book=books/long.epub', '?book=books/notes.md', '?book=books/page.html', '?book=books/comic.cbz', '?book=books/shelf-dir/']) {
+  for (const ref of ['', '?book=books/long.epub', '?book=books/notes.md', '?book=books/page.html', '?book=books/comic.cbz', '?book=books/shelf-dir/',
+    '?book=books/fixed.epub', '?book=books/manga.cbz']) {
     const page = await h.newPage();
     await h.openReader(page, h.READER + ref);
     assert.notEqual(await h.title(page), 'Spine Reader', ref);
@@ -26,6 +27,10 @@ test('books, documents, comics, fonts and search work under the policy, with not
     await page.waitForTimeout(400);
     await page.keyboard.press('Escape');
     await page.keyboard.press('/'); await page.keyboard.type('the'); await page.waitForTimeout(600);
+    await page.keyboard.press('Escape');
+    await page.click('#setBtn'); await page.waitForTimeout(200); await page.keyboard.press('Escape');   // (the settings dialog)
+    // (Refusals can come later than the page showing: wait a while before looking: T-20.)
+    await page.waitForTimeout(1500);
     assert.deepEqual(page.cspViolations, [], `${ref || 'sample'}: ${page.cspViolations.join(' | ')}`);
     assert.deepEqual(page.errors, [], ref);
   }

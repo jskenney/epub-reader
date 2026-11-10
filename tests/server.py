@@ -38,6 +38,7 @@ ap.add_argument("--csp-skip", default="", help="comma-separated path prefixes se
 args = ap.parse_args()
 
 seen, breeze_log, busy = [], [], threading.Lock()
+stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing)
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
 head_on = [True]     # GET /__head?on=0 makes HEAD requests answer 405 (and ?on=1 again)
@@ -146,6 +147,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.json(404, {"detail": "logged"})
         if args.breeze:
             if path == "/__breeze":
+                m = re.search(r"stall=(headers|mid)(?:&n=(\d+))?", self.path)
+                if m:
+                    stall_next.extend([m.group(1)] * int(m.group(2) or 1))
                 return self.json(200, breeze_log)
             if path in ("/tts/health", "/alt-tts/health"):   # (/alt-tts/: a folder whose config moves TTS_SERVER)
                 return self.json(200, {"status": "ok"})
@@ -211,6 +215,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             sent.clear()
             return self.json(200, {"ok": True})
         (seen if self.path.startswith("/__log") else breeze_log).clear()
+        if not self.path.startswith("/__log"):
+            stall_next.clear()
         self.json(200, {"ok": True})
 
     def do_POST(self):
@@ -220,6 +226,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body = self.rfile.read(int(self.headers["Content-Length"]))
         msg = BytesParser(policy=default).parsebytes(b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + body)
         f = {p.get_param("name", header="content-disposition"): p.get_payload(decode=True) for p in msg.iter_parts()}
+        if stall_next:   # (a stalled stream: it doesn't hold the server busy, so the reader's next request is answered)
+            mode = stall_next.pop(0)
+            breeze_log.append({"text": f["text"].decode(), "stalled": mode, "path": path})
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/pcm")
+            self.send_header("X-Sample-Rate", "24000")
+            self.end_headers()
+            try:
+                if mode == "mid":
+                    self.wfile.write(b"\0\0" * 4800); self.wfile.flush()
+                time.sleep(6)
+                self.wfile.write(b"\0\0" * 480); self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                breeze_log[-1]["aborted"] = True
+            return
         if not busy.acquire(blocking=False):
             return self.json(409, {"detail": "An inference request is already running."})
         try:

@@ -250,3 +250,30 @@ test('choosing a chapter that can\'t be shown keeps the place reading aloud had 
   const at = await h.waitFor(async () => { const w = await h.spokenWord(page); if (!w) return null; return page.evaluate(() => [...document.querySelector('#page').contentWindow.CSS.highlights.get('tts-sentence')][0].toString()); }, 10000);
   assert.ok(at && !at.startsWith('Chapter One') && !at.startsWith('First paragraph 1.'), `goes on from where it was, not the top of the page: "${at}"`);
 });
+
+// A server voice stream that stops: before any audio (L-100) or partway (L-75). The time allowed is cut to a
+// second for the test (SPINE_TEST.svReplySec; 60 s otherwise), and the mock server stalls the first request.
+for (const mode of ['headers', 'mid']) {
+  test(`a server voice stream that stalls ${mode === 'headers' ? 'before any audio (L-100)' : 'partway (L-75)'} is given up on with a note; play then reads on (T-20)`, { timeout: 60000 }, async () => {
+    const page = await h.newPage();
+    await page.addInitScript(() => { window.SPINE_TEST = { svReplySec: 1 }; });
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, serverVoice);
+    await fetch(`${h.SITE}/__breeze?stall=${mode}`);
+    await page.keyboard.press('r');
+    // Given up on within the time allowed (3 s before the first audio, 1 s between pieces), not left waiting.
+    const note = await h.waitFor(async () => {
+      const t = `${await page.textContent('#notice')} ${await page.textContent('#ttsStatus')}`;
+      return /voice server (isn't responding|stopped partway)/.test(t) && t;
+    }, 10000);
+    assert.ok(note, `${await page.textContent('#notice')} | ${await page.textContent('#ttsStatus')}`);
+    assert.equal(await playing(page), false);
+    assert.equal((await h.breezeLog())[0].stalled, mode);
+    // Play again: the passage is asked for again and read.
+    await h.waitFor(async () => !(await page.isDisabled('#ttsPlay')), 10000);
+    await page.click('#ttsPlay');
+    assert.ok(await h.waitFor(() => h.spokenWord(page), 20000), 'reading goes on');
+    const log = await h.breezeLog();
+    assert.ok(log.slice(1).some(e => e.text === log[0].text && !e.stalled), JSON.stringify(log.map(e => [e.text.slice(0, 20), e.stalled])));
+  });
+}
