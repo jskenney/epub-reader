@@ -239,6 +239,17 @@ Two things they noted are left as designed: the code button makes plain-text cod
 inline code holds no formatting), and pasted pictures from other sites are kept in the text (the frame's policy
 keeps them from loading while remote content is off).
 
+The second loop built E-24 (`54916c8`): `?edit=path` opens a document straight into the editor (a new, empty one
+if it isn't there), and `?get=address` opens a book or document by its address, on this site or another that
+allows it with CORS. A third review, of loop 1's fixes, found no critical items; what it found was fixed in
+`7634901`, each with a test that fails on the code before it:
+- **High:** H-26.
+- **Medium:** M-102 to M-105.
+- **Low:** L-246 to L-258.
+
+One small thing is left as it is: HTML written back from the page loses a line break straight after `<pre>`
+or `<textarea>`, which a browser ignores anyway (the page is the same).
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -271,14 +282,14 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Only enhancements are open: E-1 to E-4, E-6 to E-8, and E-22 to E-25 (planned in TODO.md). L-110 is left as it is, by your decision (see Resolved).
+Only enhancements are open: E-1 to E-4, E-6 to E-8, E-22, E-23 and E-25 (planned in TODO.md). L-110 is left as it is, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
-| [E-22](#e-22-a-server-api) to [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB editing, opening files to edit (plan in TODO.md) | — |
+| [E-22](#e-22-a-server-api), [E-23](#e-23-edit-an-epubs-chapters), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB editing (plan in TODO.md) | — |
 
 ## Tests
 
@@ -313,16 +324,12 @@ bookmarks (for E-3), settings, and sign-in. The plan is in TODO.md.
 Edit an EPUB's existing chapters with E-21's editor, and download the chapter or the re-packed book. The plan is
 in TODO.md.
 
-### E-24. Open files by address for editing
-`?edit=path` opens a file straight into the editor (a new one if it doesn't exist); `?get=URL` opens a file from
-an address on this or another site. The plan is in TODO.md.
-
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
 
 ## Suggested order
 
-1. E-24, E-23, E-25, E-22, as laid out in TODO.md.
+1. E-23, E-25, E-22, as laid out in TODO.md.
 2. The other enhancements, as wanted.
 
 ## Resolved
@@ -347,6 +354,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
 | H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
+| H-26 | WYSIWYG: a body holding one wrapper with a kept element (a script, a style) or a comment beside it, the usual `<div id="app">…</div><script>`, lost both the wrapper and the script when written back (HTML and Markdown) | `7634901` |
 | H-25 | WYSIWYG Markdown: an empty paragraph (Enter at a paragraph's end) or a line break at a paragraph's end became a literal backslash | `9a6889f` |
 | H-24 | WYSIWYG Markdown: a document starting with a rule had it written as `---`, then read as front matter, which hid the text after it and was written again (duplicated) on every flush | `9a6889f` |
 | H-23 | WYSIWYG HTML: the body was found by a pattern that matched `<body` in a comment or the title, or stopped at a `>` inside an attribute: the file came back with its head turned into a comment or its body inside an attribute | `9a6889f` |
@@ -420,6 +428,10 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-105 | Changing the address of a link added while editing was ignored when written back (and the prompt didn't show its address) | `7634901` |
+| M-104 | A draft made after a save that downloaded a copy (a document from the site, or opened with the file input) was kept but never offered again: it was tied to the copy, which the site or the file didn't have | `7634901` |
+| M-103 | HTML with no `<html>`, `<head>` or `<body>` tags lost its doctype when written back (quirks mode) | `7634901` |
+| M-102 | WYSIWYG Markdown: the wrapper fix wrote the whole wrapped document as HTML | `7634901` |
 | M-101 | Editing could start during an audiobook export, replacing the sections the export was reading (*read*) | `9a6889f` |
 | M-100 | Saving HTML as UTF-8 changed `charset=` inside a description meta's text, a `data-charset` attribute or a commented-out meta, and could leave the real declaration as it was | `9a6889f` |
 | M-99 | WYSIWYG Markdown escaping: `!` before a link made an image, a heading's trailing `#` vanished, `---` and setext lines became rules and headings, `*` inside inline HTML became emphasis, adjacent or intraword emphasis broke, two lists merged, a list starting at 0 started at 1, a line break in a cell left a backslash, no-break spaces were lost | `9a6889f` |
@@ -644,6 +656,19 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-228 | A fixed page with a slow picture from another site stayed blank until its load event (up to 6 s); it is now shown once parsed | `dea8a59` |
 | L-229 | A fixed page coloured only under a media query kept its first judgement when the query stopped applying: black text on black | `dea8a59` |
 | L-110 | No edit list for the AAC encoder's delay: each .m4b file starts with 20 to 45 ms of silence and its chapter marks fall that much early. WebCodecs doesn't report the delay, so an `elst` would have to guess it (too much clips speech) or measure it with a test encode; inaudible in speech | Left as is, by your decision |
+| L-258 | `editFocus` didn't keep the page's scroll; a draft kept for leaving came back after the page returned from the browser's cache, or after Done discarded it; a site document saved to a file kept the site's draft key (*read*) | `7634901` |
+| L-257 | An apostrophe in an unquoted attribute value made the body unfindable, and the whole document was written out again | `7634901` |
+| L-256 | The charset rewrite changed `<meta charset>` inside a script's string or a textarea | `7634901` |
+| L-255 | The editor bar's arrow keys stopped at the paragraph-style select | `7634901` |
+| L-254 | The editor bar squeezed the document's name to nothing on narrower screens | `7634901` |
+| L-253 | A cancelled Save as left the HTML's charset changed in the text, and the document unsaved | `7634901` |
+| L-252 | A page rebuild held back while reading aloud in Raw ran after switching to WYSIWYG; resuming dropped the word it was at | `7634901` |
+| L-251 | Markdown written back escaped `_ > < ~ \| ]` and backslashes where nothing needed it, wrote emphasis inside a word as HTML, and dropped the blank line after front matter (the README now says lines are joined and reference links made inline) | `7634901` |
+| L-250 | A Markdown line that was only emphasis around `-`, `=` or `*` was escaped as if it were a rule | `7634901` |
+| L-249 | XHTML written back declared `xmlns:epub` and the XHTML namespace again on elements and kept markup | `7634901` |
+| L-248 | Comments after `</body>` or `</html>` were dropped when markup followed `</body>` | `7634901` |
+| L-247 | A `<body>` inside a `<noscript>` in the head was taken for the body, removing the head's end | `7634901` |
+| L-246 | Finding the body lowercased the whole text for each script: offsets went wrong after a character whose lower case is longer (İ), and long documents took seconds | `7634901` |
 | L-245 | Text dragged within the page being edited was copied rather than moved (*read*) | `9a6889f` |
 | L-244 | Changing a block's style (paragraph to heading) dropped its id and class; splitting a block at its start left the id on the empty half | `9a6889f` |
 | L-243 | A `<pre>` starting with blank lines lost them when written back | `9a6889f` |
@@ -770,6 +795,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
+| E-24 | `?edit=path` opens a document into the editor (a new, empty one if missing); `?get=address` opens a book or document by its address, on this site or another that allows it (CORS); `GET_URLS` turns it off | `54916c8` |
 | E-21 | Editing Markdown, HTML and text documents: WYSIWYG and raw (CodeMirror) with the page beside, new documents, saving in place or as a copy, drafts (plan and as-built notes in TODO.md) | `0ee38a7`, `efae5f8`, `9a6889f` |
 | E-20 | Fixed-layout follow-ups: a frame of its own for each page in the page layouts (vw/vh, fixed positions and media queries the page's own), two-page spreads by the pages' sides or with the cover alone, right-to-left fixed-layout books, EPUB 2 fixed layout; manga spreads kept as they are, by your decision | `6c5cc87` |
 | E-9 | Right-to-left manga: spreads read right to left in two columns, the left arrow and a swipe to the right go on | `cc60fa5` |
