@@ -39,6 +39,14 @@ test('right-to-left manga: each spread shows its later page on the left, and the
   assert.match(await page.evaluate(() => document.querySelector('#infoList')?.textContent || ''), /Right to left/);
 });
 
+test('manga with every book turned left to right in Settings: pages in order, the right arrow goes on (M-86)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, MANGA, { 'spine:layout': 'two', 'spine:set:FORCE_LTR': true });
+  await sees(page, ['Page 1', 'Page 2']);
+  await page.keyboard.press('ArrowRight');
+  await sees(page, ['Page 3', 'Page 4']);
+});
+
 test('a left-to-right comic is unchanged: pages in order, the right arrow goes on', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/comic.cbz`, { 'spine:layout': 'two' });

@@ -512,6 +512,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       </fieldset>
       <fieldset class="set-group"><legend>Reading</legend>
         <div class="set-row"><span><label for="set-TIME_LEFT">Reading time left in the footer</label><small class="set-def"></small></span><input id="set-TIME_LEFT" type="checkbox" data-set="TIME_LEFT"></div>
+        <div class="set-row"><span><label for="set-FORCE_LTR">Turn every book left to right</label><small>For books marked right to left by mistake: off, those (and manga) turn right to left, the left arrow going on.</small><small class="set-def"></small></span><input id="set-FORCE_LTR" type="checkbox" data-set="FORCE_LTR"></div>
         <div class="set-row"><span><label for="set-ALLOW_EXTERNAL_LINKS">Web links in books open in a new tab</label><small>Off: they are plain text.</small><small class="set-def"></small></span><input id="set-ALLOW_EXTERNAL_LINKS" type="checkbox" data-set="ALLOW_EXTERNAL_LINKS"></div>
         <div class="set-row"><span><label for="set-ALLOW_REMOTE_CONTENT">Pictures and media from other websites</label><small>A book can name files on other sites, which lets them see when it's read. The site's own security policy may still block them. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-ALLOW_REMOTE_CONTENT" type="checkbox" data-set="ALLOW_REMOTE_CONTENT"></div>
         <div class="set-row"><span><label for="set-shortcuts">Single-letter shortcuts (C F T L I R /)</label><small>Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.</small><small class="set-def"></small></span><input id="set-shortcuts" type="checkbox" data-set="shortcuts"></div>
@@ -584,6 +585,10 @@ let SLEEP_TIMER = false;
 // left under older keys don't pile up in the browser. 0 keeps them forever.
 let KEEP_POSITIONS_DAYS = 730;
 let TIME_LEFT = false;
+// Right-to-left books (page-progression-direction="rtl", or manga marked so in ComicInfo.xml) turn right to left:
+// the left arrow and a swipe to the right go on, and spreads show the later page on the left. true turns every book
+// left to right, for books marked right to left by mistake.
+let FORCE_LTR = false;
 // Opened if the address has no ?book=: the first of these that is really there, next to this page (an EPUB or
 // comic must be a valid archive; a document mustn't be the site's "not found" page). A single name works too.
 let DEFAULT_BOOK = ['default.epub', 'default.md'];
@@ -2816,9 +2821,10 @@ function relayout(){
 // Right-to-left manga (E-9; ComicInfo's Manga "YesAndRightToLeft"): pages are read from right to left, so in two
 // columns each spread shows its later page on the left. The section's page elements are put in that order (and
 // back) whenever the layout or the width changes; the arrow keys and swipes go the other way.
-const comicRtl = () => !!book?.comicParts && book.info?.direction === 'Right to left';
-// Pages turned right to left: manga, and fixed-layout books with page-progression-direction="rtl" (E-20).
-const rtlPages = () => book?.info?.direction === 'Right to left' && (!!book.comicParts || book.info?.layout === 'Fixed layout' || !!book.spine?.some(s => s.fixed));
+const comicRtl = () => !!book?.comicParts && rtlPages();
+// Pages turned right to left: manga, and books with page-progression-direction="rtl", reflowable ones too (E-20,
+// M-86), unless Settings turns every book left to right (FORCE_LTR).
+const rtlPages = () => !FORCE_LTR && book?.info?.direction === 'Right to left';
 function comicOrder(){
   const doc = frame.contentDocument; if (!doc || !comicRtl()) return;
   const els = [...doc.querySelectorAll('.cbz-page[id^="cbz-p"]')], num = el => Number(el.id.slice(5));
@@ -3060,7 +3066,7 @@ function renderMeta(){
   $('#metaDesc').open = false;
   const rows = [
     ['Publisher', i.publisher], ['Published', i.published], ['ISBN', i.isbn], ['Series', i.series],
-    ['Subjects', i.subjects], ['Narrator', i.narrator], ['Narration', i.duration], ['Language', book.language], ['Layout', i.layout === 'Reflowable' && book.spine.some(s => s.fixed) ? 'Fixed layout (some pages)' : i.layout], ['Direction', i.direction],
+    ['Subjects', i.subjects], ['Narrator', i.narrator], ['Narration', i.duration], ['Language', book.language], ['Layout', i.layout === 'Reflowable' && book.spine.some(s => s.fixed) ? 'Fixed layout (some pages)' : i.layout], ['Direction', FORCE_LTR && i.direction === 'Right to left' ? 'Right to left (turned left to right in Settings)' : i.direction],
     ...(book.format
       ? [['Format', book.format], ...(book.comic ? [['Pages', plural(book.pageCount, 'page')]] : []), ['Sections', plural(book.spine.length, 'section')], ['File', book.opfPath], ['Showing', '', 'curFile']]
       : [['EPUB', book.version], ['Spine', plural(book.spine.length, 'item')], ['Manifest', plural(book.manifest.size, 'item')],
@@ -6538,6 +6544,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
+  FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
   KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, Math.round(v))); }],
@@ -6604,6 +6611,8 @@ async function loadConfig(){
    whole site (paths, the CDN policy, the voice server, default books) stays in reader-config.json. */
 const SET_VARS = {   // name: [the value now, what to do once it changes ('reload': only when the page is reloaded)]
   TIME_LEFT: [() => TIME_LEFT, () => updateTimeLeft()],
+  // (Spreads paired and placed again, and a manga's pages put in the other order: the page shown again.)
+  FORCE_LTR: [() => FORCE_LTR, () => { if (!book) return; book.spreads = null; renderMeta(); if (frame.contentDocument && cur.shown && !tts.open) renderChapter(cur.i, { fraction: fraction() }); else relayout(); }],
   // (Shown again at once, except while reading aloud, which a new page would send back to its top: then from
   // the next chapter shown.)
   ALLOW_EXTERNAL_LINKS: [() => ALLOW_EXTERNAL_LINKS, () => { if (book && frame.contentDocument && cur.shown && !tts.open) renderChapter(cur.i, { fraction: fraction() }); }],

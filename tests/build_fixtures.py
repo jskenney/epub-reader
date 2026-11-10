@@ -802,6 +802,8 @@ def main():
     fxl_book("fixed-nosize", "urn:fixed-nosize", [pg(1), pg(2), pg(3)], '<meta property="rendition:layout">pre-paginated</meta>', heads=[None, None, ""])
     fxl_book("fixed-epub3-reflow", "urn:fixed-epub3-reflow", [pg(1), pg(2)], '<meta property="rendition:layout">reflowable</meta><meta name="fixed-layout" content="true"/>',
              extra={"META-INF/com.apple.ibooks.display-options.xml": '<?xml version="1.0"?><display_options><platform name="*"><option name="fixed-layout">true</option></platform></display_options>'})
+    # (M-86) A reflowable right-to-left book, no fixed pages: turns right to left all the same.
+    fxl_book("rtl-reflow", "urn:rtl-reflow", [pg(1), pg(2), pg(3)], ppd="rtl", heads=["", "", ""])
     fxl_book("fixed-units", "urn:fixed-units", ['<div id="half" style="width:50vw;height:10vh;background:#c00"></div><div id="pin" style="position:fixed;right:0;bottom:0;width:40px;height:40px;background:#00c"></div><p>Units page</p>'],
              '<meta property="rendition:layout">pre-paginated</meta>')
 

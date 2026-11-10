@@ -57,8 +57,7 @@ shows one page. The facing page only shows: search highlights, the word read
 aloud and the book's links are on the current page, and a click on the facing
 page (on a link there too) goes to that page; reading aloud on into it shows
 the spread again with it current. A book with
-`page-progression-direction="rtl"` is read right to left, as manga are; if
-any of its pages is fixed, its reflowable chapters turn right to left too. The
+`page-progression-direction="rtl"` is read right to left, as manga are. The
 scroll layout fits each page to the width (up to twice its size), zoomed in
 the reader's frame, where `vw`/`vh` measure the frame; there a page with no
 colour of its own is shown white within the theme's colour, and one that
@@ -79,6 +78,14 @@ opened as a comic whatever its name. Right-to-left manga (`ComicInfo.xml`'s
 layout each spread shows its later page on the left, and the left arrow key
 (or a swipe to the right, on a touch screen or a trackpad) goes on. Page Down, Next and the single-column and
 scroll layouts keep the pages in order.
+
+**Right-to-left books.** Every book marked right to left turns right to left:
+EPUBs with `page-progression-direction="rtl"` (reflowable ones too, so a
+Japanese or Arabic novel turns the way its fixed cover does) and right-to-left
+manga. The left arrow key and a swipe to the right go on, and two-page spreads
+show the later page on the left. The book's information (I) shows its
+direction. If a book is marked right to left by mistake, turn on **Turn every
+book left to right** in Settings (`FORCE_LTR`).
 
 ## Opening a book from the address
 
@@ -303,7 +310,8 @@ This needs a real web server (for example `npx vite` or
   you pick one, the page uses the folder's default theme if its
   `reader-config.json` sets one, otherwise your system setting.
 - Settings (the gear button in the top bar): the theme, and reader options
-  that otherwise only the site sets: the time left in the footer, web links,
+  that otherwise only the site sets: the time left in the footer, turning
+  every book left to right, web links,
   pictures from other sites, shortcuts, how long positions are kept, how many
   search matches are listed, comic section size, the sleep timer, how much
   speech is prepared ahead and saved, and full-precision voice models. Each
@@ -529,6 +537,7 @@ default books and the memory and request sizes stay the site's to set.
 | `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site (except in a folder that locks it). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |

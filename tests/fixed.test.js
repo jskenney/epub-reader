@@ -361,3 +361,31 @@ test('an EPUB 3 book marked reflowable stays reflowable whatever EPUB 2\'s marks
   await h.openReader(page, `${h.READER}?book=books/abc`);
   assert.ok(!asked.some(u => /display-options/i.test(u)), asked.filter(u => /display-options/i.test(u)).join(' '));
 });
+
+test('a reflowable right-to-left book turns right to left too; Settings can turn every book left to right (M-86)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, book('rtl-reflow'), { 'spine:layout': 'one' });
+  assert.equal((await shown(page)).fxl, null, 'reflowed');
+  await turn(page, 'ArrowLeft');
+  assert.match(await page.textContent('#spinePos'), /spine 2\/3/);
+  await page.keyboard.press('i');
+  assert.match(await page.textContent('#infoList'), /Right to left/);
+  // Turned left to right in Settings: the right arrow goes on, and the information says so.
+  await page.click('#setBtn'); await page.waitForFunction(() => document.querySelector('#setDialog').open);
+  await page.check('[data-set="FORCE_LTR"]');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(800);
+  assert.match(await page.textContent('#infoList'), /turned left to right in Settings/);
+  await turn(page, 'ArrowRight');
+  assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('spine:set:FORCE_LTR')), 'true');
+});
+
+test('with every book turned left to right, a right-to-left fixed book\'s spreads read left to right (M-86)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, book('fixed-rtl'), { 'spine:layout': 'two', 'spine:set:FORCE_LTR': true });
+  await turn(page, 'ArrowRight');
+  const s = await shown(page);
+  assert.match(s.text, /Page 2/);
+  assert.ok(s.facing && /Page 3/.test(s.facingText) && s.facing.left >= s.page.right - 1, 'page 3 on the right of page 2');
+});
