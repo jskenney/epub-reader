@@ -180,6 +180,25 @@ can't be loaded, the reader shows why and opens the folder's default book
 This needs a real web server (for example `npx vite` or
 `python3 -m http.server`); browsers block these requests on `file://` pages.
 
+Two more parameters open files by address:
+
+- `index.html?edit=notes/today.md` opens a Markdown, HTML or text file
+  (`.md`, `.markdown`, `.html`, `.htm`, `.txt`) straight into the editor (see
+  [Editing documents](#editing-documents)), found the same way as `?book=`.
+  If there's no such file, a new, empty one with that name is started in the
+  text editor, ready to save. Other kinds of file are refused; an EPUB opens to
+  read (its chapters can't be edited yet). With editing turned off on the site
+  (`EDITING`), the document opens to read and nothing new is started.
+- `index.html?get=https://example.com/notes.md` opens a book or document by its
+  address, on this site (like `?book=`) or another. The other site has to allow
+  it, with CORS headers (`Access-Control-Allow-Origin`); if it doesn't, the
+  reader says so. An `http` address can't be read from a page served over
+  `https` (the browser blocks it). A note says which site it came from; it can
+  be edited and saved as a copy on your computer. The reader's policy in
+  `nginx.conf.example` allows `https:` in `connect-src` for this; a site can
+  turn `?get=` off with `GET_URLS` in `reader-config.json` (and then take
+  `https:` out of the policy).
+
 ## Features
 
 - Search the whole book from the box above the contents (/ or Ctrl+F / ⌘F).
@@ -565,7 +584,7 @@ For Caddy, the same policy goes in a `header` directive:
 
 ```
 handle /reader/* {
-	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob: https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
 	header X-Content-Type-Options nosniff
 	header Referrer-Policy same-origin
 	# Revalidate every file (cheap with ETags): a cached old library would fail a new index.html's hash.
@@ -597,7 +616,8 @@ default books and the memory and request sizes stay the site's to set.
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
 | `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
-| `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones. |
+| `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones (`?edit=` opens the document to read). |
+| `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |

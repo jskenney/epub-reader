@@ -174,6 +174,7 @@ def main():
                         ("folder-remotevoice", {"LIB_FILES": "/reader/", "VOICE_FILES": "http://localhost:8792/voices/"}),
                         ("folder-cfg", {"LIB_FILES": "/reader/", "SEARCH_MAX": 2, "COMIC_PART": 10, "KEEP_POSITIONS_DAYS": 0, "BOOKSHELF": "/shelf2"}),
                         ("folder-noedit", {"LIB_FILES": "/reader/", "EDITING": False}),
+                        ("folder-noget", {"LIB_FILES": "/reader/", "GET_URLS": False}),
                         ("folder-alttts", {"LIB_FILES": "/reader/", "TTS_SERVER": {"api": "/alt-tts/", "voices": "/alt-voices/"},
                                            "SPAN_MAX": {"server": 60}, "SAVED_AUDIO_MB": 0})):
         (SITE / folder).mkdir()
@@ -707,6 +708,8 @@ def main():
     (books / 'meta.html').write_text('<!DOCTYPE html>\n<html>\n<head>\n<!-- <meta charset="iso-8859-2"> -->\n<meta name="description" content="How to set charset=latin1 in Apache" data-charset="x">\n<meta charset="windows-1252">\n<title>M</title>\n</head>\n<body>\n<p>Start.</p>\n</body>\n</html>\n')
     (books / 'keepattr.html').write_text('<!DOCTYPE html>\n<html>\n<head><title>K</title></head>\n<body>\n<p data-ed-keep="0">Important text</p>\n<script>s()</script>\n<p>Start.</p>\n<pre>\n\nfirst</pre>\n</body>\n</html>\n')
     (books / "ids.html").write_text('<!DOCTYPE html>\n<html>\n<head><title>I</title></head>\n<body>\n<h2 id="hh" class="big">Heading</h2>\n<p>Start.</p>\n</body>\n</html>\n')
+    (SITE / "nocors").mkdir(exist_ok=True)
+    (SITE / "nocors" / "doc.md").write_text("# Not shared\n\nThis site doesn't let other sites read it.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

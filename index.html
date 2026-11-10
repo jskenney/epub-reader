@@ -1452,7 +1452,7 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   }
   return parts.length ? parts : [[]];
 }
-async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false } = {}){
+async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false, created = false, foreign = '' } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const text = decodeText(new Uint8Array(buffer), { http: charset, sniff: kind === 'html' });
   const built = await buildDocument(text, name, kind);
@@ -1474,7 +1474,7 @@ async function openDocument(buffer, name, kind, { base = null, key, seq, charset
     title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
     manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
     urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}`,
-    doc: { text, kind, name, base, handle, fresh } });
+    doc: { text, kind, name, base, handle, fresh, created, foreign } });
   if (!isStale(seq)) editOffered();
 }
 // A document as the reader's sections, files and contents. whole: one section however long, as the editor
@@ -6660,6 +6660,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
   EDITING: ['boolean', v => { EDITING = v; }],
+  GET_URLS: ['boolean', v => { GET_URLS = v; }],
   FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
   KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
@@ -6728,6 +6729,7 @@ async function loadConfig(){
    was opened from where the browser allows it (a file picked with showOpenFilePicker, or dropped), and
    otherwise saves a copy (the save picker, or a download). Unsaved text is kept as a draft in this browser. */
 let EDITING = true;   // reader-config.json: false hides the Edit button and new documents
+let GET_URLS = true;  // reader-config.json: false refuses ?get= (a file by its address, on this site or another: E-24)
 const CM_VERSION = '5.65.21';   // must match CODEMIRROR in fetch-libs.sh
 // In loading order (each mode after what it uses), with the hashes fetch-libs.sh checks too.
 const CM_FILES = [
@@ -6902,7 +6904,7 @@ async function editStart({ mode } = {}){
     const draft = await draftGet(draftKey());
     if (book !== b) return;
     if (draftFits(draft, d.text)) {
-      if (confirm(`${d.fresh ? 'A new document' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
+      if (confirm(`${d.fresh || d.created ? 'A new document' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
       else draftDel(draftKey());
     }
     hideNotice();
@@ -6980,7 +6982,7 @@ function editStyle(){ $('#editSrc').style.setProperty('--ed-size', `${Math.round
 function editTitle(){ if (ed.on && book) document.title = `${editDirty() ? '• ' : ''}${ed.name} — editing`; }
 function editSyncBar(){
   $('#editName').textContent = (editDirty() ? '• ' : '') + ed.name + (ed.saving ? ' (saving…)' : editDirty() ? ' (unsaved)' : '');
-  $('#editName').title = ed.handle ? 'Save writes to this file' : 'Save asks where to save a copy';
+  $('#editName').title = ed.handle ? 'Save writes to this file' : book?.doc?.foreign ? `From ${book.doc.foreign}: Save keeps a copy on this computer` : 'Save asks where to save a copy';
   $('#editNote').textContent = ed.plainWhy ? `A plain text box: the code editor couldn't be loaded (${ed.plainWhy}).` : '';
   editTitle();
 }
@@ -7934,8 +7936,8 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   { const t = store.get('spine:theme'); if (THEMES.includes(t) && !LOCKED.has('theme')) document.documentElement.setAttribute('data-theme', t); }
   syncThemeBtn();
   setToc(!narrow.matches);
-  const ref = new URLSearchParams(location.search).get('book');
-  await (ref ? openFromUrl(ref) : openDefault());
+  const q = new URLSearchParams(location.search), ref = q.get('book'), editRef = q.get('edit'), getRef = q.get('get');
+  await (editRef ? openForEdit(editRef) : getRef ? openByAddress(getRef) : ref ? openFromUrl(ref) : openDefault());
 })();
 /* Without ?book=, a default.epub next to this page opens if there is one; otherwise the built-in sample.
    A missing file may still come back as 200 (a site's "not found" page), so the reply has to be a real
@@ -7992,33 +7994,87 @@ function bookCandidates(ref){
   for (const u of urls) { u.search = ''; u.hash = ''; }
   return urls.filter((u, i) => urls.findIndex(v => v.href === u.href) === i);
 }
-async function openFromUrl(ref){
+// A book from another site (?get=, E-24) says where it came from. (It can be downloaded, as any document; it
+// isn't saved to this site's server: E-22.)
+function showFrom(host){ showNotice(`This comes from ${host}, another site.`, 'info', { label: 'OK', run(){} }); }
+// ?edit=path (E-24): the document, found as ?book= finds one, opened for editing; one that isn't there is started,
+// empty, under that name. Editing turned off: opened to read. An EPUB: opened to read (its chapters can't be
+// edited yet).
+const EDIT_EXT = /\.(md|markdown|html?|txt)$/i;
+async function openForEdit(ref){
+  // (A note after opening, unless opening failed and said why.)
+  const note = msg => { if ($('#notice').hidden || noticeKind !== 'error') showNotice(msg, 'info', { label: 'OK', run(){} }); };
+  if (!EDITING) { await openFromUrl(ref); note('Editing is turned off on this site: the document is open to read.'); return; }
+  if (/\.epub$/i.test(ref)) { await openFromUrl(ref); note("An EPUB's chapters can't be edited yet: the book is open to read."); return; }
+  const kind = docKind(ref);
+  if (!EDIT_EXT.test(ref.replace(/[?#].*$/, '')) || !kind) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} can't be edited: ?edit= takes .md, .markdown, .html, .htm and .txt files.`, 'error'); return; }
+  const seq = ++openSeq;
+  const candidates = bookCandidates(ref);
+  if (candidates.some(u => u.origin !== location.origin)) { await openDefault(seq); if (!isStale(seq)) showNotice('?edit= opens files on this same site.', 'error'); return; }
+  showStatus(`Loading ${ref}…`);
+  let gone = true;
+  for (const u of candidates) {
+    const got = await fetchDocument(u, kind);
+    if (isStale(seq)) return;
+    if (got.miss) { if (!/^(404|410)$|not found/.test(got.miss)) gone = false; continue; }
+    try {
+      await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset });
+      if (!isStale(seq)) await editStart();
+    } catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, ref), 'error'); } }
+    return;
+  }
+  const u = candidates[0];
+  if (!gone) { await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} couldn't be read from the site.`, 'error'); return; }
+  // (Not there: a new, empty document with that name, ready to save.)
+  try {
+    await openDocument(new ArrayBuffer(0), safeDecode(u.pathname.split('/').pop()), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, created: true });
+    if (!isStale(seq)) await editStart({ mode: 'raw' });
+  } catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, ref), 'error'); } }
+}
+// ?get=address (E-24): a book or document on this site or another. Another site has to allow it (CORS).
+async function openByAddress(ref){
+  if (!GET_URLS) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice("This site doesn't open files by their address (?get=).", 'error'); return; }
+  await openFromUrl(ref, { anySite: true });
+}
+// anySite: ?get= (E-24), which takes addresses on other sites too; then: a found document is opened for
+// editing if edit is set.
+async function openFromUrl(ref, { anySite = false, edit = false } = {}){
   const seq = ++openSeq;
   showStatus(`Loading ${ref}…`);
   // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
   const name = (ref.replace(/\/+$/, '').split('/').pop() || ref).replace(/\.epub$/i, '');
   try {
     const candidates = bookCandidates(ref);
-    if (candidates.some(u => u.origin !== location.origin)) throw new Error('Only books hosted on this same site can be opened from the address.');
+    if (!anySite && candidates.some(u => u.origin !== location.origin)) throw new Error('Only books hosted on this same site can be opened from the address.');
+    const foreign = candidates[0].origin !== location.origin ? candidates[0].host : '';
+    if (foreign) {
+      if (!/^https?:$/.test(candidates[0].protocol)) throw new Error('Only web addresses (http or https) can be opened.');
+      if (location.protocol === 'https:' && candidates[0].protocol === 'http:') throw new Error('An http address can\'t be read from a page on https: the browser blocks it. Use the https address, if the site has one.');
+    }
+    const why = m => foreign && m === 'network error' ? `${foreign} didn't let this page read it (the site has to allow it, with CORS headers), or it couldn't be reached` : m;
     const misses = [];
     for (const u of candidates) {
       const kind = docKind(u.pathname);
       // Each candidate must really be the book: a "not found" page served with status 200 counts as a miss,
       // so the next location is tried.
       if (kind) {
-        const got = await fetchDocument(u, kind);
-        if (got.miss) { misses.push(`${u.pathname} (${got.miss})`); continue; }
+        const got = await fetchDocument(u, kind, foreign ? { credentials: 'omit' } : {});
+        if (got.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(got.miss)})`); continue; }
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
-          { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset });
+          { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign });
+        if (isStale(seq)) return;
+        if (foreign) showFrom(foreign);
+        if (edit) await editStart();
         return;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
         const found = await zipFromUrl(u.href);
-        if (found.miss) { misses.push(`${u.pathname} (${found.miss})`); continue; }
+        if (found.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(found.miss)})`); continue; }
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
-        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: `spine:pos:url:${u.pathname}`, seq });
+        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq });
+        if (foreign && !isStale(seq)) showFrom(foreign);
         return;
       }
       if (!u.pathname.endsWith('/')) u.pathname += '/';
@@ -8028,6 +8084,7 @@ async function openFromUrl(ref){
         misses.push(`${u.pathname} (no META-INF/container.xml)`); continue;
       }
       await openBook(src, { name, seq });
+      if (foreign && !isStale(seq)) showFrom(foreign);
       return;
     }
     throw new Error(`Nothing was found at ${misses.join(' or ')}.`);

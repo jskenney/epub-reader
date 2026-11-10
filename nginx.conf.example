@@ -12,13 +12,17 @@ location ^~ /reader/ {
     # (the voices), no plugins, nothing may frame the reader. This one is for a fully self-hosted reader
     # (fetch-libs.sh, fetch-fonts.sh, fetch-kokoro.sh, fetch-pocket.sh run). 'unsafe-inline' is needed for
     # the reader's own inline script. tests/run.sh sends exactly this policy, so the tests check it works.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
+    # connect-src allows https: so ?get= can read a file from another site (E-24; that site must allow it with
+    # CORS). Book pages run no scripts, so this lets nothing in a book connect anywhere. With GET_URLS = false
+    # in reader-config.json, take https: out of connect-src (the CDN policy below then needs its CDN hosts back:
+    # https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co).
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob: https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
 
     # If you don't self-host everything (ALLOW_CDN = true, the default), use this policy instead: it adds the
     # CDNs the reader falls back to (cdnjs, jsDelivr, Google Fonts, and Hugging Face with its download hosts).
     # With ALLOW_REMOTE_CONTENT = true, also add the sites books may load from to img-src, media-src,
     # style-src and font-src (or https: to allow any), since this policy applies to book pages too.
-    # add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data: https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob: https://fonts.gstatic.com; connect-src 'self' data: blob: https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
+    # add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data: https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob: https://fonts.gstatic.com; connect-src 'self' data: blob: https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
 
     add_header X-Content-Type-Options nosniff always;   # files must have the right type (see below)
     add_header Referrer-Policy same-origin always;

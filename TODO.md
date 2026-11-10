@@ -1,7 +1,7 @@
 # Plan: editing, server saving and EPUB editing (E-21 to E-25)
 
 This file is the plan for five enhancements listed in REVIEW.md. REVIEW.md only names them; the design, the
-decisions behind it and the work to do are here. E-21 is built (phases 1 to 3; its review is under way); the rest isn't yet.
+decisions behind it and the work to do are here. E-21 and E-24 are built; the rest isn't yet.
 
 | ID | What | Depends on |
 |---|---|---|
@@ -287,12 +287,12 @@ into the file.
 
 ### Tasks
 
-- [ ] `?edit=`: lookup, opening into the editor, new file when missing, `EDITING` off, EPUB note.
-- [ ] `?get=`: same-site and full addresses, CORS and mixed-content messages, the banner, download-only for
+- [x] `?edit=`: lookup, opening into the editor, new file when missing, `EDITING` off, EPUB note.
+- [x] `?get=`: same-site and full addresses, CORS and mixed-content messages, the banner, download-only for
       other sites, `GET_URLS`.
-- [ ] The test server: a second origin serving files with and without CORS headers.
-- [ ] nginx example and README.
-- [ ] Tests: each case above, including a missing file creating a new one, a refused extension, and a
+- [x] The test server: a second origin serving files with and without CORS headers.
+- [x] nginx example and README.
+- [x] Tests: each case above, including a missing file creating a new one, a refused extension, and a
       cross-site file without CORS.
 
 ---

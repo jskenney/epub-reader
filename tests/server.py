@@ -95,7 +95,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Security-Policy", POLICY)
             self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if not self.path.startswith("/nocors/"):   # (E-24: a site that doesn't let other sites read its files)
+            self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
 
     def send_header(self, key, value):
