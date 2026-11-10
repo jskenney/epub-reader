@@ -7,7 +7,9 @@
 <!-- The interface fonts: fonts/ui.css when self-hosted (fetch-fonts.sh), otherwise Google Fonts; set at start-up. -->
 <link id="uiFonts" rel="stylesheet" href="data:text/css,">
 <!-- The reader's theme before anything is drawn (a flash of the light theme is worst with Black at night). -->
-<script>try { const t = JSON.parse(localStorage.getItem('spine:theme')); if (['light', 'sepia', 'dark', 'black'].includes(t)) document.documentElement.setAttribute('data-theme', t); } catch {}</script>
+<!-- Without one, this folder's default theme (from its reader-config.json, as last seen) until the config arrives. -->
+<script>try { const ok = t => ['light', 'sepia', 'dark', 'black'].includes(t), mine = JSON.parse(localStorage.getItem('spine:theme')), folder = JSON.parse(localStorage.getItem('spine:folderTheme:' + location.pathname.replace(/[^/]*$/, '')));
+  if (ok(mine)) document.documentElement.setAttribute('data-theme', mine); else if (mine == null && ok(folder)) document.documentElement.setAttribute('data-theme', folder); } catch {}</script>
 <style>
 /* Layout: one-screen reading app. Top bar, contents rail on the left, the page as the one framed object, a segmented spine ribbon along the bottom. */
 :root{
@@ -206,6 +208,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-theme input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
 .set-theme:has(input:checked){border-color:var(--ribbon);box-shadow:0 0 0 1px var(--ribbon)}
 .set-theme:has(input:focus-visible){outline:2px solid var(--ribbon);outline-offset:2px}
+@media (forced-colors: active){.set-theme:has(input:checked){border:3px solid Highlight;padding:6px 2px}}
 .sw{width:100%;max-width:58px;height:34px;box-sizing:border-box;border-radius:5px;border:1px solid var(--rule);display:grid;place-items:center;font:600 14px var(--font-read)}
 .sw-light{background:#FDFDFB;color:#1C2120}.sw-sepia{background:#F8F1E1;color:#3A2E20}.sw-dark{background:#171A19;color:#D6DCD8}.sw-black{background:#000;color:#D2D6D4}
 .sw-system{background:linear-gradient(135deg,#FDFDFB 50%,#171A19 50%)}
@@ -327,7 +330,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 8H1.5M3.5 5.5 1 8l2.5 2.5M10 8h4.5M12.5 5.5 15 8l-2.5 2.5"/></svg>
         </button>
       </div>
-      <button class="btn ghost" id="setBtn" title="Settings: theme and reader options" aria-label="Settings" aria-haspopup="dialog">
+      <button class="btn ghost" id="setBtn" title="Settings: theme and reader options" aria-label="Settings" aria-haspopup="dialog" disabled>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.1"/><path d="M6.9 1.75h2.2l.35 1.6 1.2.7 1.55-.5 1.1 1.9-1.2 1.1v1.4l1.2 1.1-1.1 1.9-1.55-.5-1.2.7-.35 1.6H6.9l-.35-1.6-1.2-.7-1.55.5-1.1-1.9 1.2-1.1v-1.4l-1.2-1.1 1.1-1.9 1.55.5 1.2-.7Z"/></svg>
       </button>
       <label class="btn ghost" for="fileInput" tabindex="0" role="button" id="openBtn" title="Open a book (EPUB, comic, text, Markdown or HTML)" aria-label="Open a book">
@@ -4241,7 +4244,12 @@ async function pkLoad(){
       ...['text_conditioner', 'flow_lm_main', 'flow_lm_flow', 'mimi_decoder'].map(f => f + q + '.onnx')])]);
   pk.local = lib || ort || model;
   if (!ALLOW_CDN && !(lib && ort && model)) {
-    pk.state = 'error'; pk.error = 'the self-hosted Pocket TTS files are missing (run fetch-pocket.sh); ALLOW_CDN is off';
+    // (Only the other precision here: the reader's "Full-precision voice models" setting asks for files the site
+    // doesn't have, which the reader can change, unlike the site.)
+    const other = lib && ort && !model && await allReal(POCKET.local + `model/${lang}/`, ['text_conditioner', 'flow_lm_main', 'flow_lm_flow', 'mimi_decoder'].map(f => f + (FULL_PRECISION ? '_int8' : '') + '.onnx'));
+    pk.state = 'error';
+    pk.error = other ? `this site has only the ${FULL_PRECISION ? 'smaller' : 'full-precision'} Pocket TTS model: turn "Full-precision voice models" ${FULL_PRECISION ? 'off' : 'on'} in Settings and reload`
+      : 'the self-hosted Pocket TTS files are missing (run fetch-pocket.sh); ALLOW_CDN is off';
     ttsUpdateBar(); return;
   }
   try {
@@ -6250,7 +6258,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
-  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = Math.min(36500, Math.max(0, Math.round(v))); }],
+  KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, Math.round(v))); }],
   NCACHE_SEC: ['number', v => { NCACHE_SEC = Math.min(86400, Math.max(30, v)); }],
@@ -6274,6 +6282,10 @@ async function loadConfig(){
     const r = await fetch(new URL(CONFIG_FILE, location.href), { cache: 'no-cache' });
     if (r.ok && !looksHtml(r)) cfg = JSON.parse(await r.text());
   } catch (err) { if (!(err instanceof TypeError)) console.warn(`${CONFIG_FILE} isn't valid JSON, so it was ignored:`, err.message); }
+  // (This folder's default theme, remembered for the script in <head>, or forgotten: L-d of round 20's last review.)
+  const folderKey = 'spine:folderTheme:' + location.pathname.replace(/[^/]*$/, '');
+  if (THEMES.includes(cfg?.theme)) store.set(folderKey, cfg.theme);
+  else { store.del(folderKey); if (store.get('spine:theme') == null) document.documentElement.removeAttribute('data-theme'); }   // (it had one before)
   if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return;
   readerConfig = cfg;
   for (const [key, value] of Object.entries(cfg)) {
@@ -6429,6 +6441,7 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
 (async () => {
   await loadConfig();
   loadUserSettings();
+  $('#setBtn').disabled = false;   // (not before: the dialog compares with the site's values, known only now)
   sweepPositions();
   $('#ttsSleep').hidden = !SLEEP_TIMER;   // (off: the sleep timer stays "off" and isn't shown)
   await Promise.all([setupFonts(), loadLib('jszip').catch(err => console.warn(err.message))]);

@@ -175,6 +175,10 @@ def main():
     (SITE / "folder-pocket-partial").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-pocket-partial" / "index.html")
     (SITE / "folder-pocket-partial" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "VOICE_FILES": "/pocket-partial/"}))
+    # The same files with the CDNs off: only the 8-bit model is here (round 20: the reader's precision setting).
+    (SITE / "folder-pocket-int8").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-pocket-int8" / "index.html")
+    (SITE / "folder-pocket-int8" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "VOICE_FILES": "/pocket-partial/", "ALLOW_CDN": False}))
     pp = SITE / "pocket-partial" / "pocket"
     for f in ("lib/binary.js", "lib/tokenizer.js", "ort/ort.min.mjs", "ort/ort-wasm-simd-threaded.mjs", "ort/ort-wasm-simd-threaded.wasm"):
         (pp / f).parent.mkdir(parents=True, exist_ok=True); (pp / f).write_text("// stand-in\n")

@@ -214,8 +214,8 @@ test('days to keep positions: kept even when the same as the folder\'s, and whol
   assert.equal(await stored(page, 'spine:pos:url:/old.epub'), null, 'the reader\'s 730 days, not another folder\'s "keep forever"');
   await openSettings(page);
   await row(page, 'KEEP_POSITIONS_DAYS').fill('0.001'); await row(page, 'KEEP_POSITIONS_DAYS').press('Tab');
-  assert.equal(await stored(page, 'spine:set:KEEP_POSITIONS_DAYS'), '0');
-  assert.equal(await row(page, 'KEEP_POSITIONS_DAYS').inputValue(), '0');
+  assert.equal(await stored(page, 'spine:set:KEEP_POSITIONS_DAYS'), '1');   // (whole days; under one is one, not "keep forever")
+  assert.equal(await row(page, 'KEEP_POSITIONS_DAYS').inputValue(), '1');
 });
 
 test('T and the theme button: a folder\'s default theme is the fallback, and the button names where it goes (round 20 review)', async () => {
@@ -325,4 +325,41 @@ test('a comic with pages taller than the screen reopens as far down the page as 
   await page.reload(); await h.waitForBook(page);
   await page.waitForTimeout(500);
   assert.ok(Math.abs((await top()) - was) < 30, `${await top()} vs ${was}`);
+});
+
+test('final review: the button waits for the site\'s values; under a day is a day; the chosen theme card shows in forced colours; a folder\'s theme comes early; Pocket names the precision setting (round 20 review)', async () => {
+  const page = await h.newPage();
+  // The settings button waits for reader-config.json.
+  let release;
+  const held = new Promise(r => { release = r; });
+  await page.route('**/folder-listen/reader-config.json', async r => { await held; await r.continue(); });
+  await page.goto(`${h.SITE}/folder-listen/index.html?book=/reader/books/long.epub`);
+  await page.waitForSelector('#setBtn');
+  assert.equal(await page.isDisabled('#setBtn'), true);
+  release(); await h.waitForBook(page);
+  assert.equal(await page.isDisabled('#setBtn'), false);
+  await page.unroute('**/folder-listen/reader-config.json');
+  // Under a day is a day, not "keep forever".
+  await openSettings(page);
+  await row(page, 'KEEP_POSITIONS_DAYS').fill('0.4'); await row(page, 'KEEP_POSITIONS_DAYS').press('Tab');
+  assert.equal(await stored(page, 'spine:set:KEEP_POSITIONS_DAYS'), '1');
+  // Forced colours: the chosen theme's card is marked.
+  await page.click('.set-theme:has(input[value="sepia"])');
+  await page.emulateMedia({ forcedColors: 'active' });
+  const widths = await page.evaluate(() => [...document.querySelectorAll('.set-theme')].map(c => getComputedStyle(c).borderTopWidth));
+  assert.deepEqual(widths, ['1px', '1px', '3px', '1px', '1px']);
+  await page.emulateMedia({ forcedColors: 'none' });
+  // A folder's default theme, once seen, is there before the page draws.
+  const p2 = await h.newPage();
+  await h.openReader(p2, `${h.SITE}/folder-sepia/index.html?book=/reader/books/long.epub`);
+  await p2.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__early = document.documentElement.getAttribute('data-theme'); }));
+  await p2.reload(); await h.waitForBook(p2);
+  assert.equal(await p2.evaluate(() => window.__early), 'sepia');
+  // Only the 8-bit Pocket model on a site without CDNs: the reader is told which setting to change.
+  const p3 = await h.newPage();
+  await h.openReader(p3, `${h.SITE}/folder-pocket-int8/index.html?book=/reader/books/long.epub`, { 'spine:ttsEngine': 'pocket' });
+  await p3.keyboard.press('r');
+  await p3.click('#ttsDownload').catch(() => {});
+  await p3.waitForFunction(() => /Full-precision voice models/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 15000 });
+  assert.match(await p3.textContent('#ttsStatus'), /turn "Full-precision voice models" off in Settings/);
 });
