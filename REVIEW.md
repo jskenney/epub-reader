@@ -250,6 +250,13 @@ allows it with CORS. A third review, of loop 1's fixes, found no critical items;
 One small thing is left as it is: HTML written back from the page loses a line break straight after `<pre>`
 or `<textarea>`, which a browser ignores anyway (the page is the same).
 
+A fourth review, of E-24 and loop 2's fixes, found no critical or high items. What it found was fixed in
+`d6ec28d`, each with a test that fails on the code before it (the read-only ones checked by reading):
+- **Medium:** M-106 to M-108.
+- **Low:** L-259 to L-265.
+It found nothing in a hostile document from another site that could run, reach the logging server, or touch
+the reader's own storage.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -428,6 +435,9 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-108 | Saving a site document to a file deleted another file's draft kept under that file name | `d6ec28d` |
+| M-107 | Markdown written back after loop 2: a backslash at the end of a text lost the emphasis, link or code after it (written as `\<em>`, `\[`, `` \` ``) | `d6ec28d` |
+| M-106 | `?get=` took a `data:` address (which has no host) and showed it with no note that it came from elsewhere; `javascript:` and `file:` failed with misleading messages | `d6ec28d` |
 | M-105 | Changing the address of a link added while editing was ignored when written back (and the prompt didn't show its address) | `7634901` |
 | M-104 | A draft made after a save that downloaded a copy (a document from the site, or opened with the file input) was kept but never offered again: it was tied to the copy, which the site or the file didn't have | `7634901` |
 | M-103 | HTML with no `<html>`, `<head>` or `<body>` tags lost its doctype when written back (quirks mode) | `7634901` |
@@ -656,6 +666,13 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-228 | A fixed page with a slow picture from another site stayed blank until its load event (up to 6 s); it is now shown once parsed | `dea8a59` |
 | L-229 | A fixed page coloured only under a media query kept its first judgement when the query stopped applying: black text on black | `dea8a59` |
 | L-110 | No edit list for the AAC encoder's delay: each .m4b file starts with 20 to 45 ms of silence and its chapter marks fall that much early. WebCodecs doesn't report the delay, so an `elst` would have to guess it (too much clips speech) or measure it with a test encode; inaudible in speech | Left as is, by your decision |
+| L-265 | Small things: a pending draft dropped (not moved in) when the page came back from the browser's cache; a policy block reported as CORS only; an unreadable folder book reported as having no container.xml; `?edit=` refused a name followed by a query; a created file's name could hold a slash; an unused option and a duplicated branch | `d6ec28d` |
+| L-264 | The charset change ended a script's text at any `</script`, so a meta inside a string was changed | `d6ec28d` |
+| L-263 | The wrapper fix (H-26) skipped every `<animate>`/`<set>`, but the write-back puts aside only those setting an address: the wrapper was written inside itself and the element twice | `d6ec28d` |
+| L-262 | A fragment with a comment before its doctype lost the doctype (quirks mode) | `d6ec28d` |
+| L-261 | The note that a document came from another site was replaced by the draft offer, and was gone once editing began | `d6ec28d` |
+| L-260 | `?edit=` couldn't start a new Markdown or text file on a site that answers missing files with a page | `d6ec28d` |
+| L-259 | A site address that redirects to another site opened its content with no note, through `?book=` too (the page policy's `https:` lets it through); `?get=` named the first site, not the one it came from | `d6ec28d` |
 | L-258 | `editFocus` didn't keep the page's scroll; a draft kept for leaving came back after the page returned from the browser's cache, or after Done discarded it; a site document saved to a file kept the site's draft key (*read*) | `7634901` |
 | L-257 | An apostrophe in an unquoted attribute value made the body unfindable, and the whole document was written out again | `7634901` |
 | L-256 | The charset rewrite changed `<meta charset>` inside a script's string or a textarea | `7634901` |
