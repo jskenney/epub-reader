@@ -641,3 +641,53 @@ test('a stopped export keeps extra room in the saved audio (for a week); a finis
   await exportAll(page, 'one', 1);
   assert.equal(await page.evaluate(() => localStorage.getItem('spine:exportRoom')), null);
 });
+
+test('the voice label stays while the server is away mid-export (T-20, L-161)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/short-lines.epub`);
+  let until = 0;
+  await page.route('**/tts/v1/audio/speech', route => {
+    if (!until && /Line 25 /.test(spoken(route))) until = Date.now() + 5000;
+    return Date.now() < until ? fail500(route, 'restarting', 502) : route.continue();
+  });
+  const labels = [];
+  const done = exportAll(page, 'one', 1);
+  while (!until) await page.waitForTimeout(100);
+  while (Date.now() < until - 500) { labels.push(await page.textContent('#abVoice')); await page.waitForTimeout(400); }
+  await done;
+  assert.ok(labels.length > 3 && labels.every(l => /^Voice: /.test(l)), JSON.stringify(labels));
+});
+
+test('keepPart: an export that stops before any speech keeps no file; one that stops over a file already there doesn\'t replace it (T-20)', { skip: noFfmpeg, timeout: 150000 }, async () => {
+  FRAMES ??= aacFrames();
+  // Gone from the first request: nothing to keep.
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.addInitScript(() => { window.SPINE_TEST = { abWaitSec: 3 }; window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });
+  await page.route('**/tts/v1/audio/speech', route => fail500(route, 'gone', 502));
+  await openExport(page, `${h.READER}?book=books/long.epub`);
+  const downloads = []; page.on('download', d => downloads.push(d.suggestedFilename()));
+  await page.click('#abStart');
+  await page.waitForFunction(() => /Export stopped/.test(document.querySelector('#abNow').textContent), null, { timeout: 60000 });
+  await page.waitForTimeout(500);
+  assert.deepEqual(downloads, []);
+  assert.doesNotMatch(await page.textContent('#abDone'), /kept/);
+  // A file per chapter into a folder where the files are already there: the chapter it stopped in isn't replaced
+  // by a part of it.
+  const p2 = await h.newPage();
+  await p2.addInitScript(fakeAac, FRAMES);
+  await p2.addInitScript(fakePickers);
+  await p2.addInitScript(() => { window.SPINE_TEST = { abWaitSec: 3 }; });
+  let gone = false;
+  await p2.route('**/tts/v1/audio/speech', route => gone || /paragraph 2\./.test(spoken(route)) ? (gone = true, fail500(route, 'gone', 502)) : route.continue());
+  await openExport(p2, `${h.READER}?book=books/long.epub`);
+  await p2.click('#abNone'); await p2.check('#abList input >> nth=0'); await p2.check('#abList input >> nth=1');
+  await p2.check('input[name="abMode"][value="each"]');
+  await p2.click('#abStart');
+  await p2.waitForFunction(() => /Export stopped/.test(document.querySelector('#abNow').textContent), null, { timeout: 60000 });
+  await p2.waitForTimeout(500);
+  const names = await p2.evaluate(() => Object.keys(window.__files));
+  assert.ok(!names.some(n => /Chapter One/.test(n)), `the chapter it stopped in wasn't written: ${names}`);
+});

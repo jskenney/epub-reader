@@ -280,6 +280,9 @@ def main():
         epub(books / f"{name}.epub", name, [("c1.xhtml", "One", "<p>Obfuscated font text.</p>", style)], uid=uid,
              extra={"OEBPS/f.ttf": obfuscated(key, n), "META-INF/encryption.xml": enc(alg)})
     (books / "obf-font.bin").write_bytes(font)
+    # (T-20) The IDPF one unpacked as a folder book, whose font is fetched from the server.
+    with zipfile.ZipFile(books / "obf-idpf.epub") as z0:
+        z0.extractall(books / "obf-dir")
     # (T-20, L-137) The same, but encryption.xml names the font in another case than the file: found by its folded name.
     epub(books / "obf-case.epub", "obf-case", [("c1.xhtml", "One", "<p>Obfuscated font text.</p>", style)], uid=" urn:isbn:9780000000001 ",
          extra={"OEBPS/f.ttf": obfuscated(hashlib.sha1(b"urn:isbn:9780000000001").digest(), 1040),

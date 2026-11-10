@@ -79,3 +79,25 @@ test('publisher narration at the end of the text doesn\'t turn to a following pi
   assert.ok(await h.waitFor(async () => /End of book/.test(await page.textContent('#ttsStatus')), 20000), await page.textContent('#ttsStatus'));
   assert.match(await page.textContent('#spinePos'), /spine 1\/2/);
 });
+
+test('a folder book closed while its obfuscated font is still downloading leaves no copy of the font behind (L-153)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => {
+    window.__fonts = [];   // [address, revoked]
+    const make = URL.createObjectURL, drop = URL.revokeObjectURL;
+    URL.createObjectURL = b => { const u = make(b); if (/font|ttf/.test(b?.type || '')) window.__fonts.push([u, false]); return u; };
+    URL.revokeObjectURL = u => { const f = window.__fonts.find(x => x[0] === u); if (f) f[1] = true; return drop(u); };
+  });
+  let release, held = false;
+  const gate = new Promise(r => { release = r; });
+  await page.route('**/obf-dir/OEBPS/f.ttf', async route => { held = true; await gate; await route.continue(); });
+  await page.goto(`${h.READER}?book=books/obf-dir/`);
+  assert.ok(await h.waitFor(async () => held, 15000), 'the font was asked for');
+  // Another book opened while the font is on its way, then the font arrives.
+  await page.setInputFiles('#fileInput', path.join(__dirname, 'site', 'reader', 'books', 'abc.epub'));
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'ABC');
+  release();
+  await page.waitForTimeout(1000);
+  const live = await page.evaluate(() => window.__fonts.filter(([, revoked]) => !revoked).map(([u]) => u));
+  assert.deepEqual(live, [], 'no copy of the closed book\'s font left');
+});
