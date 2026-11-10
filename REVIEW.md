@@ -197,6 +197,12 @@ fixed in `165e1ba`, with tests that fail on the code before it:
 - **Medium:** M-84.
 - **Low:** L-224 to L-227. **Tests:** T-38.
 
+A sixth and last review looked at the round as a whole. It found no critical or high items. What it found was fixed
+in `dea8a59`, with a test that fails on the code before it:
+- **Medium:** M-85.
+- **Low:** L-228 to L-230. **Tests:** T-39.
+It also confirmed every round 22 fix it re-checked. That was the last of the six loops allowed.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -398,6 +404,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-85 | A fixed page's colours were judged once, possibly before a stylesheet from another site had arrived (with remote content allowed): white text on a white page; they are now judged on every fit and again when such a sheet loads | `dea8a59` |
 | M-84 | Switching a fixed page into the scroll layout, or reopening it there, landed at its bottom (a side effect of L-223's fix); the place stays at the top, and progress counts a shown fixed page as read separately | `165e1ba` |
 | M-83 | Making every fixed page's body white hid pages coloured on their html (or by bgcolor): white text on white (a regression from M-82's fix); the colours are now worked out once per page | `0e3ee93` |
 | M-82 | In dark themes a fixed page that paints no background of its own showed its black text on the theme's black; it is now a white page unless the book colours it | `8bda4f7` |
@@ -602,6 +609,9 @@ From all reviews so far, with the commits that fixed them.
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
 | L-205 | With shortcuts locked, the arrow keys stopped at the end of the Aa menu (a disabled item can't take focus); it is now aria-disabled | `96e5832` |
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
+| L-228 | A fixed page with a slow picture from another site stayed blank until its load event (up to 6 s); it is now shown once parsed | `dea8a59` |
+| L-229 | A fixed page coloured only under a media query kept its first judgement when the query stopped applying: black text on black | `dea8a59` |
+| L-230 | Progress counted the page still in the frame while the next one loaded; the time left of a shown fixed page disagreed with the 100% bar and could vanish (*read*) | `dea8a59` |
 | L-224 | The time left vanished on fixed pages in page layouts (the same side effect) | `165e1ba` |
 | L-225 | A fixed page's first paint showed black text on the dark theme before its colours were judged; it is now hidden until then | `165e1ba` |
 | L-226 | A fixed page that fits without scrolling counted as unread in the scroll layout; a shown fixed page now counts as read in every layout | `165e1ba` |
@@ -667,6 +677,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-39 | No test checked that a fixed page becomes visible; a late stylesheet and a media query; comic tests waited set times; a stall queued by a failed test could reach the next | `dea8a59` |
 | T-38 | A black-html page in the black theme and after a theme change; a fixed page switched to, or reopened in, the scroll layout; the time left on fixed pages | `165e1ba` |
 | T-37 | The fixed tests' page-turn helper didn't wait for the new page; no test of pages coloured on html, by bgcolor, or with a body of "none", or of the last page's 100% | `0e3ee93` |
 | T-36 | Fixed tests waited a fixed time per page turn; no test of an unpainted fixed page, its highlight colours, manga trackpad swipes or a switch right after scrolling; a race in the mock server's stall queue | `8bda4f7` |
