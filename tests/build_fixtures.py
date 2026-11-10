@@ -167,7 +167,8 @@ def main():
                         ("folder-listen", {"LIB_FILES": "/reader/", "VOICE_FILES": "/reader/", "SLEEP_TIMER": True, "TIME_LEFT": True}),
                         ("folder-sepia", {"LIB_FILES": "/reader/", "theme": "sepia"}),
                         ("folder-locked", {"LIB_FILES": "/reader/", "theme": "sepia", "TIME_LEFT": True,
-                                           "LOCKED": ["theme", "TIME_LEFT", "shortcuts", "ALLOW_REMOTE_CONTENT", "bogus"]})):
+                                           "LOCKED": ["theme", "TIME_LEFT", "shortcuts", "ALLOW_REMOTE_CONTENT", "bogus"]}),
+                        ("folder-keep", {"LIB_FILES": "/reader/", "KEEP_POSITIONS_DAYS": 30, "LOCKED": ["KEEP_POSITIONS_DAYS"]})):
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))

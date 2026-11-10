@@ -2611,9 +2611,13 @@ function sweepPositions(){
   // The sweep covers the whole site, so it uses the longest time any folder's setting has asked for (0, "keep
   // forever", included), rather than whichever folder's page happens to run it (REVIEW.md L-77).
   // A time the reader chose in Settings is theirs for the whole site, so it is used as it is.
-  const seen = store.get('spine:keepDays'), mine = typeof store.get('spine:set:KEEP_POSITIONS_DAYS') === 'number';
-  const days = mine ? KEEP_POSITIONS_DAYS : KEEP_POSITIONS_DAYS === 0 || seen === 0 ? 0 : Math.max(KEEP_POSITIONS_DAYS, typeof seen === 'number' ? seen : 0);
-  if (!mine && days !== seen) store.set('spine:keepDays', days);
+  // (In a folder that locks it, the longest of the folders' times and the reader's own applies: the positions are
+  // the reader's, kept for the whole site, so no folder can shorten that.)
+  const seen = store.get('spine:keepDays'), own = store.get('spine:set:KEEP_POSITIONS_DAYS');
+  const mine = typeof own === 'number', locked = LOCKED.has('KEEP_POSITIONS_DAYS');
+  const longest = KEEP_POSITIONS_DAYS === 0 || seen === 0 ? 0 : Math.max(KEEP_POSITIONS_DAYS, typeof seen === 'number' ? seen : 0);
+  const days = !mine ? longest : !locked ? KEEP_POSITIONS_DAYS : own === 0 || longest === 0 ? 0 : Math.max(longest, own);
+  if ((!mine || locked) && longest !== seen) store.set('spine:keepDays', longest);
   if (!(days > 0) || now - (store.get('spine:posSweep') || 0) < 86400000) return;
   store.set('spine:posSweep', now);
   let keys = [];
@@ -3107,7 +3111,7 @@ function buildFontMenu(){
   const ks = document.createElement('small'); ks.textContent = 'C F T L I R /';
   k.append(kn, ks);
   k.title = 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.';
-  k.addEventListener('click', () => { setSingleKeys(!singleKeys); });
+  k.addEventListener('click', () => { if (!LOCKED.has('shortcuts')) setSingleKeys(!singleKeys); });
   menu.append(keys, k);
   syncFontMenu();
 }
@@ -3119,7 +3123,8 @@ function setSingleKeys(on){
 function syncFontMenu(){
   for (const b of $('#fontMenu').querySelectorAll('.opt[data-face]')) b.setAttribute('aria-checked', String(b.dataset.face === fontFace));
   const ko = $('#keysOpt');
-  if (ko) { ko.setAttribute('aria-checked', String(singleKeys)); ko.disabled = LOCKED.has('shortcuts'); ko.title = ko.disabled ? 'Set by this site' : 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.'; }
+  // (Locked: still focusable in the menu, so the arrow keys go round and the lock can be heard: aria-disabled.)
+  if (ko) { const lock = LOCKED.has('shortcuts'); ko.setAttribute('aria-checked', String(singleKeys)); ko.setAttribute('aria-disabled', String(lock)); ko.title = lock ? 'Set by this site' : 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.'; }
   $('#fontBtn .aa').style.fontFamily = face().stack || face().preview;
   $('#fontBtn').title = `Reading font: ${face().name}`;
 }
@@ -3940,6 +3945,7 @@ $('#ttsEngine').addEventListener('change', e => ttsSetEngine(e.target.value));
 // book)"), which wasted room in the read-aloud bar (E-19). The open list still shows the options in full.
 let fitCtx = null;
 function fitSelect(el){
+  if (CSS.supports?.('field-sizing', 'content')) { el.style.fieldSizing = 'content'; return; }   // (the browser sizes it: Safari's arrows take more room)
   const cs = getComputedStyle(el), text = el.selectedOptions[0]?.textContent || '';
   fitCtx ??= document.createElement('canvas').getContext('2d');
   fitCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
@@ -4272,7 +4278,8 @@ async function pkLoad(){
     // doesn't have, which the reader can change, unlike the site.)
     const other = lib && ort && !model && await allReal(POCKET.local + `model/${lang}/`, ['text_conditioner', 'flow_lm_main', 'flow_lm_flow', 'mimi_decoder'].map(f => f + (FULL_PRECISION ? '_int8' : '') + '.onnx'));
     pk.state = 'error';
-    pk.error = other ? `this site has only the ${FULL_PRECISION ? 'smaller' : 'full-precision'} Pocket TTS model: turn "Full-precision voice models" ${FULL_PRECISION ? 'off' : 'on'} in Settings and reload`
+    pk.error = other && LOCKED.has('FULL_PRECISION') ? `this site has only the ${FULL_PRECISION ? 'smaller' : 'full-precision'} Pocket TTS model, and its settings ask for the other (run fetch-pocket.sh${FULL_PRECISION ? '' : ' --int8'})`
+      : other ? `this site has only the ${FULL_PRECISION ? 'smaller' : 'full-precision'} Pocket TTS model: turn "Full-precision voice models" ${FULL_PRECISION ? 'off' : 'on'} in Settings and reload`
       : 'the self-hosted Pocket TTS files are missing (run fetch-pocket.sh); ALLOW_CDN is off';
     ttsUpdateBar(); return;
   }

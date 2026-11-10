@@ -415,4 +415,30 @@ test('the read-aloud engine list is as wide as the engine chosen, not its longes
   await page.selectOption('#ttsEngine', 'pocket');
   const w2 = await page.evaluate(() => document.querySelector('#ttsEngine').getBoundingClientRect().width);
   assert.ok(w2 < 100 && w2 > 50, `width ${w2}`);
+  // Never narrower than the text needs: as wide as a list holding only that option.
+  const fits = await page.evaluate(() => {
+    const e = document.querySelector('#ttsEngine'), solo = e.cloneNode(false);
+    solo.removeAttribute('id'); solo.style.width = ''; solo.style.fieldSizing = '';
+    solo.append(new Option(e.selectedOptions[0].textContent)); e.after(solo);
+    const out = [e.getBoundingClientRect().width, solo.getBoundingClientRect().width]; solo.remove(); return out;
+  });
+  assert.ok(fits[0] >= fits[1] - 0.5, `${fits[0]} vs ${fits[1]}`);
+});
+
+test('a locked days-to-keep doesn\'t delete other folders\' positions; a locked shortcuts option stays reachable in the Aa menu (round 21 review)', async () => {
+  const page = await h.newPage();
+  const old = { i: 0, f: 0, t: Date.now() - 100 * 86400000 };
+  await h.openReader(page, `${h.SITE}/folder-keep/index.html?book=/reader/books/long.epub`, { 'spine:set:KEEP_POSITIONS_DAYS': 0, 'spine:pos:url:/elsewhere/x.epub': old });
+  assert.notEqual(await stored(page, 'spine:pos:url:/elsewhere/x.epub'), null, 'the reader keeps positions forever; the folder\'s 30 days are its own');
+  const p2 = await h.newPage();
+  await h.openReader(p2, `${h.SITE}/folder-locked/index.html?book=/reader/books/long.epub`);
+  await p2.click('#fontBtn');
+  await p2.waitForSelector('#fontMenu:not([hidden])');
+  assert.equal(await p2.getAttribute('#keysOpt', 'aria-disabled'), 'true');
+  const n = await p2.evaluate(() => document.querySelectorAll('#fontMenu .opt').length);
+  const seen = new Set();
+  for (let k = 0; k < n + 1; k++) { await p2.keyboard.press('ArrowDown'); seen.add(await p2.evaluate(() => document.activeElement.id || document.activeElement.dataset.face)); }
+  assert.ok(seen.has('keysOpt') && seen.size === n, [...seen].join());
+  await p2.keyboard.press('Enter');   // (on the locked option: nothing changes)
+  assert.equal(await p2.getAttribute('#keysOpt', 'aria-checked'), 'true');
 });

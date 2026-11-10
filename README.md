@@ -487,7 +487,7 @@ changed. Edit the file and reload the page, or set them for one folder in a
 [`reader-config.json`](#per-folder-settings-reader-configjson) (the ones
 marked ✓). Readers can change some of them for themselves in the Settings
 dialog (marked ⚙): yours is then the default they start from, and their
-choice is saved in their browser. A folder can keep any of them fixed with a
+choice is saved in their browser. A folder can keep any of the ⚙ ones fixed with a
 `LOCKED` list in its `reader-config.json`. The paths, the CDN policy, the voice server,
 default books and the memory and request sizes stay the site's to set.
 
@@ -502,7 +502,7 @@ default books and the memory and request sizes stay the site's to set.
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
-| `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site. |
+| `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site (except in a folder that locks it). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
 | `FULL_PRECISION` ✓ ⚙ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. Readers can change it in Settings; with `ALLOW_CDN` false (or a policy that blocks the CDNs), Pocket TTS then needs both precisions self-hosted (`./fetch-pocket.sh` and `./fetch-pocket.sh --int8`), or it tells the reader to set it back. |
 | `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. Whole seconds. |
@@ -551,8 +551,10 @@ each with its own `default.epub`:
   "theme"]`. Any option marked ⚙ can be named, plus `theme` and `shortcuts`.
   A locked option is this folder's value (or `index.html`'s) whatever the
   reader chose; the dialog shows it as set by the site, and a locked theme
-  also disables the theme button and T. The reader's own choice is kept for
-  folders that don't lock it.
+  also disables the theme button and T (a locked `shortcuts`, its option in
+  the Aa menu). The reader's own choice is kept for folders that don't lock
+  it. A locked `KEEP_POSITIONS_DAYS` doesn't shorten it for the whole
+  site: the longest of the folders' times and the reader's own applies.
 - Unknown names and wrong values are ignored with a warning in the browser
   console. A missing file, or a "not found" page in its place, means no
   config.
