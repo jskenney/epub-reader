@@ -31,9 +31,9 @@ function fakeFiles() {
   const handle = name => ({ kind: 'file', name,
     async getFile() { return new File([window.__files[name] ?? window.__open?.[name] ?? ''], name, { type: '' }); },
     async queryPermission() { return 'granted'; }, async requestPermission() { return 'granted'; },
-    async createWritable() { let out = ''; return { async write(b) { out += typeof b === 'string' ? b : await b.text(); }, async close() { window.__files[name] = out; window.__writes++; }, async abort() {} }; } });
+    async createWritable() { let out = ''; return { async write(b) { out += typeof b === 'string' ? b : await b.text(); }, async close() { await new Promise(r => setTimeout(r, window.__slow || 0)); window.__files[name] = out; window.__writes++; }, async abort() {} }; } });
   window.showOpenFilePicker = async () => [handle(Object.keys(window.__open || {})[0])];
-  window.showSaveFilePicker = async o => { window.__saveAs = o; return handle(o.suggestedName); };
+  window.showSaveFilePicker = async o => { window.__saveAs = o; return handle(window.__saveName || o.suggestedName); };
 }
 
 test('the Edit button sits between Settings and Open; its menu edits a document or starts a new one (E-21)', async () => {
@@ -338,6 +338,14 @@ test('pasted HTML brings only text and simple formatting: no scripts, handlers o
   assert.match(await text(page), /The end\. ?Pasted \*\*bold\*\*!\[\]\(x\)\n$/);
   assert.doesNotMatch(await text(page), /style|class|onclick|onerror|script/);
   assert.equal(await page.evaluate(() => window.__p), undefined);
+  // A link to a file beside the document: not resolved against the reader's site in the page; written as it was.
+  await inPage(page).locator('p', { hasText: 'Pasted' }).evaluate(el => {
+    const dt = new DataTransfer(); dt.setData('text/html', ' <a href="other.md">other</a>'); dt.setData('text/plain', ' other');
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await flush(page);
+  assert.equal(await inPage(page).locator('a', { hasText: 'other' }).getAttribute('href'), null);
+  assert.match(await text(page), /\[other\]\(other\.md\)\n$/);
 });
 
 test('links in the page being edited are not followed; the chips can\'t be typed into (E-21)', async () => {
@@ -365,4 +373,237 @@ test('reading aloud goes on while the page is edited, and reads the edited sente
   const log = (await h.breezeLog()).map(e => e.text);
   assert.equal(log.filter(t => t === first).length, 1, `not started again: ${JSON.stringify(log)}`);
   assert.ok(!log.some(t => new RegExp(`^Paragraph 2 of part ${part + 1},.*\\.$`).test(t) && !/Edited now/.test(t)), 'the sentence as it was isn\'t read');
+});
+
+// Round 24 review: write-back.
+async function typedRoundTrip(page, name, settings = {}) {
+  await wysiwyg(page, doc(name), settings);
+  const original = await text(page);
+  await inPage(page).locator('p', { hasText: 'Start.' }).first().click();
+  await page.keyboard.press('End'); await page.keyboard.type(' Typed.');
+  await flush(page);
+  return [original, await text(page)];
+}
+const sameHtml = (page, a, b) => page.evaluate(([x, y]) => {
+  // (The empty comment that keeps two lists apart says nothing.)
+  const norm = md => new DOMParser().parseFromString(window.marked.parse(md, { gfm: true }), 'text/html').body.innerHTML.replace(/<!-- -->/g, '').replace(/\s+/g, ' ').replace(/> </g, '><').trim();
+  return [norm(x), norm(y)];
+}, [a, b]);
+
+test('written back exactly: kept elements inside an SVG and a table, <body in a comment and an attribute, comments, a fragment, a document\'s own data-ed-keep, a <pre> starting with blank lines (round 24 review)', async () => {
+  const page = await h.newPage();
+  for (const name of ['trap.html', 'comments.html', 'frag.html', 'keepattr.html']) {
+    const [original, back] = await typedRoundTrip(page, name);
+    assert.equal(back, original.replace('Start.', 'Start. Typed.'), name);
+  }
+  // XHTML stays well-formed XML, with what was written (empty elements as the XML serializer writes them).
+  const [ox, bx] = await typedRoundTrip(page, 'doc.xhtml');
+  const xml = t => page.evaluate(x => { const d = new DOMParser().parseFromString(x, 'application/xml'); return d.getElementsByTagName('parsererror').length ? 'not well-formed' : new XMLSerializer().serializeToString(d); }, t);
+  assert.equal(await xml(bx.replace(' Typed.', '')), await xml(ox));
+  assert.match(bx, /^<\?xml version="1\.0" encoding="utf-8"\?>\n<!DOCTYPE html>\n<html xmlns="http:\/\/www\.w3\.org\/1999\/xhtml">\n<head><title>X<\/title><\/head>\n<body>\n/);
+  // (The body as the browser writes it: <rect/> as <rect></rect>, a <tbody> added; the style stays in the SVG,
+  // the script in the table.)
+  const [original, back] = await typedRoundTrip(page, 'svg-table.html');
+  const dom = t => page.evaluate(x => new DOMParser().parseFromString(x, 'text/html').documentElement.outerHTML, t);
+  assert.equal(await dom(back), await dom(original.replace('Start.', 'Start. Typed.')));
+  assert.match(back, /<defs><style>\.c\{fill:red\}<\/style><\/defs>/);
+  assert.match(back, /<tr><td>a<\/td><\/tr><script>var x=1<\/script><tr>/);
+  // Markup after </body>: written once, inside the body.
+  const [, after] = await typedRoundTrip(page, 'after.html');
+  assert.equal(after.split('track()').length - 1, 1, after);
+  assert.match(after, /<p>Start\. Typed\.<\/p>/);
+});
+
+test('Markdown written back: comments, a wrapper, escapes, emphasis, separate lists, list starts, breaks in cells, no-break spaces (round 24 review)', async () => {
+  const page = await h.newPage();
+  for (const name of ['comments.md', 'wrap.md', 'corpus2.md']) {
+    const [original, back] = await typedRoundTrip(page, name);
+    const [want, got] = await sameHtml(page, original.replace('Start.', 'Start. Typed.'), back);
+    assert.equal(got, want, `${name}:\n${back}`);
+  }
+});
+
+test('a Markdown document starting with a rule keeps it a rule, not front matter, however often it is written back (round 24 review)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('hr.md'));
+  for (const s of [' one', ' two']) {
+    await inPage(page).locator('p', { hasText: 'Body' }).click();
+    await page.keyboard.press('End'); await page.keyboard.type(s);
+    await flush(page);
+  }
+  assert.equal(await text(page), '***\n\nIntro text\n\n***\n\nBody one two\n');
+});
+
+test('Enter at the end of a paragraph, and a line break at the end of one, leave no backslash (round 24 review)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('notes.md'));
+  await inPage(page).locator('p', { hasText: 'Text.' }).click();
+  await page.keyboard.press('End'); await page.keyboard.press('Enter');
+  await flush(page);
+  assert.equal(await text(page), NOTES.replace('Text.', 'Text.'), 'an empty paragraph says nothing');
+  await inPage(page).locator('p', { hasText: 'Text.' }).click();
+  await page.keyboard.press('End'); await page.keyboard.press('Shift+Enter'); await page.keyboard.type('y'); await page.keyboard.press('Shift+Enter');
+  await flush(page);
+  assert.match(await text(page), /\nText\.\\\ny\n\n## Later/);
+});
+
+test('a meta describing charsets, a data-charset attribute and a commented-out meta are left alone when saving as UTF-8 (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  const [original] = await typedRoundTrip(page, 'meta.html');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#editSave')]);
+  assert.equal(fs.readFileSync(await dl.path(), 'utf8'), original.replace('Start.', 'Start. Typed.').replace('<meta charset="windows-1252">', '<meta charset="utf-8">'));
+});
+
+test('a paragraph made a heading keeps its id and class; link addresses that aren\'t web, e-mail or relative are refused (round 24 review)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('ids.html'));
+  await inPage(page).locator('h2').click();
+  await page.selectOption('#editBlock', 'h3');
+  await flush(page);
+  assert.match(await text(page), /<h3 id="hh" class="big">Heading<\/h3>/);
+  const before = await text(page);
+  await inPage(page).locator('p', { hasText: 'Start.' }).dblclick({ position: { x: 5, y: 5 } });
+  page.once('dialog', d => d.accept('java\tscript:alert(1)'));
+  await page.click('[data-cmd="link"]');
+  await flush(page);
+  assert.equal(await text(page), before);
+  assert.match(await page.textContent('#noticeText'), /Links can go to/);
+});
+
+// Round 24 review: flows.
+test('while a save is being written, Done and opening another book wait; typing meanwhile keeps a draft (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeFiles);
+  await page.addInitScript(t => { window.__open = { 'mine.md': t }; window.__slow = 1500; }, NOTES);
+  await h.openReader(page, doc('notes.md'), RAW);
+  await page.click('#openBtn');
+  await page.waitForFunction(() => document.title === 'Notes');
+  await startEditing(page);
+  await typeAtEnd(page, 'One.\n');
+  await page.keyboard.press('Control+s');
+  await page.click('#editDone');
+  assert.match(await page.textContent('#noticeText'), /still being saved/);
+  assert.equal(await page.isVisible('#editBar'), true);
+  await page.locator('#fileInput').setInputFiles({ name: 'other.md', mimeType: 'text/markdown', buffer: Buffer.from('# Other\n') });
+  await page.waitForTimeout(200);
+  assert.equal(await page.textContent('#bookTitle'), 'Notes', 'still this document');
+  await typeAtEnd(page, 'Two.\n');
+  await page.waitForFunction(() => window.__writes === 1);
+  assert.equal(await page.evaluate(() => window.__files['mine.md']), NOTES + 'One.\n');
+  await page.waitForTimeout(1200);
+  const drafts = await page.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-drafts', 1); rq.onsuccess = () => { const g = rq.result.transaction('drafts').objectStore('drafts').getAll(); g.onsuccess = () => res(g.result.map(d => d.text)); }; }));
+  assert.deepEqual(drafts, [NOTES + 'One.\nTwo.\n']);
+});
+
+test('drafts belong to the text they were made from: offered after a save, not to another file with the same name (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, doc('notes.md'), RAW);
+  const open = async t => { await page.locator('#fileInput').setInputFiles({ name: 'same.md', mimeType: 'text/markdown', buffer: Buffer.from(t) }); await page.waitForFunction(x => document.querySelector('#bookTitle').textContent === x, t.slice(2, t.indexOf('\n'))); await page.waitForTimeout(400); };
+  await open('# A\n\nFirst.\n');
+  await startEditing(page);
+  await typeAtEnd(page, 'Saved.\n');
+  await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  await typeAtEnd(page, 'Later.\n');
+  await page.waitForTimeout(1200);
+  await page.goto(doc('notes.md')); await h.waitForBook(page);
+  await open('# B\n\nOther file.\n');
+  assert.equal(await page.isHidden('#notice'), true, 'not offered to another file');
+  await open('# A\n\nFirst.\nSaved.\n');
+  await page.waitForFunction(() => !document.querySelector('#notice').hidden);
+  assert.match(await page.textContent('#noticeText'), /unsaved changes/);
+});
+
+test('WYSIWYG takes the typing at once; Ctrl+F there opens the reader\'s search; R does nothing with no page shown; Done gives the focus back to Edit (round 24 review)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('notes.md'));
+  const theme = await page.evaluate(() => document.documentElement.dataset.theme || '');
+  await page.keyboard.type('zz');
+  await flush(page);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme || ''), theme);
+  assert.match(await text(page), /zz/);
+  await page.keyboard.press('Control+f');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'searchBox');
+  await page.keyboard.press('Escape');
+  await page.click('[data-mode="raw"]'); await page.waitForTimeout(300);
+  await page.click('#editSplit');   // (split off: no page)
+  await page.keyboard.press('r');
+  assert.equal(await page.isHidden('#tts'), true);
+  // The editor bar's arrow keys move along it, not the page.
+  await page.focus('[data-mode="wysiwyg"]');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.mode), 'raw');
+  page.once('dialog', d => d.accept());
+  await page.click('#editDone');
+  await page.waitForFunction(() => document.querySelector('#editBar').hidden);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'editBtn');
+});
+
+test('on a narrow screen WYSIWYG shows the page it edits; leaving right after typing still keeps a draft (round 24 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 420, height: 800 } });
+  await wysiwyg(page, doc('notes.md'));
+  assert.equal(await page.isVisible('#stage'), true);
+  assert.equal(await page.isVisible('#editSrc'), false);
+  assert.equal(await page.isVisible('#editTools'), true);
+  await page.keyboard.type('Quick ');
+  await page.goto(doc('notes.md')); await h.waitForBook(page);
+  await page.waitForFunction(() => !document.querySelector('#notice').hidden);
+  assert.match(await page.textContent('#noticeText'), /unsaved changes/);
+});
+
+// (The fake device voice of speech.test.js: every utterance is recorded, none cached.)
+function fakeSpeech() {
+  const voices = [{ name: 'Plain Voice', lang: 'en-US', voiceURI: 'plain', default: true, localService: true },
+    { name: 'Natural Voice', lang: 'en-GB', voiceURI: 'natural', default: false, localService: true },
+    { name: 'Voix', lang: 'fr-FR', voiceURI: 'fr', default: false, localService: true }];
+  let timer = null, current = null;
+  window.__spoken = [];
+  const synth = {
+    speaking: false, pending: false, paused: false,
+    getVoices: () => voices,
+    addEventListener() {}, removeEventListener() {},
+    cancel() { clearTimeout(timer); if (current) { const u = current; current = null; u.onerror?.({ error: 'interrupted' }); } this.speaking = false; },
+    pause() {}, resume() {},
+    speak(u) {
+      current = u; this.speaking = true;
+      window.__spoken.push({ text: u.text, voice: u.voice?.name || null, rate: u.rate, lang: u.lang });
+      const words = [...u.text.matchAll(/\S+/g)];
+      let k = 0;
+      const step = () => {
+        if (current !== u) return;
+        if (k < words.length) { const w = words[k++]; u.onboundary?.({ name: 'word', charIndex: w.index, charLength: w[0].length }); timer = setTimeout(step, 40); }
+        else { current = null; synth.speaking = false; u.onend?.({}); }
+      };
+      timer = setTimeout(step, 10);
+    },
+  };
+  Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
+  // (The real utterance only takes real voices.)
+  window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; this.lang = ''; this.rate = 1; this.voice = null; } };
+}
+test('reading aloud while typing in Raw beside the page doesn\'t say a sentence twice (round 24 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(fakeSpeech);
+  await h.openReader(page, doc('long-notes.md'), { ...RAW, 'spine:ttsEngine': 'device' });
+  await startEditing(page);
+  await page.click('#ttsBtn');
+  assert.ok(await h.waitFor(() => page.evaluate(() => window.__spoken.length > 0), 20000), 'reading');
+  for (let k = 0; k < 4; k++) { await typeAtEnd(page, `Added ${k}. `); await page.waitForTimeout(1200); }
+  await page.waitForTimeout(1500);
+  const log = await page.evaluate(() => window.__spoken.map(u => u.text));
+  assert.ok(log.length >= 3, JSON.stringify(log));
+  assert.equal(new Set(log).size, log.length, `a sentence said twice: ${JSON.stringify(log)}`);
+});
+
+test('after Save as, the information gives the new file name (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeFiles);
+  await page.addInitScript(() => { window.__saveName = 'copy.md'; });
+  await h.openReader(page, doc('notes.md'), RAW);
+  await startEditing(page);
+  await page.click('#editSaveAs');
+  await page.waitForFunction(() => window.__writes === 1);
+  assert.match(await page.textContent('#editName'), /copy\.md/);
+  assert.match(await page.textContent('#infoList'), /copy\.md/);
 });

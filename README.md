@@ -112,9 +112,11 @@ document**, **New Markdown document** and **New HTML document**.
   between WYSIWYG and Raw without typing keeps the file exactly as it was.
   Once written from the page, HTML keeps everything outside its body as it
   was, but the body is written out by the browser (attribute quotes and
-  entities normalised). Markdown comes back in one consistent style (`#`
-  headings, `-` bullets, `*` and `**` emphasis, fenced code), with anything
-  Markdown can't say kept as HTML; front matter is kept as it was.
+  entities normalised, `<tbody>` added to tables); XHTML is written as XML,
+  so it stays well-formed. Comments are kept. Markdown comes back in one
+  consistent style (`#` headings, `-` bullets, `*` and `**` emphasis, `***`
+  rules, fenced code), with anything Markdown can't say kept as HTML; front
+  matter is kept as it was.
 - The raw text is edited in CodeMirror, with Markdown or HTML highlighting,
   line numbers, Ctrl+F to find and replace, and Tab to indent. If CodeMirror
   can't be loaded, a plain text box does the same, and the editor bar says why.
@@ -135,8 +137,10 @@ document**, **New Markdown document** and **New HTML document**.
   where to save a copy (Chrome and Edge) or download it. HTML is saved as
   UTF-8, and a `<meta charset>` naming another encoding is changed to say so.
 - What you write is kept in the browser as a draft a moment after each
-  change. Opening the document again offers it back (Edit restores it), and
-  so does starting a new document after an unsaved one. Done, opening another
+  change, and as you leave the page. Opening the document again offers it
+  back (Edit restores it) as long as the file is as it was when you began, and
+  so does starting a new document after an unsaved one. While a save is being
+  written, Done and opening another book wait for it. Done, opening another
   book, or leaving the page asks first when there are unsaved changes.
 - Nothing in the document runs while it is edited: the page is made exactly
   as the reader makes any page, scripts removed, in the same locked-down frame.
