@@ -1137,7 +1137,8 @@ async function sha1(bytes){
   return out;
 }
 // The same site for a redirect: the same host, give or take "www." and a move to https (round 24 review).
-const sameSite = (a, b) => a.hostname.replace(/^www\./, '') === b.hostname.replace(/^www\./, '') && (a.port === b.port || a.protocol === 'https:');
+const sameSite = (a, b) => a.hostname.replace(/^www\./, '') === b.hostname.replace(/^www\./, '')
+  && ((a.protocol === b.protocol && a.port === b.port) || (b.protocol === 'http:' && a.protocol === 'https:' && /^(80)?$/.test(b.port) && /^(443)?$/.test(a.port)));
 function zipSource(zip){
   const blobs = new Set();
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
@@ -1181,7 +1182,17 @@ function dirSource(base){
     },
     async exists(p){ return !!abs(p); },
     // (A file's bytes, for packing an edited book: E-23.)
-    async bytes(p){ const u = abs(p); if (!u) return null; try { const r = await fetch(u); return r.ok && !(r.redirected && !sameSite(new URL(r.url), new URL(root))) ? new Uint8Array(await r.arrayBuffer()) : null; } catch { return null; } },
+    async bytes(p){
+      const u = abs(p); if (!u) return null;
+      try {
+        const r = await fetch(u);
+        if (!r.ok || (r.redirected && !sameSite(new URL(r.url), new URL(root)))) return null;
+        const data = new Uint8Array(await r.arrayBuffer());
+        // (A site's "not found" page sent with status 200 isn't the file, as for text(): round 24 review.)
+        if (looksHtml(r) && !/\.x?html?$/i.test(p) && await isSoftNotFound(u, new TextDecoder().decode(data.subarray(0, 65536)))) return null;
+        return data;
+      } catch { return null; }
+    },
     obf: null, blobs: new Set(),
     async url(p, type){
       const u = abs(p), key = lookObf(this.obf, p, pathKey); if (!u || !key) return u;   // (a folder on a server: names compared folded)
@@ -7033,7 +7044,8 @@ async function editSetMode(mode, split = ed.split, save = true){
   if (changed && was === 'wysiwyg') editFlush();
   if (ed.mode !== mode || !$('#editBar').hasAttribute('data-ready')) ed.tab = mode === 'wysiwyg' ? 'page' : 'src';   // (a narrow screen shows what is edited: round 24 review)
   ed.mode = mode; ed.split = split; ed.previewWaiting = false;
-  if (save) { store.set('spine:editMode', mode); store.set('spine:editSplit', split); }
+  // (A mode forced by what is edited, text or a fixed page, isn't kept as the one chosen: round 24 review.)
+  if (save) { if (!(ed.kind === 'text' || ed.epub?.doc.rawOnly)) store.set('spine:editMode', mode); store.set('spine:editSplit', split); }
   for (const btn of $('#editBar').querySelectorAll('[data-mode]')) { btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode)); btn.disabled = (ed.kind === 'text' || !!ed.epub?.doc.rawOnly) && btn.dataset.mode === 'wysiwyg'; }
   $('#editSplit').setAttribute('aria-pressed', String(split));
   $('#editTools').hidden = mode !== 'wysiwyg';
@@ -7265,33 +7277,41 @@ async function epubPack(b, changes){
   // (The package's own dcterms:modified, not one refining something else; added to an EPUB 3 package without one.)
   const opfFix = t => {
     let done = false;
-    const u = t.replace(/(<meta\b[^>]*>)([^<]*)(<\/meta>)/gi, (m, open, v, close) => {
+    const u = t.replace(/(<(?:[\w-]+:)?meta\b[^>]*>)([^<]*)(<\/(?:[\w-]+:)?meta\s*>)/gi, (m, open, v, close) => {
       if (done || !/\bproperty\s*=\s*["']dcterms:modified["']/i.test(open) || /\brefines\s*=/i.test(open)) return m;
       done = true; return open + now + close;
     });
     if (done || !/^3/.test(b.version || '')) return u;
-    return u.replace(/(<\/(?:[\w-]+:)?metadata\s*>)/i, `<meta property="dcterms:modified">${now}</meta>$1`);
+    // (With the prefix the metadata element has, if the package uses one.)
+    return u.replace(/<\/([\w-]+:)?metadata\s*>/i, (m, px = '') => `<${px}meta property="dcterms:modified">${now}</${px}meta>${m}`);
   };
   // (Text written as UTF-8 says so; the package is read in its own encoding (UTF-16 too) and only written again
   // when its date changes: round 24 review.)
   const add = async (name, edited) => {
     let data = edited != null ? enc.encode(utf8Declared(edited)) : await b.src.bytes(name);
     if (data == null) return;
-    if (name === b.opfPath) { const t = decodeText(data, { fallback: 'utf-8' }), u = opfFix(t); if (u !== t) data = enc.encode(utf8Declared(u.replace(/^\uFEFF/, ''))); }
+    if (name === opfName) { const t = decodeText(data, { fallback: 'utf-8' }), u = opfFix(t); if (u !== t) data = enc.encode(utf8Declared(u.replace(/^\uFEFF/, ''))); }
     out.file(name, data, { compression: 'DEFLATE', createFolders: false });   // (no folder entries the book didn't have)
   };
+  // (The optional META-INF files of a folder book only when there really, as XML.)
+  const optional = new Set(['META-INF/encryption.xml', 'META-INF/com.apple.ibooks.display-options.xml', 'META-INF/metadata.xml', 'META-INF/manifest.xml', 'META-INF/rights.xml', 'META-INF/signatures.xml']);
+  // (The package by its name in the archive, which may differ in case from container.xml's.)
+  const opfName = (b.src.kind === 'zip' && getFile(b.src.raw, b.opfPath)?.name) || b.opfPath;
   if (b.src.kind === 'zip') {
     const raw = b.src.raw, byName = new Map();
     for (const [p, t] of changes) { const f = getFile(raw, p); if (f) byName.set(f.name, t); }
     for (const [name, f] of Object.entries(raw.files)) {
       if (f.dir || name === 'mimetype') continue;
       try { await add(name, byName.get(name)); }
-      catch (e) { throw new Error(`${name} in the book can't be read (${e.message}), so the book can't be saved whole; Chapter downloads this chapter on its own`); }
+      catch (e) { throw new Error(`${name} in the book can't be read (${e.message}), so the book can't be saved whole; Chapter downloads this chapter on its own.`); }
     }
   } else {
     const names = ['META-INF/container.xml', 'META-INF/encryption.xml', 'META-INF/com.apple.ibooks.display-options.xml', 'META-INF/metadata.xml',
       'META-INF/manifest.xml', 'META-INF/rights.xml', 'META-INF/signatures.xml', b.opfPath, ...[...b.manifest.values()].map(it => it.path)];
-    for (const name of new Set(names)) await add(name, changes.get(name));
+    for (const name of new Set(names)) {
+      if (optional.has(name)) { const t = await b.src.text(name); if (!t || !parseDoc(t, 'application/xml')) continue; }
+      await add(name, changes.get(name));
+    }
   }
   return out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
 }
@@ -8332,7 +8352,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
       const src = dirSource(u.href);
       const container = await src.text('META-INF/container.xml');
       if (!container || !parseDoc(container, 'application/xml')?.getElementsByTagNameNS('*', 'rootfile')[0]) {
-        misses.push(foreign ? `${u.href} (${foreign} didn't give its META-INF/container.xml: not an EPUB folder, or not readable from here)` : `${u.pathname} (no META-INF/container.xml)`); continue;
+        misses.push(foreign ? `${u.href} (${foreign} didn't give its META-INF/container.xml: not an EPUB folder, or not readable from here)` : `${u.pathname} (no META-INF/container.xml${anySite ? ', or it is sent on to another site: ?get= opens folder books on that site by their own address' : ''})`); continue;
       }
       await openBook(src, { name, seq });
       if (!isStale(seq) && book) book.fileName = `${name || 'book'}.epub`;

@@ -736,6 +736,11 @@ def main():
         return (f'<?xml version="1.0" encoding="{enc}"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="u"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
                 f'<dc:identifier id="u">urn:{title}</dc:identifier><dc:title>{title}</dc:title><dc:language>en</dc:language>{extra_meta}</metadata><manifest>{man}</manifest><spine>{spine}</spine></package>')
     chap = lambda body, decl='<?xml version="1.0" encoding="utf-8"?>': f'{decl}<html xmlns="http://www.w3.org/1999/xhtml"><head><title>C</title></head><body>{body}</body></html>'
+    # (Round 24 review, loop 6) A package written with an opf: prefix, and one named in another case in container.xml.
+    raw_epub("rq-prefix.epub", {"OEBPS/content.opf": '<?xml version="1.0" encoding="utf-8"?><opf:package xmlns:opf="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="u"><opf:metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="u">urn:prefix</dc:identifier><dc:title>Prefixed</dc:title><dc:language>en</dc:language><opf:meta property="dcterms:modified">2000-01-01T00:00:00Z</opf:meta></opf:metadata><opf:manifest><opf:item id="i0" href="c1.xhtml" media-type="application/xhtml+xml"/></opf:manifest><opf:spine><opf:itemref idref="i0"/></opf:spine></opf:package>',
+             "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Prefixed text.</p>')})
+    raw_epub("rq-case.epub", {"OEBPS/content.opf": opf3("Cased", [("c1.xhtml", "application/xhtml+xml")], '<meta property="dcterms:modified">2000-01-01T00:00:00Z</meta>'),
+             "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Cased text.</p>')}, opf="OEBPS/Content.OPF")
     raw_epub("rv-wrap.epub", {"OEBPS/content.opf": opf3("Wrapped", [("c1.xhtml", "application/xhtml+xml")]),
              "OEBPS/c1.xhtml": chap('<div class="calibre"><h1>Chapter 1</h1><p>Wrapped text.</p></div>')})
     raw_epub("rv-u16.epub", {"OEBPS/content.opf": "﻿".encode("utf-16-le") + opf3("Sixteen", [("c1.xhtml", "application/xhtml+xml")], enc="utf-16").encode("utf-16-le"),

@@ -249,3 +249,28 @@ test('an XHTML chapter named .html keeps <br/> through WYSIWYG; chapters kept ma
   assert.match(await page.textContent('#noticeText'), /encrypted \(DRM\)/);
   assert.equal(await page.isHidden('#editBar'), true);
 });
+
+// Round 24 review, loop 6.
+test('a folder book on a site that answers missing files with a page gets no such pages packed in; prefixed and differently cased packages get their date (round 24 review)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, `${h.SOFT}/reader/index.html?book=books/abc/`, RAW);
+  await startEditing(page);
+  await replace(page, '</p>', ' Soft edit.</p>');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  const got = unzip(await dl.path(), []);
+  assert.deepEqual(got.order.filter(n => n.startsWith('META-INF/')), ['META-INF/container.xml']);
+  const p = await editAndSave(page, 'rq-prefix.epub', 'Prefixed text.', 'Prefixed edit.', ['OEBPS/content.opf']);
+  assert.doesNotMatch(p.files['OEBPS/content.opf'], /2000-01-01/);
+  assert.equal(p.files['OEBPS/content.opf'].split('dcterms:modified').length - 1, 1, p.files['OEBPS/content.opf']);
+  const c = await editAndSave(page, 'rq-case.epub', 'Cased text.', 'Cased edit.', ['OEBPS/content.opf']);
+  assert.doesNotMatch(c.files['OEBPS/content.opf'], /2000-01-01/);
+});
+
+test('switching Split on a fixed page doesn\'t keep Raw as the chosen mode (round 24 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/fixed.epub`, { 'spine:editMode': 'wysiwyg', 'spine:layout': 'one' });
+  await startEditing(page);
+  await page.click('#editSplit');
+  assert.equal(await page.evaluate(() => localStorage.getItem('spine:editMode')), '"wysiwyg"');
+});
