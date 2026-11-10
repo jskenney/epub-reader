@@ -191,7 +191,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-body{overflow:auto;display:flex;flex-direction:column;gap:18px;min-height:0;margin:0 -6px;padding:2px 6px}
 .set-group{border:0;margin:0;padding:0;min-width:0}
 .set-group legend{font:500 11px/1 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:0;margin-bottom:8px}
-.set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 0;border-top:1px solid var(--rule);cursor:pointer}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 0;border-top:1px solid var(--rule)}
+.set-row label{cursor:pointer}
 .set-row>span{display:flex;flex-direction:column;gap:2px;min-width:0}
 .set-row small{color:var(--muted);font-size:12px;line-height:1.35}
 .set-row small.set-def{color:var(--ribbon)}
@@ -492,19 +493,19 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         </div>
       </fieldset>
       <fieldset class="set-group"><legend>Reading</legend>
-        <label class="set-row"><span>Reading time left in the footer<small class="set-def"></small></span><input type="checkbox" data-set="TIME_LEFT"></label>
-        <label class="set-row"><span>Web links in books open in a new tab<small>Off: they are plain text.</small><small class="set-def"></small></span><input type="checkbox" data-set="ALLOW_EXTERNAL_LINKS"></label>
-        <label class="set-row"><span>Pictures and media from other websites<small>A book can name files on other sites, which lets them see when it's read. The site's own security policy may still block them. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input type="checkbox" data-set="ALLOW_REMOTE_CONTENT"></label>
-        <label class="set-row"><span>Single-letter shortcuts (C F T L I R /)<small>Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.</small><small class="set-def"></small></span><input type="checkbox" data-set="shortcuts"></label>
-        <label class="set-row"><span>Forget reading positions after (days)<small>For books not opened in that time. 0 keeps them.</small><small class="set-def"></small></span><input type="number" min="0" max="36500" step="1" data-set="KEEP_POSITIONS_DAYS"></label>
-        <label class="set-row"><span>Search matches listed, at most<small class="set-def"></small></span><input type="number" min="1" max="100000" step="1" data-set="SEARCH_MAX"></label>
-        <label class="set-row"><span>Comic pages per section<small>For comics opened after the change.</small><small class="set-def"></small></span><input type="number" min="2" max="1000" step="2" data-set="COMIC_PART"></label>
+        <div class="set-row"><span><label for="set-TIME_LEFT">Reading time left in the footer</label><small class="set-def"></small></span><input id="set-TIME_LEFT" type="checkbox" data-set="TIME_LEFT"></div>
+        <div class="set-row"><span><label for="set-ALLOW_EXTERNAL_LINKS">Web links in books open in a new tab</label><small>Off: they are plain text.</small><small class="set-def"></small></span><input id="set-ALLOW_EXTERNAL_LINKS" type="checkbox" data-set="ALLOW_EXTERNAL_LINKS"></div>
+        <div class="set-row"><span><label for="set-ALLOW_REMOTE_CONTENT">Pictures and media from other websites</label><small>A book can name files on other sites, which lets them see when it's read. The site's own security policy may still block them. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-ALLOW_REMOTE_CONTENT" type="checkbox" data-set="ALLOW_REMOTE_CONTENT"></div>
+        <div class="set-row"><span><label for="set-shortcuts">Single-letter shortcuts (C F T L I R /)</label><small>Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.</small><small class="set-def"></small></span><input id="set-shortcuts" type="checkbox" data-set="shortcuts"></div>
+        <div class="set-row"><span><label for="set-KEEP_POSITIONS_DAYS">Forget reading positions after (days)</label><small>For books not opened in that time. 0 keeps them.</small><small class="set-def"></small></span><input id="set-KEEP_POSITIONS_DAYS" type="number" min="0" max="36500" step="1" data-set="KEEP_POSITIONS_DAYS"></div>
+        <div class="set-row"><span><label for="set-SEARCH_MAX">Search matches listed, at most</label><small class="set-def"></small></span><input id="set-SEARCH_MAX" type="number" min="1" max="100000" step="1" data-set="SEARCH_MAX"></div>
+        <div class="set-row"><span><label for="set-COMIC_PART">Comic pages per section</label><small>For comics opened after the change; your place stays on the same page.</small><small class="set-def"></small></span><input id="set-COMIC_PART" type="number" min="2" max="1000" step="2" data-set="COMIC_PART"></div>
       </fieldset>
       <fieldset class="set-group"><legend>Read aloud</legend>
-        <label class="set-row"><span>Sleep timer in the read-aloud bar<small class="set-def"></small></span><input type="checkbox" data-set="SLEEP_TIMER"></label>
-        <label class="set-row"><span>Speech prepared ahead (seconds)<small>For the natural voices.</small><small class="set-def"></small></span><input type="number" min="0" max="1800" step="10" data-set="LOOKAHEAD_SEC"></label>
-        <label class="set-row"><span>Saved speech kept in this browser (MB)<small>0 saves none.</small><small class="set-def"></small></span><input type="number" min="0" max="1000000" step="50" data-set="SAVED_AUDIO_MB"></label>
-        <label class="set-row"><span>Full-precision voice models<small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input type="checkbox" data-set="FULL_PRECISION"></label>
+        <div class="set-row"><span><label for="set-SLEEP_TIMER">Sleep timer in the read-aloud bar</label><small class="set-def"></small></span><input id="set-SLEEP_TIMER" type="checkbox" data-set="SLEEP_TIMER"></div>
+        <div class="set-row"><span><label for="set-LOOKAHEAD_SEC">Speech prepared ahead (seconds)</label><small>For the natural voices.</small><small class="set-def"></small></span><input id="set-LOOKAHEAD_SEC" type="number" min="0" max="1800" step="10" data-set="LOOKAHEAD_SEC"></div>
+        <div class="set-row"><span><label for="set-SAVED_AUDIO_MB">Saved speech kept in this browser (MB)</label><small>0 saves none.</small><small class="set-def"></small></span><input id="set-SAVED_AUDIO_MB" type="number" min="0" max="1000000" step="50" data-set="SAVED_AUDIO_MB"></div>
+        <div class="set-row"><span><label for="set-FULL_PRECISION">Full-precision voice models</label><small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-FULL_PRECISION" type="checkbox" data-set="FULL_PRECISION"></div>
       </fieldset>
       <p class="ab-muted">Saved in this browser. Settings for the whole site go in reader-config.json (see the README).</p>
       <p class="sr-only" id="setStatus" aria-live="polite"></p>
@@ -590,7 +591,8 @@ let fontPct = Number(store.get('spine:font')) || 100;
 // Single-letter shortcuts (C, F, T, L, I, R, /, [ and ]) can clash with screen readers' browse-mode keys, so
 // they can be turned off (the Aa menu, or "shortcuts": false in reader-config.json as the starting choice).
 // Arrow keys, Page Up/Down, Space, Escape and Ctrl+F keep working.
-let singleKeys = typeof store.get('spine:shortcuts') === 'boolean' ? store.get('spine:shortcuts') : true;
+if (store.get('spine:shortcuts') != null && typeof store.get('spine:shortcuts') !== 'boolean') store.del('spine:shortcuts');   // (so a folder's default applies)
+let singleKeys = store.get('spine:shortcuts') ?? true;
 let lineH = Number(store.get('spine:line')) || 1.65;
 const LAYOUTS = { two: 'Two columns', one: 'One column', scroll: 'Scrolling' };
 // Text width: the widest the text may get; anything beyond becomes side margin. [name, one column/scroll, two columns]
@@ -1460,7 +1462,7 @@ async function openComic(zip, name, { key, seq } = {}){
   const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
   const files = new Map();
   parts.forEach((part, i) => {
-    const body = part.pages.map((f, j) => `<div class="cbz-page"><img src="${escHtml(f.name.split('/').map(encodeURIComponent).join('/'))}" alt="Page ${part.first + j}"></div>`).join('');
+    const body = part.pages.map((f, j) => `<div class="cbz-page" id="cbz-p${part.first + j}"><img src="${escHtml(f.name.split('/').map(encodeURIComponent).join('/'))}" alt="Page ${part.first + j}"></div>`).join('');
     files.set(path(i), `<!DOCTYPE html><html${language ? ` lang="${escHtml(language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(title)}</title></head><body>${body}</body></html>`);
   });
   const toc = [];
@@ -1703,10 +1705,11 @@ async function startBook(next){
   const loose = !saved && book.looseKey ? store.get(book.looseKey) : null;
   if (loose && loose.i < spine.length) { saved = { i: loose.i, f: loose.f }; store.set(book.key, saved); }
   const lens = comicLens();
-  if (lens && Number.isFinite(saved?.p) && saved.p >= 0) {   // (a comic: its page, wherever the sections now fall)
-    let i = 0, start = 0;
-    while (i < lens.length - 1 && saved.p >= start + lens[i]) start += lens[i++];
-    saved = { i, f: lens[i] ? Math.min(1, (saved.p - start) / lens[i]) : 0 };
+  if (lens && Number.isInteger(saved?.page) && saved.page >= 1) {   // (a comic: its page, wherever the sections now fall)
+    let i = 0, end = lens[0];
+    while (i < lens.length - 1 && saved.page > end) end += lens[++i];
+    await renderChapter(i, { frag: `cbz-p${Math.min(saved.page, end)}` });
+    return;
   }
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
@@ -2606,14 +2609,22 @@ function sweepPositions(){
     else if (now - v.t > days * 86400000) store.del(k);
   }
 }
-// A comic's sections follow COMIC_PART, which can change (Settings), so its place is also kept as a page
-// number through the whole comic (p), which is what is used to come back to it.
+// A comic's sections follow COMIC_PART, which can change (Settings), so its place is also kept as the number
+// of the first page on screen (page, counted through the whole comic), which is what it comes back to.
 const comicLens = () => book?.comicParts ? book.spine.map(s => book.comicParts.get(s.path)?.length || 0) : null;
+function comicPageShown(){
+  const doc = frame.contentDocument, w = frame.contentWindow; if (!doc || !w) return 0;
+  for (const el of doc.querySelectorAll('.cbz-page[id^="cbz-p"]')) {
+    const r = el.getBoundingClientRect();
+    // (Scrolling: a page shown is scrolled to with a margin above it, so the bottom of the one before shows there.)
+    if (scrolling() ? r.bottom > 40 : r.right > 1 && r.left < w.innerWidth - 1) return Number(el.id.slice(5)) || 0;
+  }
+  return 0;
+}
 function savePos(){
   if (!book) return;
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
-  const lens = comicLens();
-  if (lens) pos.p = Math.round((lens.slice(0, cur.i).reduce((a, n) => a + n, 0) + pos.f * lens[cur.i]) * 1000) / 1000;
+  if (comicLens()) { const n = comicPageShown(); if (n) pos.page = n; }
   store.set(book.key, pos);
   if (book.writeLoose) store.set(book.looseKey, pos);
 }
@@ -6319,7 +6330,9 @@ function loadUserSettings(){
   for (const [name, [get]] of Object.entries(SET_VARS)) {
     siteValue[name] = get();
     const v = store.get(setKey(name));
-    if (v != null) { if (setVar(name, v)) setSave(name, get()); else store.del(setKey(name)); }
+    // (Kept even when it equals this folder's value: it's saved for the whole site, and other folders' defaults
+    // can differ. Only a value out of range is saved again as it is used.)
+    if (v != null) { if (!setVar(name, v)) store.del(setKey(name)); else if (get() !== v) store.set(setKey(name), get()); }
     loadedValue[name] = get();
   }
   siteValue.shortcuts = typeof readerConfig?.shortcuts === 'boolean' ? readerConfig.shortcuts : true;
@@ -6377,9 +6390,9 @@ function setReset(){
   syncThemeBtn();
   setSync();
 }
-// Each option's name is its title; the notes under it are its description (not part of the name).
+// Each option's name is its title (its label); the notes under it are its description.
 $('#setForm').querySelectorAll('.set-row').forEach((row, k) => {
-  const ids = [...row.querySelectorAll('small')].map((sm, j) => { sm.id = `setNote${k}-${j}`; sm.setAttribute('aria-hidden', 'true'); return sm.id; });
+  const ids = [...row.querySelectorAll('small')].map((sm, j) => { sm.id = `setNote${k}-${j}`; return sm.id; });
   row.querySelector('input').setAttribute('aria-describedby', ids.join(' '));
 });
 function setOpen(){
@@ -6402,7 +6415,7 @@ $('#setForm').addEventListener('change', e => {
 });
 $('#setDialog').addEventListener('close', () => $('#setBtn').focus());
 // (Escape closes the dialog before a number being typed is committed by leaving the field: commit it first.)
-$('#setDialog').addEventListener('cancel', () => { const a = document.activeElement; if (a?.dataset?.set && a.type === 'number') a.dispatchEvent(new Event('change', { bubbles: true })); });
+$('#setDialog').addEventListener('cancel', () => { const a = document.activeElement; if (a?.dataset?.set && a.type === 'number' && a.value.trim() !== '' && Number(a.value) !== setShown(a.dataset.set)) a.dispatchEvent(new Event('change', { bubbles: true })); });
 
 /* ---------- start ---------- */
 (async () => {

@@ -244,3 +244,55 @@ test('the dialog: focus on the chosen theme, short names with notes as descripti
   await page.reload(); await h.waitForBook(page);
   assert.equal(await page.evaluate(() => window.__early), 'black');
 });
+
+const firstShown = page => page.evaluate(() => {   // the first comic page on screen
+  const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow;
+  const scroll = getComputedStyle(d.documentElement).overflow === 'auto';
+  return [...d.querySelectorAll('.cbz-page img')].find(i => { const r = i.parentElement.getBoundingClientRect(); return scroll ? r.bottom > 40 : r.right > 1 && r.left < w.innerWidth - 1; })?.alt;
+});
+test('a comic reopens at the page left, at the end of a section and after the section size grows, in every layout (round 20 review)', async () => {
+  for (const layout of ['one', 'two', 'scroll']) {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/comic.cbz`, { 'spine:layout': layout, 'spine:set:COMIC_PART': 10 });
+    // The last page of the first section (pages 1-10).
+    await page.click('#tocList a >> nth=1');
+    await page.waitForFunction(() => document.querySelector('#page').contentDocument?.querySelector('.cbz-page img')?.alt === 'Page 11');
+    await page.waitForTimeout(400);
+    await page.keyboard.press(layout === 'scroll' ? 'PageUp' : 'ArrowLeft');
+    await page.waitForTimeout(800);
+    const left = await firstShown(page);
+    assert.ok(/^Page ([1-9]|10)$/.test(left), `${layout}: ${left}`);
+    await page.reload(); await h.waitForBook(page);
+    assert.equal(await firstShown(page), left, `${layout}: the same page after a reload`);
+    // Sections of 40: still the same page.
+    await page.evaluate(() => localStorage.setItem('spine:set:COMIC_PART', '40'));
+    await page.reload(); await h.waitForBook(page);
+    assert.equal(await firstShown(page), left, `${layout}: the same page with sections of 40`);
+  }
+});
+
+test('a setting is kept when another folder\'s default happens to equal it; Escape in an untouched field saves nothing (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  await openSettings(page);
+  await row(page, 'TIME_LEFT').check();
+  await page.keyboard.press('Escape');
+  await page.goto(`${h.SITE}/folder-listen/index.html?book=/reader/books/long.epub`); await h.waitForBook(page);   // (TIME_LEFT on there)
+  assert.equal(await stored(page, 'spine:set:TIME_LEFT'), 'true');
+  await page.goto(LONG); await h.waitForBook(page);
+  await openSettings(page);
+  assert.equal(await row(page, 'TIME_LEFT').isChecked(), true);
+  await row(page, 'KEEP_POSITIONS_DAYS').focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await stored(page, 'spine:set:KEEP_POSITIONS_DAYS'), null);
+});
+
+test('a stored shortcuts value that isn\'t on or off doesn\'t stop the folder\'s default (round 20 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-keys/index.html?book=/reader/books/long.epub`, { 'spine:shortcuts': 'no' });
+  const before = await theme(page);
+  await page.keyboard.press('t');
+  assert.equal(await theme(page), before, 'the folder turns single-letter shortcuts off');
+  await openSettings(page);
+  assert.equal(await row(page, 'shortcuts').isChecked(), false);
+});

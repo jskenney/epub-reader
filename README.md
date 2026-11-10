@@ -510,7 +510,7 @@ default books and the memory and request sizes stay the site's to set.
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
 | `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |
-| `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. A comic's place is kept as a page number, so changing it doesn't move readers to another page. |
+| `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. A comic's place is kept as the page on screen, so changing it doesn't move readers to another page (a place saved by a version before this one follows the old sections once). |
 
 External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
 3.10.1 and marked 15.0.12, with their SRI hashes), the `lib`/`ort` URLs and
