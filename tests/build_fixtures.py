@@ -170,6 +170,8 @@ def main():
                                            "LOCKED": ["theme", "TIME_LEFT", "shortcuts", "ALLOW_REMOTE_CONTENT", "bogus"]}),
                         ("folder-keep", {"LIB_FILES": "/reader/", "KEEP_POSITIONS_DAYS": 30, "LOCKED": ["KEEP_POSITIONS_DAYS"]}),
                         # (T-16: settings from a config file.)
+                        # (T-20, L-103) Voice files on another site: its server may not allow a Range header.
+                        ("folder-remotevoice", {"LIB_FILES": "/reader/", "VOICE_FILES": "http://localhost:8792/voices/"}),
                         ("folder-cfg", {"LIB_FILES": "/reader/", "SEARCH_MAX": 2, "COMIC_PART": 10, "KEEP_POSITIONS_DAYS": 0, "BOOKSHELF": "/shelf2"}),
                         ("folder-alttts", {"LIB_FILES": "/reader/", "TTS_SERVER": {"api": "/alt-tts/", "voices": "/alt-voices/"},
                                            "SPAN_MAX": {"server": 60}, "SAVED_AUDIO_MB": 0})):

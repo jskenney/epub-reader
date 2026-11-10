@@ -76,3 +76,25 @@ test('a self-hosted Pocket TTS model missing files of the precision in use comes
   assert.match(status, /model https:\/\/huggingface\.co\/vlapky\/pocket-tts-onnx\//, 'the model from the CDN');
   assert.ok(status.includes(`ort ${h.SITE}/pocket-partial/pocket/ort/`), `the complete runtime folder from this site: ${status}`);
 });
+
+test('the self-hosted voice check reads only the first bytes of model files on this site, and sends no Range header to another site (T-20, L-91, L-103)', async () => {
+  const page = await h.newPage();
+  const probes = [];
+  page.on('request', r => { if (/\.onnx$/.test(new URL(r.url()).pathname)) probes.push([r.url(), r.headers().range || '']); });
+  await h.openReader(page, `${h.SITE}/folder-pocket-partial/index.html`, { 'spine:ttsEngine': 'pocket' });
+  await page.keyboard.press('r');
+  await page.click('#ttsDownload').catch(() => {});
+  await h.waitFor(async () => probes.length >= 4, 15000);
+  const local = probes.filter(([u]) => u.startsWith(h.SITE));
+  assert.ok(local.length >= 4, JSON.stringify(probes));
+  assert.ok(local.every(([, r]) => r === 'bytes=0-255'), JSON.stringify(local));
+  // Voice files on another site (on the plain server, whose policy lets the page reach it).
+  const other = await h.newPage(), seen = [];
+  other.on('request', r => { if (r.url().startsWith('http://localhost:8792/voices/')) seen.push([r.url(), r.headers().range || '']); });
+  await h.openReader(other, `${h.PLAIN}/folder-remotevoice/index.html?book=/reader/books/long.epub`, { 'spine:ttsEngine': 'pocket' });
+  await other.keyboard.press('r');
+  await other.click('#ttsDownload').catch(() => {});
+  await h.waitFor(async () => seen.length > 0, 15000);
+  assert.ok(seen.length > 0, 'the other site was asked');
+  assert.ok(seen.every(([, r]) => r === ''), JSON.stringify(seen));
+});
