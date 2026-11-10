@@ -616,3 +616,19 @@ test('Cancel after a few minutes of audio asks again, keeps its question up, and
   await page.click('#abCancel'); await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
 });
+
+test('a stopped export keeps extra room in the saved audio (for a week); a finished one gives it back (T-20)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await openExport(page, `${h.READER}?book=books/short-lines.epub`);
+  await h.clearBreezeLog();
+  await page.click('#abStart');
+  await h.waitFor(async () => (await h.breezeLog()).length >= 2, 15000, 50);
+  await page.click('#abCancel');
+  await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
+  const room = JSON.parse(await page.evaluate(() => localStorage.getItem('spine:exportRoom')));
+  assert.ok(room?.mb > 0 && Math.abs(Date.now() - room.t) < 60000, JSON.stringify(room));
+  await exportAll(page, 'one', 1);
+  assert.equal(await page.evaluate(() => localStorage.getItem('spine:exportRoom')), null);
+});
