@@ -132,8 +132,10 @@ test('searches typed while the book is first being indexed don\'t use up the ret
   release();
   const status = () => page.textContent('#searchStatus');
   await h.waitFor(async () => /No matches/.test(await status()), 10000);
-  // A search after it: chapter 2 is tried again and still fails; then it can be read, and the next search finds it.
+  // Two searches after it: chapter 2 is tried again and still fails; then it can be read, and the next search
+  // finds it, with the third and last retry. (Had the searches during indexing used one up, none would be left.)
   await page.fill('#searchBox', 'zebr'); await page.waitForTimeout(600);
+  await page.fill('#searchBox', 'zeb'); await page.waitForTimeout(600);
   failTwo = false;
   await page.fill('#searchBox', 'zebra');
   assert.ok(await h.waitFor(async () => /1 of 1 match/.test(await status()), 10000), await status());
@@ -145,12 +147,15 @@ test('the sleep timer set to the chapter\'s end while reading aloud looks past p
   const gate = new Promise(r => { release = r; });
   await page.route(/\/pics-dir\/OEBPS\/c[23]\.xhtml$/, async route => { if (hold) await gate; await route.continue(); });
   // (folder-listen shows the sleep timer.)
+  await page.addInitScript(() => { window.SPINE_TEST = {}; });
   await h.openReader(page, `${h.SITE}/folder-listen/index.html?book=/reader/books/pics-dir/`, { 'spine:ttsEngine': 'server' });
   hold = true;   // (the picture pages wait, so reading looks past them for as long as the test needs)
   await h.clearBreezeLog();
   await page.keyboard.press('r');
   assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => /Opening words/.test(e.text)), 15000), 'reading started');
-  await page.waitForTimeout(3000);   // (the sentence read: now looking past the picture pages)
+  // The sentence read: now looking past the picture pages.
+  assert.ok(await h.waitFor(() => page.evaluate(() => SPINE_TEST.ttsLooked > 0), 20000, 50), 'reading reached the end of the chapter');
+  await page.waitForTimeout(300);
   await page.selectOption('#ttsSleep', 'chapter');
   release();
   assert.ok(await h.waitFor(async () => /Sleep timer: stopped at the end of the chapter/.test(await page.textContent('#ttsStatus')), 15000), await page.textContent('#ttsStatus'));

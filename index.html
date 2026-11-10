@@ -3735,6 +3735,7 @@ async function ttsEndOfChapter(){
   };
   if (tts.playing && sleep.mode === 'chapter') { stopHere(); return; }
   tts.atEnd = tts.doc;   // (paused while looking, Play goes on looking rather than read the last sentence again)
+  if (window.SPINE_TEST) SPINE_TEST.ttsLooked = (SPINE_TEST.ttsLooked || 0) + 1;   // (tests: reading has reached the chapter's end)
   // On to the next chapter with something to read. Pages with nothing (pictures only) are passed over without
   // being shown, so reading past the last text doesn't turn every page to the end and save that as the
   // position (REVIEW.md M-23). A chapter that couldn't be read counts as having text, so it is shown and its

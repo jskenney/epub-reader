@@ -662,11 +662,12 @@ test('the voice label stays while the server is away mid-export (T-20, L-161)', 
 
 test('keepPart: an export that stops before any speech keeps no file; one that stops over a file already there doesn\'t replace it (T-20)', { skip: noFfmpeg, timeout: 150000 }, async () => {
   FRAMES ??= aacFrames();
-  // Gone from the first request: nothing to keep.
+  // The voice away from the first request (busy, waited for until it counts as gone): nothing to keep. (This
+  // reaches keepPart with no speech; an empty file fails to finish anyway, so what's checked is that none appears.)
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
-  await page.addInitScript(() => { window.SPINE_TEST = { abWaitSec: 3 }; window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });
-  await page.route('**/tts/v1/audio/speech', route => fail500(route, 'gone', 502));
+  await page.addInitScript(() => { window.SPINE_TEST = { abWaitSec: 3, svBusyTries: 1 }; window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });
+  await page.route('**/tts/v1/audio/speech', route => fail500(route, 'busy', 409));
   await openExport(page, `${h.READER}?book=books/long.epub`);
   const downloads = []; page.on('download', d => downloads.push(d.suggestedFilename()));
   await page.click('#abStart');
@@ -674,8 +675,8 @@ test('keepPart: an export that stops before any speech keeps no file; one that s
   await page.waitForTimeout(500);
   assert.deepEqual(downloads, []);
   assert.doesNotMatch(await page.textContent('#abDone'), /kept/);
-  // A file per chapter into a folder where the files are already there: the chapter it stopped in isn't replaced
-  // by a part of it.
+  // A file per chapter into a folder whose files count as already there (the stand-in folder's getFileHandle finds
+  // every name, though it starts empty): the chapter it stopped in isn't replaced by a part of it.
   const p2 = await h.newPage();
   await p2.addInitScript(fakeAac, FRAMES);
   await p2.addInitScript(fakePickers);

@@ -53,11 +53,17 @@ its own is shown white, and the theme colours the space around it. In the
 two-column layout pages are shown in two-page spreads, following the pages'
 own sides (`page-spread-left`/`right`/`center`), or the cover alone and then
 pairs; `rendition:spread` none, a narrow window or the single-column layout
-shows one page. Click the facing page to go to it. A book with
-`page-progression-direction="rtl"` is read right to left, as manga are. The
+shows one page. The facing page only shows: search highlights, the word read
+aloud and the book's links are on the current page, and a click on the facing
+page (on a link there too) goes to that page; reading aloud on into it shows
+the spread again with it current. A book with
+`page-progression-direction="rtl"` is read right to left, as manga are; if
+any of its pages is fixed, its reflowable chapters turn right to left too. The
 scroll layout fits each page to the width (up to twice its size), zoomed in
-the reader's frame, where `vw`/`vh` measure the frame. Their text can still be
-searched and read aloud; the text size, line spacing and font buttons don't
+the reader's frame, where `vw`/`vh` measure the frame; there a page with no
+colour of its own is shown white within the theme's colour, and one that
+colours its whole page keeps it. Their text can still be searched and read
+aloud; the text size, line spacing and font buttons don't
 change these pages. A page whose size isn't given, or marked
 `rendition:layout-reflowable`, is reflowed like any other.
 
