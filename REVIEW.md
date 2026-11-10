@@ -254,13 +254,14 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Only enhancements are open: E-1 to E-4 and E-6 to E-8. L-110 is left as it is, by your decision (see Resolved).
+Only enhancements are open: E-1 to E-4, E-6 to E-8, and E-21 to E-25 (planned in TODO.md). L-110 is left as it is, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
+| [E-21](#e-21-edit-markdown-and-html-documents) to [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Editing, server saving and EPUB editing (plan in TODO.md) | — |
 
 ## Tests
 
@@ -287,9 +288,29 @@ Save positions (and later bookmarks) on your server, so each device picks up whe
 ### E-8. Install as an offline app
 A web app manifest and service worker, so the reader can be installed and open saved books offline.
 
+### E-21. Edit Markdown and HTML documents
+Edit a document in a WYSIWYG view, a raw view (CodeMirror) or a split view, create new Markdown and HTML documents,
+and save them to your computer (in place where the browser allows it). The plan is in TODO.md.
+
+### E-22. A server API
+Optional, multi-user server calls: saving files and EPUBs, reading progress and completion (for E-7), notes and
+bookmarks (for E-3), settings, and sign-in. The plan is in TODO.md.
+
+### E-23. Edit an EPUB's chapters
+Edit an EPUB's existing chapters with E-21's editor, and download the chapter or the re-packed book. The plan is
+in TODO.md.
+
+### E-24. Open files by address for editing
+`?edit=path` opens a file straight into the editor (a new one if it doesn't exist); `?get=URL` opens a file from
+an address on this or another site. The plan is in TODO.md.
+
+### E-25. Add, remove and reorder EPUB chapters
+Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
+
 ## Suggested order
 
-1. The enhancements, as wanted.
+1. E-21, E-24, E-23, E-25, E-22, as laid out in TODO.md.
+2. The other enhancements, as wanted.
 
 ## Resolved
 
