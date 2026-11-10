@@ -590,22 +590,8 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
-| T-33 | T-20, most of it:
-  - stalled server streams before any audio and partway (L-75, L-100), with a test setting for the time allowed;
-  - fallback-page pictures (L-90);
-  - the range probe on this site and another (L-91, L-103);
-  - narration before a picture page (L-93);
-  - the sleep timer in a newly opened book (L-96);
-  - the non-page note (L-153, L-172) and ZIP64 records (L-153);
-  - obfuscated fonts by folded name (L-137);
-  - the Cancel question (L-158) and a busy (409) server during an export;
-  - the export's saved-audio room;
-  - refusals checked after a wait (T-18). | `fea7773` to `9be8cdd` |
-| T-16 | Coverage gaps:
-  - config files' TTS_SERVER, SPAN_MAX, SAVED_AUDIO_MB, SEARCH_MAX, COMIC_PART, BOOKSHELF and KEEP_POSITIONS_DAYS 0;
-  - If-Range on range requests;
-  - the checksum lists against each script's `--list`;
-  - the test server now takes nginx.conf.example's types. | `9172885` |
+| T-33 | T-20, most of it: stalled server streams before any audio and partway (L-75, L-100), with a test setting for the time allowed; fallback-page pictures (L-90); the range probe on this site and another (L-91, L-103); narration before a picture page (L-93); the sleep timer in a newly opened book (L-96); the non-page note (L-153, L-172) and ZIP64 records (L-153); obfuscated fonts by folded name (L-137); the Cancel question (L-158) and a busy (409) server during an export; the export's saved-audio room; refusals checked after a wait (T-18) | `fea7773` to `9be8cdd` |
+| T-16 | Coverage gaps: config files' TTS_SERVER, SPAN_MAX, SAVED_AUDIO_MB, SEARCH_MAX, COMIC_PART, BOOKSHELF and KEEP_POSITIONS_DAYS 0; If-Range on range requests; the checksum lists against each script's `--list`; the test server now takes nginx.conf.example's types | `9172885` |
 | T-32 | A locked days-to-keep against other folders' positions, the Aa menu with shortcuts locked, the engine list never narrower than its text | `96e5832` |
 | T-31 | The Settings button before the config, under a day, forced colours, a folder's early theme, Pocket with only the 8-bit model and no CDNs | `fd47b98` |
 | T-30 | A choice set back in another folder, a tall-page comic in the scroll layout, the whole row as a target | `e7d1096` |
