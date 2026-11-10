@@ -43,18 +43,23 @@ saved position) works as for EPUBs.
   uploaded single file can't bring those along.
 
 **Fixed-layout EPUBs** (pre-paginated: picture books, comics and magazines
-made as EPUB) are shown a page at a time, each at the size the book gives it
-(its `viewport`, an SVG page's `viewBox`, or the book's
-`rendition:viewport`), scaled to fit the screen, with the book's own styles
-and positions (not the reader's fonts or colours). A page with no colour of
-its own is shown white, and the theme colours the space around it, unless the
-book colours its whole page; the scroll layout fits each page to the width (up to twice its size). Their
-text can still be searched and read aloud. A page whose size isn't given, or
-marked `rendition:layout-reflowable`, is reflowed like any other. Limits: the
-text size, line spacing and font buttons don't change these pages; one page
-is shown at a time (no two-page spreads); and `vw`/`vh` units and
-`position: fixed` in a page's styles measure the reader's frame, not the
-page.
+made as EPUB, including EPUB 2 books marked fixed-layout) are shown a page at a
+time, each at the size the book gives it (its `viewport`, an SVG page's
+`viewBox`, or the book's `rendition:viewport`), scaled to fit the screen. In
+the one- and two-column layouts each page is a frame of exactly its own size,
+so the book's styles, positions, `vw`/`vh` units and fixed positions work as
+the book intends; not the reader's fonts or colours. A page with no colour of
+its own is shown white, and the theme colours the space around it. In the
+two-column layout pages are shown in two-page spreads, following the pages'
+own sides (`page-spread-left`/`right`/`center`), or the cover alone and then
+pairs; `rendition:spread` none, a narrow window or the single-column layout
+shows one page. Click the facing page to go to it. A book with
+`page-progression-direction="rtl"` is read right to left, as manga are. The
+scroll layout fits each page to the width (up to twice its size), zoomed in
+the reader's frame, where `vw`/`vh` measure the frame. Their text can still be
+searched and read aloud; the text size, line spacing and font buttons don't
+change these pages. A page whose size isn't given, or marked
+`rendition:layout-reflowable`, is reflowed like any other.
 
 **Comic books** (`.cbz`, a ZIP of page images) open too. Pages are shown in
 name order (page2 before page10), each as large as fits: a two-page spread

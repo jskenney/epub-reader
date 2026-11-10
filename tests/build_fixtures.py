@@ -736,6 +736,35 @@ def main():
         z.writestr(zipfile.ZipInfo("mimetype"), parts.pop("mimetype"))
         for n, d in parts.items(): z.writestr(n, d)
 
+    # E-20: fixed-layout books with hand-written packages: right to left, EPUB 2 (a meta, or Apple's display
+    # options), and a page using vw units and a fixed position.
+    def fxl_book(name, uid, pages, meta="", props=None, version="3.0", ppd="", extra=None):
+        items = "".join(f'<item id="f{i}" href="f{i}.xhtml" media-type="application/xhtml+xml"/>' for i in range(len(pages)))
+        refs = "".join(f'<itemref idref="f{i}"{(" properties=" + chr(34) + props[i] + chr(34)) if props and props[i] else ""}/>' for i in range(len(pages)))
+        opf = (f'<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="{version}" unique-identifier="uid">'
+               f'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">{uid}</dc:identifier><dc:title>{name}</dc:title>'
+               f'<dc:language>en</dc:language>{meta}</metadata><manifest>{items}<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest>'
+               f'<spine toc="ncx"{(" page-progression-direction=" + chr(34) + ppd + chr(34)) if ppd else ""}>{refs}</spine></package>')
+        ncx = ('<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head/><docTitle><text>x</text></docTitle><navMap>'
+               '<navPoint id="n1" playOrder="1"><navLabel><text>Start</text></navLabel><content src="f0.xhtml"/></navPoint></navMap></ncx>')
+        with zipfile.ZipFile(books / f"{name}.epub", "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
+            z.writestr("META-INF/container.xml", """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
+            z.writestr("OEBPS/content.opf", opf); z.writestr("OEBPS/toc.ncx", ncx)
+            for i, body in enumerate(pages):
+                z.writestr(f"OEBPS/f{i}.xhtml", xhtml(f"P{i + 1}", body, vp))
+            for n, d in (extra or {}).items(): z.writestr(n, d)
+    pg = lambda n: f'<p class="n">Page {n} text</p>'
+    fxl_book("fixed-rtl", "urn:fixed-rtl", [pg(1), pg(2), pg(3)], '<meta property="rendition:layout">pre-paginated</meta>', ppd="rtl")
+    fxl_book("fixed-sides", "urn:fixed-sides", [pg(1), pg(2), pg(3), pg(4)], '<meta property="rendition:layout">pre-paginated</meta>',
+             props=["page-spread-left", "page-spread-right", "page-spread-center", ""])
+    fxl_book("fixed-epub2", "urn:fixed-epub2", [pg(1), pg(2)], '<meta name="fixed-layout" content="true"/>', version="2.0")
+    fxl_book("fixed-apple", "urn:fixed-apple", [pg(1), pg(2)], "", version="2.0",
+             extra={"META-INF/com.apple.ibooks.display-options.xml": '<?xml version="1.0"?><display_options><platform name="*"><option name="fixed-layout">true</option></platform></display_options>'})
+    fxl_book("fixed-units", "urn:fixed-units", ['<div id="half" style="width:50vw;height:10vh;background:#c00"></div><div id="pin" style="position:fixed;right:0;bottom:0;width:40px;height:40px;background:#00c"></div><p>Units page</p>'],
+             '<meta property="rendition:layout">pre-paginated</meta>')
+
     # (Round 22, second review) A vertically written page (Japanese fixed-layout books), and one that clears html's background.
     fx3 = xhtml("Vertical", '<p class="v">縦書きのページ</p>', '<meta name="viewport" content="width=600, height=1600"/><style>html{writing-mode:vertical-rl}body{background:#fff}</style>')
     fx4 = xhtml("Clear", '<p>Clear html</p>', '<meta name="viewport" content="width=600, height=800"/><style>html{background:transparent}body{background:#ff0}</style>')
