@@ -295,7 +295,7 @@ A web app manifest and service worker, so the reader can be installed and open s
 
 ### E-20. Fixed-layout spreads and right-to-left choices
 
-*Partly needs your decision.* Left for later from round 22's review:
+Left for later from round 22's review:
 - **Fixed-layout spreads.** Fixed-layout pages are shown one at a time. `rendition:spread` and
   `page-spread-left`/`page-spread-right` could show two pages side by side in the two-column layout.
 - **Right-to-left fixed-layout books.** A fixed-layout EPUB with `page-progression-direction="rtl"` (manga made
@@ -304,10 +304,7 @@ A web app manifest and service worker, so the reader can be installed and open s
 - **A real page for each fixed page.** Each fixed page could be rendered in a frame of its own size. Then `vw`/`vh`
   units and `position: fixed` would measure the page, not the reader's frame. They measure the frame now, as the
   README says.
-- **Manga spreads, your choice:**
-  - With an odd number of pages, the last page sits alone in the left column.
-  - The cover is paired with page 2.
-  - Many manga readers show the cover alone and put a lone page on the right.
+- **Manga spreads: decided.** The cover stays paired with page 2, and a lone last page stays in the left column (your choice, 2026-11-10).
 
 ## Suggested order
 
@@ -624,7 +621,7 @@ From all reviews so far, with the commits that fixed them.
 | L-220 | In a manga a sideways trackpad swipe went the opposite way from a touch swipe | `8bda4f7` |
 | L-216 | A fixed page that clears html's background spread its body's colour over the whole frame (a regression from M-77's fix) | `59c5761` |
 | L-217 | fixedSize looked the item up by path, so a fallback page shared by two items could take the other's layout (*read*) | `59c5761` |
-| L-209 | A manga's odd last page and its cover's pairing: left for your decision in E-20 (*read*) | — |
+| L-209 | A manga's odd last page and its cover's pairing: kept as they are, by your decision (E-20) (*read*) | — |
 | L-210 | The text size, spacing and font buttons do nothing on fixed pages; documented (*read*) | `6f6bc97` |
 | L-211 | A spine item shown through a manifest fallback wasn't treated as fixed (*read*) | `6f6bc97` |
 | L-212 | The information panel said "Reflowable" for a book whose pages are fixed one by one (*read*) | `6f6bc97` |
