@@ -122,15 +122,15 @@ test('a document opened through the file picker is saved back to its file; Save 
   assert.deepEqual(await page.evaluate(() => window.__saveAs.types[0].accept), { 'text/markdown': ['.md', '.markdown'] });
 });
 
-test('unsaved text is kept as a draft: offered when the document is opened again; Done asks before letting it go (E-21)', async () => {
+test('unsaved text is kept as a draft and offered when the document is opened again; Discard asks, then lets it go (E-21)', async () => {
   const page = await h.newPage();
   await h.openReader(page, doc('notes.md'), RAW);
   await startEditing(page);
   await typeAtEnd(page, 'Draft words.\n');
   await page.waitForTimeout(1200);   // (kept a moment after typing stops)
-  // Done, declined: still editing. (A reload is asked about too: the browser's own prompt.)
+  // Discard, declined: still editing. (A reload is asked about too: the browser's own prompt.)
   page.once('dialog', d => d.dismiss());
-  await page.click('#editDone');
+  await page.click('#editDiscard');
   assert.equal(await page.isVisible('#editBar'), true);
   await page.evaluate(() => { window.onbeforeunload = null; });
   await page.goto(doc('notes.md'), { waitUntil: 'load' }).catch(() => {});
@@ -142,13 +142,45 @@ test('unsaved text is kept as a draft: offered when the document is opened again
   await page.click('#noticeAction');
   await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
   assert.equal(await text(page), NOTES + 'Draft words.\n');
-  // Done, accepted: back to the document as it was, and the draft is gone.
+  // Discard, accepted: back to the document as it was, and the draft is gone.
   page.once('dialog', d => d.accept());
-  await page.click('#editDone');
+  await page.click('#editDiscard');
   await page.waitForFunction(() => document.querySelector('#editBar').hidden);
   assert.doesNotMatch(await pageText(page), /Draft words/);
   await page.reload(); await h.waitForBook(page); await page.waitForTimeout(500);
   assert.equal(await page.isHidden('#notice'), true);
+});
+
+test('Done keeps unsaved changes in the reading view, asks before another book, and Edit goes on from them; Discard returns to the saved text (E-21)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, doc('notes.md'), RAW);
+  await startEditing(page);
+  await typeAtEnd(page, 'Kept words.\n');
+  await page.click('#editDone');
+  await page.waitForFunction(() => document.querySelector('#editBar').hidden);
+  assert.ok(await h.waitFor(async () => /Kept words\./.test(await pageText(page)), 5000), 'shown as edited');
+  await page.waitForFunction(() => /changes not saved yet/.test(document.querySelector('#noticeText').textContent));
+  // Edit again: the changes are there, still unsaved.
+  await startEditing(page);
+  assert.equal(await text(page), NOTES + 'Kept words.\n');
+  assert.match(await page.textContent('#editName'), /unsaved/);
+  await page.click('#editDone');
+  await page.waitForFunction(() => document.querySelector('#editBar').hidden);
+  // Another book: asked first; declined, the document stays.
+  let asked = '';
+  page.once('dialog', d => { asked = d.message(); d.dismiss(); });
+  await page.locator('#fileInput').setInputFiles({ name: 'x.md', mimeType: 'text/markdown', buffer: Buffer.from('# X\n') });
+  await page.waitForTimeout(300);
+  assert.match(asked, /notes\.md has unsaved changes/);
+  assert.equal(await page.textContent('#bookTitle'), 'Notes');
+  // Discard: the saved text again, nothing asked about after.
+  await startEditing(page);
+  page.once('dialog', d => d.accept());
+  await page.click('#editDiscard');
+  await page.waitForFunction(() => document.querySelector('#editBar').hidden);
+  assert.ok(await h.waitFor(async () => !/Kept words/.test(await pageText(page)), 5000));
+  await page.locator('#fileInput').setInputFiles({ name: 'x.md', mimeType: 'text/markdown', buffer: Buffer.from('# X\n') });
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'X');
 });
 
 test('new Markdown and HTML documents start from a small template and are saved under Untitled (E-21)', async () => {

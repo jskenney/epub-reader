@@ -132,6 +132,10 @@ document**, **New Markdown document** and **New HTML document**.
   the ones after it are read as they now are.
 - The reader's single-letter shortcuts don't fire while you type. Ctrl+S
   saves, Ctrl+Shift+S saves as, and Escape (or Done) goes back to reading.
+- **Done** goes back to reading and keeps your changes: the page shows them,
+  they're kept as a draft, and Edit carries on from them (Save saves them).
+  **Discard** goes back to the text as last saved, throwing away the changes
+  since (it asks first).
 - **Save** writes back to the file where the browser allows it: a document
   opened with the Open button in Chrome or Edge (which use the system's file
   picker) or dropped onto the page. Otherwise Save, and **Save as**, ask
@@ -141,8 +145,8 @@ document**, **New Markdown document** and **New HTML document**.
   change, and as you leave the page. Opening the document again offers it
   back (Edit restores it) as long as the file is as it was when you began, and
   so does starting a new document after an unsaved one. While a save is being
-  written, Done and opening another book wait for it. Done, opening another
-  book, or leaving the page asks first when there are unsaved changes.
+  written, Done and opening another book wait for it. Opening another book,
+  or leaving the page, asks first when there are unsaved changes.
 - Nothing in the document runs while it is edited: the page is made exactly
   as the reader makes any page, scripts removed, in the same locked-down frame.
 - A site can turn editing off with `EDITING` in `reader-config.json`.

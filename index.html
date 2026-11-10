@@ -463,7 +463,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <button class="btn" id="editSave" title="Save (Ctrl+S)">Save</button>
         <button class="btn" id="editSaveAs" title="Save as (Ctrl+Shift+S)">Save as…</button>
         <button class="btn" id="editChapter" title="Download this chapter on its own" hidden>Chapter</button>
-        <button class="btn primary" id="editDone" title="Back to reading (Escape)">Done</button>
+        <button class="btn" id="editDiscard" title="Leave the editor and throw away the changes since the last save">Discard</button>
+        <button class="btn primary" id="editDone" title="Back to reading, keeping the changes (Escape)">Done</button>
       </div>
       <div class="work" id="work">
         <div class="edit-src" id="editSrc" hidden></div>
@@ -7045,11 +7046,11 @@ async function editStart({ mode } = {}){
       d = { text: b.over?.get(item.path) ?? orig, source: orig, kind: 'html', name: item.path.split('/').pop(), handle: null, base: null, xhtml, rawOnly };
       ed.epub = { i: cur.i, path: item.path, item, doc: d };
     }
-    const last = ed.epub ? (b.savedText?.get(ed.epub.path) ?? d.source) : d.text;
+    const last = ed.epub ? (b.savedText?.get(ed.epub.path) ?? d.source) : (d.saved ?? d.text);   // (a document left with changes by Done: as last saved)
     Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: last, blocks: null, blocksFor: null });
     const draft = await draftGet(draftKey());
     if (book !== b) return;
-    if (draftFits(draft, docSource(d))) {
+    if (draftFits(draft, docSource(d)) && draft.text !== d.text) {
       if (confirm(`${d.fresh || d.created ? 'A new document' : ed.epub ? 'This chapter' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
       else draftDel(draftKey());
     }
@@ -7294,7 +7295,7 @@ async function editSave(as = false){
   if (text !== typed && ed.text === typed) { editSetText(text); if (ed.mode === 'wysiwyg') ed.wBase = utf8Declared(ed.wBase); }
   if (handle) { ed.handle = handle; if (handle.name) ed.name = handle.name; }
   ed.saved = text; ed.fresh = false;
-  Object.assign(b.doc, { text, name: ed.name, handle: ed.handle, fresh: false });
+  Object.assign(b.doc, { text, saved: text, unsaved: false, name: ed.name, handle: ed.handle, fresh: false });
   // (Written to a file: that file is now where it comes from (its drafts by its name). Downloaded: the site's
   // or the file's text stays what drafts are made against.)
   if (how === 'saved') Object.assign(b.doc, { source: text, base: null, foreign: '', created: false });
@@ -7406,15 +7407,40 @@ function editSaveChapter(){
   $('#editNote').textContent = `Downloaded the chapter as ${ed.name}.`;
 }
 const editWaitSave = () => { if (!ed.saving) return false; showNotice(`${ed.name} is still being saved: a moment.`, 'info', { label: 'OK', run(){} }); return true; };
+// Done: back to reading, keeping the changes: shown as edited, kept as a draft, and saved later (Edit, then
+// Save); another book, or leaving the page, asks first while they aren't.
 async function editDone(){
   if (!ed.on || editWaitSave()) return;
   editFlush();
   if (ed.epub) return editDoneChapter();
-  if (editDirty() && !confirm('Leave the editor? Your unsaved changes will be lost.')) return;
-  if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
-  const frag = editTopHeading();
+  const b = book, frag = editTopHeading(), unsaved = editDirty();
+  if (unsaved) { clearTimeout(ed.draftTimer); draftPut({ key: draftKey(), text: ed.text, kind: ed.kind, name: ed.name, from: draftFrom(), t: Date.now() }); }
   editQuit();
-  ed.text = ed.saved; book.doc.text = ed.saved;
+  Object.assign(b.doc, { text: ed.text, saved: ed.saved, unsaved });
+  $('#editBtn').focus();
+  await editRebuild({ frag });
+  if (unsaved && book === b) showNotice(`${ed.name} has changes not saved yet: Edit, then Save, saves them.`, 'info', { label: 'OK', run(){} });
+}
+// Discard: back to reading as last saved, the changes since thrown away (after asking). An EPUB chapter: this
+// chapter's; other chapters edited stay as they are.
+async function editDiscard(){
+  if (!ed.on || editWaitSave()) return;
+  editFlush();
+  if (editDirty() && !confirm('Discard your changes since the last save?')) return;
+  const b = book, frag = editTopHeading(), key = draftKey(), last = ed.saved;
+  clearTimeout(ed.draftTimer); draftDel(key);
+  if (ed.epub) {
+    const { path: p, i } = ed.epub;
+    editQuit();
+    b.live?.delete(p);
+    if (last === b.archive.get(p)) b.over?.delete(p); else (b.over ??= new Map()).set(p, last);
+    b.unsaved?.delete(p); b.search = null; n.chapBook = null; ed.epub = null;
+    $('#editBtn').focus();
+    await renderChapter(i, frag ? { frag } : {});
+    return;
+  }
+  editQuit();
+  ed.text = last; Object.assign(b.doc, { text: last, saved: last, unsaved: false });
   $('#editBtn').focus();
   await editRebuild({ frag });
 }
@@ -7454,6 +7480,11 @@ function editQuit(){
 function editLeaveOk(){
   if (ed.on && editWaitSave()) return false;
   if (ed.on) editFlush();
+  // (A document left with changes by Done, not saved: asked about too.)
+  if (!ed.on && book?.doc?.unsaved) {
+    if (!confirm(`${book.doc.name} has unsaved changes. Open the other book and lose them?`)) return false;
+    draftDel(docDraftKey(book.doc)); book.doc.unsaved = false;
+  }
   // (An EPUB with chapters edited and not saved, this one or others: asked about once: E-23.)
   const waiting = [...(book?.unsaved || [])].filter(p => !(ed.on && ed.epub?.path === p)), count = waiting.length + (editDirty() && ed.epub ? 1 : 0);
   if (count && !confirm(`${count} edited chapter${count > 1 ? 's' : ''} of this book ${count > 1 ? "aren't" : "isn't"} saved. Open the other book and lose ${count > 1 ? 'them' : 'it'}?`)) return false;
@@ -7517,7 +7548,8 @@ $('#editSave').addEventListener('click', () => editSave());
 $('#editChapter').addEventListener('click', () => editSaveChapter());
 $('#editSaveAs').addEventListener('click', () => editSave(true));
 $('#editDone').addEventListener('click', () => editDone());
-window.addEventListener('beforeunload', e => { if (editDirty() || (ed.on && ed.wdirty) || book?.unsaved?.size) { e.preventDefault(); e.returnValue = ''; } });
+$('#editDiscard').addEventListener('click', () => editDiscard());
+window.addEventListener('beforeunload', e => { if (editDirty() || (ed.on && ed.wdirty) || book?.unsaved?.size || book?.doc?.unsaved) { e.preventDefault(); e.returnValue = ''; } });
 // (Leaving within a moment of typing: the page's edits written and kept as a draft at once: round 24 review.)
 // (Back from the browser's page cache: the editor is still here, so the draft kept for leaving isn't wanted.)
 window.addEventListener('pageshow', e => { if (e.persisted && ed.on) draftPending(); });

@@ -274,3 +274,17 @@ test('switching Split on a fixed page doesn\'t keep Raw as the chosen mode (roun
   await page.click('#editSplit');
   assert.equal(await page.evaluate(() => localStorage.getItem('spine:editMode')), '"wysiwyg"');
 });
+
+test('Discard on a chapter returns it to how it was last saved; other chapters stay edited (E-23)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG, RAW);
+  await startEditing(page);
+  const original = await text(page);
+  await replace(page, '</p>', ' Thrown away.</p>');
+  page.once('dialog', d => d.accept());
+  await page.click('#editDiscard');
+  await page.waitForFunction(() => document.querySelector('#editBar').hidden);
+  assert.ok(await h.waitFor(async () => !/Thrown away/.test(await pageText(page)), 5000));
+  await startEditing(page);
+  assert.equal(await text(page), original);
+});
