@@ -191,6 +191,12 @@ tests that fail on the code before it:
 - **Medium:** M-83.
 - **Low:** L-221 to L-223. **Tests:** T-37. **Documentation:** D-18.
 
+A fifth review found a high gap in that judging of colours, and a medium side effect of the 100% fix. Both were
+fixed in `165e1ba`, with tests that fail on the code before it:
+- **High:** H-20.
+- **Medium:** M-84.
+- **Low:** L-224 to L-227. **Tests:** T-38.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -324,6 +330,7 @@ From all reviews so far, with the commits that fixed them.
 | H-13 | A short voice outage stopped an hours-long export, and shorter ones left sentences silent; now it waits | `ce5efe6` |
 | H-14 | Addresses got past the CSS cleaner through substitutions (unclosed `image-set(var(…)`, `url("…" var())`, `if()`) (the book policy held) | `74c9765` |
 | H-15 | The `var()` check was quadratic: a small sheet froze the tab | `74c9765` |
+| H-20 | A fixed page coloured black on its html, in the black theme, was taken for one with no colour (the theme's colour was on html too) and shown white on white, even after a theme change | `165e1ba` |
 | H-18 | Fixed-layout pages in the page layouts never saved the reading position or updated progress | `6f6bc97` |
 | H-19 | The reader's base styles (Literata, sizes, theme ink) applied to fixed-layout pages: overflowing text, and light text on white pages in dark themes | `6f6bc97` |
 | H-17 | A comic left on the last page of a section reopened a section later, and a larger section size drifted (a regression from M-65's fix); its place is now the first page on screen | `7bbe17b` |
@@ -391,6 +398,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-84 | Switching a fixed page into the scroll layout, or reopening it there, landed at its bottom (a side effect of L-223's fix); the place stays at the top, and progress counts a shown fixed page as read separately | `165e1ba` |
 | M-83 | Making every fixed page's body white hid pages coloured on their html (or by bgcolor): white text on white (a regression from M-82's fix); the colours are now worked out once per page | `0e3ee93` |
 | M-82 | In dark themes a fixed page that paints no background of its own showed its black text on the theme's black; it is now a white page unless the book colours it | `8bda4f7` |
 | M-81 | A vertically written fixed page (html writing-mode: vertical-rl, common in Japanese fixed-layout books) sat flush right, and in the scroll layout its top couldn't be reached | `59c5761` |
@@ -594,6 +602,10 @@ From all reviews so far, with the commits that fixed them.
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
 | L-205 | With shortcuts locked, the arrow keys stopped at the end of the Aa menu (a disabled item can't take focus); it is now aria-disabled | `96e5832` |
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
+| L-224 | The time left vanished on fixed pages in page layouts (the same side effect) | `165e1ba` |
+| L-225 | A fixed page's first paint showed black text on the dark theme before its colours were judged; it is now hidden until then | `165e1ba` |
+| L-226 | A fixed page that fits without scrolling counted as unread in the scroll layout; a shown fixed page now counts as read in every layout | `165e1ba` |
+| L-227 | A clear body with a partly transparent background image wasn't made white (*read*) | `165e1ba` |
 | L-221 | The read-aloud sentence highlight on a dark fixed page was light pink behind light text; it now has dark text | `0e3ee93` |
 | L-222 | A fixed page whose body background is "none" showed black text on black in dark themes; it is white when the page has no colour of its own | `0e3ee93` |
 | L-223 | A fixed-layout book never reached 100%: each page counted as not yet read | `0e3ee93` |
@@ -655,6 +667,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-38 | A black-html page in the black theme and after a theme change; a fixed page switched to, or reopened in, the scroll layout; the time left on fixed pages | `165e1ba` |
 | T-37 | The fixed tests' page-turn helper didn't wait for the new page; no test of pages coloured on html, by bgcolor, or with a body of "none", or of the last page's 100% | `0e3ee93` |
 | T-36 | Fixed tests waited a fixed time per page turn; no test of an unpainted fixed page, its highlight colours, manga trackpad swipes or a switch right after scrolling; a race in the mock server's stall queue | `8bda4f7` |
 | T-35 | Vertical writing and a cleared html background in fixed pages; the Cancel test's timing margin | `59c5761` |
