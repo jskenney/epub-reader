@@ -70,7 +70,8 @@ if args.csp_from:
 NGINX_TYPES = {}
 _conf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "nginx.conf.example")
 if os.path.isfile(_conf):
-    for m in re.finditer(r"location ~\*\s+\\\.\(?([a-z|]+)\)?\$\s*\{\s*types \{ \} default_type ([^;]+);", open(_conf).read()):
+    _text = "\n".join(l for l in open(_conf).read().split("\n") if not l.lstrip().startswith("#"))
+    for m in re.finditer(r"location\s+~\*\s+\\\.\(?([a-z0-9|]+)\)?\$\s*\{\s*types\s*\{\s*\}\s*default_type\s+([^;]+);", _text, re.I):
         for ext in m.group(1).split("|"):
             NGINX_TYPES["." + ext] = m.group(2).strip()
 
@@ -228,7 +229,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         f = {p.get_param("name", header="content-disposition"): p.get_payload(decode=True) for p in msg.iter_parts()}
         if stall_next:   # (a stalled stream: it doesn't hold the server busy, so the reader's next request is answered)
             mode = stall_next.pop(0)
-            breeze_log.append({"text": f["text"].decode(), "stalled": mode, "path": path})
+            entry = {"text": f["text"].decode(), "stalled": mode, "path": path}
+            breeze_log.append(entry)
             self.send_response(200)
             self.send_header("Content-Type", "audio/pcm")
             self.send_header("X-Sample-Rate", "24000")
@@ -236,10 +238,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:
                 if mode == "mid":
                     self.wfile.write(b"\0\0" * 4800); self.wfile.flush()
-                time.sleep(6)
+                time.sleep(20)   # (longer than any test waits: it must be the reader that gives up)
                 self.wfile.write(b"\0\0" * 480); self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError):
-                breeze_log[-1]["aborted"] = True
+                entry["aborted"] = True
             return
         if not busy.acquire(blocking=False):
             return self.json(409, {"detail": "An inference request is already running."})

@@ -1006,17 +1006,18 @@ async function fontKeys(src, uid, identifiers){
       const hex = (identifiers.find(t => /^urn:uuid:/i.test(t)) || '').replace(/^urn:uuid:/i, '').replace(/[^0-9a-f]/gi, '');
       if (hex.length === 32) key = { bytes: Uint8Array.from(hex.match(/../g), h => parseInt(h, 16)), length: 1024 };
     }
-    if (key) { const at = resolve('', uri); out.set(at, key); out.set('\0' + pathKey(at), { ...key, named: at }); }   // (exact, and folded: lookObf)
+    if (key) { const at = resolve('', uri); out.set(at, { ...key, named: at }); out.set('\0' + pathKey(at), { ...key, named: at }); }   // (exact, and folded: lookObf)
   }
   return out.size ? out : null;
 }
-// An obfuscated font's key: by its exact name, or (as getFile finds files) by its folded name, unless a file has
-// that exact name, which isn't the obfuscated one then (loop 4 review); but when encryption.xml's own spelling
-// names no file, the one file it can mean is this one (T-20).
-function lookObf(obf, p, exactFile){
+// An obfuscated font's key: the one listed for the file a name opens. which(name) is the file the book opens for a
+// name (its exact name if there is one, else the first with the same folded name, as getFile does), so a key
+// listed in another spelling applies to that file and no other: not to a plain font differing only in case
+// (loop 4 review, round 22 review).
+function lookObf(obf, p, which){
   if (!obf) return null;
   const k = obf.get(p) ?? obf.get('\0' + pathKey(p));
-  return !k || obf.get(p) || !exactFile(p) || !exactFile(k.named) ? k ?? null : null;
+  return k && which(p) === which(k.named) ? k : null;
 }
 function unobfuscate(data, key){
   const out = data.slice(), n = Math.min(out.length, key.length);
@@ -1058,7 +1059,7 @@ function zipSource(zip){
       const f = getFile(zip, p); if (!f) return null;
       // (Fonts too: a data: copy pasted into every place the font is named could make pages of hundreds of MB.)
       let data = await f.async('uint8array');
-      const key = lookObf(this.obf, p, n => Object.prototype.hasOwnProperty.call(zip.files || {}, n)); if (key) data = unobfuscate(data, key);
+      const key = lookObf(this.obf, p, n => Object.prototype.hasOwnProperty.call(zip.files || {}, n) ? n : foldedNames(zip).get(pathKey(n))); if (key) data = unobfuscate(data, key);
       const u = URL.createObjectURL(new Blob([data], { type }));
       if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
@@ -1086,7 +1087,7 @@ function dirSource(base){
     async exists(p){ return !!abs(p); },
     obf: null, blobs: new Set(),
     async url(p, type){
-      const u = abs(p), key = lookObf(this.obf, p, () => false); if (!u || !key) return u;
+      const u = abs(p), key = lookObf(this.obf, p, pathKey); if (!u || !key) return u;   // (a folder on a server: names compared folded)
       try {
         const r = await fetch(u); if (!r.ok) return null;
         const data = unobfuscate(new Uint8Array(await r.arrayBuffer()), key);
@@ -4544,7 +4545,8 @@ function svVoiceHash(){
   return hashText(JSON.stringify([TTS_SERVER.api, v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
     String(v.cfg_scale ?? 1), String(v.seed ?? 42)]));
 }
-const SV_REPLY_SEC = Number(window.SPINE_TEST?.svReplySec) || 60;   // how long the server voice may take to start answering a request (tests set less)
+const SV_REPLY_SEC = Number(window.SPINE_TEST?.svReplySec) || 60;
+const SV_BUSY_TRIES = Number(window.SPINE_TEST?.svBusyTries) || 40;   // a busy (409) server asked again, about a minute in all (tests set less)   // how long the server voice may take to start answering a request (tests set less)
 function svGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();
@@ -4573,7 +4575,7 @@ function svGenerate(text, opts = {}){
       }
       // Busy with another request, often one just cancelled that the server hasn't let go of yet: retry
       // soon, then less often.
-      if (r.status === 409 && attempt < 40) { unlisten(); await bgSleep(Math.min(1500, 150 * 2 ** attempt)); if (opts.signal?.aborted) throw staleError(); continue; }
+      if (r.status === 409 && attempt < SV_BUSY_TRIES) { unlisten(); await bgSleep(Math.min(1500, 150 * 2 ** attempt)); if (opts.signal?.aborted) throw staleError(); continue; }
       if (!r.ok) {
         let detail = ''; try { detail = (await r.json()).detail; } catch {}
         unlisten();

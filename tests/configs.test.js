@@ -21,8 +21,8 @@ test('a folder config: SEARCH_MAX, COMIC_PART, KEEP_POSITIONS_DAYS 0 and BOOKSHE
   assert.notEqual(await page.evaluate(() => localStorage.getItem('spine:pos:url:/old.epub')), null);
   assert.equal(await page.evaluate(() => localStorage.getItem('spine:keepDays')), '0');
   // SEARCH_MAX 2.
-  await page.fill('#searchBox', 'paragraph'); await page.waitForTimeout(800);
-  assert.match(await page.textContent('#searchResults'), /Showing the first 2 matches/);
+  await page.fill('#searchBox', 'paragraph');
+  await page.waitForFunction(() => /Showing the first 2 matches/.test(document.querySelector('#searchResults').textContent), null, { timeout: 10000 });
   assert.match(await page.textContent('#searchStatus'), /of 2\+ matches/);
   // COMIC_PART 10: 90 pages in sections of 10.
   await page.goto(`${CFG}?book=/reader/books/comic.cbz`); await h.waitForBook(page);
@@ -34,6 +34,7 @@ test('a folder config: SEARCH_MAX, COMIC_PART, KEEP_POSITIONS_DAYS 0 and BOOKSHE
 
 test('a folder config: TTS_SERVER elsewhere, SPAN_MAX for the server voice, SAVED_AUDIO_MB 0 (T-16)', async () => {
   const page = await h.newPage();
+  const asked = []; page.on('request', r => asked.push(new URL(r.url()).pathname));
   await h.clearBreezeLog();
   await h.openReader(page, `${h.SITE}/folder-alttts/index.html?book=/reader/books/long.epub`, { 'spine:ttsEngine': 'server' });
   await page.keyboard.press('r');
@@ -42,7 +43,9 @@ test('a folder config: TTS_SERVER elsewhere, SPAN_MAX for the server voice, SAVE
   const log = await h.breezeLog();
   assert.ok(log.length >= 2, JSON.stringify(log));
   assert.ok(log.every(e => e.path === '/alt-tts/v1/audio/speech'), 'the API named in the config');
-  assert.ok(log.every(e => e.ref_bytes > 1000), 'the voice clip from the voices folder named in the config');
+  assert.ok(log.every(e => e.ref_bytes > 1000), 'the voice clip');
+  assert.ok(asked.includes('/alt-voices/voices.json') && asked.some(p => /^\/alt-voices\/.*\.wav$/.test(p)), 'the voices folder named in the config');
+  assert.ok(!asked.some(p => p.startsWith('/tts-voices/') || p.startsWith('/tts/')), 'not the default paths');
   // (Sentences are joined up to 60 characters; a sentence longer than that, up to 220, is still sent whole.)
   assert.ok(log.every(e => e.text.length <= 60 || !/[.!?]["'”’)]*\s+\S/.test(e.text)), log.map(e => e.text).join(' | '));
   await page.keyboard.press(' ');
@@ -83,15 +86,17 @@ test('the checksum lists name exactly the files the fetch scripts download (T-16
 
 test("the test server sends nginx.conf.example's types for the files whose types it sets (T-16)", async () => {
   const conf = fs.readFileSync(path.join(REPO, 'nginx.conf.example'), 'utf8');
-  const types = [...conf.matchAll(/location ~\*\s+\\\.\(?([a-z|]+)\)?\$\s*\{\s*types \{ \} default_type ([^;]+);/g)]
-    .flatMap(m => m[1].split('|').map(ext => [ext, m[2].trim()]));
-  assert.ok(types.length >= 4, JSON.stringify(types));
+  const active = conf.split('\n').filter(l => !l.trimStart().startsWith('#')).join('\n');
+  const blocks = [...active.matchAll(/location\s+~\*\s+\\\.\(?([a-z0-9|]+)\)?\$\s*\{\s*types\s*\{\s*\}\s*default_type\s+([^;]+);/gi)];
+  // (Every such block read: as many as there are location blocks setting a default_type.)
+  assert.equal(blocks.length, active.split('\n').filter(l => /location\s+~\*/.test(l) && /default_type/.test(l)).length);
+  const types = blocks.flatMap(m => m[1].split('|').map(ext => [ext.toLowerCase(), m[2].trim()]));
   const files = { mjs: '/reader/kokoro/ort/ort-wasm-simd-threaded.jsep.mjs', wasm: '/pocket-partial/pocket/ort/ort-wasm-simd-threaded.wasm',
     epub: '/reader/books/long.epub', cbz: '/reader/books/comic.cbz', md: '/reader/books/notes.md' };
   for (const [ext, type] of types) {
-    if (!files[ext]) continue;
+    assert.ok(files[ext], `a sample .${ext} file for this test`);
     const r = await fetch(h.SITE + files[ext], { method: 'HEAD' });
-    if (r.status === 404) continue;   // (not in this test site)
+    assert.equal(r.status, 200, files[ext]);
     assert.equal((r.headers.get('content-type') || '').split(';')[0], type, ext);
   }
 });

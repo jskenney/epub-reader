@@ -47,10 +47,19 @@ test('a part of the book that can\'t be shown gets a note, which isn\'t searched
   await h.openReader(page, `${h.READER}?book=books/nonpage.epub`, { 'spine:ttsEngine': 'server' });
   await toSpine(page, 2);
   assert.match(await frameText(page), /This part of the book \(application\/pdf\) can't be shown here\./);
-  await page.fill('#searchBox', 'shown here'); await page.waitForTimeout(800);
-  assert.match(await page.textContent('#searchStatus'), /No matches/);
-  await page.fill('#searchBox', 'words here'); await page.waitForTimeout(800);
-  assert.match(await page.textContent('#searchStatus'), /of 2 matches/);
+  await toSpine(page, 3);
+  assert.match(await frameText(page), /This part of the book \(audio\/mpeg\) can't be shown here\./, 'an item with no type, known by its name');
+  const status = re => page.waitForFunction(re => new RegExp(re).test(document.querySelector('#searchStatus').textContent), re, { timeout: 10000 });
+  await page.fill('#searchBox', 'shown here'); await status('No matches');
+  await page.fill('#searchBox', 'words here'); await status('of 2 matches');
+  await page.fill('#searchBox', '');
+  // Reading aloud from the start passes the notes over: they're never sent to the voice.
+  await page.keyboard.press('Home').catch(() => {});
+  await page.click('#tocList a >> nth=0'); await page.waitForTimeout(500);
+  await h.clearBreezeLog();
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => /Last words/.test(e.text)), 30000), JSON.stringify(await h.breezeLog()));
+  assert.ok((await h.breezeLog()).every(e => !/shown here/.test(e.text)), JSON.stringify(await h.breezeLog()));
 });
 
 test('an obfuscated font named in another case in encryption.xml is still unobfuscated (L-137)', async () => {

@@ -285,9 +285,11 @@ def main():
          extra={"OEBPS/f.ttf": obfuscated(hashlib.sha1(b"urn:isbn:9780000000001").digest(), 1040),
                 "META-INF/encryption.xml": enc("http://www.idpf.org/2008/embedding").replace("OEBPS/f.ttf", "OEBPS/F.TTF")})
     # (T-20, L-153) A part of the book that isn't a page or a picture (a PDF): a note, not searched or read aloud.
+    # (L-172: and one with no media type, known by its name.)
     epub_items(books / "nonpage.epub", "Non Page", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("pdf", "doc.pdf", "application/pdf", ""),
-        ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "pdf", "c2"],
-        {"c1.xhtml": xhtml("One", "<p>First words here.</p>"), "doc.pdf": b"%PDF-1.4 not really", "c2.xhtml": xhtml("Two", "<p>Last words here.</p>")}, "urn:nonpage")
+        ("snd", "track.mp3", "", ""), ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "pdf", "snd", "c2"],
+        {"c1.xhtml": xhtml("One", "<p>First words here.</p>"), "doc.pdf": b"%PDF-1.4 not really", "track.mp3": b"ID3 not really",
+         "c2.xhtml": xhtml("Two", "<p>Last words here.</p>")}, "urn:nonpage")
     # Round 13 review: markup that only appears on reading back (mutation) carrying styles, srcset and a relative
     # src; var() inside image-set(); XHTML files named .html; namespaces in the importing sheet and in strings;
     # a damaged picture.

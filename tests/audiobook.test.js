@@ -580,6 +580,8 @@ test('a busy voice server (409) is waited for during an export, and nothing is l
   FRAMES ??= aacFrames();
   const page = await h.newPage();
   await page.addInitScript(fakeAac, FRAMES);
+  // (A busy answer is asked again twice, not for a minute, so it reaches the export's own waiting: M-58.)
+  await page.addInitScript(() => { window.SPINE_TEST = { svBusyTries: 2 }; });
   await openExport(page, `${h.READER}?book=books/short-lines.epub`);
   // Busy for 4 s from line 20 on, as when someone else is using the server.
   let until = 0, busy = 0;
@@ -608,13 +610,19 @@ test('Cancel after a few minutes of audio asks again, keeps its question up, and
   assert.match(await page.textContent('#abLeft'), /What is finished so far is kept/);
   await page.waitForTimeout(3500);   // (the question goes after five seconds)
   assert.equal(await page.textContent('#abCancel'), 'Cancel export');
-  await page.click('#abCancel'); await page.click('#abCancel');
+  // Asked again and confirmed a second later: the first question's five seconds are still running.
+  await page.click('#abCancel'); await page.waitForTimeout(1000); await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
-  // A new export starts without the question (the speech saved last time counts as made, so it asks at once).
+  // A new export at once (the speech saved last time counts as made, so it asks at once): the old timer, due about
+  // four seconds from now, mustn't take the new question away early.
   await page.click('#abStart');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
   assert.equal(await page.textContent('#abCancel'), 'Cancel export');
-  await page.click('#abCancel'); await page.click('#abCancel');
+  await page.click('#abCancel');
+  assert.equal(await page.textContent('#abCancel'), 'Click again to stop');
+  await page.waitForTimeout(4300);
+  assert.equal(await page.textContent('#abCancel'), 'Click again to stop', 'still asking: the earlier timer was cleared');
+  await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
 });
 
@@ -625,7 +633,7 @@ test('a stopped export keeps extra room in the saved audio (for a week); a finis
   await openExport(page, `${h.READER}?book=books/short-lines.epub`);
   await h.clearBreezeLog();
   await page.click('#abStart');
-  await h.waitFor(async () => (await h.breezeLog()).length >= 2, 15000, 50);
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).length >= 2, 15000, 50), 'the export started');
   await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });
   const room = JSON.parse(await page.evaluate(() => localStorage.getItem('spine:exportRoom')));

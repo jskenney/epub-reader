@@ -260,13 +260,16 @@ for (const mode of ['headers', 'mid']) {
     await h.clearBreezeLog();
     await h.openReader(page, LONG, serverVoice);
     await fetch(`${h.SITE}/__breeze?stall=${mode}`);
+    const t0 = Date.now();
     await page.keyboard.press('r');
-    // Given up on within the time allowed (3 s before the first audio, 1 s between pieces), not left waiting.
+    // Given up on within the time allowed (3 s before the first audio, 1 s between pieces), not left waiting: the
+    // mock server holds the stream for 20 s, so only the reader's own time limit ends it this soon.
     const note = await h.waitFor(async () => {
       const t = `${await page.textContent('#notice')} ${await page.textContent('#ttsStatus')}`;
       return /voice server (isn't responding|stopped partway)/.test(t) && t;
     }, 10000);
     assert.ok(note, `${await page.textContent('#notice')} | ${await page.textContent('#ttsStatus')}`);
+    assert.ok(Date.now() - t0 < (mode === 'headers' ? 7000 : 5000), `given up on after ${Date.now() - t0} ms`);
     assert.equal(await playing(page), false);
     assert.equal((await h.breezeLog())[0].stalled, mode);
     // Play again: the passage is asked for again and read.
