@@ -186,6 +186,11 @@ A third, fresh review of the whole round found no critical or high items, and on
 - **Medium:** M-82 (in dark themes, a fixed page with no background of its own showed black text on black).
 - **Low:** L-218 to L-220. **Tests:** T-36. **Documentation:** D-17.
 
+A fourth review found that M-82's fix had hidden pages coloured on their html. That was fixed in `0e3ee93`, with
+tests that fail on the code before it:
+- **Medium:** M-83.
+- **Low:** L-221 to L-223. **Tests:** T-37. **Documentation:** D-18.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -386,6 +391,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-83 | Making every fixed page's body white hid pages coloured on their html (or by bgcolor): white text on white (a regression from M-82's fix); the colours are now worked out once per page | `0e3ee93` |
 | M-82 | In dark themes a fixed page that paints no background of its own showed its black text on the theme's black; it is now a white page unless the book colours it | `8bda4f7` |
 | M-81 | A vertically written fixed page (html writing-mode: vertical-rl, common in Japanese fixed-layout books) sat flush right, and in the scroll layout its top couldn't be reached | `59c5761` |
 | M-76 | A fixed page's own html sizing or body padding put it off-centre, clipped it, or made part of it unreachable | `6f6bc97` |
@@ -588,6 +594,9 @@ From all reviews so far, with the commits that fixed them.
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
 | L-205 | With shortcuts locked, the arrow keys stopped at the end of the Aa menu (a disabled item can't take focus); it is now aria-disabled | `96e5832` |
 | L-206 | Pocket TTS told the reader to change a precision setting the folder had locked (*read*) | `96e5832` |
+| L-221 | The read-aloud sentence highlight on a dark fixed page was light pink behind light text; it now has dark text | `0e3ee93` |
+| L-222 | A fixed page whose body background is "none" showed black text on black in dark themes; it is white when the page has no colour of its own | `0e3ee93` |
+| L-223 | A fixed-layout book never reached 100%: each page counted as not yet read | `0e3ee93` |
 | L-218 | The read-aloud sentence highlight on a fixed page used the dark theme's maroon behind the page's black text | `8bda4f7` |
 | L-219 | A comic switched to another layout just after scrolling opened at the page before the scroll | `8bda4f7` |
 | L-220 | In a manga a sideways trackpad swipe went the opposite way from a touch swipe | `8bda4f7` |
@@ -646,6 +655,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-37 | The fixed tests' page-turn helper didn't wait for the new page; no test of pages coloured on html, by bgcolor, or with a body of "none", or of the last page's 100% | `0e3ee93` |
 | T-36 | Fixed tests waited a fixed time per page turn; no test of an unpainted fixed page, its highlight colours, manga trackpad swipes or a switch right after scrolling; a race in the mock server's stall queue | `8bda4f7` |
 | T-35 | Vertical writing and a cleared html background in fixed pages; the Cancel test's timing margin | `59c5761` |
 | T-34 | New tests that passed with their bug restored: stalled streams (no time limit), the 409 export (never left the voice's own retries), the Cancel timer, reading past the non-page note and an untyped item, the voices folder, the server's types; and fixed waits | `5dafde4` |
@@ -666,6 +676,7 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-18 | README: when a fixed page is shown white; manga trackpad swipes | `0e3ee93` |
 | D-17 | README: the scroll layout fits a fixed page to the width up to twice its size | `8bda4f7` |
 | D-16 | A code comment had moved to the wrong line | `59c5761` |
 | D-15 | README: what fixed-layout pages don't do; SPAN_MAX's wording for sentences over 220 characters | `6f6bc97`, `5dafde4` |
