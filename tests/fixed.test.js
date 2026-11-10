@@ -97,3 +97,20 @@ test('in the scroll layout with the read-aloud bar open, the bottom of a fixed p
   });
   assert.ok(r.bottom <= r.barTop + 1, JSON.stringify(r));
 });
+
+test('a vertically written fixed page is centred and reachable; a page that clears html\'s colour has the theme\'s around it (round 22 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/fixed-styled.epub`, { 'spine:theme': 'black', 'spine:layout': 'one' });
+  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
+  const box = () => page.evaluate(() => { const d = document.querySelector('#page').contentDocument, w = document.querySelector('#page').contentWindow; const b = d.body.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, vw: w.innerWidth }; });
+  let b = await box();
+  assert.ok(Math.abs((b.left + b.right) / 2 - b.vw / 2) < 2, `centred: ${JSON.stringify(b)}`);
+  await page.click('#layoutBtn'); await page.waitForTimeout(800);   // (one → scroll)
+  await page.evaluate(() => { document.querySelector('#page').contentDocument.scrollingElement.scrollTop = 0; });
+  b = await box();
+  assert.ok(b.top >= 0, `its top can be reached: ${JSON.stringify(b)}`);
+  assert.ok(Math.abs((b.left + b.right) / 2 - b.vw / 2) < 2, `centred when scrolling: ${JSON.stringify(b)}`);
+  await page.click('#layoutBtn'); await page.waitForTimeout(500);   // (scroll → two)
+  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#page').contentDocument.documentElement).backgroundColor), 'rgb(0, 0, 0)', 'the theme around the page, not its yellow');
+});

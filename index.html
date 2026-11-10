@@ -2207,9 +2207,9 @@ function fixedCss(fx, t, dark){
   // (The theme's colour around the page, unless the book colours its html: a background of lower precedence
   // than the book's own. The page itself keeps the book's colours, light controls included.)
   return `:where(html){background-color:${t.bg};color:#000}
-html{color-scheme:${dark ? 'dark' : 'light'};width:auto !important;min-width:0 !important;max-width:none !important;${scroll ? 'height:auto !important;min-height:100% !important' : 'height:100% !important;min-height:0 !important'};max-height:none !important;
+html{color-scheme:${dark ? 'dark' : 'light'};width:100% !important;min-width:0 !important;max-width:none !important;${scroll ? 'height:auto !important;min-height:100% !important' : 'height:100% !important;min-height:0 !important'};max-height:none !important;
   margin:0 !important;padding:0 0 ${scroll ? 12 + tts.barH : tts.barH}px !important;box-sizing:border-box !important;transform:none !important;
-  display:flex !important;align-items:${scroll ? 'flex-start' : 'center'} !important;justify-content:center !important;overflow:${scroll ? 'auto' : 'hidden'} !important}
+  display:flex !important;align-items:safe center !important;justify-content:safe center !important;overflow:${scroll ? 'auto' : 'hidden'} !important}
 body{width:${fx.w}px !important;height:${fx.h}px !important;min-width:0 !important;max-width:none !important;min-height:0 !important;max-height:none !important;box-sizing:border-box !important;
   margin:${scroll ? '12px 0 0' : '0'} !important;flex:none !important;transform:none !important;color-scheme:light;
   overflow:hidden !important;position:relative !important;box-shadow:0 1px 8px rgb(0 0 0 / .25)}
@@ -2227,6 +2227,11 @@ function fxlFit(){
   const pad = 16, room = [w.innerWidth - pad * 2, w.innerHeight - pad * 2 - (tts.open ? tts.barH : 0)];
   const s = Math.max(0.05, Math.min(scrolling() ? room[0] / fx[0] : Math.min(room[0] / fx[0], room[1] / fx[1]), 2));
   doc.body.style.setProperty('zoom', String(Math.round(s * 1000) / 1000), 'important');
+  // (A book that clears html's background would have its body's colour spread over the whole frame: the theme's.)
+  const html = doc.documentElement;
+  if (html.hasAttribute('data-spine-bg') || (!html.style.backgroundColor && /^(transparent|rgba\(0, 0, 0, 0\))$/.test(w.getComputedStyle(html).backgroundColor))) {
+    html.style.setProperty('background-color', tokens().bg); html.setAttribute('data-spine-bg', '');   // (kept up to date with the theme)
+  }
 }
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
@@ -2342,17 +2347,16 @@ function viewportSize(t){
   const w = n('width'), h = n('height');
   return w >= 10 && h >= 10 && w <= 20000 && h <= 20000 ? { w: Math.round(w), h: Math.round(h) } : null;
 }
-function fixedSize(src, path){
-  const item = book.spine?.find(s => s.path === path) || book.spine?.find(s => s.readerPath === path);   // (or shown through its fallback)
+function fixedSize(src, path, item = book.spine?.find(s => s.path === path) || book.spine?.find(s => s.readerPath === path)){   // (the item shown, else by its path)
   if (!item || !(item.fixed ?? book.info?.layout === 'Fixed layout')) return null;
   const meta = [...src.getElementsByTagNameNS('*', 'meta')].find(m => (m.getAttribute('name') || '').toLowerCase() === 'viewport');
   const svg = src.getElementsByTagNameNS('*', 'body')[0]?.firstElementChild;
   const vb = svg?.localName === 'svg' && (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
   return viewportSize(meta?.getAttribute('content')) || (vb?.length === 4 ? viewportSize(`width=${vb[2]},height=${vb[3]}`) : null) || book.info?.viewport || null;
 }
-async function buildPage(src, path){
+async function buildPage(src, path, item){
   const out = document.implementation.createHTMLDocument('');
-  const fx = fixedSize(src, path);
+  const fx = fixedSize(src, path, item);
   if (fx) out.documentElement.setAttribute('data-spine-fxl', `${fx.w} ${fx.h}`);
   const sHtml = src.documentElement;
   const sHead = src.getElementsByTagNameNS('*', 'head')[0];
@@ -2560,7 +2564,7 @@ async function chapterSource(item){
 async function chapterDoc(i){
   const src = await chapterSource(book.spine[i]);
   const out = document.implementation.createHTMLDocument('');
-  const fx = fixedSize(src, src.readerPath);   // (built like the page: a fixed-layout page has no wrapper)
+  const fx = fixedSize(src, src.readerPath, book.spine[i]);   // (built like the page: a fixed-layout page has no wrapper)
   if (fx) out.documentElement.setAttribute('data-spine-fxl', `${fx.w} ${fx.h}`);
   const flow = out.createElement('div'); flow.id = RID.flow;
   const into = fx ? out.body : flow;
@@ -2582,7 +2586,7 @@ async function renderChapter(i, { frag = '', fraction: startAt = 0 } = {}){   //
   updateChrome();
   try {
     const src = await chapterSource(item);
-    const html = await buildPage(src, src.readerPath);
+    const html = await buildPage(src, src.readerPath, item);
     if (token !== renderToken) return;
     await loadFrame(html);
     if (token !== renderToken) return;
@@ -4545,8 +4549,8 @@ function svVoiceHash(){
   return hashText(JSON.stringify([TTS_SERVER.api, v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
     String(v.cfg_scale ?? 1), String(v.seed ?? 42)]));
 }
-const SV_REPLY_SEC = Number(window.SPINE_TEST?.svReplySec) || 60;
-const SV_BUSY_TRIES = Number(window.SPINE_TEST?.svBusyTries) || 40;   // a busy (409) server asked again, about a minute in all (tests set less)   // how long the server voice may take to start answering a request (tests set less)
+const SV_REPLY_SEC = Number(window.SPINE_TEST?.svReplySec) || 60;   // how long the server voice may take to start answering a request (tests set less)
+const SV_BUSY_TRIES = Number(window.SPINE_TEST?.svBusyTries) || 40;   // a busy (409) server asked again, about a minute in all (tests set less)
 function svGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();

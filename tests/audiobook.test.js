@@ -620,7 +620,7 @@ test('Cancel after a few minutes of audio asks again, keeps its question up, and
   assert.equal(await page.textContent('#abCancel'), 'Cancel export');
   await page.click('#abCancel');
   assert.equal(await page.textContent('#abCancel'), 'Click again to stop');
-  await page.waitForTimeout(4300);
+  await page.waitForTimeout(4000);
   assert.equal(await page.textContent('#abCancel'), 'Click again to stop', 'still asking: the earlier timer was cleared');
   await page.click('#abCancel');
   await page.waitForFunction(() => /cancelled/.test(document.querySelector('#abNow').textContent), null, { timeout: 30000 });

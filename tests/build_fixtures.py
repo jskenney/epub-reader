@@ -691,7 +691,11 @@ def main():
     fx2 = xhtml("Styled", '<p class="cap">Styled caption</p><p class="plain">Plain words</p>',
         '<meta name="viewport" content="width=600, height=800"/><style>html{width:600px;height:800px;background:#fdd}'
         'body{padding:50px;background:#fff}body > p.cap{position:absolute;top:700px;left:20px;margin:0;color:#c00}</style>')
-    epub_items(books / "fixed-styled.epub", "Fixed Styled", [("s1", "s1.xhtml", "application/xhtml+xml", "")], ["s1"], {"s1.xhtml": fx2}, "urn:fixed-styled")
+    # (Round 22, second review) A vertically written page (Japanese fixed-layout books), and one that clears html's background.
+    fx3 = xhtml("Vertical", '<p class="v">縦書きのページ</p>', '<meta name="viewport" content="width=600, height=1600"/><style>html{writing-mode:vertical-rl}body{background:#fff}</style>')
+    fx4 = xhtml("Clear", '<p>Clear html</p>', '<meta name="viewport" content="width=600, height=800"/><style>html{background:transparent}body{background:#ff0}</style>')
+    epub_items(books / "fixed-styled.epub", "Fixed Styled", [("s1", "s1.xhtml", "application/xhtml+xml", ""), ("s2", "s2.xhtml", "application/xhtml+xml", ""),
+        ("s3", "s3.xhtml", "application/xhtml+xml", "")], ["s1", "s2", "s3"], {"s1.xhtml": fx2, "s2.xhtml": fx3, "s3.xhtml": fx4}, "urn:fixed-styled")
     with zipfile.ZipFile(books / "fixed-styled.epub") as z0:
         parts = {n: z0.read(n) for n in z0.namelist()}
     parts["OEBPS/content.opf"] = parts["OEBPS/content.opf"].replace(b"</metadata>", b'<meta property="rendition:layout">pre-paginated</meta></metadata>')
