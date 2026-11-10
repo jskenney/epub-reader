@@ -187,6 +187,7 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
   assert.equal(def(/jszip: \{ file: 'libs\/jszip\.min\.js', cdn: '[^']*\/jszip\/([^/]+)\/jszip\.min\.js'/), v(libs, 'JSZIP'), 'JSZIP');
   assert.equal(def(/^const MARKED_URL = '[^']*\/marked\/([^/]+)\/marked\.min\.js';/m), v(libs, 'MARKED'), 'MARKED');
   assert.equal(def(/lamejs: \{ file: 'libs\/lame\.min\.js', cdn: '[^']*\/lamejs\/([^/]+)\/lame\.min\.js'/), v(libs, 'LAMEJS'), 'LAMEJS');
+  assert.equal(def(/^const CM_VERSION = '([^']+)';/m), v(libs, 'CODEMIRROR'), 'CODEMIRROR');
   assert.equal(block('KOKORO').match(/lib: '[^']*kokoro-js@([^/]+)\//)?.[1], v(kokoro, 'KOKORO_JS'), 'KOKORO_JS');
   assert.equal(block('KOKORO').match(/revision: '([^']+)'/)?.[1], v(kokoro, 'REV'), 'Kokoro REV');
   assert.equal(block('POCKET').match(/lib: '[^']*pocket-tts-js@([^/]+)\//)?.[1], v(pocket, 'POCKET_JS'), 'POCKET_JS');
@@ -205,6 +206,13 @@ test('the Subresource Integrity hashes in LIBS match the files in libs/, each it
     const want = 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(__dirname, '..', 'libs', file))).digest('base64');
     assert.equal(libs[file], want, file);
   }
+  // CodeMirror's files (E-21): every one fetch-libs.sh downloads is in CM_FILES, with its own hash.
+  const block = page.slice(page.indexOf('const CM_FILES = ['), page.indexOf('];', page.indexOf('const CM_FILES = [')));
+  const cm = Object.fromEntries([...block.matchAll(/\['([^']+)', '(sha384-[^']+)'\]/g)].map(m => [m[1], m[2]]));
+  const dir = path.join(__dirname, '..', 'libs', 'codemirror');
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.relative(dir, path.join(d, e.name)).split(path.sep).join('/')]);
+  assert.deepEqual(Object.keys(cm).sort(), walk(dir).sort());
+  for (const [file, hash] of Object.entries(cm)) assert.equal(hash, 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(dir, file))).digest('base64'), file);
 });
 
 test("the Kokoro worker's source, written inside a template string in index.html, parses (L-7)", () => {

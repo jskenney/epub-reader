@@ -262,6 +262,29 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .opt[aria-checked="true"]{color:var(--ribbon)}
 .opt[aria-checked="true"] small::before{content:"✓ ";color:var(--ribbon)}
 
+/* The editor (E-21): the text (CodeMirror, or a plain text box) beside, or instead of, the page. */
+.edit-pick{position:relative}
+.work{flex:1;min-height:0;display:flex;gap:10px}
+.edit-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.edit-bar .seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.edit-bar .seg .btn{border:0;border-radius:0}
+.edit-bar .seg .btn[aria-pressed="true"]{background:var(--ribbon-soft)}
+.edit-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px/1.3 var(--font-ui);color:var(--muted)}
+.edit-note{font:400 12px/1.3 var(--font-ui);color:var(--muted)}
+.edit-src{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+.edit-src .CodeMirror,.edit-plain{flex:1;min-height:0;height:auto;font:var(--ed-size,14px)/1.55 var(--font-mono);background:var(--surface);color:var(--ink)}
+.edit-plain{resize:none;border:0;margin:0;padding:10px 12px;box-sizing:border-box}
+.edit-src .CodeMirror-gutters{background:var(--surface);border-right:1px solid var(--rule)}
+.edit-src .CodeMirror-linenumber{color:var(--muted)}
+.edit-src .CodeMirror-cursor{border-left-color:var(--ink)}
+.edit-src .CodeMirror-selected,.edit-src .CodeMirror-focused .CodeMirror-selected{background:var(--ribbon-soft)}
+.edit-src .CodeMirror-dialog{background:var(--surface);color:var(--ink)}
+.edit-src .cm-header,.edit-src .cm-tag{color:var(--ribbon)}
+.edit-src .cm-string,.edit-src .cm-url,.edit-src .cm-link,.edit-src .cm-attribute,.edit-src .cm-property,.edit-src .cm-qualifier,.edit-src .cm-number,
+.edit-src .cm-comment,.edit-src .cm-meta,.edit-src .cm-formatting,.edit-src .cm-quote,.edit-src .cm-bracket{color:var(--muted)}
+.edit-src .cm-keyword,.edit-src .cm-variable-2,.edit-src .cm-variable-3,.edit-src .cm-def,.edit-src .cm-atom{color:var(--ink)}
+.work.v-raw .stage,.work.tab-src .stage,.work.tab-page .edit-src{display:none}
+
 @media (max-width:820px){
   .hide-sm{display:none}
   .toc,.toc.collapsed{display:flex;position:absolute;z-index:5;top:0;bottom:0;left:0;width:min(320px,88%);box-sizing:border-box;
@@ -343,6 +366,16 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <button class="btn ghost" id="setBtn" title="Settings: theme and reader options" aria-label="Settings" aria-haspopup="dialog" disabled>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.1"/><path d="M6.9 1.75h2.2l.35 1.6 1.2.7 1.55-.5 1.1 1.9-1.2 1.1v1.4l1.2 1.1-1.1 1.9-1.55-.5-1.2.7-.35 1.6H6.9l-.35-1.6-1.2-.7-1.55.5-1.1-1.9 1.2-1.1v-1.4l-1.2-1.1 1.1-1.9 1.55.5 1.2-.7Z"/></svg>
       </button>
+      <div class="edit-pick" id="editPick">
+        <button class="btn ghost" id="editBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="editMenu" title="Edit this document, or start a new one" aria-label="Edit">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M10.75 2.25l3 3-8 8H2.75v-3l8-8Z"/><path d="M9 4l3 3"/></svg>
+        </button>
+        <div class="menu" id="editMenu" role="menu" aria-label="Edit" hidden>
+          <button class="opt" role="menuitem" id="editThis">Edit this document</button>
+          <button class="opt" role="menuitem" id="editNewMd">New Markdown document</button>
+          <button class="opt" role="menuitem" id="editNewHtml">New HTML document</button>
+        </div>
+      </div>
       <label class="btn ghost" for="fileInput" tabindex="0" role="button" id="openBtn" title="Open a book (EPUB, comic, text, Markdown or HTML)" aria-label="Open a book">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 12.5V3.25h4l1.5 1.5h5.5v1.75"/><path d="M1.75 12.5 3.5 6.5h11l-1.75 6H1.75Z"/></svg>
       </label>
@@ -388,9 +421,27 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <p id="noticeText"></p>
         <button class="btn" id="noticeAction"></button>
       </div>
-      <div class="stage" id="stage">
-        <iframe id="page" title="Book page" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
-        <iframe id="page2" title="Facing page" sandbox="allow-same-origin" tabindex="-1" hidden></iframe>
+      <div class="edit-bar" id="editBar" role="toolbar" aria-label="Editor" hidden>
+        <div class="seg" role="group" aria-label="View">
+          <button class="btn" data-view="raw" aria-pressed="false" title="The text only">Raw</button>
+          <button class="btn" data-view="split" aria-pressed="false" title="The text beside the page">Split</button>
+        </div>
+        <div class="seg" id="editTabs" role="group" aria-label="Show" hidden>
+          <button class="btn" data-tab="src" aria-pressed="true">Text</button>
+          <button class="btn" data-tab="page" aria-pressed="false">Page</button>
+        </div>
+        <span class="edit-name" id="editName"></span>
+        <span class="edit-note" id="editNote" role="status"></span>
+        <button class="btn" id="editSave" title="Save (Ctrl+S)">Save</button>
+        <button class="btn" id="editSaveAs" title="Save as (Ctrl+Shift+S)">Save as…</button>
+        <button class="btn primary" id="editDone" title="Back to reading (Escape)">Done</button>
+      </div>
+      <div class="work" id="work">
+        <div class="edit-src" id="editSrc" hidden></div>
+        <div class="stage" id="stage">
+          <iframe id="page" title="Book page" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+          <iframe id="page2" title="Facing page" sandbox="allow-same-origin" tabindex="-1" hidden></iframe>
+        </div>
       </div>
       <div class="tts" id="tts" role="region" aria-label="Read aloud" hidden>
         <button class="btn ghost" id="ttsPrev" title="Previous sentence" aria-label="Previous sentence">
@@ -1374,9 +1425,34 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   }
   return parts.length ? parts : [[]];
 }
-async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '' } = {}){
+async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const text = decodeText(new Uint8Array(buffer), { http: charset, sniff: kind === 'html' });
+  const built = await buildDocument(text, name, kind);
+  const fallback = base ? dirSource(base) : null;
+  const src = {
+    kind: 'mem',
+    base: fallback?.base,
+    files: built.files,   // (the editor puts its own in their place: E-21)
+    async text(p){ return src.files.has(p) ? src.files.get(p) : fallback ? fallback.text(p) : null; },
+    async exists(p){ return src.files.has(p); },
+    async url(p, type){ return fallback ? fallback.url(p, type) : null; },
+    dispose(){}
+  };
+  const { spine, toc, title, language, meta } = built;
+  const info = { publisher: '', published: '', isbn: '', series: '', subjects: '', layout: 'Reflowable', direction: 'Left to right',
+    description: '', narrator: '', duration: '', activeClass: '-epub-media-overlay-active', playbackClass: '' };
+  // (The text as it came, kept for the editor; what it was opened from, for saving in place.)
+  await startBook({ seq, zip: src, src, opfPath: name, version: '', format: { text: 'Plain text', markdown: 'Markdown', html: 'HTML' }[kind],
+    title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
+    manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
+    urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}`,
+    doc: { text, kind, name, base, handle, fresh } });
+  if (!isStale(seq)) editOffered();
+}
+// A document as the reader's sections, files and contents. whole: one section however long, as the editor
+// shows it (E-21).
+async function buildDocument(text, name, kind, { whole = false } = {}){
   let doc, meta = {}, headExtra = '';
   if (kind === 'html') {
     doc = new DOMParser().parseFromString(withoutDocumentControls(text), 'text/html');
@@ -1390,7 +1466,7 @@ async function openDocument(buffer, name, kind, { base = null, key, seq, charset
   const language = langCode(meta.language);
   const title = meta.title || doc.querySelector('h1, h2')?.textContent.replace(/\s+/g, ' ').trim() || name.replace(DOC_EXT, '') || 'Untitled';
 
-  const parts = splitDocument(doc);
+  const parts = splitDocument(doc, whole ? { maxLen: Infinity } : {});
   const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
   // Give headings ids for the contents (GitHub-style, so Markdown links like [x](#some-heading) work), and
   // send in-document links to the section holding their target.
@@ -1435,23 +1511,8 @@ async function openDocument(buffer, name, kind, { base = null, key, seq, charset
     }
   });
   if (!toc.length) parts.forEach((_, i) => toc.push({ label: parts.length > 1 ? `Part ${i + 1}` : title, path: path(i), frag: '', children: [] }));
-
-  const fallback = base ? dirSource(base) : null;
-  const src = {
-    kind: 'mem',
-    base: fallback?.base,
-    async text(p){ return files.has(p) ? files.get(p) : fallback ? fallback.text(p) : null; },
-    async exists(p){ return files.has(p); },
-    async url(p, type){ return fallback ? fallback.url(p, type) : null; },
-    dispose(){}
-  };
   const spine = parts.map((_, i) => ({ id: `part${i + 1}`, href: path(i), path: path(i), type: 'text/html', props: [], overlay: '', linear: true }));
-  const info = { publisher: '', published: '', isbn: '', series: '', subjects: '', layout: 'Reflowable', direction: 'Left to right',
-    description: '', narrator: '', duration: '', activeClass: '-epub-media-overlay-active', playbackClass: '' };
-  await startBook({ seq, zip: src, src, opfPath: name, version: '', format: { text: 'Plain text', markdown: 'Markdown', html: 'HTML' }[kind],
-    title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
-    manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
-    urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}` });
+  return { files, toc, spine, title, language, meta, where, path };
 }
 
 /* ---------- comic books (.cbz) ----------
@@ -1718,6 +1779,7 @@ let openSeq = 0;
 const isStale = seq => seq != null && seq !== openSeq;
 async function startBook(next){
   if (isStale(next.seq)) { next.src?.dispose?.(); return; }
+  editQuit();   // (a book opened another way while editing: openFile and the rest have asked about unsaved changes)
   if (book) book.src.dispose();
   // The narration audio belongs to the book it came from: a new book with the same audio path must not play
   // the previous book's recording (REVIEW.md M-17).
@@ -2879,7 +2941,7 @@ function comicPageShown(){
   return first ? { page: first, off: 0 } : null;
 }
 function savePos(){
-  if (!book) return;
+  if (!book || ed.on) return;   // (the editor's one long page isn't a place in the book: E-21)
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
   if (comicLens()) { const at = comicPageShown(); if (at?.page) { pos.page = cur.comicPage = at.page; if (at.off) pos.off = at.off; } }
   store.set(book.key, pos);
@@ -2907,6 +2969,7 @@ function wireFrame(){
       // Track the position as the reader scrolls.
       if (t !== doc.scrollingElement) return;
       cur.f = fraction(); updateProgress();
+      if (ed.on) editPageScrolled();
       clearTimeout(scrollSave); scrollSave = setTimeout(savePos, 300);
       return;
     }
@@ -3031,7 +3094,9 @@ function onKey(e){
   if ($('#abDialog').open || $('#setDialog').open) return;   // (the dialogs are modal: the reader's keys wait)
   if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs() && !e.defaultPrevented && e.target.id !== 'searchBox') { e.preventDefault(); setToc(false); $('#tocBtn').focus(); return; }
   const tag = (e.target.tagName || '').toLowerCase();
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox') { e.preventDefault(); searchOpen(); return; }
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox' && !e.target.closest?.('.edit-src')) { e.preventDefault(); searchOpen(); return; }
+  if (ed.on && (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); editSave(e.shiftKey); return; }
+  if (ed.on && e.key === 'Escape' && !e.defaultPrevented && !isFs() && !e.target.closest?.('.edit-src, #searchBox')) { e.preventDefault(); editDone(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
   if (menuOpen() && menuKey(e)) return;
@@ -3039,14 +3104,14 @@ function onKey(e){
   if (e.key === '/') { e.preventDefault(); searchOpen(); return; }
   // (Space belongs to a focused control: a button, a link, a label acting as one, a <summary>: L-54.)
   if (e.key === ' ' && tts.open && !e.target.closest?.('button, a, summary, label, input, select, textarea, [contenteditable], [role="button"], [role="checkbox"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="switch"], [role="tab"]')) { e.preventDefault(); ttsTogglePlay(); return; }
-  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); ttsReadHere(); return; }
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (!(ed.on && ed.view === 'raw')) ttsReadHere(); return; }
   if (e.key === '[' || e.key === ']') { if (tts.open) { e.preventDefault(); ttsSetRate(tts.rate + (e.key === ']' ? 0.1 : -0.1)); } return; }
   if (e.key === 'Escape' && isFs()) { e.preventDefault(); setFs(false); }
   else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setFs(!isFs()); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); toggleTheme(); }
   else if ((e.key === 'c' || e.key === 'C') && !isFs()) { e.preventDefault(); setToc(!tocIsOpen()); }
   else if ((e.key === 'i' || e.key === 'I') && !isFs()) { e.preventDefault(); toggleInfo(); }
-  else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]); }
+  else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); if (!ed.on) setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]); }   // (the editor's page is one long page)
   else if (scrolling() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {   // scroll a little, like a normal page
     e.preventDefault(); ttsUserNav(); const se = scroller(); if (se) scrollTo(se.scrollTop + (e.key === 'ArrowDown' ? 60 : -60));
   }
@@ -3175,12 +3240,13 @@ function updateProgress(){
 }
 function showStatus(msg){ const s = $('#status'); s.textContent = msg; s.hidden = false; }
 function hideStatus(){ $('#status').hidden = true; }
-let noticeKind = '';
-function showNotice(msg, kind){
-  noticeKind = kind;
+let noticeKind = '', noticeRun = null;
+// action: { label, run } for a button of its own (else Dismiss for an error, Open a book otherwise).
+function showNotice(msg, kind, action = null){
+  noticeKind = kind; noticeRun = action?.run || null;
   $('#notice').className = 'notice' + (kind === 'error' ? ' error' : '');
   $('#noticeText').textContent = msg;
-  $('#noticeAction').textContent = kind === 'error' ? 'Dismiss' : 'Open a book';
+  $('#noticeAction').textContent = action?.label || (kind === 'error' ? 'Dismiss' : 'Open a book');
   $('#notice').hidden = false;
 }
 function hideNotice(){ $('#notice').hidden = true; }
@@ -3190,14 +3256,16 @@ function friendly(err, name){
   return `${name} couldn't be opened. ${m}`;
 }
 
-async function openFile(file){
+async function openFile(file, { handle = null } = {}){
   if (!file) return;
   // (Another book ends an export of this one: asked first, as Cancel and closing the tab do: round 13 review.)
   if (ab.running && !confirm('An audiobook of this book is being made. Stop it and open the other book?')) return;
+  if (!editLeaveOk()) return;   // (unsaved edits: asked too: E-21)
   const seq = ++openSeq;
   try {
     const kind = docKind(file.name, file.type);
-    if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}`, seq });
+    // (handle: the file it came from, which Save can write back to: E-21.)
+    if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}`, seq, handle: handle?.kind === 'file' ? handle : null });
     else {
       let zip = await zipFromBlob(file).catch(() => null);   // in place when possible
       if (!zip) { zip = await zipLib().loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
@@ -3209,8 +3277,9 @@ async function openFile(file){
 
 /* ---------- events ---------- */
 $('#fileInput').addEventListener('change', e => { openFile(e.target.files[0]); e.target.value = ''; });
-$('#openBtn').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#fileInput').click(); } });
-$('#noticeAction').addEventListener('click', () => noticeKind === 'error' ? hideNotice() : $('#fileInput').click());
+$('#openBtn').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.showOpenFilePicker ? openPicked() : $('#fileInput').click(); } });
+$('#openBtn').addEventListener('click', e => { if (window.showOpenFilePicker) { e.preventDefault(); openPicked(); } });
+$('#noticeAction').addEventListener('click', () => { const run = noticeRun; if (run) { hideNotice(); run(); } else if (noticeKind === 'error') hideNotice(); else $('#fileInput').click(); });
 $('#fsBtn').addEventListener('click', () => setFs(!isFs()));
 $('#fsExit').addEventListener('click', () => setFs(false));
 document.addEventListener('mousemove', wake);
@@ -3294,6 +3363,7 @@ $('#narrower').addEventListener('click', () => setWidth(widthStep - 1));
 $('#wider').addEventListener('click', () => setWidth(widthStep + 1));
 function setFont(p){
   fontPct = Math.max(70, Math.min(200, p));
+  if (ed.on) editStyle();
   $('#fontPct').textContent = fontPct + '%';
   store.set('spine:font', fontPct);
   restyleFrame();
@@ -3445,7 +3515,13 @@ function onDragOver(e){ if (!hasFiles(e)) return; e.preventDefault(); e.dataTran
 document.addEventListener('dragenter', onDragEnter);
 document.addEventListener('dragover', onDragOver);
 $('#drop').addEventListener('dragleave', e => { if (!e.relatedTarget || !$('#drop').contains(e.relatedTarget)) $('#drop').hidden = true; });
-$('#drop').addEventListener('drop', e => { e.preventDefault(); $('#drop').hidden = true; openFile(e.dataTransfer.files[0]); });
+$('#drop').addEventListener('drop', e => {
+  e.preventDefault(); $('#drop').hidden = true;
+  // (A dropped file's handle, where the browser gives one, so Save can write back to it: E-21. Asked for now:
+  // the drop's data is gone once the event is over.)
+  const got = e.dataTransfer.items?.[0]?.getAsFileSystemHandle?.()?.catch(() => null), file = e.dataTransfer.files[0];
+  Promise.resolve(got).then(handle => openFile(file, { handle }));
+});
 
 /* ---------- sample book, assembled as a real EPUB 3 archive ---------- */
 async function makeSample(){
@@ -6544,6 +6620,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   ALLOW_EXTERNAL_LINKS: ['boolean', v => { ALLOW_EXTERNAL_LINKS = v; }],
   SLEEP_TIMER: ['boolean', v => { SLEEP_TIMER = v; }],
   TIME_LEFT: ['boolean', v => { TIME_LEFT = v; }],
+  EDITING: ['boolean', v => { EDITING = v; }],
   FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
   KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
@@ -6602,6 +6679,438 @@ async function loadConfig(){
   // Settings other values are worked out from.
   KOKORO.local = new URL('kokoro/', voiceFilesBase()).href;
   POCKET.local = new URL('pocket/', voiceFilesBase()).href;
+}
+
+/* ---------- editing (E-21) ----------
+   A Markdown, HTML or text document can be edited: the text in CodeMirror (or a plain text box if CodeMirror
+   can't be loaded), beside the page (split) or alone (raw). The text is the master copy: the page shown is
+   made from it by the usual pipeline (converted, cleaned, in the book frame with its policy), as one long
+   section in the scroll layout while editing, and only the text is saved. Saving writes back to the file it
+   was opened from where the browser allows it (a file picked with showOpenFilePicker, or dropped), and
+   otherwise saves a copy (the save picker, or a download). Unsaved text is kept as a draft in this browser. */
+let EDITING = true;   // reader-config.json: false hides the Edit button and new documents
+const CM_VERSION = '5.65.21';   // must match CODEMIRROR in fetch-libs.sh
+// In loading order (each mode after what it uses), with the hashes fetch-libs.sh checks too.
+const CM_FILES = [
+  ['codemirror.min.css', 'sha384-+yu/aRBj6vcneAvmF5a9GnugX+oBXin9PIagi4luaaD4tgG0uTA4LU6LRtE053dS'],
+  ['addon/dialog/dialog.min.css', 'sha384-iMET5g95jXVh7tWFoVOkrhEj3Tds18etb+S6BSRNig0I545KDyYPp8q/E2F0/2cZ'],
+  ['codemirror.min.js', 'sha384-xfmso8UFYhkuzyZivaGgwCrv2xhUIJqHlbcU2uYmjMr0nN6X9xcWPWSZRIuz0688'],
+  ['addon/mode/overlay.min.js', 'sha384-k217S4m0oomFDQ9M+gesHS+5UVtktxIECJOFMXTj3nGCQGZsqX7QtU+CE1aFJiv5'],
+  ['mode/xml/xml.min.js', 'sha384-HQ97XGatBIzE9ehT8ULVd8zbQqmUeAqFitblat7qHMzve9en/W6LVpypExvJVK1M'],
+  ['mode/javascript/javascript.min.js', 'sha384-v2Wcvt74JqXpPYp+aWBqBgtoZkIBpy7eBmUMdyxRZy0EhrSEVPqGAZKosLi6DHun'],
+  ['mode/css/css.min.js', 'sha384-JOtTLceW1ZTf2g0GZYhSq0Kk46dfTHxmIjxM8+VelTWo9/CQPA2YWNajXyeZ6uhN'],
+  ['mode/htmlmixed/htmlmixed.min.js', 'sha384-/iVtDNt+CtUFbYR/VcG/OT9IyPos+SZdbLMXwmKq5oBFMFjUJkJjUQHD8cwzxpKT'],
+  ['mode/markdown/markdown.min.js', 'sha384-fLJlgkK+mD5ztSAkVqEi6ndDmcSbMD/tHaOfShsAhqn/QDx8rfcAPUL69DnyNltb'],
+  ['mode/gfm/gfm.min.js', 'sha384-evZpFh5TqpYPk6bQT0PT2EjYw1CO2BEU0uqdLGGMgtu5fhtk6ccLZpq4PVRNcqrz'],
+  ['addon/dialog/dialog.min.js', 'sha384-uTwX7Rs87pk/hXCFXraFzDHBtEtnbErjkmW5Li6ixZLyRqe4dF9+LbdgDH94vp2x'],
+  ['addon/search/searchcursor.min.js', 'sha384-x9DIoLmd371+DrVnS+ICttTBXdGepZKrvOodUQtNCub4MMzxMtm3GVcbR3khSuqH'],
+  ['addon/search/search.min.js', 'sha384-dxjA5seynu4/cjPNbJxh3DfgbP4YOWbpV/WHLLM3yFtQmV1oug4n2H9NspLA9yqo'],
+  ['addon/edit/continuelist.min.js', 'sha384-gfi/eU8z8UjiSkmS9DWS8p/dCRNmlc3QtMcq0fr/ehhVpbgo2SpSXrFahl0n6uim'],
+];
+function loadStyle(href, integrity){
+  return new Promise((res, rej) => {
+    const el = document.createElement('link');
+    el.rel = 'stylesheet'; el.integrity = integrity; el.crossOrigin = 'anonymous'; el.href = href;
+    el.onload = res; el.onerror = () => { el.remove(); rej(new Error(`couldn't load ${href}`)); };
+    document.head.append(el);
+  });
+}
+let cmLoading = null;
+// CodeMirror's files, from this site (fetch-libs.sh) or else cdnjs, each checked against its pinned hash.
+function loadCodeMirror(){
+  return cmLoading ??= (async () => {
+    if (window.SPINE_TEST?.noCodeMirror) throw new Error('turned off for a test');
+    for (const [f, integrity] of CM_FILES) {
+      const load = f.endsWith('.css') ? loadStyle : loadScript;
+      try { await load(new URL('libs/codemirror/' + f, folderBase(LIB_FILES)).href, integrity); continue; } catch {}
+      if (!ALLOW_CDN) throw new Error(`libs/codemirror/${f} isn't on this site (run fetch-libs.sh), and ALLOW_CDN is off`);
+      try { await load(`https://cdnjs.cloudflare.com/ajax/libs/codemirror/${CM_VERSION}/${f}`, integrity); }
+      catch { throw new Error(`${f} couldn't be loaded from cdnjs.cloudflare.com`); }
+    }
+    if (!window.CodeMirror) throw new Error("CodeMirror didn't start");
+  })().catch(e => { cmLoading = null; throw e; });
+}
+
+const ed = { on: false, view: 'split', tab: 'src', text: '', saved: '', kind: '', name: '', handle: null, fresh: false, api: null,
+  timer: 0, draftTimer: 0, prevLayout: null, expectPage: null, expectSrc: null, blocks: null, blocksFor: null, starting: false };
+const editable = () => EDITING && !!book?.doc;
+const editDirty = () => ed.on && ed.text !== ed.saved;
+const EDIT_TYPES = { markdown: { mime: 'text/markdown', ext: ['.md', '.markdown'], label: 'Markdown' },
+  html: { mime: 'text/html', ext: ['.html', '.htm'], label: 'HTML' }, text: { mime: 'text/plain', ext: ['.txt'], label: 'Plain text' } };
+const draftKey = () => ed.fresh ? `new:${ed.kind}` : book?.key || '';
+
+// Drafts: the text being edited, a moment after each change, in IndexedDB (documents can be large).
+let draftDb = null;
+function draftOpen(){
+  return draftDb ??= new Promise((res, rej) => {
+    const rq = indexedDB.open('spine-drafts', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('drafts', { keyPath: 'key' });
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  }).catch(e => { draftDb = null; throw e; });
+}
+async function draftDo(mode, f){
+  try {
+    const db = await draftOpen();
+    return await new Promise((res, rej) => { const tx = db.transaction('drafts', mode), rq = f(tx.objectStore('drafts')); tx.oncomplete = () => res(rq.result); tx.onerror = () => rej(tx.error); });
+  } catch { return null; }   // (no storage, a private window: no drafts, nothing else lost)
+}
+const draftGet = key => key ? draftDo('readonly', st => st.get(key)) : Promise.resolve(null);
+const draftPut = d => draftDo('readwrite', st => st.put(d));
+const draftDel = key => key ? draftDo('readwrite', st => st.delete(key)) : Promise.resolve(null);
+
+// A document just opened that has a draft: said, with Edit to see it.
+async function editOffered(){
+  if (!editable() || book.doc.fresh) return;
+  const b = book, d = await draftGet(book.key);
+  if (book !== b || ed.on || !d || d.text === b.doc.text) return;
+  showNotice(`This document has unsaved changes from ${new Date(d.t).toLocaleString()}, kept in this browser.`, 'info', { label: 'Edit', run: () => editStart() });
+}
+
+// The text editor: CodeMirror, or a plain text box with the same few operations.
+async function editMakeApi(host){
+  host.replaceChildren();
+  ed.plainWhy = '';
+  try {
+    await loadCodeMirror();
+    const cm = CodeMirror(host, {
+      value: ed.text, mode: { markdown: 'gfm', html: 'htmlmixed' }[ed.kind] || null, lineNumbers: true, lineWrapping: true,
+      indentUnit: 2, tabSize: 2, screenReaderLabel: 'Document text',
+      extraKeys: {
+        Tab: c => c.somethingSelected() ? c.indentSelection('add') : c.replaceSelection('  '),
+        'Shift-Tab': c => c.indentSelection('subtract'),
+        Enter: ed.kind === 'markdown' ? 'newlineAndIndentContinueMarkdownList' : 'newlineAndIndent',
+        Esc: () => editDone(),
+      },
+    });
+    const at = l => cm.heightAtLine(l, 'local');
+    return {
+      get: () => cm.getValue(), focus: () => cm.focus(), refresh: () => cm.refresh(), scrollTop: () => cm.getScrollInfo().top,
+      onChange: f => cm.on('changes', f), onScroll: f => cm.on('scroll', f), lines: () => cm.lineCount(),
+      topLine(){ const top = cm.getScrollInfo().top, l = cm.lineAtHeight(top, 'local'), h = at(l + 1) - at(l); return l + (h > 0 ? Math.max(0, Math.min(1, (top - at(l)) / h)) : 0); },
+      scrollToLine(x){ const l = Math.floor(x); cm.scrollTo(null, at(l) + (at(l + 1) - at(l)) * (x - l)); },
+      cm,
+    };
+  } catch (err) {
+    ed.plainWhy = err.message;
+    const ta = document.createElement('textarea');
+    ta.className = 'edit-plain'; ta.value = ed.text; ta.spellcheck = false; ta.setAttribute('aria-label', 'Document text');
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); ta.dispatchEvent(new Event('input')); }
+      else if (e.key === 'Escape') { e.preventDefault(); editDone(); }
+    });
+    host.append(ta);
+    const max = () => Math.max(1, ta.scrollHeight - ta.clientHeight), n = () => ta.value.split('\n').length;
+    return {
+      get: () => ta.value, focus: () => ta.focus(), refresh(){}, scrollTop: () => ta.scrollTop,
+      onChange: f => ta.addEventListener('input', f), onScroll: f => ta.addEventListener('scroll', f), lines: n,
+      topLine: () => ta.scrollTop / max() * (n() - 1),   // (wrapped lines aren't known: in proportion)
+      scrollToLine: x => { ta.scrollTop = x / Math.max(1, n() - 1) * max(); },
+    };
+  }
+}
+
+// The heading at or above the top of the page shown, to open the editor (and come back from it) there.
+function editTopHeading(){
+  const d = frame.contentDocument, w = frame.contentWindow; if (!d || !w) return '';
+  let id = '';
+  for (const h of d.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]')) {
+    const r = h.getBoundingClientRect();
+    if (scrolling() ? r.top < 60 : r.left < w.innerWidth - 1) id = h.id; else break;
+  }
+  return id;
+}
+
+// The document made again from the text: one section while editing, the usual sections after.
+async function editRebuild({ frag = '', fraction: f = 0 } = {}){
+  const b = book;
+  const built = await buildDocument(ed.text, ed.name, ed.kind, { whole: ed.on });
+  if (book !== b) return;
+  b.src.files = built.files; b.spine = built.spine; b.toc = built.toc;
+  b.manifest = new Map(built.spine.map(x => [x.id, x])); b.byPath = new Map(built.spine.map(x => [x.path, x]));
+  b.title = built.title; b.language = built.language;
+  b.search = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;   // (made from the text before)
+  renderMeta(); renderToc(); editTitle();
+  const i = frag && built.where.has(frag) ? built.where.get(frag) : 0;
+  await renderChapter(i, frag ? { frag } : { fraction: f });
+  if (book === b && search.q.trim().length >= 2) searchRun(search.q);
+}
+
+async function editStart({ view } = {}){
+  if (!editable() || ed.on || ed.starting) return;
+  ed.starting = true;
+  try {
+    const b = book, d = b.doc;
+    Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: d.text, blocks: null, blocksFor: null });
+    const draft = await draftGet(draftKey());
+    if (book !== b) return;
+    if (draft && draft.text !== d.text) {
+      if (confirm(`${d.fresh ? 'A new document' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
+      else draftDel(draftKey());
+    }
+    hideNotice();
+    const frag = editTopHeading();
+    ed.on = true; ed.prevLayout = layout;
+    $('.app').classList.add('editing');
+    $('#editBar').hidden = false; $('#editSrc').hidden = false;
+    $('#layoutBtn').disabled = true; $('#layoutBtn').title = 'Layout: one long page while editing';
+    setLayout('scroll', false);
+    ed.api = await editMakeApi($('#editSrc'));
+    if (!ed.on || book !== b) return;
+    ed.api.onChange(editChanged); ed.api.onScroll(editSrcScrolled);
+    editSetView(view || (EDIT_VIEWS.includes(store.get('spine:editView')) ? store.get('spine:editView') : 'split'), false);
+    editStyle();
+    await editRebuild({ frag });
+    if (!ed.on) return;
+    editSyncBar();
+    ed.api.refresh(); ed.api.focus();
+    ed.expectPage = null; editPageScrolled();   // (the text opens where the page is)
+    if (ed.text !== ed.saved) editDraftSoon();
+    $('#editBar').dataset.ready = '';
+  } finally { ed.starting = false; }
+}
+const EDIT_VIEWS = ['raw', 'split'];
+function editSetView(v, save = true){
+  if (!EDIT_VIEWS.includes(v)) v = 'split';
+  ed.view = v;
+  if (save) store.set('spine:editView', v);
+  for (const btn of $('#editBar').querySelectorAll('[data-view]')) btn.setAttribute('aria-pressed', String(btn.dataset.view === v));
+  editLayout();
+  // (Raw: no page beside the text, so nothing to read aloud.)
+  $('#ttsBtn').disabled = v === 'raw';
+  if (v === 'raw' && tts.open) ttsClose();
+  ed.api?.refresh();
+  if (v === 'split') requestAnimationFrame(editSyncToPage);
+}
+// The views' panes: a narrow screen has no room for two, so split shows one at a time, chosen by tabs.
+function editLayout(){
+  const w = $('#work'), tabs = ed.on && ed.view === 'split' && narrow.matches;
+  w.classList.toggle('v-raw', ed.on && ed.view === 'raw');
+  w.classList.toggle('tab-src', tabs && ed.tab === 'src');
+  w.classList.toggle('tab-page', tabs && ed.tab === 'page');
+  $('#editTabs').hidden = !tabs;
+  for (const btn of $('#editTabs').querySelectorAll('[data-tab]')) btn.setAttribute('aria-pressed', String(btn.dataset.tab === ed.tab));
+}
+narrow.addEventListener('change', () => { editLayout(); ed.api?.refresh(); });
+// The text's size follows A−/A+; its colours follow the theme (CSS).
+function editStyle(){ $('#editSrc').style.setProperty('--ed-size', `${Math.round(14 * fontPct) / 100}px`); ed.api?.refresh(); }
+function editTitle(){ if (ed.on && book) document.title = `${editDirty() ? '• ' : ''}${ed.name} — editing`; }
+function editSyncBar(){
+  $('#editName').textContent = ed.name + (editDirty() ? ' (unsaved)' : '');
+  $('#editName').title = ed.handle ? 'Save writes to this file' : 'Save asks where to save a copy';
+  $('#editNote').textContent = ed.plainWhy ? `A plain text box: the code editor couldn't be loaded (${ed.plainWhy}).` : '';
+  editTitle();
+}
+
+function editChanged(){
+  if (!ed.on) return;
+  const was = editDirty();
+  ed.text = ed.api.get();
+  if (was !== editDirty()) editSyncBar();
+  editDraftSoon();
+  clearTimeout(ed.timer);
+  ed.timer = setTimeout(editPreview, 400);
+}
+function editDraftSoon(){
+  clearTimeout(ed.draftTimer);
+  const key = draftKey(), text = ed.text, kind = ed.kind, name = ed.name;
+  ed.draftTimer = setTimeout(() => { if (ed.on && ed.text !== ed.saved) draftPut({ key, text, kind, name, t: Date.now() }); else if (ed.on) draftDel(key); }, 800);
+}
+async function editPreview(){
+  if (!ed.on) return;
+  await editRebuild({ fraction: fraction() });
+  if (ed.on && ed.view === 'split') editSyncToPage();
+}
+
+// Keeping the two sides together: by top-level block for Markdown (marked's tokens know their lines), and
+// in proportion otherwise.
+function editBlocks(){
+  if (ed.kind !== 'markdown' || !window.marked) return null;
+  if (ed.blocksFor === ed.text) return ed.blocks;
+  let text = ed.text.replace(/^﻿/, '').replace(/\r\n?/g, '\n'), line = 0;
+  const fm = text.match(/^---\n([\s\S]*?)\n(?:---|\.\.\.)\n/);
+  if (fm) { line = fm[0].split('\n').length - 1; text = text.slice(fm[0].length); }
+  const out = [];
+  try {
+    for (const t of window.marked.lexer(text, { gfm: true })) {
+      if (t.type !== 'space' && t.type !== 'def') out.push(line);
+      line += (t.raw.match(/\n/g) || []).length;
+    }
+  } catch { return null; }
+  ed.blocks = out; ed.blocksFor = ed.text;
+  return out;
+}
+function pageBlocks(){
+  const flow = frame.contentDocument?.getElementById(RID.flow);
+  return flow ? [...flow.children].filter(e => e.id !== RID.end) : [];
+}
+// Element k of the page for block j of the text (the same, when the counts agree).
+const blockMap = (j, from, to) => Math.min(to - 1, Math.round(j * (to - 1) / Math.max(1, from - 1)));
+function editSyncToPage(){
+  if (!ed.on || ed.view !== 'split' || !ed.api) return;
+  const se = scroller(); if (!se) return;
+  const x = ed.api.topLine(), lines = Math.max(1, ed.api.lines()), blocks = editBlocks(), els = pageBlocks();
+  let y;
+  if (blocks?.length && els.length) {
+    const top = el => el.getBoundingClientRect().top + se.scrollTop;
+    let k = 0; while (k + 1 < blocks.length && blocks[k + 1] <= x) k++;
+    const a = top(els[blockMap(k, blocks.length, els.length)]);
+    const z = k + 1 < blocks.length ? top(els[blockMap(k + 1, blocks.length, els.length)]) : se.scrollHeight;
+    const span = (k + 1 < blocks.length ? blocks[k + 1] : lines) - blocks[k];
+    y = x < blocks[0] ? 0 : a + (z - a) * Math.min(1, (x - blocks[k]) / Math.max(1, span)) - 16;
+  } else y = x / Math.max(1, lines - 1) * (se.scrollHeight - se.clientHeight);
+  const before = se.scrollTop;
+  se.scrollTop = Math.max(0, y);
+  // (The scroll this causes isn't taken as the reader's: matched by where it lands.)
+  ed.expectPage = se.scrollTop !== before ? se.scrollTop : null;
+}
+function editSrcScrolled(){
+  if (ed.expectSrc != null) { const was = ed.expectSrc; ed.expectSrc = null; if (Math.abs(ed.api.scrollTop() - was) < 2) return; }
+  editSyncToPage();
+}
+function editPageScrolled(){
+  if (!ed.on || ed.view !== 'split' || !ed.api) return;
+  const se = scroller(); if (!se) return;
+  if (ed.expectPage != null) { const was = ed.expectPage; ed.expectPage = null; if (Math.abs(se.scrollTop - was) < 2) return; }
+  const lines = Math.max(1, ed.api.lines()), blocks = editBlocks(), els = pageBlocks();
+  let x;
+  if (blocks?.length && els.length) {
+    const top = el => el.getBoundingClientRect().top + se.scrollTop, y = se.scrollTop + 16;
+    let k = 0; while (k + 1 < els.length && top(els[k + 1]) <= y) k++;
+    const a = top(els[k]), z = k + 1 < els.length ? top(els[k + 1]) : se.scrollHeight;
+    const j = blockMap(k, els.length, blocks.length), j2 = k + 1 < els.length ? blockMap(k + 1, els.length, blocks.length) : -1;
+    const from = blocks[j], to = j2 > j ? blocks[j2] : j + 1 < blocks.length ? blocks[j + 1] : lines;
+    x = y < a ? 0 : from + (to - from) * Math.min(1, (y - a) / Math.max(1, z - a));
+  } else { const max = se.scrollHeight - se.clientHeight; x = max > 0 ? se.scrollTop / max * (lines - 1) : 0; }
+  const before = ed.api.scrollTop();
+  ed.api.scrollToLine(x);
+  ed.expectSrc = ed.api.scrollTop() !== before ? ed.api.scrollTop() : null;
+}
+
+// HTML saved as UTF-8 (the only encoding a browser writes) says so: a <meta charset> naming another is changed.
+function utf8Declared(text){
+  return text.replace(/(<meta\b[^>]*?\bcharset\s*=\s*["']?)([\w.:-]+)/i, (m, a, cs) => /^utf-?8$/i.test(cs) ? m : a + 'utf-8')
+    .replace(/(<meta\b[^>]*?\bcontent\s*=\s*["'][^"']*?charset\s*=\s*)([\w.:-]+)/i, (m, a, cs) => /^utf-?8$/i.test(cs) ? m : a + 'utf-8');
+}
+async function editWrite(handle, blob){
+  if (handle.queryPermission && await handle.queryPermission({ mode: 'readwrite' }) !== 'granted'
+      && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') throw new Error('permission to write the file was refused');
+  const w = await handle.createWritable();
+  try { await w.write(blob); await w.close(); } catch (e) { await w.abort?.().catch(() => {}); throw e; }
+}
+// Save: back to the file where possible; Save as (or no file to write to): the save picker, or a download.
+async function editSave(as = false){
+  if (!ed.on) return;
+  let text = ed.text;
+  if (ed.kind === 'html') {
+    const fixed = utf8Declared(text);
+    if (fixed !== text) { text = fixed; ed.api.cm ? ed.api.cm.setValue(text) : (($('#editSrc .edit-plain') || {}).value = text); ed.text = text; }
+  }
+  const type = EDIT_TYPES[ed.kind], blob = new Blob([text], { type: `${type.mime};charset=utf-8` });
+  let handle = as ? null : ed.handle, how = '';
+  try {
+    if (handle) { await editWrite(handle, blob); how = 'saved'; }
+    else if (window.showSaveFilePicker) {
+      try { handle = await window.showSaveFilePicker({ suggestedName: ed.name, types: [{ description: type.label, accept: { [type.mime]: type.ext } }] }); }
+      catch (e) { if (e?.name === 'AbortError') return; handle = null; }
+      if (handle) { await editWrite(handle, blob); how = 'saved'; }
+    }
+    if (!how) { abDownload(blob, ed.name); how = 'downloaded'; }
+  } catch (e) { showNotice(`${ed.name} couldn't be saved: ${e.message}`, 'error'); return; }
+  if (handle) { ed.handle = handle; if (handle.name) ed.name = handle.name; }
+  ed.saved = text; ed.fresh = false;
+  clearTimeout(ed.draftTimer);
+  draftDel(book.doc.fresh ? `new:${ed.kind}` : book.key);
+  Object.assign(book.doc, { text, name: ed.name, handle: ed.handle, fresh: false });
+  editSyncBar();
+  $('#editNote').textContent = how === 'saved' ? `Saved to ${ed.name}.` : `Downloaded ${ed.name}.`;
+}
+
+// Leaving the editor: the page made again from the text saved (what isn't saved is let go, after asking).
+async function editDone(){
+  if (!ed.on) return;
+  if (editDirty() && !confirm('Leave the editor? Your unsaved changes will be lost.')) return;
+  if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
+  const frag = editTopHeading();
+  editQuit();
+  ed.text = ed.saved; book.doc.text = ed.saved;
+  await editRebuild({ frag });
+}
+// Edit mode off, without making the page again (another book is coming).
+function editQuit(){
+  if (!ed.on) return;
+  ed.on = false;
+  clearTimeout(ed.timer); clearTimeout(ed.draftTimer);
+  $('.app').classList.remove('editing');
+  $('#editBar').hidden = true; $('#editSrc').hidden = true; $('#editSrc').replaceChildren(); ed.api = null;
+  delete $('#editBar').dataset.ready;
+  editLayout();
+  $('#ttsBtn').disabled = false; $('#layoutBtn').disabled = false;
+  if (ed.prevLayout) setLayout(ed.prevLayout, false);
+  if (book) document.title = book.title;
+}
+// Before opening another book: unsaved changes are let go only if the reader agrees.
+function editLeaveOk(){
+  if (editDirty() && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return false;
+  if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
+  editQuit();
+  return true;
+}
+const EDIT_NEW = {
+  markdown: ['Untitled.md', '# Untitled\n\n'],
+  html: ['Untitled.html', '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Untitled</title>\n</head>\n<body>\n<h1>Untitled</h1>\n<p></p>\n</body>\n</html>\n'],
+};
+async function editNew(kind){
+  if (!EDITING) return;
+  if (ab.running && !confirm('An audiobook of this book is being made. Stop it and start a new document?')) return;
+  if (!editLeaveOk()) return;
+  const [name, text] = EDIT_NEW[kind], seq = ++openSeq;
+  try { await openDocument(new TextEncoder().encode(text).buffer, name, kind, { key: `spine:pos:new:${kind}`, seq, fresh: true }); }
+  catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, name), 'error'); } return; }
+  if (!isStale(seq)) await editStart();
+}
+
+// The Edit button's menu.
+const editMenuOpen = () => !$('#editMenu').hidden;
+function editMenu(open){
+  if (open === editMenuOpen()) return;
+  if (open) { setMenu(false); $('#editThis').hidden = ed.on; $('#editThis').disabled = !editable(); }
+  $('#editMenu').hidden = !open;
+  $('#editBtn').setAttribute('aria-expanded', String(open));
+  if (open) [...$('#editMenu').querySelectorAll('.opt')].find(o => !o.hidden && !o.disabled)?.focus();
+}
+$('#editBtn').addEventListener('click', () => editMenu(!editMenuOpen()));
+$('#editMenu').addEventListener('keydown', e => {
+  e.stopPropagation();   // (the reader's keys wait while the menu is open)
+  const opts = [...$('#editMenu').querySelectorAll('.opt')].filter(o => !o.hidden && !o.disabled), i = opts.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); editMenu(false); $('#editBtn').focus(); }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); opts[(i + (e.key === 'ArrowDown' ? 1 : opts.length - 1)) % opts.length]?.focus(); }
+  else if (e.key === 'Tab') editMenu(false);
+});
+document.addEventListener('click', e => { if (editMenuOpen() && !e.target.closest('.edit-pick')) editMenu(false); });
+$('#editThis').addEventListener('click', () => { editMenu(false); editStart(); });
+$('#editNewMd').addEventListener('click', () => { editMenu(false); editNew('markdown'); });
+$('#editNewHtml').addEventListener('click', () => { editMenu(false); editNew('html'); });
+$('#editBar').addEventListener('click', e => {
+  const v = e.target.closest('[data-view]')?.dataset.view, t = e.target.closest('[data-tab]')?.dataset.tab;
+  if (v) editSetView(v);
+  if (t) { ed.tab = t; editLayout(); ed.api?.refresh(); if (t === 'page') requestAnimationFrame(editSyncToPage); }
+});
+$('#editSave').addEventListener('click', () => editSave());
+$('#editSaveAs').addEventListener('click', () => editSave(true));
+$('#editDone').addEventListener('click', () => editDone());
+window.addEventListener('beforeunload', e => { if (editDirty()) { e.preventDefault(); e.returnValue = ''; } });
+
+// Open: the file picker where the browser has one, so a document can be saved back to its file; else the
+// file input as before.
+const OPEN_TYPES = [{ description: 'Books and documents', accept: {
+  'application/epub+zip': ['.epub'], 'application/vnd.comicbook+zip': ['.cbz'], 'text/plain': ['.txt', '.text'],
+  'text/markdown': ['.md', '.markdown', '.mdown', '.mkd'], 'text/html': ['.html', '.htm', '.xhtml'] } }];
+async function openPicked(){
+  let handle;
+  try { [handle] = await window.showOpenFilePicker({ types: OPEN_TYPES, excludeAcceptAllOption: false }); }
+  catch (e) { if (e?.name !== 'AbortError') $('#fileInput').click(); return; }
+  try { openFile(await handle.getFile(), { handle }); }
+  catch (e) { showNotice(friendly(e, handle.name), 'error'); }
 }
 
 /* ---------- settings dialog (E-5, E-11) ----------
@@ -6751,6 +7260,7 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   await loadConfig();
   loadUserSettings();
   $('#setBtn').disabled = false;   // (not before: the dialog compares with the site's values, known only now)
+  $('#editPick').hidden = !EDITING;
   sweepPositions();
   $('#ttsSleep').hidden = !SLEEP_TIMER;   // (off: the sleep timer stays "off" and isn't shown)
   await Promise.all([setupFonts(), loadLib('jszip').catch(err => console.warn(err.message))]);

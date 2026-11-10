@@ -6,7 +6,8 @@ a fetch script (and index.html); see "Upgrading a pinned version" in the README.
     python3 tools/make-checksums.py            # all three
     python3 tools/make-checksums.py pocket     # one
 
-For libs it also prints the Subresource Integrity hash (sha384) of each library, for LIBS in index.html.
+For libs it also prints the Subresource Integrity hash (sha384) of each library script and stylesheet, for LIBS
+and CM_FILES in index.html.
 
 Large model files aren't downloaded: their SHA-256 comes from Hugging Face's file list for the pinned
 revision (Git LFS records it). Everything else is downloaded with curl and hashed.
@@ -56,7 +57,7 @@ def main(names):
             if not digest:
                 data = curl(url)
                 digest, how = hashlib.sha256(data).hexdigest(), "downloaded"
-                if path.endswith(".min.js"):
+                if path.endswith((".min.js", ".min.css")):
                     print(f"  SRI for {path}: sha384-{base64.b64encode(hashlib.sha384(data).digest()).decode()}", file=sys.stderr)
             print(f"  {how:10} {path}", file=sys.stderr)
             lines.append(f"{digest}  {path}")

@@ -19,6 +19,25 @@ const URL = `${h.CDN}/folder-cdn/index.html?book=/reader/books/long.epub`;
 
 // Offline, the CDN requests are answered with the self-hosted copies of the same files: the browser still
 // applies the policy to those hosts, so this checks the policy allows them, without internet access.
+test('the CDN policy allows the editor\'s CodeMirror scripts and stylesheets from cdnjs (answered locally) (E-21)', async () => {
+  const repo = path.join(__dirname, '..');
+  const page = await h.newPage();
+  const seen = [];
+  await page.route(/^https:\/\/cdnjs\.cloudflare\.com\//, route => {
+    const u = route.request().url(), m = u.match(/\/ajax\/libs\/(?:codemirror\/[^/]+\/(.+)|marked\/[^/]+\/(marked\.min\.js))$/);
+    seen.push(u);
+    if (!m) return route.abort();
+    const file = m[1] ? path.join(repo, 'libs', 'codemirror', m[1]) : path.join(repo, 'libs', m[2]);
+    return route.fulfill({ contentType: file.endsWith('.css') ? 'text/css' : 'text/javascript', body: fs.readFileSync(file), headers: { 'access-control-allow-origin': '*' } });
+  });
+  await h.openReader(page, `${h.CDN}/folder-cdn/index.html?book=/reader/books/notes.md`);
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  assert.equal(await page.isVisible('.CodeMirror'), true, await page.textContent('#editNote'));
+  assert.ok(seen.some(u => /codemirror\.min\.css$/.test(u)) && seen.some(u => /gfm\.min\.js$/.test(u)), seen.join(' '));
+  assert.deepEqual(page.cspViolations, []);
+});
+
 test('the CDN policy allows the CDN hosts the reader uses for libraries and fonts (answered locally) (T-5)', async () => {
   const repo = path.join(__dirname, '..');
   const font = fs.readFileSync(path.join(repo, 'fonts', fs.readFileSync(path.join(repo, 'fonts', 'SHA256SUMS'), 'utf8').split('\n')[0].split(/\s+/)[1]));

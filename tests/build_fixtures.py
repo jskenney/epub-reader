@@ -173,6 +173,7 @@ def main():
                         # (T-20, L-103) Voice files on another site: its server may not allow a Range header.
                         ("folder-remotevoice", {"LIB_FILES": "/reader/", "VOICE_FILES": "http://localhost:8792/voices/"}),
                         ("folder-cfg", {"LIB_FILES": "/reader/", "SEARCH_MAX": 2, "COMIC_PART": 10, "KEEP_POSITIONS_DAYS": 0, "BOOKSHELF": "/shelf2"}),
+                        ("folder-noedit", {"LIB_FILES": "/reader/", "EDITING": False}),
                         ("folder-alttts", {"LIB_FILES": "/reader/", "TTS_SERVER": {"api": "/alt-tts/", "voices": "/alt-voices/"},
                                            "SPAN_MAX": {"server": 60}, "SAVED_AUDIO_MB": 0})):
         (SITE / folder).mkdir()
@@ -685,6 +686,10 @@ def main():
         z.extractall(books / "hostile-dir")
 
     # Documents.
+    # (E-21) A long Markdown document, for keeping the editor's text and page together, and an HTML page with
+    # what the cleaning removes (kept by the editor) and a stale charset.
+    (books / "long-notes.md").write_text("# Long notes\n\n" + "".join(f"## Part {k}\n\n" + "".join(f"Paragraph {j} of part {k}, with enough words to wrap across a line or two in the page.\n\n" for j in range(1, 6)) for k in range(1, 31)))
+    (books / "kept.html").write_text('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="windows-1252">\n<title>Kept</title>\n</head>\n<body>\n<h1>Kept</h1>\n<p onclick="alert(1)">Text.</p>\n<script>window.parent.__ran = true;</script>\n<form action="/x"><input name="q"></form>\n</body>\n</html>\n')
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

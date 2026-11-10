@@ -87,6 +87,41 @@ show the later page on the left. The book's information (I) shows its
 direction. If a book is marked right to left by mistake, turn on **Turn every
 book left to right** in Settings (`FORCE_LTR`).
 
+## Editing documents
+
+Markdown, HTML and plain text documents can be edited in the reader. The
+**Edit** button (the pencil, between Settings and Open) has **Edit this
+document**, **New Markdown document** and **New HTML document**.
+
+- **Split** shows the text on the left and the page on the right, made from
+  the text a moment after you stop typing, the way the reader would show the
+  file. **Raw** shows the text alone. On a narrow screen Split shows one at a
+  time, with Text and Page tabs.
+- The text is edited in CodeMirror, with Markdown or HTML highlighting, line
+  numbers, Ctrl+F to find and replace, and Tab to indent. If CodeMirror can't
+  be loaded, a plain text box does the same, and the editor bar says why.
+- While editing, the page is one long page (the layout button is off), and
+  the text and the page scroll together: block by block for Markdown, in
+  proportion for HTML. The contents list follows the headings as you write,
+  and its entries take both sides there. The font, theme, text size, line
+  spacing and width apply to the page as usual; the text follows the theme
+  and the text size. None of these are written into the file.
+- Reading aloud reads the page beside the text.
+- The reader's single-letter shortcuts don't fire while you type. Ctrl+S
+  saves, Ctrl+Shift+S saves as, and Escape (or Done) goes back to reading.
+- **Save** writes back to the file where the browser allows it: a document
+  opened with the Open button in Chrome or Edge (which use the system's file
+  picker) or dropped onto the page. Otherwise Save, and **Save as**, ask
+  where to save a copy (Chrome and Edge) or download it. HTML is saved as
+  UTF-8, and a `<meta charset>` naming another encoding is changed to say so.
+- What you write is kept in the browser as a draft a moment after each
+  change. Opening the document again offers it back (Edit restores it), and
+  so does starting a new document after an unsaved one. Done, opening another
+  book, or leaving the page asks first when there are unsaved changes.
+- Nothing in the document runs while it is edited: the page beside the text
+  is made exactly as the reader makes any page, scripts removed.
+- A site can turn editing off with `EDITING` in `reader-config.json`.
+
 ## Opening a book from the address
 
 When `index.html` is served from a web server, a `book` query parameter opens
@@ -327,15 +362,16 @@ This needs a real web server (for example `npx vite` or
 ## Self-hosting the libraries and fonts
 
 ```bash
-./fetch-libs.sh     # JSZip and marked into ./libs/ (about 190 KB)
+./fetch-libs.sh     # JSZip, marked, lamejs and CodeMirror into ./libs/ (about 750 KB)
 ./fetch-fonts.sh    # the interface and reading fonts into ./fonts/ (about 2 MB)
 ```
 
 With these (and the voice scripts below), the reader loads nothing from other
 sites. Without them it falls back to cdnjs and Google Fonts.
 
-- **Libraries:** `libs/jszip.min.js` (opens EPUB and comic files) and
-  `libs/marked.min.js` (Markdown) are tried first. The local and the cdnjs
+- **Libraries:** `libs/jszip.min.js` (opens EPUB and comic files),
+  `libs/marked.min.js` (Markdown), `libs/lame.min.js` (MP3 audiobooks) and
+  `libs/codemirror/` (the editor's text view) are tried first. The local and the cdnjs
   copy must both match hashes pinned in `index.html` (Subresource Integrity),
   so a changed or damaged file is refused rather than run.
 - **Fonts:** `fetch-fonts.sh` writes `fonts/ui.css` (IBM Plex Sans and Mono,
@@ -379,6 +415,7 @@ Library versions and model revisions are pinned in two places each, which must a
 | JSZip | `LIBS.jszip.cdn` | `JSZIP` in `fetch-libs.sh` |
 | marked | `MARKED_URL` | `MARKED` in `fetch-libs.sh` |
 | lamejs | `LIBS.lamejs.cdn` | `LAMEJS` in `fetch-libs.sh` |
+| CodeMirror | `CM_VERSION` (and a hash per file in `CM_FILES`) | `CODEMIRROR` in `fetch-libs.sh` |
 | kokoro-js | `KOKORO.lib` | `KOKORO_JS` in `fetch-kokoro.sh` (and `TRANSFORMERS`, the transformers.js it bundles) |
 | Kokoro model | `KOKORO.revision` | `REV` in `fetch-kokoro.sh` |
 | pocket-tts-js | `POCKET.lib` | `POCKET_JS` in `fetch-pocket.sh` |
@@ -389,8 +426,8 @@ To upgrade one:
 
 1. Change the version or revision in both places.
 2. Run `python3 tools/make-checksums.py libs` (or `kokoro`, `pocket`) to rewrite its list in
-   `checksums/`. For a library, it also prints the new `sha384-…` hash: put it in `integrity` in `LIBS`,
-   or the browser refuses the new file.
+   `checksums/`. For a library, it also prints the new `sha384-…` hash: put it in `integrity` in `LIBS`
+   (for CodeMirror, each file's in `CM_FILES`), or the browser refuses the new file.
 3. Run the fetch script twice (`./fetch-libs.sh`, …): the first run finds the old files, which fail the
    new checksums and are removed (it ends with "run this script again"); the second downloads the new ones.
 4. For a new model revision, check that every voice and language still works (the French Pocket TTS bundle
@@ -536,6 +573,7 @@ default books and the memory and request sizes stay the site's to set.
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
 | `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
+| `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones. |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
@@ -631,7 +669,8 @@ upstream (a CDN, Hugging Face's download hosts, a model file) show up.
 
 ## Requirements
 
-No build step. The libraries (JSZip, marked for Markdown, lamejs for MP3 audiobooks) and fonts come
+No build step. The libraries (JSZip, marked for Markdown, lamejs for MP3 audiobooks, CodeMirror for
+editing) and fonts come
 from `libs/` and `fonts/` when self-hosted, otherwise from cdnjs and Google
 Fonts (with system font fallbacks).
 
@@ -646,7 +685,8 @@ with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/` and `pocket/`;
 a `NOTICE.txt` in `fonts/`):
 
 - JSZip: MIT or GPLv3 (your choice); marked: MIT; lamejs: LGPL-3.0 (a port of
-  LAME; `LICENSES/LGPL-3.0.txt` holds the LGPL and the GPL text it builds on).
+  LAME; `LICENSES/LGPL-3.0.txt` holds the LGPL and the GPL text it builds on);
+  CodeMirror: MIT.
 - The fonts (IBM Plex Sans and Mono, Literata and the reading fonts): SIL Open
   Font License 1.1.
 - Kokoro-82M and kokoro-js: Apache-2.0 (kokoro-js bundles a phonemizer built
