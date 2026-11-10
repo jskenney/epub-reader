@@ -363,3 +363,56 @@ test('final review: the button waits for the site\'s values; under a day is a da
   await p3.waitForFunction(() => /Full-precision voice models/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 15000 });
   assert.match(await p3.textContent('#ttsStatus'), /turn "Full-precision voice models" off in Settings/);
 });
+
+test('a folder\'s LOCKED list: those options are the site\'s there, whatever the reader chose, and can\'t be changed; other folders keep the reader\'s (E-18)', async () => {
+  const page = await h.newPage();
+  const warnings = []; page.on('console', m => { if (m.type() === 'warning') warnings.push(m.text()); });
+  const LOCKED = `${h.SITE}/folder-locked/index.html?book=/reader/books/long.epub`;
+  await h.openReader(page, LOCKED, { 'spine:theme': 'black', 'spine:set:TIME_LEFT': false, 'spine:shortcuts': false, 'spine:set:ALLOW_REMOTE_CONTENT': true });
+  assert.ok(warnings.some(w => /LOCKED: bogus ignored/.test(w)), warnings.join(' | '));
+  assert.equal(await theme(page), 'sepia');
+  await page.waitForFunction(() => document.querySelector('#timeLeft').textContent.trim());
+  // Shortcuts locked on (the default): T works as a key, but the theme can't change.
+  await page.keyboard.press('t');
+  assert.equal(await theme(page), 'sepia');
+  assert.equal(await page.isDisabled('#themeBtn'), true);
+  await openSettings(page);
+  assert.equal(await page.isDisabled('input[name="theme"][value="dark"]'), true);
+  assert.equal(await page.isVisible('#setThemeLocked'), true);
+  for (const name of ['TIME_LEFT', 'shortcuts', 'ALLOW_REMOTE_CONTENT']) {
+    assert.equal(await row(page, name).isDisabled(), true, name);
+    assert.equal(await changedNote(page, name), 'Set by this site.', name);
+  }
+  assert.equal(await row(page, 'ALLOW_REMOTE_CONTENT').isChecked(), false);
+  assert.equal(await row(page, 'SEARCH_MAX').isDisabled(), false);
+  await page.click('.set-row:has([data-set="TIME_LEFT"]) small >> nth=0');   // (the row doesn't toggle it either)
+  assert.equal(await row(page, 'TIME_LEFT').isChecked(), true);
+  await page.click('#setReset');
+  // The reader's own values are kept for the folders that don't lock them.
+  assert.equal(await stored(page, 'spine:theme'), '"black"');
+  assert.equal(await stored(page, 'spine:set:TIME_LEFT'), 'false');
+  await page.keyboard.press('Escape');
+  // The locked theme is there before the page draws next time.
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__early = document.documentElement.getAttribute('data-theme'); }));
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await page.evaluate(() => window.__early), 'sepia');
+  // Elsewhere, the reader's choices.
+  await page.goto(LONG); await h.waitForBook(page);
+  assert.equal(await theme(page), 'black');
+  assert.equal(await page.textContent('#timeLeft'), '');
+  assert.equal(await page.isDisabled('#themeBtn'), false);
+});
+
+test('the read-aloud engine list is as wide as the engine chosen, not its longest option (E-19)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
+  const info = await page.evaluate(() => { const e = document.querySelector('#ttsEngine'); return { value: e.value, width: e.getBoundingClientRect().width, longest: Math.max(...[...e.options].map(o => o.textContent.length)) }; });
+  assert.equal(info.value, 'device');
+  assert.ok(info.longest > 20, 'a long option is still in the list');
+  assert.ok(info.width < 100, `width ${info.width}`);
+  // Another engine: the width follows.
+  await page.selectOption('#ttsEngine', 'pocket');
+  const w2 = await page.evaluate(() => document.querySelector('#ttsEngine').getBoundingClientRect().width);
+  assert.ok(w2 < 100 && w2 > 50, `width ${w2}`);
+});

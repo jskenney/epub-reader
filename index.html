@@ -8,8 +8,10 @@
 <link id="uiFonts" rel="stylesheet" href="data:text/css,">
 <!-- The reader's theme before anything is drawn (a flash of the light theme is worst with Black at night). -->
 <!-- Without one, this folder's default theme (from its reader-config.json, as last seen) until the config arrives. -->
-<script>try { const ok = t => ['light', 'sepia', 'dark', 'black'].includes(t), mine = JSON.parse(localStorage.getItem('spine:theme')), folder = JSON.parse(localStorage.getItem('spine:folderTheme:' + location.pathname.replace(/[^/]*$/, '')));
-  if (ok(mine)) document.documentElement.setAttribute('data-theme', mine); else if (mine == null && ok(folder)) document.documentElement.setAttribute('data-theme', folder); } catch {}</script>
+<!-- A folder that locks the theme (its LOCKED list) has its own, whatever the reader chose elsewhere. -->
+<script>try { const ok = t => ['light', 'sepia', 'dark', 'black'].includes(t), get = k => JSON.parse(localStorage.getItem(k)), dir = location.pathname.replace(/[^/]*$/, '');
+  const mine = get('spine:theme'), folder = get('spine:folderTheme:' + dir), set = t => document.documentElement.setAttribute('data-theme', t);
+  if (get('spine:folderThemeLocked:' + dir)) { if (ok(folder)) set(folder); } else if (ok(mine)) set(mine); else if (mine == null && ok(folder)) set(folder); } catch {}</script>
 <style>
 /* Layout: one-screen reading app. Top bar, contents rail on the left, the page as the one framed object, a segmented spine ribbon along the bottom. */
 :root{
@@ -200,6 +202,9 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-row small{color:var(--muted);font-size:12px;line-height:1.35}
 .set-row small.set-def{color:var(--ribbon)}
 .set-row small:empty{display:none}
+.set-row.set-off label,.set-row.set-off{cursor:default;color:var(--muted)}
+.set-theme:has(input:disabled){cursor:default;opacity:.6}
+
 .set-row input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--ribbon);flex:none}
 .set-row input[type=number]{width:6.5em;height:30px;box-sizing:border-box;flex:none;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--field);border-radius:6px;padding:0 6px}
 .set-row input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
@@ -495,6 +500,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <label class="set-theme"><input type="radio" name="theme" value="dark"><span class="sw sw-dark" aria-hidden="true">Aa</span>Dark</label>
           <label class="set-theme"><input type="radio" name="theme" value="black"><span class="sw sw-black" aria-hidden="true">Aa</span>Black</label>
         </div>
+        <p class="ab-muted set-locked" id="setThemeLocked" hidden>The theme is set by this site.</p>
       </fieldset>
       <fieldset class="set-group"><legend>Reading</legend>
         <div class="set-row"><span><label for="set-TIME_LEFT">Reading time left in the footer</label><small class="set-def"></small></span><input id="set-TIME_LEFT" type="checkbox" data-set="TIME_LEFT"></div>
@@ -579,6 +585,7 @@ const MIME = {xhtml:'application/xhtml+xml',html:'text/html',htm:'text/html',css
   mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'video/mp4',ogg:'audio/ogg',webm:'video/webm'};
 
 let readerConfig = null;   // the folder's reader-config.json as loaded, for reference
+const LOCKED = new Set();   // its LOCKED list: Settings options readers can't change in this folder (E-18)
 const store = {
   get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -3105,12 +3112,14 @@ function buildFontMenu(){
   syncFontMenu();
 }
 function setSingleKeys(on){
+  if (LOCKED.has('shortcuts')) return;   // (set by the site: E-18)
   singleKeys = on; store.set('spine:shortcuts', on);
   syncFontMenu();
 }
 function syncFontMenu(){
   for (const b of $('#fontMenu').querySelectorAll('.opt[data-face]')) b.setAttribute('aria-checked', String(b.dataset.face === fontFace));
-  $('#keysOpt')?.setAttribute('aria-checked', String(singleKeys));
+  const ko = $('#keysOpt');
+  if (ko) { ko.setAttribute('aria-checked', String(singleKeys)); ko.disabled = LOCKED.has('shortcuts'); ko.title = ko.disabled ? 'Set by this site' : 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.'; }
   $('#fontBtn .aa').style.fontFamily = face().stack || face().preview;
   $('#fontBtn').title = `Reading font: ${face().name}`;
 }
@@ -3149,9 +3158,12 @@ function syncThemeBtn(){
   const label = `Switch to ${next === 'light' ? 'light mode' : next === 'dark' ? 'dark mode' : next[0].toUpperCase() + next.slice(1)}`;
   b.classList.toggle('dark', dark);
   b.title = label + ' (T)'; b.setAttribute('aria-label', label);
+  b.disabled = LOCKED.has('theme');
+  if (b.disabled) { b.title = 'The theme is set by this site'; b.setAttribute('aria-label', b.title); }
 }
 // mode: one of THEMES, or 'system'. The light and dark ones last chosen are what the button and T switch between.
 function setTheme(mode){
+  if (LOCKED.has('theme')) return;   // (set by the site: E-18)
   if (mode === 'system') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', mode);
   store.set('spine:theme', mode);
@@ -3836,6 +3848,7 @@ function ttsUpdateBar(status){
   const auto = unusable && tts.engine === 'narration';
   eng.value = auto ? 'device' : tts.engine;
   eng.title = unusable && !auto ? 'Not available for this book or right now: the device voice reads instead' : '';
+  fitSelect(eng);
   let dl = '';
   const neural = !tts.mo && neuralEngine();
   if (!status && neural && !neural.ready()) {
@@ -3923,6 +3936,17 @@ $('#ttsClose').addEventListener('click', () => { ttsClose(); $('#ttsBtn').focus(
 $('#ttsRate').addEventListener('input', e => { $('#ttsRateVal').textContent = Number(e.target.value).toFixed(1) + '×'; });
 $('#ttsRate').addEventListener('change', e => ttsSetRate(Number(e.target.value)));
 $('#ttsEngine').addEventListener('change', e => ttsSetEngine(e.target.value));
+// The engine list as wide as the engine chosen, not its longest option ("Publisher narration (not in this
+// book)"), which wasted room in the read-aloud bar (E-19). The open list still shows the options in full.
+let fitCtx = null;
+function fitSelect(el){
+  const cs = getComputedStyle(el), text = el.selectedOptions[0]?.textContent || '';
+  fitCtx ??= document.createElement('canvas').getContext('2d');
+  fitCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  // (Padding and borders, and about 24 px for the arrow.)
+  el.style.width = Math.ceil(fitCtx.measureText(text).width + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + 26) + 'px';
+}
+document.fonts?.ready.then(() => fitSelect($('#ttsEngine')));
 $('#ttsVoice').addEventListener('change', e => {
   if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
   else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
@@ -6282,13 +6306,21 @@ async function loadConfig(){
     const r = await fetch(new URL(CONFIG_FILE, location.href), { cache: 'no-cache' });
     if (r.ok && !looksHtml(r)) cfg = JSON.parse(await r.text());
   } catch (err) { if (!(err instanceof TypeError)) console.warn(`${CONFIG_FILE} isn't valid JSON, so it was ignored:`, err.message); }
-  // (This folder's default theme, remembered for the script in <head>, or forgotten: L-d of round 20's last review.)
-  const folderKey = 'spine:folderTheme:' + location.pathname.replace(/[^/]*$/, '');
+  // Settings readers can't change here (E-18): read first, as the folder's defaults then apply whatever they chose.
+  if (cfg && typeof cfg === 'object' && 'LOCKED' in cfg) {
+    const v = cfg.LOCKED, lockable = [...Object.keys(SET_VARS), 'theme', 'shortcuts'];
+    if (!Array.isArray(v) || !v.every(n => typeof n === 'string')) console.warn(`${CONFIG_FILE}: LOCKED ignored (should be a list of setting names)`);
+    else for (const n of v) { if (lockable.includes(n)) LOCKED.add(n); else console.warn(`${CONFIG_FILE}: LOCKED: ${n} ignored (not one of ${lockable.join(', ')})`); }
+  }
+  // (This folder's default theme, and whether it's locked, remembered for the script in <head>: L-204, E-18.)
+  const dir = location.pathname.replace(/[^/]*$/, ''), folderKey = 'spine:folderTheme:' + dir;
+  if (LOCKED.has('theme')) store.set('spine:folderThemeLocked:' + dir, true); else store.del('spine:folderThemeLocked:' + dir);
   if (THEMES.includes(cfg?.theme)) store.set(folderKey, cfg.theme);
   else { store.del(folderKey); if (store.get('spine:theme') == null) document.documentElement.removeAttribute('data-theme'); }   // (it had one before)
   if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return;
   readerConfig = cfg;
   for (const [key, value] of Object.entries(cfg)) {
+    if (key === 'LOCKED') continue;
     try {
       if (CONFIG_SETTINGS[key]) {
         const [type, apply] = CONFIG_SETTINGS[key];
@@ -6300,7 +6332,7 @@ async function loadConfig(){
       } else if (CONFIG_DEFAULTS[key]) {
         const [stored, ok, apply] = CONFIG_DEFAULTS[key];
         if (!ok(value)) throw new Error('not one of the allowed values');
-        if (store.get(stored) == null) apply(value);   // the reader's own choice wins
+        if (store.get(stored) == null || LOCKED.has(key)) apply(value);   // the reader's own choice wins, unless locked
       } else throw new Error('unknown setting');
     } catch (err) { console.warn(`${CONFIG_FILE}: ${key} ignored (${err.message})`); }
   }
@@ -6344,7 +6376,8 @@ const setSave = (name, v) => store.set(setKey(name), v);
 function loadUserSettings(){
   for (const [name, [get]] of Object.entries(SET_VARS)) {
     siteValue[name] = get();
-    const v = store.get(setKey(name));
+    // (A locked one stays the site's here; the reader's value is left saved for the folders that don't lock it.)
+    const v = LOCKED.has(name) ? null : store.get(setKey(name));
     // (Kept even when it equals this folder's value: it's saved for the whole site, and other folders' defaults
     // can differ. Only a value out of range is saved again as it is used.)
     if (v != null) { if (!setVar(name, v)) store.del(setKey(name)); else if (get() !== v) store.set(setKey(name), get()); }
@@ -6352,30 +6385,39 @@ function loadUserSettings(){
   }
   siteValue.shortcuts = typeof readerConfig?.shortcuts === 'boolean' ? readerConfig.shortcuts : true;
   siteValue.theme = THEMES.includes(readerConfig?.theme) ? readerConfig.theme : 'system';
+  if (LOCKED.has('shortcuts')) { singleKeys = siteValue.shortcuts; syncFontMenu(); }
+  if (LOCKED.has('theme')) {
+    if (siteValue.theme === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', siteValue.theme);
+  }
 }
 // The value shown: for those that wait for a reload, what will apply then.
 function setShown(name){
   if (name === 'shortcuts') return singleKeys;
   const [get, after] = SET_VARS[name];
-  return after === 'reload' ? store.get(setKey(name)) ?? siteValue[name] : get();
+  return after === 'reload' && !LOCKED.has(name) ? store.get(setKey(name)) ?? siteValue[name] : get();
 }
 const setText = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v);
 function setSync(){
   const f = $('#setForm');
   const theme = document.documentElement.getAttribute('data-theme') || 'system';
-  for (const r of f.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
+  for (const r of f.querySelectorAll('input[name="theme"]')) { r.checked = r.value === theme; r.disabled = LOCKED.has('theme'); }
+  $('#setThemeLocked').hidden = !LOCKED.has('theme');
   let reload = false;
   for (const el of f.querySelectorAll('[data-set]')) {
     const name = el.dataset.set, now = setShown(name), site = siteValue[name];
     if (el.type === 'checkbox') el.checked = now;
     else if (document.activeElement !== el || Number(el.value) !== now) el.value = now;
-    el.closest('.set-row').querySelector('.set-def').textContent = now === site ? '' : `Changed: this site's default is ${setText(site)}.`;
+    el.disabled = LOCKED.has(name);
+    el.closest('.set-row').classList.toggle('set-off', el.disabled);
+    el.closest('.set-row').querySelector('.set-def').textContent = el.disabled ? 'Set by this site.' : now === site ? '' : `Changed: this site's default is ${setText(site)}.`;
     if (SET_VARS[name]?.[1] === 'reload' && now !== loadedValue[name]) reload = true;
   }
   if (reload !== !$('#setReload').hidden) $('#setStatus').textContent = reload ? 'Takes effect when the page is reloaded: Reload now is available.' : '';
   $('#setReload').hidden = !reload;
 }
 function setChange(name, v){
+  if (LOCKED.has(name)) return;
   if (name === 'shortcuts') {
     setSingleKeys(v);
     return;
@@ -6391,14 +6433,15 @@ function setChange(name, v){
 }
 function setReset(){
   for (const [name, [get, after]] of Object.entries(SET_VARS)) {
+    if (LOCKED.has(name)) continue;   // (the reader's value there is for the folders that don't lock it)
     store.del(setKey(name));
     if (after === 'reload') continue;
     const before = get();
     setVar(name, siteValue[name]);
     if (get() !== before) after?.();
   }
-  store.del('spine:shortcuts'); singleKeys = siteValue.shortcuts; syncFontMenu();
-  store.del('spine:theme'); store.del('spine:themeLight'); store.del('spine:themeDark');
+  if (!LOCKED.has('shortcuts')) { store.del('spine:shortcuts'); singleKeys = siteValue.shortcuts; syncFontMenu(); }
+  if (!LOCKED.has('theme')) store.del('spine:theme'), store.del('spine:themeLight'), store.del('spine:themeDark');
   if (siteValue.theme === 'system') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', siteValue.theme);
   syncThemeBtn();
@@ -6418,7 +6461,8 @@ $('#setForm').querySelectorAll('.set-row').forEach((row, k) => {
 function setOpen(){
   setSync();
   const d = $('#setDialog'); if (!d.open) d.showModal();
-  $('#setForm').querySelector('input[name="theme"]:checked')?.focus();   // (not the scrolling list around it)
+  const f = $('#setForm');
+  (f.querySelector('input[name="theme"]:checked:not(:disabled)') || f.querySelector('input:not(:disabled)'))?.focus();   // (not the scrolling list around it)
 }
 $('#setBtn').addEventListener('click', setOpen);
 $('#setClose').addEventListener('click', () => $('#setDialog').close());
@@ -6450,7 +6494,7 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   setWidth(widthStep, false);
   setLayout(layout, false);
   syncFontMenu();
-  { const t = store.get('spine:theme'); if (THEMES.includes(t)) document.documentElement.setAttribute('data-theme', t); }
+  { const t = store.get('spine:theme'); if (THEMES.includes(t) && !LOCKED.has('theme')) document.documentElement.setAttribute('data-theme', t); }
   syncThemeBtn();
   setToc(!narrow.matches);
   const ref = new URLSearchParams(location.search).get('book');

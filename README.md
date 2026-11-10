@@ -487,7 +487,8 @@ changed. Edit the file and reload the page, or set them for one folder in a
 [`reader-config.json`](#per-folder-settings-reader-configjson) (the ones
 marked ✓). Readers can change some of them for themselves in the Settings
 dialog (marked ⚙): yours is then the default they start from, and their
-choice is saved in their browser. The paths, the CDN policy, the voice server,
+choice is saved in their browser. A folder can keep any of them fixed with a
+`LOCKED` list in its `reader-config.json`. The paths, the CDN policy, the voice server,
 default books and the memory and request sizes stay the site's to set.
 
 | Constant | Default | What it does / when to change it |
@@ -497,7 +498,7 @@ default books and the memory and request sizes stay the site's to set.
 | `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/` and `pocket/` folders are. `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
-| `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings: to keep other sites out for everyone, send the reader policy from `nginx.conf.example`, which blocks them whatever the reader chooses. |
+| `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
@@ -545,6 +546,13 @@ each with its own `default.epub`:
   such as `"literata"`), `fontSize` (percent, 70–200), `lineSpacing`
   (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`) and
   `shortcuts` (`false` starts with single-key shortcuts off).
+- `LOCKED`: a list of options readers can't change in this folder's
+  Settings, such as `["ALLOW_REMOTE_CONTENT", "ALLOW_EXTERNAL_LINKS",
+  "theme"]`. Any option marked ⚙ can be named, plus `theme` and `shortcuts`.
+  A locked option is this folder's value (or `index.html`'s) whatever the
+  reader chose; the dialog shows it as set by the site, and a locked theme
+  also disables the theme button and T. The reader's own choice is kept for
+  folders that don't lock it.
 - Unknown names and wrong values are ignored with a warning in the browser
   console. A missing file, or a "not found" page in its place, means no
   config.
