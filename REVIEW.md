@@ -148,6 +148,14 @@ before it:
 - **Low:** L-199 and L-200. **Tests:** T-30. **Documentation:** D-12.
 L-188 is taken back for the same reason as M-73: shortcuts set back to the folder's value stay the reader's.
 
+A fourth and last review looked at the whole feature afresh at `94fd7d1`. It found no critical or high items.
+What it found was fixed in `fd47b98`, with a test that fails on the code before it:
+- **Medium:** M-74 (Pocket TTS broke, with a message meant for the site owner, when a reader's precision choice
+  asked for files a site without CDNs doesn't have).
+- **Low:** L-201 to L-204. **Tests:** T-31. **Documentation:** D-13.
+It also raised a question for the owner, filed as E-18: whether a site should be able to lock options. That was
+the fourth loop of the four allowed, so the review-and-fix loops stop here.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -183,7 +191,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 No critical, high or medium items are open. The open items are:
 - **Low:** L-110 (no edit list for the encoder's delay, which WebCodecs doesn't report).
 - **Tests:** T-16 and T-20 (in part).
-- **Enhancements:** E-1 to E-4, E-6 to E-9 and E-15.
+- **Enhancements:** E-1 to E-4, E-6 to E-9, E-15 and E-18.
 
 ## Open items
 
@@ -192,7 +200,7 @@ No critical, high or medium items are open. The open items are:
 | [L-110](#l-110-no-edit-list-for-the-encoders-delay) | No edit list for the encoder's delay | Low |
 | [T-16](#t-16-coverage-gaps) | Coverage gaps | Tests |
 | [T-20](#t-20-test-gaps) | Test gaps | Tests |
-| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-9](#e-9-right-to-left-manga), [E-15](#e-15-fixed-layout-books) | Enhancements | — |
+| [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-9](#e-9-right-to-left-manga), [E-15](#e-15-fixed-layout-books), [E-18](#e-18-let-a-site-lock-settings) | Enhancements | — |
 
 ## Low
 
@@ -256,6 +264,14 @@ Use ComicInfo's `Manga` value to show comic pages right to left, including sprea
 Pre-paginated (fixed-layout) EPUBs are shown reflowed in columns, and `linear="no"` items are read in order with
 the rest (which the spec allows). Laying out fixed-layout pages as pages (and optionally skipping non-linear
 items) would suit comics-style and picture books.
+
+### E-18. Let a site lock settings
+
+*Needs your decision.* Readers can now change, for themselves, options a site sets in reader-config.json,
+including turning on remote content (M-69) and web links where a folder turned them off. A site that needs
+them fixed (a kiosk, a school) can't keep them. A `LOCKED` list in reader-config.json could name options the
+dialog shows as set by the site and doesn't let readers change. Until then, the reader policy from
+nginx.conf.example still blocks other sites whatever the reader chooses.
 
 ## Suggested order
 
@@ -349,6 +365,7 @@ From all reviews so far, with the commits that fixed them.
 | M-61 | `.mp3` chapters with titles of 127 bytes or more (about 43 CJK characters) were dropped by ffmpeg-based players (mpv, Audiobookshelf, Jellyfin): ID3v2.4 sizes inside `CHAP`; now ID3v2.3 | `8af5e59` |
 | M-62 | On first opening, Export worked while the saved format was still being checked, and made a different one | `0a4902b` |
 | M-63 | More than 255 `.mp3` chapters wrapped the `CTOC` count; now nested tables of 255 | `8af5e59` |
+| M-74 | Turning off full-precision voices broke Pocket TTS on a site without CDNs that self-hosts only the full-precision files, with a message for the site owner; the reader is now told which setting to change | `fd47b98` |
 | M-72 | A comic in the scroll layout reopened at the top of its page, not as far down it as the reader was (a regression from H-17's fix) | `e7d1096` |
 | M-73 | Setting an option back to one folder's default deleted the reader's choice for every folder, and could turn remote content back on elsewhere (the rest of M-70) | `e7d1096` |
 | M-70 | Opening another folder deleted a reader's setting when that folder's default equalled it (a regression from L-189's fix) | `7bbe17b` |
@@ -540,6 +557,10 @@ From all reviews so far, with the commits that fixed them.
 | L-181 | `libs/LICENSES/lamejs.txt` was LAME's licence FAQ, not the LGPL; fetch-libs.sh now saves the LGPL-3.0 text (with the GPL) | `0a4902b` |
 | L-182 | Stale messages: the export button said `.m4b`; formats being checked were greyed out; a note for a format that can't be made; the AAC size estimate used the wrong setting (*read*) | `0a4902b` |
 | L-183 | The format reasons weren't linked to the format group for screen readers (*read*) | `0a4902b` |
+| L-201 | Settings could be opened before the site's values were known ("this site's default is undefined"; Restore defaults left `data-theme="undefined"`) | `fd47b98` |
+| L-202 | Days to keep positions under one rounded to 0, "keep forever" | `fd47b98` |
+| L-203 | In forced-colours mode the chosen theme card couldn't be told apart | `fd47b98` |
+| L-204 | A folder's default theme still flashed in late; it's now remembered per folder for the script in `<head>` | `fd47b98` |
 | L-199 | A comic's page could be read from the page still in the frame while another book opened (*read*) | `e7d1096` |
 | L-200 | Settings: only an option's label toggled it, not its whole row | `e7d1096` |
 | L-197 | A stored shortcuts value that isn't on or off still stopped a folder's default | `7bbe17b` |
@@ -580,6 +601,7 @@ From all reviews so far, with the commits that fixed them.
 | T-25 | The weekly workflow had no ffmpeg, so the export tests would be skipped | `ce5efe6` |
 | T-11 | The weekly workflow hadn't run: run by hand and on its schedule on 2026-11-09 at `06fc8e7`, 178 of 178 passed with none skipped (the real models and the CDNs included) | runs 42616347850, 42620691908 |
 | T-26 | Wall-clock limits tight enough to be flaky on a slow machine | `ce5efe6` |
+| T-31 | The Settings button before the config, under a day, forced colours, a folder's early theme, Pocket with only the 8-bit model and no CDNs | `fd47b98` |
 | T-30 | A choice set back in another folder, a tall-page comic in the scroll layout, the whole row as a target | `e7d1096` |
 | T-29 | Comic places at the end of a section and after a larger section size in every layout, settings across folders, Escape in an untouched field, a stored junk shortcuts value | `7bbe17b` |
 | T-28 | Settings test gaps: reload-only settings turned back, reading aloud through a change, comic pages, days to keep positions, a folder's theme, focus and names, the early theme | `3c07e06` |
@@ -593,6 +615,7 @@ From all reviews so far, with the commits that fixed them.
 | D-6 | The Caddy example didn't revalidate files (an old library fails a new hash); upgrading needs two fetch runs | `299ded9` |
 | D-7 | Documentation nits: Markdown gzip in the nginx example, test requirements, --list, sizes, checksum order | `4d65017` |
 | D-8 | README: positions setting only goes up, test duration, Kokoro reuse only at 1× | `ce5efe6` |
+| D-13 | README: themes didn't mention a folder's default; values now whole numbers; what a reader's precision choice needs on a self-hosted site | `fd47b98` |
 | D-12 | The settings code comment and REVIEW.md said a reader's value is dropped when it equals the site's | `e7d1096` |
 | D-11 | README: changing COMIC_PART "doesn't move readers" wasn't true yet, and places saved by earlier versions weren't mentioned | `7bbe17b` |
 | D-10 | README: "a time a reader sets in Settings is used as it is" wasn't true when it equalled the folder's | `3c07e06` |
@@ -602,6 +625,6 @@ From all reviews so far, with the commits that fixed them.
 | E-14 | The time left in the footer off unless `TIME_LEFT` | `23100cb` |
 | E-16 | Default book: `default.epub`, else `default.md` (an ordered `DEFAULT_BOOK` list, with "not found" page checks) | `a29374c` |
 | E-10 | Audiobook export: chosen chapters into one `.m4b` or one per chapter, with any natural voice | `1b3516b` to `ed1aa5e` |
-| E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `e7d1096` |
-| E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `e7d1096` |
+| E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
+| E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
 | E-17 | Audiobook formats: `.opus` (Opus in Ogg, chapter comments) and `.mp3` (lamejs, ID3 chapters) as well as `.m4b`; those this browser can't make greyed out with the reason | `2c7386b`, `895bafa`, `8af5e59`, `0a4902b` |
