@@ -243,3 +243,60 @@ test('API_START: a place that comes after the reader has already turned a page i
   await page.waitForTimeout(3500);
   assert.equal((await where(page))[0], 'Chapter One');
 });
+
+// Round 25 review.
+test('an EPUB from another site (?get=) keeps its own place and finished mark, apart from this site\'s copy with the same identifier (round 25 review, H-29)', async () => {
+  const page = await apiPage();
+  const done = await api(page, '**/api/complete');
+  const reader = `${h.PLAIN}/reader/index.html`;
+  await h.openReader(page, `${reader}?book=books/long.epub`, { 'spine:layout': 'scroll', 'spine:pos:urn:long': { i: 1, f: 0.5, t: Date.now() } });
+  assert.equal((await where(page))[0], 'Chapter Two');
+  await page.goto(`${reader}?get=${h.SOFT}/reader/books/long.epub`); await h.waitForBook(page);
+  await page.focus('#ribbon'); await page.keyboard.press('End'); await page.waitForTimeout(300);
+  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
+  await h.waitFor(() => done.length === 1);
+  assert.equal(done[0].body.path, null);
+  const stored = await page.evaluate(() => [JSON.parse(localStorage.getItem('spine:pos:urn:long')), JSON.parse(localStorage.getItem(`spine:pos:get:${location.search.slice(5)}`))]);
+  assert.deepEqual([stored[0].i, stored[0].f, stored[0].done], [1, 0.5, undefined], 'this site\'s copy keeps its place, not finished');
+  assert.equal(stored[1].done, 1);
+  await page.goto(`${reader}?book=books/long.epub`); await h.waitForBook(page);
+  assert.equal((await where(page))[0], 'Chapter Two');
+});
+
+test('?edit= sends nothing for a new document, and doesn\'t report a short one finished as it opens for editing (round 25 review, M-115)', async () => {
+  const page = await apiPage();
+  const all = await api(page, '**/api/**');
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, `${h.READER}?edit=books/brand-new-r25.md`);
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'), null, { timeout: 15000 });
+  await page.waitForTimeout(800);
+  assert.deepEqual(all.map(r => r.url.split('/').pop()), []);
+  await h.openReader(page, `${h.READER}?edit=books/notes.md`);
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'), null, { timeout: 15000 });
+  await page.waitForTimeout(800);
+  assert.deepEqual(all.map(r => r.url.split('/').pop()), ['position']);
+});
+
+test('a comic goes to the site\'s book_percentage, as its sections depend on COMIC_PART (round 25 review, M-116)', async () => {
+  const page = await apiPage();
+  await api(page, '**/api/position', { status: 200, type: 'application/json', body: '{"section":0,"section_percentage":0,"book_percentage":95}' });
+  await h.openReader(page, `${h.READER}?book=books/comic.cbz`, { 'spine:layout': 'one', 'spine:set:COMIC_PART': 10 });
+  const n = await h.waitFor(async () => { const m = /spine (\d+)\/(\d+)/.exec((await where(page))[1]); return m && Number(m[1]) > 1 ? m : null; }, 5000);
+  assert.ok(n && Number(n[1]) >= Number(n[2]) - 1, `near the end: ${n && n[0]}`);
+});
+
+test('leaving while an earlier place waits for its answer still sends the newest place (round 25 review, L-280)', async () => {
+  const log = async () => (await (await fetch(`${h.SITE}/__api`)).json()).filter(r => r.path === '/api-log/progress');
+  await fetch(`${h.SITE}/__api`, { method: 'DELETE' });
+  const page = await apiPage();
+  await page.route('**/api-log/progress', async route => { await new Promise(r => setTimeout(r, 4000)); await route.continue(); });
+  await h.openReader(page, LONG, { 'spine:layout': 'one', 'spine:set:API_PROGRESS': '/api-log/progress', 'spine:set:API_START': '/api-log/position' });
+  await page.click('#nextBtn'); await page.waitForTimeout(2300);   // (the first place is on its way, held 4 s)
+  await page.click('#nextBtn'); await page.click('#nextBtn'); await page.waitForTimeout(2300);   // (the newest waits for it)
+  const newest = await page.evaluate(() => document.querySelector('#spinePos').textContent);
+  await page.goto(`${h.SITE}/reader/books/notes.md`);
+  // (The first, held one may be dropped with the page; the newest must arrive.)
+  const [, at, of] = /page (\d+)\/(\d+)/.exec(newest).map(Number), want = (at - 1) / (of - 1) * 100;
+  const got = await h.waitFor(async () => { const l = await log(); return l.some(r => Math.abs(r.body.section_percentage - want) < 0.2) ? l : null; }, 8000);
+  assert.ok(got, `the newest place (${newest}) among ${JSON.stringify((await log()).map(r => r.body.section_percentage))}`);
+});

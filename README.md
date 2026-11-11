@@ -250,8 +250,10 @@ signing in of its own.
   another book) if a place hasn't been sent yet. Opening a book sends
   nothing; nor does editing.
 - **`POST /api/complete`** (`API_COMPLETE`): once, the first time the last
-  page of the last section is reached (a document that fits on one page is
-  finished as it opens). Once your site has answered, the reader remembers
+  page of the last section is reached (a document that fits on one page,
+  or a book whose saved place is its last page, is finished as it opens;
+  one opened with `?edit=` isn't, and a new one made by `?edit=` sends
+  nothing). Once your site has answered, the reader remembers
   it with the book's position and doesn't send it again.
 
 Both send JSON (`Content-Type: application/json`):
@@ -296,7 +298,9 @@ place it has for that book:
 
 or all three `null` for a book it doesn't know (the book then stays where
 this browser left it). `section` and `section_percentage` are used when
-`section` is a section the book has; otherwise `book_percentage` alone. A
+`section` is a section the book has (for a comic, `book_percentage` comes
+first, as its sections depend on `COMIC_PART`); otherwise `book_percentage`
+alone. A
 place gone to this way isn't sent back to `/api/progress`. An answer to
 `/api/position` that isn't JSON means your site keeps no places: progress
 isn't sent either, until the page is reloaded.
@@ -305,8 +309,13 @@ Your site should answer with JSON (anything, such as `{"ok": true}`, with a
 2xx status). An answer that isn't JSON (a missing address, an error, a web
 page such as a "not found" or sign-in page, or no connection) is taken to
 mean there's no API there: the reader stops sending to that address until
-the page is reloaded. So a site without one only sees one request per page
-load. Set `API_PROGRESS` or `API_COMPLETE` to `""` (in `reader-config.json`,
+the page is reloaded. So a site without one sees at most one request per
+address per page load. (A `/api/position` answer that isn't JSON stops
+progress too, but not `/api/complete`.)
+
+Key what you store by `path` or `url` as well as `identifier`: a book from
+another site can carry any identifier, including one of your books'. (The
+reader keeps such a book's place apart, by its address.) Set `API_PROGRESS` or `API_COMPLETE` to `""` (in `reader-config.json`,
 or in Settings) to send nothing at all (and `API_START` to ask nothing). They must be addresses on the same
 site as the reader.
 
