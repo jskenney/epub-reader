@@ -310,6 +310,14 @@ Loop 1 fixed all of them (`b61ae9f`, `d108859`, `dc862b1`), each with a test tha
 except L-281 and L-282 (checked by reading). T-43, a workflow running the suite on every push, is left as it is by
 your decision: it would cost about 40 minutes of GitHub Actions per push.
 
+The second review (loop 2), by three new reviewers on `2237314`, checked loop 1's fixes and found that most hold.
+It found regressions in M-118, M-119 and M-122, and a few more items (none critical or high):
+- **Medium:** M-123 to M-125.
+- **Low:** L-290 to L-298.
+- **Tests:** T-45. **Documentation:** D-21.
+(The third reviewer covered the new code and its area's interface; the ZIP reader, CSS cleaner internals, nginx and
+the scripts weren't re-checked in this loop.)
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -342,13 +350,27 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Only enhancements are open: E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as
-they are, by your decision (see Resolved).
+Loop 2's findings are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| M-123 | Enter in a Markdown list puts a lone LF into a CRLF file (CodeMirror's `lineSeparator` and the list addon; M-118) | Bug |
+| M-124 | A folder book with a remote (or missing) manifest item can't be saved at all (M-119) | Bug |
+| M-125 | Unwrapped text with blank lines between paragraphs loses its verse blocks and two-line headings (M-122) | Bug |
+| L-290 | Full screen with the top bar hidden keeps an empty 28 px strip above the page (L-289) | Layout |
+| L-291 | A cleaned SVG in another encoding keeps its declaration but is stored as UTF-8: garbled text (L-287) | Bug |
+| L-292 | The SVG cleaning keeps `<?xml-stylesheet?>` and href animations (defence in depth) | Hardening |
+| L-293 | A huge paragraph with no spaces (Chinese, Japanese) isn't split | Bug |
+| L-294 | Hard-wrapped text that marks paragraphs by indentation, without blank lines, is mis-split | Bug |
+| L-295 | `?edit=` of an EPUB at its last page sends `/api/complete` as it opens | Bug |
+| L-296 | `?edit=` of an EPUB: a fast `/api/position` answer chooses the chapter the editor opens at | Race |
+| L-297 | Since L-280, two progress updates for a book can be in flight; a slow site may keep the older | Docs |
+| L-298 | `book_percentage` stays under 100 at the end when the last section fits on one page or screen | Bug |
+| T-45 | Tests for L-281, L-282, `?edit=` of an EPUB with the API, and the percentage at the end | Tests |
+| D-21 | README: the finished mark is per browser; CRLF kept; Save asks about files changed on disk; a folder book needs its files; the hook and committing named paths | Docs |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
 
