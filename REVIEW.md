@@ -345,6 +345,15 @@ on the code before it, except L-316 (checked by reading: an archive JSZip reads 
 The text-file parting was adjusted again and checked over the reviewers' files (now in `tests/text-shapes/`) and the
 earlier dozen kinds.
 
+The fifth review (loop 5), by three new reviewers on `0756fa1`: one on loop 4's fixes (none critical, high or medium),
+one a fresh adversarial pass (with the nginx example in place, no way found to get an active document into the
+reader's origin), and one on plain-text files of the kinds people read (52 written for it and 18 real Project
+Gutenberg books: no regression from before this round; the three medium items there were already so). Findings:
+- **Medium:** M-135 to M-139.
+- **Low:** L-318 to L-330.
+- **Tests:** T-49. **Documentation:** D-24.
+
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -377,13 +386,33 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-T-47 is open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+Loop 5's findings and T-47 are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
 TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| M-135 | A folder book's picture of another declared type (an SVG typed PNG) is served as the site's own file: on a server without the example's sandbox header, opened in a new tab, its script runs as the reader | Security |
+| M-136 | A long front-matter line in Markdown freezes the tab (a regex that backtracks) | Hang |
+| M-137 | Verse with longer lines (poetry, plays, contents with page numbers) is joined into paragraphs (as before this round) | Bug |
+| M-138 | Word text with tab-indented paragraphs and "Chapter One" lines is read as code | Bug |
+| M-139 | Unwrapped stories with short, similar lines and no blank lines become one paragraph (as before) | Bug |
+| L-318 | Unsaved EPUB chapter drafts aren't found after L-311's new key | Bug |
+| L-319 | L-311's guard on old keys is too broad ("HTML: The Definitive Guide" loses its place) | Bug |
+| L-320 | A `?get=` document sent on to another site keeps this site's folder as its base | Bug |
+| L-321 | WYSIWYG write-back of an HTML fragment starting with many comments freezes (a regex) | Hang |
+| L-322 | Markdown write-back of a very long code span is slow (a regex) | Hang |
+| L-323 | Saving a document ending in many unclosed `<meta` is slow (a regex) | Hang |
+| L-324 | Splitting a very long text paragraph searches to the end each time | Hang |
+| L-325 | The editor's download is a blob of the document's own type, live for 60 s in the reader's origin | Hardening |
+| L-326 | "CHAPTER I" with its title in capitals below gives two headings | Bug |
+| L-327 | Non-Latin headings (第一章, Greek capitals) aren't found | Bug |
+| L-328 | Quoted signatures in capitals ("M.D.") become headings | Bug |
+| L-329 | Hard-wrapped text with no blank lines and no indents is one paragraph | Bug |
+| L-330 | Tab indentation is dropped in line blocks | Bug |
+| T-49 | No test of L-316 (an archive JSZip reads whole with overlapping files) or of L-312 for archives | Tests |
+| D-24 | The test server exempts every linked copy of index.html, the nginx example only the exact one; the Caddy example has no sandbox for book files | Docs |
 | T-47 | `LOOKAHEAD_SEC` and `NCACHE_SEC` have no test: the mock server voice answers one request at a time, so a test can't tell the settings apart | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
