@@ -255,3 +255,22 @@ test('Text settings does what the top bar does: reading font, theme, layout, tex
   const [chooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 3000 }), page.click('#txtOpen')]);
   assert.ok(chooser, 'the file picker opens');
 });
+
+test('page turns stay lined up with the text after dozens of pages, when the text width\'s margins come to a fraction of a pixel (two columns, Wide)', async () => {
+  for (const width of [1915, 1731]) {
+    const page = await h.newPage({ viewport: { width, height: 900 } });
+    await h.openReader(page, `${h.READER}?book=books/drift.md`, { 'spine:width': 2, 'spine:layout': 'two' });
+    const over = () => page.evaluate(() => {
+      const d = document.querySelector('#page').contentDocument, flow = d.querySelector('[id^="spine-flow"]'), clip = flow.parentElement.getBoundingClientRect();
+      const w = d.createTreeWalker(flow, NodeFilter.SHOW_TEXT), r = d.createRange(); let n, worst = 0;
+      while ((n = w.nextNode())) { r.selectNodeContents(n); for (const q of r.getClientRects()) if (q.right > clip.left && q.left < clip.right) worst = Math.max(worst, clip.left - q.left, q.right - clip.right); }
+      return worst;
+    });
+    for (let k = 0; k < 40; k++) await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(150);
+    assert.match(await page.textContent('#fsPos'), /^page 41\//, 'turned 40 pages');
+    const worst = await over();
+    assert.ok(worst < 1.5, `${width}px window: text ${worst.toFixed(1)}px past the edge after 40 page turns`);
+    await page.close();
+  }
+});

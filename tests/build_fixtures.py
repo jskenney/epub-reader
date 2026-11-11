@@ -945,6 +945,9 @@ def main():
     raw_epub("rv-drm.epub", {"OEBPS/content.opf": opf3("Locked", [("c1.xhtml", "application/xhtml+xml")]),
              "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Pretend this is ciphertext.</p>'),
              "META-INF/encryption.xml": '<?xml version="1.0"?><encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#"><enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><enc:CipherData><enc:CipherReference URI="OEBPS/c1.xhtml"/></enc:CipherData></enc:EncryptedData></encryption>'})
+    # One long section: dozens of pages to turn, for the page-turn drift check (text width margins in fractions of a pixel).
+    words = "the keeper walked along the cliffs and counted the boats below in the quiet evening by the harbour lantern".split()
+    (books / "drift.md").write_text("# Drift\n\n" + "\n\n".join(f"Paragraph {i}. " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + "." for i in range(400)) + "\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")
