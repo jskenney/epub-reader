@@ -232,3 +232,17 @@ test('no GNU-only sed escapes (a tab written as \\t) in the scripts (M-4)', () =
     for (const l of sedCalls) assert.doesNotMatch(l, /\\t/, `${f}: ${l}`);
   }
 });
+
+test('the version in Settings is one above the latest release tag, and tools/stamp-version.py writes it so', () => {
+  const page = fs.readFileSync(path.join(REPO, 'index.html'), 'utf8');
+  const shown = page.match(/<span id="setVer">(v\d+\.\d+\.\d+) - (\d{8}\.\d{4})<\/span>/);
+  assert.ok(shown, 'a version line');
+  const tags = spawnSync('git', ['-C', REPO, 'tag', '--list', 'v*', '--sort=-v:refname'], { encoding: 'utf8' }).stdout.split('\n').filter(t => /^v\d+\.\d+\.\d+$/.test(t));
+  const r = spawnSync('python3', [path.join(REPO, 'tools', 'stamp-version.py'), '--check'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout.trim(), /^v\d+\.\d+\.\d+ - \d{8}\.\d{4}$/);
+  if (!tags.length) return;   // (a clone without tags: nothing to compare with)
+  const [maj, min, pat] = tags[0].slice(1).split('.').map(Number);
+  assert.equal(shown[1], `v${maj}.${min}.${pat + 1}`);
+  assert.equal(r.stdout.split(' ')[0], `v${maj}.${min}.${pat + 1}`);
+});

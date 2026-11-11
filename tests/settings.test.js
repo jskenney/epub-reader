@@ -442,3 +442,49 @@ test('a locked days-to-keep doesn\'t delete other folders\' positions; a locked 
   await p2.keyboard.press('Enter');   // (on the locked option: nothing changes)
   assert.equal(await p2.getAttribute('#keysOpt', 'aria-checked'), 'true');
 });
+
+test('Settings shows the version (one above the latest release, with when it was stamped) and a link to the project on GitHub', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  await openSettings(page);
+  assert.match(await page.textContent('.set-version'), /^Version v\d+\.\d+\.\d+ - \d{8}\.\d{4}\s*$/);
+  const a = page.locator('.set-version a');
+  assert.equal(await a.getAttribute('href'), 'https://github.com/jskenney/epub-reader');
+  assert.equal(await a.getAttribute('target'), '_blank');
+  assert.equal(await a.getAttribute('aria-label'), 'epub-reader on GitHub');
+});
+
+test('Generate config shows every setting in use as a reader-config.json: the folder\'s, the reader\'s own, the LOCKED list; Copy and Download', async () => {
+  const page = await h.newPage();
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: h.SITE });
+  await h.openReader(page, `${h.SITE}/folder-locked/index.html?book=/reader/books/long.epub`);
+  await openSettings(page);
+  await page.uncheck('[data-set="SHOW_PROGRESS"]');
+  await page.fill('[data-set="SEARCH_MAX"]', '7'); await page.press('[data-set="SEARCH_MAX"]', 'Tab');
+  // (Generate config at the far left of the buttons.)
+  const [gen, reset] = await page.evaluate(() => ['#setGenerate', '#setReset'].map(q => document.querySelector(q).getBoundingClientRect().left));
+  assert.ok(gen < reset - 100, `${gen} ${reset}`);
+  await page.click('#setGenerate');
+  await page.waitForFunction(() => document.querySelector('#cfgDialog').open);
+  const cfg = JSON.parse(await page.inputValue('#cfgText'));
+  for (const k of ['DEFAULT_BOOK', 'BOOKSHELF', 'LIB_FILES', 'VOICE_FILES', 'ALLOW_CDN', 'ALLOW_REMOTE_CONTENT', 'ALLOW_EXTERNAL_LINKS', 'EDITING', 'GET_URLS',
+    'SHOW_CONTENTS', 'SHOW_PROGRESS', 'SHOW_TOPBAR', 'TIME_LEFT', 'SLEEP_TIMER', 'FORCE_LTR', 'KEEP_POSITIONS_DAYS', 'SEARCH_MAX', 'COMIC_PART',
+    'TTS_SERVER', 'FULL_PRECISION', 'LOOKAHEAD_SEC', 'SAVED_AUDIO_MB', 'NCACHE_SEC', 'SPAN_MAX', 'layout', 'width', 'font', 'fontSize', 'lineSpacing', 'shortcuts', 'LOCKED']) assert.ok(k in cfg, k);
+  assert.equal(cfg.SHOW_PROGRESS, false, 'the reader\'s own choice');
+  assert.equal(cfg.SEARCH_MAX, 7);
+  assert.equal(cfg.TIME_LEFT, true, 'the folder\'s (locked) value');
+  assert.equal(cfg.LIB_FILES, '/reader/');
+  assert.equal(cfg.theme, 'sepia');
+  assert.deepEqual(cfg.TTS_SERVER, { api: '/tts/', voices: '/tts-voices/' });
+  assert.deepEqual(cfg.LOCKED, ['theme', 'TIME_LEFT', 'shortcuts', 'ALLOW_REMOTE_CONTENT']);
+  // Copy, and Download.
+  await page.click('#cfgCopy');
+  await page.waitForFunction(() => document.querySelector('#cfgNote').textContent === 'Copied.');
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await page.inputValue('#cfgText'));
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#cfgDownload')]);
+  assert.equal(dl.suggestedFilename(), 'reader-config.json');
+  assert.deepEqual(JSON.parse(require('node:fs').readFileSync(await dl.path(), 'utf8')), cfg);
+  // Done: back to Settings.
+  await page.click('#cfgDone');
+  assert.equal(await page.evaluate(() => [document.querySelector('#cfgDialog').open, document.querySelector('#setDialog').open, document.activeElement.id]).then(x => x.join()), 'false,true,setGenerate');
+});

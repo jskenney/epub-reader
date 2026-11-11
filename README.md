@@ -432,7 +432,11 @@ Two more parameters open files by address:
   speech is prepared ahead and saved, and full-precision voice models. Each
   starts at the site's value (see [Settings](#settings) below); one you change
   is marked with the site's default beside it, and Restore defaults puts them
-  all back. They're saved in the browser.
+  all back. They're saved in the browser. The dialog's first line gives the
+  reader's version and links to the project on GitHub. **Generate config**
+  shows every setting in use (the site's, the folder's and your own, the
+  starting preferences and the folder's `LOCKED` list) as a
+  `reader-config.json`, to copy or download and put in a folder.
 - Remembers your position, text size, line spacing, font and theme. An EPUB's
   position is kept by its identifier, so it resumes wherever the book is opened
   from; a book without one is kept by a fingerprint of its title and chapter
@@ -717,6 +721,15 @@ each with its own `default.epub`:
 - Unknown names and wrong values are ignored with a warning in the browser
   console. A missing file, or a "not found" page in its place, means no
   config.
+
+## Version
+
+The version in Settings is one patch release above the latest release tag
+(after `v0.60.0` it reads `v0.60.1`), with the date and time it was stamped in
+UTC: `Version v0.60.1 - 20261111.1430`. Run `python3 tools/stamp-version.py`
+before committing a change to `index.html` to bring it up to date
+(`--check` prints what it would write). To have that done on every commit,
+a git pre-commit hook that runs it can be added to your clone.
 
 ## Tests
 
