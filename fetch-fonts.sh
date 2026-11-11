@@ -100,7 +100,8 @@ done < <(grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\
 [ "$STRICT" = 1 ] || (cd "$DEST" && find files -type f ! -name '*.part' | sort | while read -r f; do "${SHA[@]}" "$f"; done) > "$DEST/SHA256SUMS"
 cat > "$DEST/NOTICE.txt" <<NOTICE
 Self-hosted copies of the reader's fonts, fetched from Google Fonts by fetch-fonts.sh.
-IBM Plex Sans, IBM Plex Mono, Literata, Source Serif 4, EB Garamond, Crimson Pro and Atkinson Hyperlegible
+IBM Plex Sans, IBM Plex Mono, Literata, Source Serif 4, EB Garamond, Crimson Pro, Atkinson Hyperlegible,
+Gentium Book Plus, Alegreya and Lexend
 are licensed under the SIL Open Font License 1.1: https://openfontlicense.org
 NOTICE
 echo

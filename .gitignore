@@ -9,8 +9,11 @@
 # Server voice clips from older setups (they now live on the TTS server; see epub-reader-tts-server)
 /tts-voices/
 
-# The book a site opens by default (see DEFAULT_BOOK)
+# The book a site opens by default (see DEFAULT_BOOK), and a site's own per-folder settings
 default.epub
+default.md
+default.html
+reader-config.json
 
 # Interrupted or in-progress downloads
 *.part

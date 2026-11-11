@@ -507,8 +507,8 @@ site as the reader.
 - Text size (A− / A+) and line spacing (the tighter / looser line buttons,
   1.00–2.60) can be adjusted from the top bar
 - Reading font picker (the Aa button): keep the book's own font, or override
-  it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Atkinson
-  Hyperlegible, Georgia or your system sans-serif. Code keeps its monospace.
+  it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Gentium Book Plus,
+  Alegreya, Atkinson Hyperlegible, Lexend, Georgia or your system sans-serif. Code keeps its monospace.
   Add more in the `FONTS` list in `index.html`.
 - The browser tab shows the book's cover as its icon (EPUB 3 `cover-image`,
   EPUB 2 `<meta name="cover">`, an image named "cover", or the first image on
