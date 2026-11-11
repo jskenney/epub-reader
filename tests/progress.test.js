@@ -334,7 +334,7 @@ test('a book whose last chapter was edited keeps its finished mark through the l
   await page.focus('#ribbon'); await page.keyboard.press('End'); await page.waitForTimeout(300);
   await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
   await h.waitFor(() => done.length === 1);
-  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = 0; }); await page.waitForTimeout(500);   // (saved again, with the mark)
+  await page.waitForTimeout(300);   // (left at once: the looser record must have the mark already, loop 4)
   await page.goto(`${h.READER}?book=books/twin-a-last.epub`); await h.waitForBook(page);
   await page.focus('#ribbon'); await page.keyboard.press('End'); await page.waitForTimeout(300);
   await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
@@ -352,4 +352,17 @@ test('opening another book sends the last book\'s place not yet sent (round 25 r
   await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Notes');
   assert.ok(await h.waitFor(() => got.length === 1, 3000), 'sent as the other book opened');
   assert.equal(got[0].body.title, 'The Long Book');
+});
+
+test('the progress bar\'s marks fall where its fill and a click count the sections, by their size (round 25 review, loop 4)', async () => {
+  const page = await apiPage();
+  await h.openReader(page, LONG, { 'spine:layout': 'one' });
+  const marks = await page.evaluate(() => getComputedStyle(document.querySelector('#ribbon')).getPropertyValue('--marks'));
+  const at = [...marks.matchAll(/transparent ([\d.]+)%/g)].map(m => Number(m[1]));   // (each mark's end)
+  assert.equal(at.length, 3, marks);
+  assert.ok(at[1] > 75 && at[1] < 95, `the second mark, after the two long chapters: ${at[1]}`);
+  // A click just past the second mark opens the third section, as drawn.
+  const box = await page.locator('#ribbon').boundingBox();
+  await page.mouse.click(box.x + box.width * (at[1] + 3) / 100, box.y + box.height / 2);
+  await page.waitForFunction(() => /spine 3\/3/.test(document.querySelector('#spinePos').textContent));
 });

@@ -148,7 +148,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .mono{font:12px/1 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .ribbon{--n:1;position:relative;height:7px;border-radius:2px;background:var(--rule);overflow:hidden;cursor:pointer}
 .ribbon::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background:repeating-linear-gradient(90deg,transparent 0,transparent calc(100% / var(--n) - 2px),var(--paper) calc(100% / var(--n) - 2px),var(--paper) calc(100% / var(--n)))}
+  background:var(--marks,repeating-linear-gradient(90deg,transparent 0,transparent calc(100% / var(--n) - 2px),var(--paper) calc(100% / var(--n) - 2px),var(--paper) calc(100% / var(--n))))}
 .ribbon.dense::after{display:none}
 #ribbonFill{height:100%;width:0;background:var(--ribbon);transition:width .2s ease-out}
 
@@ -607,7 +607,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0507</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0539</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -3330,6 +3330,8 @@ async function bookFinished(){
   if (await apiPost(API_COMPLETE, { ...id, completed: true }) !== null) {
     b.done = true;
     const pos = store.get(b.key); if (pos) store.set(b.key, { ...pos, done: 1 });
+    // (The looser record too, which is what a copy with its last chapter edited finds: round 25 review, loop 4.)
+    if (b.writeLoose) { const lp = store.get(b.looseKey); if (lp) store.set(b.looseKey, { ...lp, done: 1 }); }
   }
   if (api.finishing === b) api.finishing = null;
 }
@@ -3584,6 +3586,15 @@ function renderMeta(){
   const r = $('#ribbon');
   r.style.setProperty('--n', book.spine.length);
   r.classList.toggle('dense', book.spine.length > 80);
+  // (Sections counted by their size: the marks drawn where the fill and a click count them, not evenly: round 25
+  // review, loop 4.)
+  const w = sectionWeights();
+  if (w && w.length <= 80) {
+    const total = w.reduce((a, x) => a + x, 0), stops = ['transparent 0'];
+    let sum = 0;
+    for (const x of w) { sum += x; const at = (sum / total * 100).toFixed(3); stops.push(`transparent calc(${at}% - 2px)`, `var(--paper) calc(${at}% - 2px)`, `var(--paper) ${at}%`, `transparent ${at}%`); }
+    r.style.setProperty('--marks', `linear-gradient(90deg,${stops.join(',')})`);
+  } else r.style.removeProperty('--marks');
 }
 function renderToc(){
   const build = list => {
@@ -6590,7 +6601,7 @@ async function abOpen(){
   // (The dialog opens at once; which formats this browser can make is filled in when the check is done.)
   abFormatCheck().then(() => { $('#abDialog').dataset.formats = 'checked'; if ($('#abDialog').open) abSummary(); });
   if (!ab.running && (!ab.units.length || ab.book !== book)) {
-    ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; ab.last = -1;   // (no shift-click range from another book: L-306) delete $('#abList').dataset.measured;
+    ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; ab.last = -1; delete $('#abList').dataset.measured;   // (no shift-click range from another book: L-306)
     $('#abDone').replaceChildren(); $('#abDone').hidden = true;
   }
   abFillList();

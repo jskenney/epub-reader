@@ -255,7 +255,8 @@ signing in of its own.
   pages stop turning, or when the page stops scrolling a screen or more
   away from the last place sent, and on leaving the page (or opening
   another book) if a place hasn't been sent yet. Opening a book sends
-  nothing; nor does editing.
+  nothing; nor does editing. (A change of layout or text size, which moves
+  the pages, can also send one.)
 - **`POST /api/complete`** (`API_COMPLETE`): once, the first time the last
   page of the last section is reached (a document that fits on one page,
   or a book whose saved place is its last page, is finished as it opens;
