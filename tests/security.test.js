@@ -245,7 +245,7 @@ test('with remote content on, an animation setting a link\'s address is taken ou
 test('an archive whose files share their data isn\'t read (round 25 review, L-304)', async () => {
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/overlap.epub`);
-  assert.match(await h.notice(page), /overlap/);
+  assert.match(await h.notice(page), /its files overlap/);
 });
 
 test('book files opened on their own are sent sandboxed; the reader page isn\'t (round 25 review, M-130)', async () => {

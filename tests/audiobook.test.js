@@ -702,7 +702,10 @@ test('the export list\'s first shift-click in another book doesn\'t use the prev
   await page.click('#abList input >> nth=2');   // (the third, last clicked)
   await page.click('#abCancel');
   await page.click('#ttsClose');
-  await page.goto(`${h.READER}?book=books/long.epub`); await h.waitForBook(page);
+  // (Another book in the same page, as the file button opens it: a new page load would start afresh anyway.)
+  await page.setInputFiles('#fileInput', `${__dirname}/site/reader/books/long.epub`);
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'The Long Book' && document.querySelector('#status').hidden);
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured);
