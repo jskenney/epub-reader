@@ -207,6 +207,12 @@ def main():
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
+    # A top bar with none of its buttons (SHOW_READ_ALOUD and the rest): all of them are in Settings' Text settings.
+    (SITE / "folder-notools").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-notools" / "index.html")
+    (SITE / "folder-notools" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", **{k: False for k in (
+        "SHOW_READ_ALOUD", "SHOW_FONT_MENU", "SHOW_THEME_BUTTON", "SHOW_LAYOUT_BUTTON", "SHOW_FULLSCREEN_BUTTON", "SHOW_TEXT_SIZE",
+        "SHOW_LINE_SPACING", "SHOW_TEXT_WIDTH", "SHOW_OPEN_BUTTON", "SHOW_SETTINGS_BUTTON")}}))
     (SITE / "folder-brand" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand2" / "tall.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="80"><rect width="20" height="80" fill="purple"/></svg>')
     # Self-hosted Pocket TTS with every library and runtime file but only the 8-bit model files (REVIEW.md

@@ -194,3 +194,64 @@ test('the contents show the book\'s title and authors only while the top bar is 
   const tops = await page.evaluate(() => [document.querySelector('#toc .search').getBoundingClientRect().top, document.querySelector('#page').getBoundingClientRect().top]);
   assert.ok(Math.abs(tops[0] - tops[1]) <= 1, `search ${tops[0]}, page ${tops[1]}`);
 });
+
+const BAR_TOOLS = ['#ttsBtn', '#fontPick', '#themeBtn', '#layoutBtn', '#fsBtn', '#sizeGroup', '#lineGroup', '#widthGroup', '#openBtn', '#setBtn'];
+
+test('SHOW_READ_ALOUD, SHOW_FONT_MENU, SHOW_THEME_BUTTON, SHOW_LAYOUT_BUTTON, SHOW_FULLSCREEN_BUTTON, SHOW_TEXT_SIZE, SHOW_LINE_SPACING, SHOW_TEXT_WIDTH, SHOW_OPEN_BUTTON and SHOW_SETTINGS_BUTTON hide the top bar\'s buttons; all shown by default, with Text settings in Settings', async () => {
+  const page = await h.newPage({ viewport: { width: 1400, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  for (const sel of BAR_TOOLS) assert.equal(await page.isVisible(sel), true, sel);
+  await page.click('#setBtn');
+  const order = await page.evaluate(() => [...document.querySelectorAll('#setDialog .ab-actions .btn:not([hidden])')].map(b => b.id));
+  assert.deepEqual(order.slice(0, 2), ['setGenerate', 'setText'], 'Text settings is just right of Generate config');
+  await h.openReader(page, `${h.SITE}/folder-notools/index.html?book=/reader/books/long.epub`);
+  for (const sel of BAR_TOOLS) assert.equal(await page.isHidden(sel), true, sel);
+  assert.equal(await page.isVisible('#tocBtn'), true);
+  const cfg = JSON.parse(await page.evaluate(() => { document.querySelector('#setBtn').click(); document.querySelector('#setGenerate').click(); return document.querySelector('#cfgText').value; }));
+  assert.equal(cfg.SHOW_SETTINGS_BUTTON, false); assert.equal(cfg.SHOW_TEXT_WIDTH, false);
+});
+
+test('Text settings does what the top bar does: reading font, theme, layout, text size, line spacing, text width, then read aloud, full screen and opening a book', async () => {
+  const page = await h.newPage({ viewport: { width: 1400, height: 800 } });
+  await h.openReader(page, `${h.SITE}/folder-notools/index.html?book=/reader/books/long.epub`);
+  await page.evaluate(() => document.querySelector('#setBtn').click());   // (its button hidden here)
+  await page.click('#setText');
+  assert.equal(await page.isVisible('#txtDialog'), true);
+  const fonts = await page.$$eval('#txtFont option', os => os.map(o => o.value));
+  assert.ok(fonts.length > 3 && fonts.includes('lexend'), fonts.join());
+  await page.selectOption('#txtFont', 'lexend');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:face'))), 'lexend');
+  await page.selectOption('#txtTheme', 'sepia');
+  assert.equal(await page.getAttribute('html', 'data-theme'), 'sepia');
+  await page.selectOption('#txtLayout', 'scroll');
+  assert.equal(await page.getAttribute('#layoutBtn', 'data-layout'), 'scroll');
+  const size0 = await page.textContent('#txtSize');
+  await page.click('#txtLarger');
+  assert.equal(await page.textContent('#txtSize'), (parseInt(size0) + 10) + '%');
+  assert.equal(await page.textContent('#fontPct'), await page.textContent('#txtSize'));
+  const line0 = Number(await page.textContent('#txtLine'));
+  await page.click('#txtLooser');
+  assert.equal(Number(await page.textContent('#txtLine')), Math.round((line0 + 0.15) * 100) / 100);
+  await page.click('#txtNarrower');
+  assert.equal(await page.textContent('#txtWidth'), 'Narrow');
+  assert.equal(await page.isDisabled('#txtNarrower'), true);
+  assert.equal(await page.textContent('#widthVal'), 'Narrow');
+  // Done goes back to Settings, which shows the theme chosen.
+  await page.click('#txtDone');
+  assert.equal(await page.isHidden('#txtDialog'), true);
+  assert.equal(await page.isVisible('#setDialog'), true);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'setText');
+  assert.equal(await page.isChecked('#setForm input[name="theme"][value="sepia"]'), true);
+  // Read aloud, full screen and opening a book leave both dialogs for the page.
+  await page.click('#setText'); await page.click('#txtRead');
+  assert.equal(await page.isHidden('#setDialog'), true);
+  assert.ok(await h.waitFor(() => page.isVisible('#tts'), 3000), 'the read-aloud bar opens');
+  await page.evaluate(() => document.querySelector('#setBtn').click()); await page.click('#setText');
+  await page.click('#txtFs');
+  assert.ok(await h.waitFor(() => page.evaluate(() => document.querySelector('.app').classList.contains('fs')), 3000), 'full screen');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.querySelector('#setBtn').click()); await page.click('#setText');
+  await page.evaluate(() => { window.showOpenFilePicker = undefined; });
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 3000 }), page.click('#txtOpen')]);
+  assert.ok(chooser, 'the file picker opens');
+});
