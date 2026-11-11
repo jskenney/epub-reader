@@ -21,7 +21,9 @@ Besides EPUB, the reader opens **plain text** (`.txt`), **Markdown** (`.md`,
 `.markdown`) and **HTML** (`.html`, `.htm`) files, by the folder button, drag and
 drop, or a `?book=` link. Each is converted to HTML and given a contents
 list built from its headings. It reads as one continuous document (split
-only past about 200,000 characters), and the contents entries jump within
+only past about 200,000 characters; a text file's paragraph of over 20,000
+characters, or block of over 2,000 short lines, is taken in pieces so it can
+be), and the contents entries jump within
 it; everything else (pages, fonts, read-aloud,
 saved position) works as for EPUBs.
 
@@ -161,7 +163,7 @@ as UTF-8, their declaration saying so), the `mimetype` file first and
 uncompressed (as readers require), and the package's own `dcterms:modified`
 set to now (added to an EPUB 3 package without one; the package is read in
 its own encoding and written as UTF-8 only then). A book opened with the Open
-button in Chrome or Edge is saved over its file, and read on from it; otherwise
+button in Chrome or Edge (or dropped onto the page there) is saved over its file, and read on from it; otherwise
 Save asks where, or downloads it. A book read from a folder on the server is
 saved as a packed `.epub` of its container, package and listed files (and the
 usual `META-INF` files). **Chapter** downloads just the chapter's file. Every
@@ -211,8 +213,9 @@ Two more parameters open files by address:
   (`.md`, `.markdown`, `.html`, `.htm`, `.txt`) straight into the editor (see
   [Editing documents](#editing-documents)), found the same way as `?book=`.
   If there's no such file, a new, empty one with that name is started in the
-  text editor, ready to save. Other kinds of file are refused; an EPUB opens to
-  read (its chapters can't be edited yet). With editing turned off on the site
+  text editor, ready to save. Other kinds of file are refused; an EPUB opens
+  with the chapter it opens at in the editor (see the EPUB chapters part of
+  [Editing documents](#editing-documents)). With editing turned off on the site
   (`EDITING`), the document opens to read and nothing new is started.
 - `index.html?get=https://example.com/notes.md` opens a book or document by its
   address, on this site (like `?book=`) or another. The other site has to allow
@@ -519,7 +522,9 @@ site as the reader.
   every book left to right, web links,
   pictures from other sites, shortcuts, how long positions are kept, how many
   search matches are listed, comic section size, the sleep timer, how much
-  speech is prepared ahead and saved, and full-precision voice models. Each
+  speech is prepared ahead and saved, full-precision voice models, and the
+  addresses reading progress is asked for and sent to (see
+  [Reading progress sent to your site](#reading-progress-sent-to-your-site)). Each
   starts at the site's value (see [Settings](#settings) below); one you change
   is marked with the site's default beside it, and Restore defaults puts them
   all back. They're saved in the browser. The dialog's first line gives the
@@ -771,7 +776,8 @@ default books and the memory and request sizes stay the site's to set.
 | `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. A comic's place is kept as the page on screen, so changing it doesn't move readers to another page (a place saved by a version before this one follows the old sections once). |
 
 External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
-3.10.1 and marked 15.0.12, with their SRI hashes), the `lib`/`ort` URLs and
+3.10.1, marked 15.0.12 and lamejs 1.2.1, with their SRI hashes), `CM_VERSION` and
+`CM_FILES` (CodeMirror 5.65.21, with its files' hashes), the `lib`/`ort` URLs and
 model `revision` in `KOKORO` (kokoro-js 1.2.1), and `POCKET` (pocket-tts-js
 0.1.0, onnxruntime-web 1.20.0, a fixed model revision). When upgrading, change
 the matching version in the fetch script too (their comments say which line

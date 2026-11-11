@@ -72,3 +72,16 @@ test('a folder\'s reader-config.json turns them off, or locks one; a narrow scre
   assert.equal(await page.evaluate(() => document.querySelector('#toc').classList.contains('open')), true);
   assert.equal(await saved(page, 'SHOW_CONTENTS'), null, 'on a narrow screen C only opens them');
 });
+
+test('with the top bar hidden, its corner button sits in a strip of its own above the page, covering none of it (round 25 review, L-289)', async () => {
+  for (const viewport of [{ width: 1280, height: 800 }, { width: 400, height: 760 }]) {
+    const page = await h.newPage({ viewport });
+    await h.openReader(page, `${h.READER}?book=books/long.epub`);
+    await page.keyboard.press('n'); await page.waitForTimeout(300);
+    const r = await page.evaluate(() => { const c = document.querySelector('#barCorner').getBoundingClientRect(), p = document.querySelector('#stage').getBoundingClientRect(); return { cb: c.bottom, cl: c.left, pt: p.top, pr: p.right }; });
+    assert.ok(r.cb <= r.pt, `corner bottom ${r.cb}, page top ${r.pt} (${viewport.width})`);
+    assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id, [viewport.width - 30, Math.round(r.pt + 10)]), 'page');
+    await page.click('#barCorner');
+    assert.equal(await page.isVisible('#tocBtn'), true);
+  }
+});

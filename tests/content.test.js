@@ -219,3 +219,21 @@ test('in the scroll layout a chapter that can\'t be shown leaves the page before
   await blank.click('#tocList a >> nth=0');
   await blank.waitForFunction(() => !document.querySelector('#notice').hidden && /couldn't/i.test(document.querySelector('#noticeText')?.textContent || ''), null, { timeout: 5000 });
 });
+
+// Round 25 review.
+test('a text file with one paragraph per line (no blank lines) keeps its paragraphs and chapter headings (round 25 review, M-122)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/oneline-paras.txt`);
+  const s = await h.inFrame(page, doc => ({ p: doc.querySelectorAll('p').length, h: doc.querySelectorAll('h1,h2').length }));
+  assert.ok(s.p >= 100 && s.h >= 1, JSON.stringify(s));
+  assert.deepEqual(await page.$$eval('#tocList a', as => as.map(a => a.textContent)), ['Chapter 1', 'Chapter 2']);
+});
+
+test('one huge paragraph, or a huge block of short lines, is split into sections (round 25 review, L-286)', async () => {
+  const page = await h.newPage();
+  for (const name of ['oneline.txt', 'verse.txt']) {
+    await h.openReader(page, `${h.READER}?book=books/${name}`, { 'spine:layout': 'scroll' });
+    const n = Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+    assert.ok(n >= 3, `${name}: ${n} sections`);
+  }
+});

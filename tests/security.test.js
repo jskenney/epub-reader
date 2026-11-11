@@ -170,3 +170,31 @@ test('href on MathML elements is removed: Firefox would follow it (L-138)', asyn
   await h.openReader(page, `${h.READER}?book=books/math-links.epub`);
   assert.deepEqual(await h.inFrame(page, doc => ['m', 'mi'].map(id => doc.getElementById(id)?.getAttribute('href'))), [null, null]);
 });
+
+// Round 25 review.
+for (const [label, base, book] of [['an EPUB', h.SITE, 'svgext.epub'], ['a folder book', h.SITE, 'svgext/'], ['an EPUB, with no reader policy', h.PLAIN, 'svgext.epub']]) {
+  test(`an SVG file used as a resource document is cleaned: nothing reaches another site, nothing for the policy to refuse, nothing runs (${label}; round 25 review, L-287)`, async () => {
+    const page = await h.newPage();
+    await h.clearRemoteLog();
+    await h.openReader(page, `${base}/reader/index.html?book=books/${book}`);
+    await page.waitForTimeout(1500);
+    assert.deepEqual(await h.remoteLog(), []);
+    assert.deepEqual(page.cspViolations, [], 'the cleaning leaves nothing for the policy to refuse');
+    assert.equal(await page.evaluate(() => window.__svg), undefined);
+    // The sprite's own shapes still show.
+    assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('use').length), 2);
+  });
+}
+
+test('names and ids that would hide the page\'s own methods are dropped, and the chapter shows (round 25 review, L-288)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/clobber.epub`);
+  assert.equal(await h.notice(page), '');
+  const s = await h.inFrame(page, doc => ({ text: doc.body.innerText.includes('Some text here'), names: [...doc.querySelectorAll('[name]')].map(e => e.getAttribute('name')), ids: [...doc.querySelectorAll('p[id]')].map(e => e.id) }));
+  assert.equal(s.text, true);
+  assert.deepEqual(s.names, []);
+  assert.ok(s.ids.includes('content') && !s.ids.includes('addEventListener'), JSON.stringify(s.ids));
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => /spine 2\/2/.test(document.querySelector('#spinePos').textContent));
+  assert.equal(await h.notice(page), '');
+});

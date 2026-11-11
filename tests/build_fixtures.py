@@ -6,6 +6,8 @@
 The reader itself is linked in as tests/site/reader/index.html (with libs/, fonts/, kokoro/ and pocket/ if
 they have been fetched next to it). Pure standard library: zipfile, struct, zlib.
 """
+import base64
+import random
 import io
 import json
 import math
@@ -702,6 +704,37 @@ def main():
     (books / 'hr.md').write_text('***\n\nIntro text\n\n***\n\nBody\n')
     (books / 'wrap.md').write_text('<div align="center">\n\n# Centered\n\nStart.\n\n</div>\n')
     (books / 'comments.html').write_text('<!DOCTYPE html>\n<html>\n<head><title>C</title></head>\n<body>\n<!-- keep me -->\n<p>Start.</p>\n<div class="w"><!-- section A --><p>In.</p></div>\n</body>\n</html>\n')
+    # Round 25 review (reviewer 3's cases): text with one paragraph per line (M-122); one huge paragraph and a huge
+    # verse block (L-286); an SVG file used as a resource document (L-287); names that hide the page's methods (L-288).
+    rnd = random.Random(1)
+    words = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"]
+    paras = [f"Paragraph {i}. " + " ".join(rnd.choice(words) for _ in range(rnd.randint(60, 110))) + "." for i in range(400)]
+    (books / "oneline-paras.txt").write_text("Chapter 1\n" + "\n".join(paras[:200]) + "\nChapter 2\n" + "\n".join(paras[200:]) + "\n")
+    (books / "oneline.txt").write_text(". ".join(" ".join(rnd.choice(words) for _ in range(12)) for _ in range(9000)) + ".")
+    (books / "verse.txt").write_text("\n".join(" ".join(rnd.choice(words) for _ in range(4)) for _ in range(30000)))
+    ext_svg = f'''<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
+<style>@import url("{REMOTE}/svgdoc-import.css"); rect {{ fill: url({REMOTE}/svgdoc-cssfill.svg#g) }}</style>
+<defs><filter id="f"><feImage href="{REMOTE}/svgdoc-feimage.png"/></filter>
+<mask id="m"><image href="{REMOTE}/svgdoc-mask-image.png" width="100" height="100"/></mask>
+<clipPath id="c"><rect width="50" height="50"/></clipPath>
+<g id="a"><image href="{REMOTE}/svgdoc-use-image.png" width="10" height="10"/><image xlink:href="{REMOTE}/svgdoc-use-ximage.png" width="10" height="10"/><rect width="10" height="10" style="fill:url({REMOTE}/svgdoc-stylefill.svg#q)" onclick="x()"/><circle r="5" fill="green"/></g>
+</defs><use href="#a"/><script>parent.__svg = 1</script></svg>'''
+    svg_page = xhtml("SVG ext", '''<h1>SVG ext</h1>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100"><use href="ext.svg#a"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100"><use xlink:href="ext.svg#a"/></svg>
+<div style="width:50px;height:50px;background:red;filter:url(ext.svg#f)">f</div>
+<div style="width:50px;height:50px;background:red;mask:url(ext.svg#m)">m</div>
+<div style="width:50px;height:50px;background:red;clip-path:url(ext.svg#c)">c</div>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="50" height="50" fill="url(ext.svg#a)"/><rect width="50" height="50" filter="url(ext.svg#f)"/></svg>
+<p>done</p>''')
+    epub_items(books / "svgext.epub", "SVG ext", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("ext", "ext.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": svg_page, "ext.svg": ext_svg}, "urn:svgext")
+    with zipfile.ZipFile(books / "svgext.epub") as z:
+        z.extractall(books / "svgext")
+    pic = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
+    epub_items(books / "clobber.epub", "Clobber", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", ""), ("p", "pic.png", "image/png", "")], ["c1", "c2"],
+               {"c1.xhtml": xhtml("Clobber", '<h1>Clobber</h1><img name="getElementById" src="pic.png" alt="g"/><img name="createRange" src="pic.png" alt="g"/><form name="fonts"></form><p id="addEventListener">Some text here for reading.</p><p id="content">Kept id.</p>'),
+                "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Second.</p>"), "pic.png": pic}, "urn:clobber")
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
     (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
     (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')
