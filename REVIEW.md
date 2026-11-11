@@ -429,6 +429,11 @@ Findings:
 - **Low:** L-348 to L-358.
 - **Tests:** T-51, T-52. **Documentation:** D-28 to D-31.
 
+Afterwards `555ff0c`, `9dc26bc` and `2eb3e9d` fixed H-34, H-35 and M-149 to M-152, each with a test that fails on the
+code before it. The paging fix was checked over 300 page turns in one and two columns, at three window widths and
+four text widths, and with nine kinds of book CSS on the column flow: no text past an edge, and a search hit 1,200
+paragraphs in shown on the page reached (the code before it was up to 688 px off).
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -461,7 +466,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 26's findings are open (below), with what was left open after round 25 (M-144 to M-148, L-340 to L-347,
+Round 26's findings are open (below) except H-34, H-35 and M-149 to M-152 (fixed), with what was left open after round 25 (M-144 to M-148, L-340 to L-347,
 T-50, D-27), T-47 and E-29, and the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110
 and T-43 are left as they are, by your decision (see Resolved).
 
@@ -469,12 +474,6 @@ and T-43 are left as they are, by your decision (see Resolved).
 
 | ID | Title | Kind |
 |---|---|---|
-| H-34 | A document's link such as `.///evil.example/x.html` (also `.\\host/…`, `a/..///host/…`) is marked internal, resolves to `//host/…`, and `goTo` opens it as a linked document from that other site, replacing the document with its page. This works even with `ALLOW_EXTERNAL_LINKS` off; it needs `GET_URLS` (default) and CORS from that site. Reproduced. | Security |
-| H-35 | No size limit for markup below `MAX_ENTRY` (512 MB): a 144 KB EPUB with a 40 MB chapter froze the tab for over 3 minutes, and a 1 MB one (300 MB chapter) crashed it. Reproduced. | Hardening |
-| M-149 | A book's CSS can restyle the reader's column flow and clip (padding, border, width, margin, zoom, transform; `transform: … !important` on the flow beats the page turn). The page step then misses the real column stride, and text runs further past the edges with each turn. Border, zoom and transform regressed with `6808bfe`; padding and width were wrong before. Reproduced. | Bug |
-| M-150 | The page step still drifts: the column gap `max(32px,4vw)` is fractional on frames wider than 800px and laid out snapped to 1/64 px. In one column at 1280px, the text is 4px past the left edge after about 280 turns, and search hits, read-aloud following, Tab to a link and fragment links land one page early (`pageAt` floors). Two columns drift the other way. Reproduced. | Bug |
-| M-151 | Two elements have `id="tocHead"`: the new sidebar title block hides the "Contents" heading while the top bar shows, and names the contents navigation (`aria-labelledby`) with the book's title and description. Reproduced. | Accessibility |
-| M-152 | With the top bar hidden, the invisible top-right corner button covers the editor's Save as… button: clicking it shows the bar instead (and saves that choice). It also covers the top of a notice's button, and that corner of scroll, comic and fixed-layout pages. Reproduced. | Bug |
 | L-348 | A font added in Settings' `ADDITIONAL_FONTS`, on a site that self-hosts fonts, is blocked in the open chapter (its frame policy was set without Google) until the next chapter is built; a one-part document never gets it. Reproduced. | Bug |
 | L-349 | `fetch-fonts.sh --config` with a relative path fails when run from another folder (the script changes folder before reading its options). Reproduced. | Bug |
 | L-350 | A config list of fonts in which a family name starts with a digit (`"42dot Sans"`) drops every extra font: the list is stored joined with commas and parsed again, and the digit is taken as the previous font's styles. Reproduced. | Bug |
@@ -551,11 +550,10 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-34 and H-35 (a document's link reaching another site; a small book freezing the tab).
-2. M-149 and M-150 together (pin the reader's column flow against book CSS, and step by the real column stride), then M-151 and M-152.
-3. The open lows, tests and docs from rounds 25 and 26.
-4. E-25, E-22, as laid out in TODO.md.
-5. The other enhancements, as wanted.
+1. M-144 to M-148 (links between documents, right-to-left documents).
+2. The open lows, tests and docs from rounds 25 and 26.
+3. E-25, E-22, as laid out in TODO.md.
+4. The other enhancements, as wanted.
 
 ## Resolved
 
@@ -563,6 +561,12 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-34 | A document's link with empty steps (`.///host/x.html`) opened a page of another site as a linked document, even with external links off. Such paths are refused, and a linked document must be on the same site. | `555ff0c` |
+| H-35 | No size limit for markup below `MAX_ENTRY`: a 144 KB EPUB with a 40 MB chapter froze the tab. Pages, style sheets and contents files over 16 MB of text (`MAX_MARKUP`) are refused with a notice. | `555ff0c` |
+| M-149 | A book's CSS on the reader's column flow (padding, border, width, zoom, transform, even `!important`) broke page turns. The flow and its clip are kept free of them, and the page turn goes through the reader's own `!important` rule. | `9dc26bc` |
+| M-150 | The page step drifted over hundreds of pages (a column gap of a fraction of a pixel, laid out snapped to 1/64 px), and search hits deep in a chapter landed a page early. The flow's width and gap are rounded down to whole pixels. | `9dc26bc` |
+| M-151 | Two elements had `id="tocHead"`, hiding the Contents heading and naming the contents navigation after the book. The title block is `#tocMeta`. | `2eb3e9d` |
+| M-152 | The invisible top-right corner covered the editor's Save as… and Done buttons and a notice's buttons. It is hidden while editing and while a notice shows. | `2eb3e9d` |
 | H-32 | Right-to-left books (Arabic, Hebrew: `dir="rtl"` or `direction:rtl`) show only the first page of each chapter in the page layouts | `44e4e05` |
 | H-33 | Books in vertical text (`writing-mode: vertical-rl`) can't be read past the first screen of a chapter, in any layout | `44e4e05` |
 | M-141 | Relative links between HTML or Markdown documents don't open the other document, though the README says they do | `44e4e05` |
