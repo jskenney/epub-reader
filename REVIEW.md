@@ -474,40 +474,8 @@ and T-43 are left as they are, by your decision (see Resolved).
 
 | ID | Title | Kind |
 |---|---|---|
-| L-348 | A font added in Settings' `ADDITIONAL_FONTS`, on a site that self-hosts fonts, is blocked in the open chapter (its frame policy was set without Google) until the next chapter is built; a one-part document never gets it. Reproduced. | Bug |
-| L-349 | `fetch-fonts.sh --config` with a relative path fails when run from another folder (the script changes folder before reading its options). Reproduced. | Bug |
-| L-350 | A config list of fonts in which a family name starts with a digit (`"42dot Sans"`) drops every extra font: the list is stored joined with commas and parsed again, and the digit is taken as the previous font's styles. Reproduced. | Bug |
-| L-351 | A `NAVBAR_ICON` logo makes the top bar three rows tall on phones (≤520px: `.book-id` keeps a fixed basis). Reproduced. | Layout |
-| L-352 | While the top bar shows, a long title or author list is cut off with no way to read it in full (no `title`, not in Information). Read. | Accessibility |
-| L-353 | `NAVBAR_LINK` without a scheme (`www.example.com`) becomes a link inside the reader's folder, with no warning. Read. | Bug |
-| L-354 | A book's CSS can hide or move the end-of-chapter marker (`display:none !important`, or far off with `position:absolute`), making a chapter one page or thousands of empty ones. Reproduced. | Hardening |
-| L-355 | With `SHOW_READ_ALOUD` false, Read aloud from Text settings leaves focus on the page body, and the read-aloud bar's × sends focus to the hidden button. Reproduced. | Accessibility |
-| L-356 | `fetch-fonts.sh` reads `ADDITIONAL_FONTS` differently from the reader: it fetches fonts already in the menu (Lexend), keeps only the first style spec when two configs name one family, and one misspelt family stops the whole run (`curl -f` under `set -e`). Read, `--list`. | Bug |
-| L-357 | Editor, a file mostly LF with some CRLF lines: undo leaves it marked changed, and saving rewrites the untouched CRLF lines as LF. Read. | Bug |
-| L-358 | A saved place can come back a page off in a section of over about 1000 pages (`f` is saved to 0.001). Read (arithmetic). | Bug |
-| T-51 | No tests of: one-column or Full-width drift over hundreds of pages, a search hit or fragment deep in a chapter, book CSS on the flow (padding, border, width), the Contents heading and navigation name, the corner covering no control, L-348 to L-350, `fetch-fonts.sh --config` from another folder, and Text settings → Read aloud actually playing and where focus goes. | Tests |
-| T-52 | Two tests fail outside a full checkout: the nginx types test needs `kokoro/` (435 MB, fetched separately) and the M-121 line-endings test needs `.git`. They should use a fixture or skip. | Tests |
-| D-28 | README on `fetch-fonts.sh`: still says it reads only `index.html` and has no `--list` (it reads `reader-config.json` and `--config` files, and has `--list`); upgrading should say to rerun it after changing `ADDITIONAL_FONTS`; the `ADDITIONAL_FONTS` examples use Lexend, now built in. | Docs |
-| D-29 | README's `SHOW_*` row says each control's keyboard shortcut still works: only Read aloud (R), theme (T), layout (L) and full screen (F) have one. | Docs |
-| D-30 | README's `SPAN_MAX` row doesn't give its config form (`{"kokoro":350,"pocket":600,"server":600}`) or say values outside 21–5000 are dropped. | Docs |
-| D-31 | README's Caddy example exempts only `/reader/index.html` from the sandbox, with no note (as the nginx section has) that a folder's own copy of `index.html` needs exempting too. | Docs |
-| M-144 | A document's link to a missing file, or up a folder (`../other/b.html`, resolved inside its own folder), replaces the document with the default book, and the address keeps the missing name | Bug |
-| M-145 | Following a document's link: Back and Forward change only the address (no `popstate`); unsaved changes and a running export aren't asked about | Bug |
-| M-146 | The focus handler (M-142) turns back a page when a link running onto the next page is clicked there, and the click is lost | Bug |
-| M-147 | Right-to-left EPUBs: Edit, then Done or Discard, go to the wrong heading (`editTopHeading` assumes later pages are to the right) | Bug |
-| M-148 | HTML, Markdown and text documents lose a right-to-left direction (`dir` on html, body or a wrapper isn't carried to the parts) | Bug |
-| L-340 | A document's link to an EPUB or comic beside it gives an error; a link to its own file name reloads it | Bug |
-| L-341 | H-33's horizontal writing also flattens small vertical elements in horizontal books (a vertical table header, SVG text) | Bug |
-| L-342 | Right-to-left text without `page-progression-direction`: pages come in from the left but the right arrow goes on | Bug |
-| L-343 | The sandbox extension list misses other XML types (`kml`, `xspf`, `wsdl`…): safe in Chromium, which downloads them; an allowlist would be sturdier | Hardening |
-| L-344 | A download named like "Notes v1.2" is taken to have an extension already | Bug |
-| L-345 | A book's link can fill the error notice with long text of its choosing, covering the page and its Dismiss button | Hardening |
-| L-346 | Link names holding `%2F` are encoded twice, so such a file can't be reached by a link | Bug |
-| L-347 | Patterns ending in `\s+$` are linear in current Chromium but slow on very long white space in other engines | Hardening |
-| T-50 | No tests of: a click on a link split across pages, `../` and hostile link shapes, Back after a linked document, vertical text in single elements, the editor's place in a right-to-left document, a long notice | Tests |
-| D-27 | README's Caddy example: `>` (deferred header) needs a recent Caddy; the block form with `defer` works in older ones | Docs |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
-| T-47 | `LOOKAHEAD_SEC` and `NCACHE_SEC` have no test: the mock server voice answers one request at a time, so a test can't tell the settings apart | Tests |
+| T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
 
@@ -561,6 +529,38 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| M-144 | A document's link to a missing file, or up a folder, replaced the document with the default book. Links are followed as written against the document's own address, and the target is opened before it is added to the history: a missing one leaves the document open, with a notice. | `4ea6db9` |
+| M-145 | After following a document's link, Back and Forward changed only the address; unsaved changes and a running export weren't asked about. They open the documents again (popstate), and both are asked about. | `4ea6db9` |
+| L-340 | A document's link to an EPUB or comic beside it gave an error; a link to its own file name reloaded it. Books beside it open; a link to itself goes to the place. | `4ea6db9` |
+| L-346 | Link names holding `%2F` were encoded twice. Followed as written. | `4ea6db9` |
+| M-146 | The focus handler turned back a page when a link running onto the next page was clicked there. The page stays when part of the focused element is on it. | `9a2a930` |
+| M-147 | Right-to-left EPUBs: Edit, then Done or Discard, went to the wrong heading. The editor's place is found by page. | `9a2a930` |
+| M-148 | HTML and Markdown documents lost a right-to-left direction. `dir` on html, body or a wrapper is carried to every part. | `9a2a930` |
+| L-341 | Horizontal writing also flattened a vertical table header and SVG text. Table cells and SVG keep theirs. | `55e28cc` |
+| L-342 | Right-to-left text without `page-progression-direction`: the right arrow went on. The arrows, swipes and sideways wheel go the way the pages come in. | `55e28cc` |
+| L-354 | A book's CSS could hide or move the end-of-chapter marker. Its display and position are the reader's. | `55e28cc` |
+| L-358 | A saved place could come back a page off in a section of over 1000 pages. Kept to a millionth. | `55e28cc` |
+| L-348 | A font added in Settings on a site that self-hosts fonts was blocked in the open page. The page is made again under the new policy. | `987f9ce` |
+| L-349 | `fetch-fonts.sh --config` with a relative path failed from another folder. Options are read first. | `987f9ce` |
+| L-350 | A family name starting with a digit dropped every extra font. Only style names and numbers continue the styles before them. | `987f9ce` |
+| L-356 | `fetch-fonts.sh` read `ADDITIONAL_FONTS` differently from the reader. It leaves out the menu's fonts, takes the styles given when a family is named twice, and skips (with a warning) a family Google doesn't know. | `987f9ce` |
+| L-351 | A logo made the top bar three rows tall on phones. Room is left for it. | `156043c` |
+| L-352 | A long title or author list couldn't be read in full. They have it as their title. | `156043c` |
+| L-353 | `NAVBAR_LINK` without a scheme became a link in the reader's folder. A host-like value is taken as `https://`, with a note. | `156043c` |
+| L-355 | With `SHOW_READ_ALOUD` false, focus was lost after Read aloud from Text settings and after closing the bar. It goes to Play, then to the page. | `156043c` |
+| L-343 | The sandbox extension list missed other XML types. `kml`, `xspf`, `wml`, `wsdl`, `xsd`, `gpx`, `xbl` and `plist` added (nginx, Caddy, test server). | `4646606` |
+| L-344 | A download named like "Notes v1.2" was taken to have an extension. Only the type's own extension counts. | `4646606` |
+| L-345 | A book's link could fill the notice with long text. Kept to 400 characters and a few lines. | `4646606` |
+| L-347 | Patterns ending in `\s+$`. Replaced by `trimEnd`. | `4646606` |
+| L-357 | A file of mixed line endings with an edit undone was marked changed. Line endings alone don't count. | `4646606` |
+| T-52 | Two tests failed outside a full checkout. A sample `.mjs` of the suite's own; the line-endings test is skipped without `.git`. | `3e8c886` |
+| D-27 | Caddy's `>` deferred header needs a recent Caddy. The example uses the block form with `defer`. | `3e8c886` |
+| D-28 | README on `fetch-fonts.sh`: `--list`, the configs it reads, rerunning after `ADDITIONAL_FONTS`, examples without Lexend. | `3e8c886` |
+| D-29 | README's `SHOW_*` row: only R, T, L and F are single-key shortcuts. | `3e8c886` |
+| D-30 | README's `SPAN_MAX` row: the config form and range. | `3e8c886` |
+| D-31 | README's Caddy example: exempt each folder's own copy of `index.html`. | `3e8c886` |
+| T-50 | No tests of a link split across pages, hostile link shapes, Back after a linked document, vertical text in single elements, the editor's place right to left, a long notice. All added with this round's fixes. | `3d1deb1` |
+| T-51 | Test gaps of round 26 (drift, book CSS on the flow, the Contents heading, the corner, fonts, Text settings → Read aloud). Added with the fixes; reading is seen word by word. | `3d1deb1` |
 | H-34 | A document's link with empty steps (`.///host/x.html`) opened a page of another site as a linked document, even with external links off. Such paths are refused, and a linked document must be on the same site. | `555ff0c` |
 | H-35 | No size limit for markup below `MAX_ENTRY`: a 144 KB EPUB with a 40 MB chapter froze the tab. Pages, style sheets and contents files over 16 MB of text (`MAX_MARKUP`) are refused with a notice. | `555ff0c` |
 | M-149 | A book's CSS on the reader's column flow (padding, border, width, zoom, transform, even `!important`) broke page turns. The flow and its clip are kept free of them, and the page turn goes through the reader's own `!important` rule. | `9dc26bc` |
