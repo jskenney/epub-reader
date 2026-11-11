@@ -997,6 +997,7 @@ def main():
          ("c2.xhtml", "Two", "<p>The same line again and again.</p>" * (20 * 1024 * 1024 // 36), "")], uid="urn:huge-chapter")
     # One long section: dozens of pages to turn, for the page-turn drift check (text width margins in fractions of a pixel).
     (books / "drift.md").write_text("# Drift\n\n" + "\n\n".join(f"Paragraph {i}. " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + "." for i in range(400)) + "\n")
+    (books / "sample.mjs").write_text("export const x = 1;\n")   # (for the nginx types test: T-52)
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

@@ -95,7 +95,8 @@ test("the test server sends nginx.conf.example's types for the files whose types
   // would prove nothing: round 25 review, T-46.)
   const want = { mjs: 'text/javascript', wasm: 'application/wasm', epub: 'application/zip', cbz: 'application/zip', md: 'text/markdown' };
   assert.deepEqual(Object.fromEntries(types), want);
-  const files = { mjs: '/reader/kokoro/ort/ort-wasm-simd-threaded.jsep.mjs', wasm: '/pocket-partial/pocket/ort/ort-wasm-simd-threaded.wasm',
+  // (Sample files of the suite's own, so a checkout without the voice models passes too: round 26 review, T-52.)
+  const files = { mjs: '/reader/books/sample.mjs', wasm: '/pocket-partial/pocket/ort/ort-wasm-simd-threaded.wasm',
     epub: '/reader/books/long.epub', cbz: '/reader/books/comic.cbz', md: '/reader/books/notes.md' };
   for (const [ext, type] of types) {
     assert.ok(files[ext], `a sample .${ext} file for this test`);

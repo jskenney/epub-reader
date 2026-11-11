@@ -278,7 +278,8 @@ test('stamp-version.py keeps the page\'s line endings; the pre-commit hook leave
   assert.equal(git('status', '--porcelain').stdout.trim(), '');
 });
 
-test('the hook, scripts and page are checked out with LF line endings, whatever core.autocrlf says (round 25 review, M-121)', () => {
+// (Only in a git checkout: a copy without .git has no attributes to ask about: round 26 review, T-52.)
+test('the hook, scripts and page are checked out with LF line endings, whatever core.autocrlf says (round 25 review, M-121)', { skip: !fs.existsSync(path.join(REPO, '.git')) && 'not a git checkout' }, () => {
   for (const f of ['.githooks/pre-commit', 'tools/stamp-version.py', 'fetch-libs.sh', 'index.html', 'checksums/libs.sha256', '.github/workflows/slow.yml']) {
     const r = spawnSync('git', ['-C', REPO, 'check-attr', 'eol', '--', f], { encoding: 'utf8' });
     assert.match(r.stdout, /eol: lf$/m, f);

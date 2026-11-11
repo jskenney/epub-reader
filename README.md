@@ -599,7 +599,7 @@ or model revision, regenerate the lists with `python3 tools/make-checksums.py`;
 large model files aren't downloaded for this, since Hugging Face records
 their SHA-256. `fetch-libs.sh`, `fetch-kokoro.sh` and `fetch-pocket.sh` also
 have a `--list` option that prints what they would download without
-downloading it (`fetch-fonts.sh` keeps its own list in `fonts/SHA256SUMS`).
+downloading it, as does `fetch-fonts.sh` (which keeps its own checksums in `fonts/SHA256SUMS`).
 
 ### Upgrading a pinned version
 
@@ -628,7 +628,8 @@ To upgrade one:
    new checksums and are removed (it ends with "run this script again"); the second downloads the new ones.
 4. For a new model revision, check that every voice and language still works (the French Pocket TTS bundle
    once had no voices at a revision), and update `POCKET_LANGS` sizes if the files changed.
-5. Fonts aren't pinned: rerun `./fetch-fonts.sh` after changing `FONTS` in `index.html`.
+5. Fonts aren't pinned: rerun `./fetch-fonts.sh` after changing `FONTS` in `index.html`, or `ADDITIONAL_FONTS`
+   in a `reader-config.json`.
 6. If your server caches `libs/`, `kokoro/` or `pocket/` for long without checking (nginx.conf.example
    doesn't), returning readers need a hard reload once, or the old library fails the new hash.
 7. Run the tests (`tests/run.sh`, and `SLOW=1 tests/run.sh` for the voice models), and commit
@@ -701,7 +702,8 @@ Every copy then loads from `/reader/kokoro/` and `/reader/pocket/`, so the
 files are downloaded and cached by the browser once. Put a copy of the fetch
 scripts in that folder and run them there: each works in its own folder, and
 reads `checksums/` beside it (`fetch-kokoro.sh` also reads the voice list from
-`index.html`, and `fetch-fonts.sh` reads only `index.html`). The browser treats the same
+`index.html`, and `fetch-fonts.sh` reads `index.html`, the `reader-config.json` beside it, and each one given with
+`--config`: pass every folder's, so the fonts their `ADDITIONAL_FONTS` name are fetched too). The browser treats the same
 file under two different paths as two files, which is why sharing one
 folder matters.
 
@@ -754,13 +756,18 @@ handle /reader/* {
 	header Referrer-Policy same-origin
 	# Revalidate every file (cheap with ETags): a cached old library would fail a new index.html's hash.
 	header Cache-Control "no-cache"
-	# Book files opened on their own run nothing (not the reader's own page). ">" defers this header so it
-	# replaces the policy above: Caddy runs a matched header line before an unmatched one.
+	# Book files opened on their own run nothing (not the reader's own page: add each folder's own copy of
+	# index.html to "not path", as /reader/index.html is). "defer" makes this header replace the policy above,
+	# as Caddy runs a matched header line before an unmatched one. (Recent Caddy also takes the short form
+	# header @bookfiles >Content-Security-Policy "sandbox".)
 	@bookfiles {
 		path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx|kml|xspf|wml|wsdl|xsd|gpx|xbl|plist)$
 		not path /reader/index.html
 	}
-	header @bookfiles >Content-Security-Policy "sandbox"
+	header @bookfiles {
+		Content-Security-Policy "sandbox"
+		defer
+	}
 	root * /srv/www
 	file_server
 }
@@ -803,11 +810,11 @@ default books and the memory and request sizes stay the site's to set.
 | `CONTENTS_TITLE` ✓ | `'Contents'` | The word on the contents button at the top left: any text, or `''` for the icon alone (screen readers still hear "Contents"). |
 | `NAVBAR_ICON` ✓ | `''` | A picture shown just left of the contents button, for a site's logo: its address relative to the page (`'logo.png'`, `'design.svg'`) or a full one. It is shown as tall as the button and at most twice as wide (smaller pictures aren't enlarged). The reader's policy in `nginx.conf.example` allows pictures from this site only. |
 | `NAVBAR_LINK` ✓ | `''` | Where clicking that picture goes: an address on this site or a full web address (`'https://example.com/'`). `''`: the picture links nowhere. Only web addresses are taken (not `javascript:` and the like). |
-| `SHOW_READ_ALOUD`, `SHOW_FONT_MENU`, `SHOW_THEME_BUTTON`, `SHOW_LAYOUT_BUTTON`, `SHOW_FULLSCREEN_BUTTON`, `SHOW_TEXT_SIZE`, `SHOW_LINE_SPACING`, `SHOW_TEXT_WIDTH`, `SHOW_OPEN_BUTTON` ✓ | `true` | `false` hides that control in the top bar: Read aloud, the reading-font (Aa) menu, the theme switcher, Layout, Full screen, text size, line spacing, text width, Open. Each one is still in Settings → **Text settings** (next to Generate config), and its keyboard shortcut still works. The Aa menu's single-key shortcuts switch is in Settings too. |
+| `SHOW_READ_ALOUD`, `SHOW_FONT_MENU`, `SHOW_THEME_BUTTON`, `SHOW_LAYOUT_BUTTON`, `SHOW_FULLSCREEN_BUTTON`, `SHOW_TEXT_SIZE`, `SHOW_LINE_SPACING`, `SHOW_TEXT_WIDTH`, `SHOW_OPEN_BUTTON` ✓ | `true` | `false` hides that control in the top bar: Read aloud, the reading-font (Aa) menu, the theme switcher, Layout, Full screen, text size, line spacing, text width, Open. Each one is still in Settings → **Text settings** (next to Generate config), and the single-key shortcuts still work for those that have one (R read aloud, T theme, L layout, F full screen). The Aa menu's single-key shortcuts switch is in Settings too. |
 | `SHOW_SETTINGS_BUTTON` ✓ | `true` | `false` hides the Settings (gear) button, so readers can't open Settings or Text settings. Fix what they would have chosen with the folder's other settings (and `LOCKED`). |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
-| `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lexend", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
+| `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lora", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
 | `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |
 | `API_PROGRESS` ✓ ⚙ | `'/api/progress'` | Where reading progress is sent (see [Reading progress sent to your site](#reading-progress-sent-to-your-site)): an address on this site; `''` sends nothing. |
 | `API_COMPLETE` ✓ ⚙ | `'/api/complete'` | Where finishing a book is sent, once; `''` sends nothing. |
@@ -822,7 +829,7 @@ default books and the memory and request sizes stay the site's to set.
 | `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. Whole seconds. |
 | `SAVED_AUDIO_MB` ✓ ⚙ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. Whole MB. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
-| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. |
+| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "server": 600}` (any of the three); a value outside 21–5000 is ignored. |
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
 | `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |
