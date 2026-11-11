@@ -367,6 +367,16 @@ M-140, L-331 and L-332 were fixed at once, in `a9fee6d`; loop 6 fixed the rest i
 fails on the code before it, except L-334 and L-337 (checked by reading and in Node). H-33 is fixed by laying vertical
 text out across, so it can be read; laying it out vertically is the new E-29.
 
+The seventh and final review (of loop 6), by three new reviewers on `8a89dec`: one on loop 6's fixes, one a whole-reader
+pass as different kinds of reader, and one a last adversarial pass. None found anything critical or high, and the
+adversarial pass found no way for hostile content to run script in the reader's origin, freeze the tab or reach
+another site without the reader choosing it. Right-to-left pagination of EPUBs held in every case tried. What they
+found is mostly in loop 6's new code (links between documents, right-to-left documents) and is left open: that was
+the last of the six loops.
+- **Medium:** M-144 to M-148.
+- **Low:** L-340 to L-347.
+- **Tests:** T-50. **Documentation:** D-27.
+
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
@@ -400,13 +410,28 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-T-47 and E-29 are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+The final review's findings, T-47 and E-29 are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
 TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| M-144 | A document's link to a missing file, or up a folder (`../other/b.html`, resolved inside its own folder), replaces the document with the default book, and the address keeps the missing name | Bug |
+| M-145 | Following a document's link: Back and Forward change only the address (no `popstate`); unsaved changes and a running export aren't asked about | Bug |
+| M-146 | The focus handler (M-142) turns back a page when a link running onto the next page is clicked there, and the click is lost | Bug |
+| M-147 | Right-to-left EPUBs: Edit, then Done or Discard, go to the wrong heading (`editTopHeading` assumes later pages are to the right) | Bug |
+| M-148 | HTML, Markdown and text documents lose a right-to-left direction (`dir` on html, body or a wrapper isn't carried to the parts) | Bug |
+| L-340 | A document's link to an EPUB or comic beside it gives an error; a link to its own file name reloads it | Bug |
+| L-341 | H-33's horizontal writing also flattens small vertical elements in horizontal books (a vertical table header, SVG text) | Bug |
+| L-342 | Right-to-left text without `page-progression-direction`: pages come in from the left but the right arrow goes on | Bug |
+| L-343 | The sandbox extension list misses other XML types (`kml`, `xspf`, `wsdl`…): safe in Chromium, which downloads them; an allowlist would be sturdier | Hardening |
+| L-344 | A download named like "Notes v1.2" is taken to have an extension already | Bug |
+| L-345 | A book's link can fill the error notice with long text of its choosing, covering the page and its Dismiss button | Hardening |
+| L-346 | Link names holding `%2F` are encoded twice, so such a file can't be reached by a link | Bug |
+| L-347 | Patterns ending in `\s+$` are linear in current Chromium but slow on very long white space in other engines | Hardening |
+| T-50 | No tests of: a click on a link split across pages, `../` and hostile link shapes, Back after a linked document, vertical text in single elements, the editor's place in a right-to-left document, a long notice | Tests |
+| D-27 | README's Caddy example: `>` (deferred header) needs a recent Caddy; the block form with `defer` works in older ones | Docs |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
 | T-47 | `LOOKAHEAD_SEC` and `NCACHE_SEC` have no test: the mock server voice answers one request at a time, so a test can't tell the settings apart | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
