@@ -647,7 +647,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2144</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2213</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -2865,6 +2865,7 @@ function markLinks(doc, path){
     else if (isExternal(h)) drop();
     else {
       a.setAttribute('data-spine-path', h.startsWith('#') ? path : resolve(path, h)); a.setAttribute('data-spine-frag', fragOf(h));
+      if (!h.startsWith('#')) a.setAttribute('data-spine-href', h);   // (as written: a document's link to a file beside it: M-144)
     }
   }
 }
@@ -3618,25 +3619,54 @@ function onFrameClick(e){
   const a = link?.hasAttribute('data-spine-path') ? link : null;
   if (!a) { ttsClickStart(e); return; }
   e.preventDefault();
-  goTo(a.getAttribute('data-spine-path'), a.getAttribute('data-spine-frag'));
+  goTo(a.getAttribute('data-spine-path'), a.getAttribute('data-spine-frag'), a.getAttribute('data-spine-href') || '');
 }
+// Going to another document or book, by a link or by Back and Forward: an export running or unsaved changes are
+// asked about first (round 25 review, M-145).
+const leaveOk = () => (!ab.running || confirm('An audiobook of this book is being made. Stop it and open the other book?')) && editLeaveOk();
+// The place linked to in a document: the part holding that id.
+function docFrag(frag){
+  if (!frag || !book?.doc) return;
+  const s = book.spine.find(x => (book.src.files?.get(x.path) || '').includes(`id="${frag}"`)); if (s) goTo(s.path, frag);
+}
+// A document's link to another document or book beside it: opened only once it is found (a missing one leaves
+// this one open, with a notice: M-144), and then added to the history, so Back returns here (M-145).
 async function openLinkedDoc(u, frag){
+  if (!leaveOk()) return;
   const same = u.origin === location.origin, ref = same ? u.pathname : u.href;
+  const ok = await (same ? openFromUrl(ref, { keep: true }) : openByAddress(ref, { keep: true }));
+  if (!ok) return;
   history.pushState(null, '', `?${same ? 'book' : 'get'}=${encodeURIComponent(ref)}`);
-  await (same ? openFromUrl(ref) : openByAddress(ref));
-  if (frag && book?.doc) { const s = book.spine.find(x => (book.src.files?.get(x.path) || '').includes(`id="${frag}"`)); if (s) goTo(s.path, frag); }
+  shownAddress = location.href;
+  docFrag(frag);
 }
-function goTo(path, frag = ''){
+// The address of the book shown, to go back to when leaving it by Back or Forward is called off.
+let shownAddress = location.href;
+window.addEventListener('popstate', async () => {
+  if (location.href === shownAddress) return;
+  if (!leaveOk()) { history.pushState(null, '', shownAddress); return; }
+  shownAddress = location.href;
+  const q = new URLSearchParams(location.search), ref = q.get('book'), getRef = q.get('get');
+  await (getRef ? openByAddress(getRef) : ref ? openFromUrl(ref) : openDefault());
+});
+function goTo(path, frag = '', href = ''){
   let idx = book.spine.findIndex(s => s.path === path);
   if (idx < 0) idx = book.spine.findIndex(s => pathKey(s.path) === pathKey(path));   // (case or Unicode form: L-48)
   // (A document on a site linking to another document beside it: that one opened, as ?book= would: round 25 review,
   // M-141.)
-  if (idx < 0 && book.doc?.base && docKind(path) && !ed.on) {
-    // (Only a document of the same site: a path with empty steps (".///host/x.html", resolved to "//host/x.html")
-    // would otherwise be read as an address on another host: round 26 review, H-34.)
+  // (The link as written, against the document's own address: "../other/b.html" reaches the folder above, and a name
+  // holding "%2F" stays as written: round 26 review, M-144, L-346. A book (EPUB, comic) beside it opens too, and a
+  // link to the document itself goes to the place in it: L-340.)
+  if (idx < 0 && book.doc?.base && href && !ed.on) {
+    const self = new URL(encodeURIComponent(book.doc.name), book.doc.base);
     let u = null;
-    if (!path.split('/').includes('')) try { u = new URL(path.split('/').map(encodeURIComponent).join('/'), book.doc.base); } catch {}
-    if (u && u.origin === new URL(book.doc.base, location.href).origin) { openLinkedDoc(u, frag); return; }
+    try { u = new URL(href, self); } catch {}
+    // (Only on the same site as the document: a link with empty steps (".///host/x.html") must not reach another
+    // host: H-34.)
+    if (u && u.origin === self.origin && /^https?:$/.test(u.protocol)) {
+      if (u.pathname === self.pathname) { if (frag) docFrag(frag); else renderChapter(0, {}); return; }
+      if (docKind(u.pathname) || /\.(epub|cbz)$/i.test(u.pathname)) { u.hash = ''; openLinkedDoc(u, frag); return; }
+    }
   }
   if (idx < 0) { showNotice(`That link points to ${path}, which isn't part of the book's reading order.`, 'error'); return; }
   // (Choosing a chapter that failed to show tries it again: loop 5 review.)
@@ -9184,12 +9214,16 @@ async function openForEdit(ref){
   } catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, ref), 'error'); } }
 }
 // ?get=address (E-24): a book or document on this site or another. Another site has to allow it (CORS).
-async function openByAddress(ref){
-  if (!GET_URLS) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice("This site doesn't open files by their address (?get=).", 'error'); return; }
-  await openFromUrl(ref, { anySite: true });
+async function openByAddress(ref, { keep = false } = {}){
+  if (!GET_URLS) {
+    if (keep) { showNotice("This site doesn't open files by their address (?get=).", 'error'); return false; }
+    const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice("This site doesn't open files by their address (?get=).", 'error'); return false;
+  }
+  return openFromUrl(ref, { anySite: true, keep });
 }
-// anySite: ?get= (E-24), which takes addresses on other sites too.
-async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
+// anySite: ?get= (E-24), which takes addresses on other sites too. keep: a book that can't be opened leaves the one
+// shown open (a document's link), rather than opening the default book. true once opened.
+async function openFromUrl(ref, { anySite = false, forEdit = false, keep = false } = {}){
   const seq = ++openSeq;
   showStatus(`Loading ${ref}…`);
   // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
@@ -9217,9 +9251,9 @@ async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
           // (from: where it really came from, after a redirect to another site, so the site's API isn't told this
           // site's path for another site's file: round 25 review, L-312.)
           { base: new URL('.', foreign && got.url ? got.url : u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: foreign && got.url ? got.url : u.href });   // (its pictures from where it came from: L-320)
-        if (isStale(seq)) return;
+        if (isStale(seq)) return false;
         if (foreign) showFrom(foreign);
-        return;
+        return true;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
         let finalUrl = '';
@@ -9230,7 +9264,7 @@ async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
         await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, from: foreign && finalUrl ? finalUrl : u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '', forEdit });   // (L-312)
         if (!isStale(seq) && book && !book.comic) book.fileName = safeDecode(u.pathname.split('/').pop());
         if (foreign && !isStale(seq)) showFrom(foreign);
-        return;
+        return !isStale(seq);
       }
       if (!u.pathname.endsWith('/')) u.pathname += '/';
       const src = dirSource(u.href);
@@ -9241,13 +9275,15 @@ async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
       await openBook(src, { name, seq, from: u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '', forEdit });
       if (!isStale(seq) && book) book.fileName = `${name || 'book'}.epub`;
       if (foreign && !isStale(seq)) showFrom(foreign);
-      return;
+      return !isStale(seq);
     }
     throw new Error(`Nothing was found at ${misses.join(' or ')}.`);
   } catch (err) {
-    if (isStale(seq)) return;   // another book was opened meanwhile: leave it
+    if (isStale(seq)) return false;   // another book was opened meanwhile: leave it
+    if (keep) { hideStatus(); showNotice(friendly(err, ref), 'error'); return false; }   // (the book shown stays: M-144)
     await openDefault(seq);   // the folder's default book (or the sample), with a note about the link
     if (!isStale(seq)) showNotice(friendly(err, ref), 'error');
+    return false;
   }
 }
 })();

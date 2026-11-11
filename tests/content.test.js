@@ -298,7 +298,7 @@ test('a document\'s relative link to another document beside it opens that one, 
   await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`, { 'spine:layout': 'scroll' });
   await page.frameLocator('#page').locator('#tob').click();
   await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B');
-  assert.match(await page.evaluate(() => location.search), /book=.*linkdoc%2Fb\.html/);
+  await page.waitForFunction(() => /book=.*linkdoc%2Fb\.html/.test(location.search));
   assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('sec')?.getBoundingClientRect(); return r && r.top >= 0 && r.top < doc.defaultView.innerHeight; }), 5000), 'at the section');
   await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`);
   await page.frameLocator('#page').locator('#tomd').click();
@@ -316,7 +316,7 @@ test('search says "+" only when there are more matches than listed (round 25 rev
 test('a document\'s link with empty steps (".///host/…", ".\\\\host/…", "a/..///host/…") doesn\'t open a page of another site (round 26 review, H-34)', async () => {
   const page = await h.newPage();
   const asked = [];
-  await page.route(/evil\.example/, r => { asked.push(r.request().url()); r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/html' }, body: '<title>Sign in again</title><h1>Sign in again</h1>' }); });
+  await page.route(u => u.hostname === 'evil.example', r => { asked.push(r.request().url()); r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/html' }, body: '<title>Sign in again</title><h1>Sign in again</h1>' }); });
   const errors = []; page.on('pageerror', e => errors.push(String(e)));
   await h.openReader(page, `${h.READER}?book=books/linkdoc/d.html`, { 'spine:layout': 'scroll' });
   for (const id of ['x1', 'x2', 'x3', 'x4']) {
@@ -339,4 +339,41 @@ test('a chapter of more than 16 MB of markup is refused with a notice, quickly, 
   assert.match(await page.textContent('#notice'), /c2\.xhtml is too large to show \(2\d MB of text; the limit is 16 MB\)/);
   await page.click('#toc :is(a,button):has-text("One")');
   assert.ok(await h.waitFor(() => h.inFrame(page, doc => /Start here/.test(doc.body.textContent)), 5000));
+});
+
+test('a document\'s links: a missing file leaves it open with a notice; "../" reaches the folder above; a book beside it opens; a link to itself goes to the place; a name holding %2F is reached (round 26 review, M-144, L-340, L-346)', async () => {
+  const page = await h.newPage();
+  const E = `${h.READER}?book=books/linkdoc/e.html`;
+  const title = () => page.textContent('#bookTitle');
+  const click = id => page.frameLocator('#page').locator('#' + id).click();
+  await h.openReader(page, E, { 'spine:layout': 'scroll' });
+  const before = await page.evaluate(() => location.href);
+  await click('miss');
+  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /missing\.html/);
+  assert.equal(await title(), 'Doc E');
+  assert.equal(await page.evaluate(() => location.href), before, 'the address is left as it was');
+  await click('me');
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('end')?.getBoundingClientRect(); return r && r.top >= 0 && r.top < doc.defaultView.innerHeight; }), 5000), 'at the place in itself');
+  assert.equal(await title(), 'Doc E');
+  await click('up');
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc F');
+  await page.waitForFunction(() => /other%2Ff\.html/.test(location.search));
+  await h.openReader(page, E, { 'spine:layout': 'scroll' });
+  await click('pct');
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc XY');
+  await h.openReader(page, E, { 'spine:layout': 'scroll' });
+  await click('epub');
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'The Long Book');
+});
+
+test('after following a document\'s link, Back and Forward open the documents again (round 26 review, M-145)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`, { 'spine:layout': 'scroll' });
+  await page.frameLocator('#page').locator('#tob').click();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B' && /linkdoc%2Fb\.html/.test(location.search));
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc A');
+  assert.match(await page.evaluate(() => location.search), /linkdoc(\/|%2F)a\.html/);
+  await page.goForward();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B');
 });

@@ -882,6 +882,15 @@ def main():
     (books / "linkdoc" / "a.html").write_text('<!DOCTYPE html><html><head><title>Doc A</title></head><body><h1>Doc A</h1><p><a id="tob" href="b.html#sec">to B</a> <a id="tomd" href="c.md">to C</a></p></body></html>')
     (books / "linkdoc" / "b.html").write_text('<!DOCTYPE html><html><head><title>Doc B</title></head><body><h1>Doc B</h1>' + "".join(f"<p>Filler {i}.</p>" for i in range(80)) + '<h2 id="sec">Section</h2><p>Here.</p></body></html>')
     (books / "linkdoc" / "c.md").write_text("# Doc C\n\nMarkdown.\n")
+    # A document's links: a missing file, one up a folder, a book beside it, itself, a name holding "%2F" (round 25
+    # review, M-144, L-340, L-346).
+    (books / "linkdoc" / "e.html").write_text('<!DOCTYPE html><html><head><title>Doc E</title></head><body><h1>Doc E</h1><p>'
+        '<a id="miss" href="missing.html">missing</a> <a id="up" href="../other/f.html">up</a> <a id="epub" href="../long.epub">book</a> '
+        '<a id="me" href="e.html#end">me</a> <a id="pct" href="x%2Fy.html">pct</a></p>' + "".join(f"<p>Filler {i}.</p>" for i in range(80)) + '<h2 id="end">End</h2></body></html>')
+    (books / "other").mkdir(exist_ok=True)
+    (books / "other" / "f.html").write_text('<!DOCTYPE html><html><head><title>Doc F</title></head><body><h1>Doc F</h1></body></html>')
+    (books / "linkdoc" / "x").mkdir()
+    (books / "linkdoc" / "x" / "y.html").write_text('<!DOCTYPE html><html><head><title>Doc XY</title></head><body><h1>Doc XY</h1></body></html>')
     # Links that look like the document's own but resolve to "//another.host/…" (round 26 review, H-34).
     (books / "linkdoc" / "d.html").write_text('<!DOCTYPE html><html><head><title>Doc D</title></head><body><h1>Doc D</h1><p>'
         '<a id="x1" href=".///evil.example/spoof.html">one</a> <a id="x2" href=".\\\\evil.example/spoof.md">two</a> '
