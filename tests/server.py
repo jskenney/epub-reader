@@ -98,7 +98,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # (Book files opened on their own are sandboxed, as nginx.conf.example sends them: round 25 review, M-130.)
             # (Decoded, as nginx matches it; the reader's own page, a link to index.html, isn't: round 25 review, M-131.)
             req = urllib.parse.unquote(self.path.split("?")[0])
-            book_page = re.search(r"\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$", req, re.I) and \
+            book_page = re.search(r"\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx|kml|xspf|wml|wsdl|xsd|gpx|xbl|plist)$", req, re.I) and \
                 not (os.path.realpath(os.path.join(args.root, req.lstrip("/"))) == READER_PAGE_PATH and
                      (req in ("/reader/index.html", "/reader/") or not req.startswith("/reader/")))
             # (Under /reader/, only the reader's own page is exempt, as the example's exact location does; a copy in

@@ -757,7 +757,7 @@ handle /reader/* {
 	# Book files opened on their own run nothing (not the reader's own page). ">" defers this header so it
 	# replaces the policy above: Caddy runs a matched header line before an unmatched one.
 	@bookfiles {
-		path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$
+		path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx|kml|xspf|wml|wsdl|xsd|gpx|xbl|plist)$
 		not path /reader/index.html
 	}
 	header @bookfiles >Content-Security-Policy "sandbox"
@@ -765,7 +765,7 @@ handle /reader/* {
 	file_server
 }
 handle /bookshelf/* {
-	@bookfiles path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$
+	@bookfiles path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx|kml|xspf|wml|wsdl|xsd|gpx|xbl|plist)$
 	header @bookfiles Content-Security-Policy "sandbox"
 	header X-Content-Type-Options nosniff
 	root * /srv/www

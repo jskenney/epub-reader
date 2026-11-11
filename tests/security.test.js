@@ -255,7 +255,7 @@ test('book files opened on their own are sent sandboxed; the reader page isn\'t 
     if (policy) assert.equal(got, policy, path); else assert.notEqual(got, 'sandbox', path);
   }
   const conf = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'nginx.conf.example'), 'utf8');
-  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|shtml\|xml\|xsl\|xslt\|svgz\?\|rss\|atom\|mml\|mathml\|rdf\|xpdl\|xul\|smil\|opf\|ncx\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
+  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|shtml\|xml\|xsl\|xslt\|svgz\?\|rss\|atom\|mml\|mathml\|rdf\|xpdl\|xul\|smil\|opf\|ncx\|kml\|xspf\|wml\|wsdl\|xsd\|gpx\|xbl\|plist\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
   assert.match(conf, /add_header Content-Security-Policy "sandbox" always;/);
 });
 
@@ -314,4 +314,6 @@ test('a small book of unclosed "<" doesn\'t freeze opening; a picture typed with
   await h.openReader(page, `${h.READER}?book=books/odd-type.epub`);
   assert.equal(await h.inFrame(page, async doc => (await fetch(doc.querySelector('img').src)).headers.get('content-type')), 'image/png');
   assert.equal((await fetch(`${h.SITE}/reader/books/sandboxed/page.xpdl`)).headers.get('content-security-policy'), 'sandbox');
+  // (The other XML types nginx's mime.types and browsers know: round 25 review, L-343.)
+  for (const ext of ['kml', 'xspf', 'wml', 'wsdl', 'gpx']) assert.equal((await fetch(`${h.SITE}/reader/books/sandboxed/page.${ext}`)).headers.get('content-security-policy'), 'sandbox', ext);
 });

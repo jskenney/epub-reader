@@ -928,3 +928,16 @@ test('a right-to-left chapter: Edit, then Done, comes back to the heading of the
   const after = await pos();
   assert.ok(after > 1 && after <= before, `page ${after}, was ${before}`);
 });
+
+test('a file mostly LF with some CRLF lines: an edit undone leaves it unchanged (round 26 review, L-357)', async () => {
+  const page = await h.newPage();
+  const mixed = '# Mixed\n\nOne.\r\nTwo.\nThree.\n\nFour.\n';
+  await page.addInitScript(fakeFiles);
+  await page.addInitScript(t => { window.__open = { 'mixed.md': t }; }, mixed);
+  await h.openReader(page, doc('notes.md'), RAW);
+  await page.click('#openBtn');
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Mixed');
+  await startEditing(page);
+  await typeAtEnd(page, 'x'); await page.keyboard.press('Backspace'); await page.waitForTimeout(300);
+  assert.doesNotMatch(await page.textContent('#editName'), /unsaved/);
+});

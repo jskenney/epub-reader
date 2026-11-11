@@ -138,6 +138,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
    page colour; a second frame for the facing page of a spread. */
 .stage.fxl{border:1px solid var(--rule);border-radius:4px;background:var(--page-bg);box-shadow:var(--shadow);overflow:hidden}
 .stage.fxl #page,.stage.fxl #page2{position:absolute;flex:none;border:0;border-radius:0;background:#fff;box-shadow:0 1px 8px rgb(0 0 0 / .25);transform-origin:0 0;display:block}
+#noticeText{max-height:7.5em;overflow:auto;overflow-wrap:anywhere;min-width:0}
 .notice{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:9px 10px 9px 14px;border-radius:6px;background:var(--ribbon-soft);font-size:13px}
 .notice.error{background:var(--warn-soft)}
 .notice p{margin:0;flex:1;min-width:14em}
@@ -649,7 +650,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2223</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2226</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -2336,7 +2337,10 @@ const cssUrl = u => `url(${u.replace(/[()'"\s\\]/g, c => '%' + c.charCodeAt(0).t
 // The addresses in a stylesheet: [{ s, e, ref, kind }], kind "import" (an @import rule, s..e the whole rule)
 // or "image" (a url token, url() or src() with a string, or a string inside image-set() or image()).
 // A rule moved elsewhere ends with ";" (the last rule of a sheet may have none, and would take what follows).
-const cssEndRule = t => /;\s*$/.test(t) ? t : cssCloseAtEnd(t) + ';';   // (closed first: an open string or bracket would take the ";")
+// The white space a text ends with. (trimEnd rather than /\s+$/, which some engines take quadratic time over on
+// very long white space: round 25 review, L-347.)
+const trailingWs = s => s.slice(s.trimEnd().length);
+const cssEndRule = t => t.trimEnd().endsWith(';') ? t : cssCloseAtEnd(t) + ';';   // (closed first: an open string or bracket would take the ";")
 const IMAGE_STRING_FNS = /^(-webkit-)?image-set$|^image$|^src$|^url$/;
 const SUBSTITUTIONS = /^(var|env|if|attr|inherit|first-valid)$/;
 // Is an attr() typed as an address? Read from its tokens (names decoded, comments skipped): after the attribute's
@@ -3916,6 +3920,9 @@ let noticeKind = '', noticeRun = null;
 function showNotice(msg, kind, action = null){
   noticeKind = kind; noticeRun = action?.run || null;
   $('#notice').className = 'notice' + (kind === 'error' ? ' error' : '');
+  // (A book's link can put text of its choosing in a notice: kept short, so it can't cover the page and the notice's
+  // own button: round 25 review, L-345.)
+  msg = String(msg); if (msg.length > 400) msg = msg.slice(0, 399) + '…';
   $('#noticeText').textContent = msg;
   $('#noticeAction').textContent = action?.label || (kind === 'error' ? 'Dismiss' : 'Open a book');
   $('#notice').hidden = false;
@@ -6563,7 +6570,9 @@ function abDownload(blob, name){
   // downloads list meanwhile, would run as the reader: round 25 review, L-325.)
   // (A name without an extension gets the one its type would have given it: loop 5.)
   const extFor = { 'application/epub+zip': 'epub', 'text/markdown': 'md', 'text/html': 'html', 'application/xhtml+xml': 'xhtml', 'text/plain': 'txt', 'application/json': 'json', 'application/zip': 'zip', 'audio/mp4': 'm4b', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg' }[String(blob.type).split(';')[0].trim()];
-  if (extFor && !/\.[\w]{1,8}$/.test(name)) name += '.' + extFor;
+  // (Unless the name ends with that type's own extension: "Notes v1.2" has none: round 25 review, L-344.)
+  const own = { md: 'md|markdown', html: 'html?', txt: 'txt|text', m4b: 'm4[ab]' }[extFor] || extFor;
+  if (extFor && !new RegExp(`\\.(${own})$`, 'i').test(name)) name += '.' + extFor;
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([blob], { type: 'application/octet-stream' })); a.download = name;
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
@@ -7551,7 +7560,10 @@ const edChapter = () => !book || book.doc || book.comic ? null : (book.spine?.[c
 const editable = () => EDITING && (!!book?.doc || !!edChapter());
 // What is being edited: the document, or the EPUB chapter (E-23).
 const edDoc = () => ed.epub?.doc || book?.doc;
-const editDirty = () => ed.on && ed.text !== ed.saved;
+// (Changed: not just in its line endings. A file of mixed endings is edited with one ending throughout, so after an
+// undo its text differs from the file's only there; saved, it has that one ending throughout: round 26 review, L-357.)
+const edSame = () => ed.text === ed.saved || (typeof ed.saved === 'string' && ed.text === edEol(ed.saved.replace(/\r\n/g, '\n')));
+const editDirty = () => ed.on && !edSame();
 const EDIT_TYPES = { markdown: { mime: 'text/markdown', ext: ['.md', '.markdown'], label: 'Markdown' },
   html: { mime: 'text/html', ext: ['.html', '.htm'], label: 'HTML' }, text: { mime: 'text/plain', ext: ['.txt'], label: 'Plain text' } };
 // Drafts are kept per document: a new one by its kind, one from the site by its address, a file by its kind and
@@ -7781,7 +7793,7 @@ async function editStart({ mode } = {}){
     ed.api.refresh();
     ed.expectPage = null; editPageScrolled();   // (the text opens where the page is)
     editFocus();
-    if (ed.text !== ed.saved) editDraftSoon();
+    if (!edSame()) editDraftSoon();
     $('#editBar').dataset.ready = '';
   } finally { ed.starting = false; }
 }
@@ -7861,7 +7873,7 @@ function editChanged(){
 function editDraftSoon(){
   clearTimeout(ed.draftTimer);
   const key = draftKey(), text = ed.text, kind = ed.kind, name = ed.name, from = draftFrom();
-  ed.draftTimer = setTimeout(() => { if (ed.on && ed.text !== ed.saved) draftPut({ key, text, kind, name, from, t: Date.now() }); else if (ed.on) draftDel(key); }, 800);
+  ed.draftTimer = setTimeout(() => { if (ed.on && !edSame()) draftPut({ key, text, kind, name, from, t: Date.now() }); else if (ed.on) draftDel(key); }, 800);
 }
 async function editPreview(){
   if (!ed.on || ed.mode !== 'raw') return;
@@ -8475,19 +8487,19 @@ function editSerialize(){
     const head = docHead(t), notes = (head.match(/<!--/g) || []).length;
     if (notes) inner = skipComments(inner, notes);
     if (head) inner = t.slice(head.length).match(/^\s*/)[0] + inner.replace(/^\s+/, '');   // (the white space after the doctype as written)
-    return head + inner.replace(/\s+$/, '') + t.match(/\s*$/)[0];
+    return head + inner.trimEnd() + trailingWs(t);
   }
   const r = bodyRange(t, xml);
   if (r) {
-    const ws = t.slice(r.start, r.end).match(/\s*$/)[0], after = t.slice(r.after);
+    const ws = trailingWs(t.slice(r.start, r.end)), after = t.slice(r.after);
     // (Markup after </body> is moved into the body by a parser: written inside it, once: round 24 review.)
     if (/\S/.test(after.replace(/<\/html\s*>/gi, '').replace(/<!--[\s\S]*?(?:-->|$)/g, ''))) {   // (an unclosed comment to the end, as a browser reads it: L-336)
       // (Comments there stay after the body: a parser keeps them outside it.)
       const end = after.search(/<\/html\s*>/i), mid = end < 0 ? after : after.slice(0, end), last = end < 0 ? '' : after.slice(end).replace(/^<\/html\s*>/i, '');
       const notes = (mid.match(/<!--[\s\S]*?(?:-->|$)/g) || []).join('\n');
-      return t.slice(0, r.start) + inner.replace(/\s+$/, '') + '\n</body>\n' + (notes ? notes + '\n' : '') + '</html>' + (/\S/.test(last.replace(/<!--[\s\S]*?(?:-->|$)/g, '')) ? '\n' : last || '\n');
+      return t.slice(0, r.start) + inner.trimEnd() + '\n</body>\n' + (notes ? notes + '\n' : '') + '</html>' + (/\S/.test(last.replace(/<!--[\s\S]*?(?:-->|$)/g, '')) ? '\n' : last || '\n');
     }
-    return t.slice(0, r.start) + inner.replace(/\s+$/, '') + ws + t.slice(r.end);
+    return t.slice(0, r.start) + inner.trimEnd() + ws + t.slice(r.end);
   }
   // (No <body> tag: what comes before <html> as it was, the document as the browser writes it.)
   const at = t.search(/<html(?=[\s>/])/i);
@@ -8630,7 +8642,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     if (p.wrap == null) { let s = p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
     const core = p.inner.trim();
     if (!core) { out += p.inner; return; }
-    const lead = p.inner.match(/^\s*/)[0], tail = p.inner.match(/\s*$/)[0];
+    const lead = p.inner.match(/^\s*/)[0], tail = trailingWs(p.inner);
     const before = (out + lead).slice(-1), after = tail ? ' ' : first(i + 1);
     // (The delimiters only where Markdown reads them as such; otherwise the HTML tags: round 24 review.)
     out += lead + (mdFlanks(core, before, after) ? p.wrap + core + p.wrap : `<${p.tag}>${core}</${p.tag}>`) + tail;

@@ -328,3 +328,15 @@ test('a book picked with no extension in its name is downloaded with .epub (roun
   const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   assert.equal(dl.suggestedFilename(), 'mybook.epub');
 });
+
+test('a book named like "My book v1.2" is downloaded with .epub added (".2" isn\'t its extension: round 25 review, L-344)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, `${h.READER}?book=books/notes.md`, RAW);
+  await page.setInputFiles('#fileInput', { name: 'My book v1.2', mimeType: '', buffer: fs.readFileSync(SRC) });
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'The Long Book' && document.querySelector('#status').hidden);
+  await startEditing(page);
+  await replace(page, '</p>', ' Edit.</p>');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  assert.equal(dl.suggestedFilename(), 'My book v1.2.epub');
+});

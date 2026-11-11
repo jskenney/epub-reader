@@ -909,6 +909,9 @@ def main():
     (books / "other" / "f.html").write_text('<!DOCTYPE html><html><head><title>Doc F</title></head><body><h1>Doc F</h1></body></html>')
     (books / "linkdoc" / "x").mkdir()
     (books / "linkdoc" / "x" / "y.html").write_text('<!DOCTYPE html><html><head><title>Doc XY</title></head><body><h1>Doc XY</h1></body></html>')
+    # A link naming a very long file (round 25 review, L-345).
+    (books / "linkdoc" / "long-link.html").write_text('<!DOCTYPE html><html><head><title>Doc L</title></head><body><h1>Doc L</h1><p><a id="long" href="'
+        + "very-long-name-" * 300 + 'x.epub">long</a></p></body></html>')
     # Links that look like the document's own but resolve to "//another.host/…" (round 26 review, H-34).
     (books / "linkdoc" / "d.html").write_text('<!DOCTYPE html><html><head><title>Doc D</title></head><body><h1>Doc D</h1><p>'
         '<a id="x1" href=".///evil.example/spoof.html">one</a> <a id="x2" href=".\\\\evil.example/spoof.md">two</a> '
@@ -918,6 +921,7 @@ def main():
                {"c1.xhtml": "<html><body><p>x</p><p>" + "< " * 600000, "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Two.</p>")}, "urn:lt-bomb")
     (books / "comment-bomb.html").write_text("<!DOCTYPE html><html><body><p>Start.</p></body>" + "<!--<" * 60000 + "</html>")
     (books / "sandboxed" / "page.xpdl").write_text("<p>x</p>")
+    for ext in ("kml", "xspf", "wml", "wsdl", "gpx"): (books / "sandboxed" / f"page.{ext}").write_text("<p>x</p>")
     epub_items(books / "odd-type.epub", "Odd Type", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("p", "pic.png", "IMAGE/PNG ", "")], ["c1"],
                {"c1.xhtml": xhtml("Odd Type", '<h1>Odd</h1><p><img src="pic.png" alt="p"/></p>'), "pic.png": png(4, 4, (10, 200, 10))}, "urn:odd-type")
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).

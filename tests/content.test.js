@@ -385,3 +385,16 @@ test('an HTML or Markdown document marked right to left (on html, or a wrapper a
     assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.querySelector('[id^="spine-flow"]')).direction), 'rtl', name);
   }
 });
+
+test('a link to a very long name gives a short notice that leaves its button in sight (round 25 review, L-345)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/long-link.html`, { 'spine:layout': 'scroll' });
+  await page.frameLocator('#page').locator('#long').click();
+  const text = await h.waitFor(() => h.notice(page), 8000);
+  assert.ok(text && text.length <= 420, `${text?.length} characters`);
+  assert.equal(await page.isVisible('#noticeAction'), true);
+  const r = await page.evaluate(() => document.querySelector('#notice').getBoundingClientRect().height);
+  assert.ok(r < 200, `the notice is ${r}px high`);
+  await page.click('#noticeAction');
+  assert.equal(await page.isHidden('#notice'), true);
+});
