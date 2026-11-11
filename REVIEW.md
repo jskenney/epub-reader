@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-10, round 24): `index.html` (about 8,000 lines), the fetch scripts,
+Review of the repository (2026-11-11, round 25): `index.html` (about 8,700 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -294,6 +294,18 @@ null for a book it doesn't know), and the book goes there unless the reader has 
 isn't JSON means the site keeps no places, so progress isn't sent either. Signing in and the rest of E-22 are
 still to come.
 
+### Round 25
+
+Round 25 is a full review of the repository at `dd1fa88` (after `API_START`) by three independent reviewers, each
+on a copy of its own: one on reading progress and the open paths that feed it, one on the editor, settings and
+the version tools, and one on everything else (the book pipeline, layout, read aloud, operations, docs and tests).
+Each was given the code and the areas to cover, not the author's conclusions. None found a way for a book or
+document to run script in the reader's page or reach another site. Findings:
+- **High:** H-29.
+- **Medium:** M-115 to M-122.
+- **Low:** L-280 to L-289.
+- **Tests:** T-43, T-44. **Documentation:** D-20.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -326,14 +338,99 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Only enhancements are open: E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 is left as it is, by your decision (see Resolved).
+Round 25's findings are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+TODO.md). L-110 is left as it is, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| [H-29](#h-29-an-epub-from-another-site-shares-a-site-books-place-and-finished-mark) | An EPUB from another site shares a site book's place and finished mark | Privacy / bug |
+| [M-115](#m-115-edit-sends-position-and-completion-for-a-new-or-short-document) | `?edit=` sends position and completion for a new (or short) document | Bug |
+| [M-116](#m-116-the-sites-section-for-a-comic-depends-on-comic_part) | The site's `section` for a comic depends on `COMIC_PART` | Bug |
+| [M-117](#m-117-markdown-write-back-breaks-links-whose-text-has-) | Markdown write-back breaks links and images whose text has `]` | Data loss |
+| [M-118](#m-118-editing-a-crlf-file-turns-its-line-endings-into-lf) | Editing a CRLF file turns its line endings into LF | Bug |
+| [M-119](#m-119-a-folder-book-is-saved-without-files-that-couldnt-be-fetched) | A folder book is saved without files that couldn't be fetched | Data loss |
+| [M-120](#m-120-the-pre-commit-hook-and-git-commit----indexhtml) | The pre-commit hook and `git commit -- index.html` | Tools |
+| [M-121](#m-121-line-endings-break-the-hook-and-the-stamp-script) | Line endings break the hook and the stamp script | Tools |
+| [M-122](#m-122-a-text-book-with-one-paragraph-per-line-becomes-one-paragraph) | A text book with one paragraph per line becomes one paragraph | Bug |
+| [L-280](#l-280-to-l-289) to [L-289](#l-280-to-l-289) | Lows: progress, editor, pipeline, the top bar corner | — |
+| [T-43](#t-43-nothing-runs-the-suite-on-push), [T-44](#t-44-tests-for-round-25s-cases) | Tests | — |
+| [D-20](#d-20-readme-corrections) | README corrections | — |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
+
+## Round 25 findings
+
+### H-29. An EPUB from another site shares a site book's place and finished mark
+*Reproduced.* `openBook` keys an EPUB by its `dc:identifier` wherever it came from (documents and comics from
+another site get `spine:pos:get:<url>`). A site that allows CORS can serve a one-page EPUB with a site book's
+identifier: opening it with `?get=` overwrites that book's place, marks it finished (so the real book's
+completion is never sent), and sends `/api/complete` with the real book's identifier. **Fix:** key an EPUB from
+another site by its address, with no copying between keys; the README tells sites to key by `path`/`url` too.
+
+### M-115. ?edit= sends position and completion for a new (or short) document
+*Reproduced.* `?edit=` of a missing file sends `/api/position` and then `/api/complete` (size 0) before the editor
+starts, and stores `done`, so a real document saved there later is never reported finished; a short existing
+one is reported finished as it opens for editing. **Fix:** nothing for a new document; no completion while the
+editor is starting.
+
+### M-116. The site's section for a comic depends on COMIC_PART
+*Read.* Comic sections are `COMIC_PART` pages each, which can differ by folder or reader, so the site's `section`
+lands on other pages. **Fix:** for comics, go by `book_percentage`.
+
+### M-117. Markdown write-back breaks links whose text has ]
+*Reproduced.* `mdEsc` escapes `[` but not `]`: `[a\]b](u)` is written back as `[a]b](u)`, which is plain text. Any
+WYSIWYG edit rewrites the whole file. **Fix:** escape `]`.
+
+### M-118. Editing a CRLF file turns its line endings into LF
+*Reproduced.* The editor gives `\n`; a file with CRLF is marked changed after a no-op edit and saved with LF.
+**Fix:** keep the file's line ending and save with it.
+
+### M-119. A folder book is saved without files that couldn't be fetched
+*Read.* `epubPack`'s folder branch skips a file that can't be fetched, then says it saved and clears the drafts.
+**Fix:** fail for the package, container and manifest files.
+
+### M-120. The pre-commit hook and git commit -- index.html
+*Reproduced.* With a pathspec, git gives the hook a temporary index: the commit is stamped but the real index
+keeps the old line (`MM index.html`), and a later commit can commit the old line back. **Fix:** don't stamp with a
+temporary index; say so.
+
+### M-121. Line endings break the hook and the stamp script
+*Reproduced.* A CRLF checkout of the hook (Windows, `core.autocrlf`) can't run, so every commit fails; the stamp
+script rewrites the whole file's line endings. **Fix:** `.gitattributes` with `eol=lf`; the script keeps line
+endings as they are.
+
+### M-122. A text book with one paragraph per line becomes one paragraph
+*Reproduced.* `textToHtml` splits blocks only at blank lines; a book with one long line per paragraph becomes one
+`<p>` with no headings or contents. **Fix:** treat each line as a block when lines are long and blank lines rare.
+
+### L-280 to L-289
+- **L-280** (*reproduced*): leaving the page while a progress send is waiting for its answer loses the newest place.
+- **L-281** (*read*): a late `/api/position` answer can move the page while `?edit=` is starting the editor.
+- **L-282** (*read*): a place taken from the loose record drops `done`.
+- **L-283** (*reproduced*): an HTML fragment with `<body>` inside a script is written back as a whole document.
+- **L-284** (*read*): an existing link changed to a relative address gets a live `href` in the page.
+- **L-285** (*read*): Save writes over a file without checking whether it changed on disk since it was opened.
+- **L-286** (*reproduced*): one huge paragraph (or verse block) is never split into sections; opening takes 12–15 s.
+- **L-287** (*reproduced*, defence in depth): SVG files used as resource documents (`<use href="x.svg#a">`,
+  `url(x.svg#f)`) are served uncleaned; the book policy refuses their remote loads, but the cleaning should.
+- **L-288** (*reproduced*): `<img name="getElementById">` clobbers the frame document's methods and the chapter
+  can't be shown.
+- **L-289** (*reproduced*): with the top bar hidden, the invisible top right corner covers part of the page.
+
+### T-43. Nothing runs the suite on push
+*Read.* The only workflow is the weekly slow one. **Needs your decision:** a push workflow uses GitHub Actions
+minutes (the suite takes about 40 minutes).
+
+### T-44. Tests for round 25's cases
+The progress API with `?get=` from another site, with `?edit=`, and leaving mid-send; text without blank lines;
+SVG resource documents.
+
+### D-20. README corrections
+A site with no API sees one request per address, not per page load; a book opened at its last page is reported
+finished at once; `?edit=` of an EPUB edits its chapter; the Settings list lacks the three addresses; a dropped
+EPUB is saved over its file too; `LIBS` also pins lamejs, and CodeMirror is pinned separately.
 
 ## Tests
 
