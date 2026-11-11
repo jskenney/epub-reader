@@ -22,7 +22,7 @@ test('the settings button sits between the text width and Open, and opens a moda
   await h.openReader(page, LONG);
   const order = await page.evaluate(() => [...document.querySelector('.tools').children].map(e => e.id || e.getAttribute('aria-label')));
   const at = order.indexOf('setBtn');
-  assert.equal(order[at - 1], 'Text width'); assert.equal(order[at + 1], 'editPick');
+  assert.equal(order[at - 1], 'widthGroup'); assert.equal(order[at + 1], 'editPick');
   await openSettings(page);
   assert.equal(await page.evaluate(() => document.querySelector('#setDialog').matches(':modal')), true);
   const before = await theme(page);

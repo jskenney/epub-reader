@@ -42,7 +42,8 @@ async function newPage({ allow = [], viewport = { width: 1280, height: 800 } } =
 // Open the reader at url with fresh storage (plus any settings given), and wait for the book to show.
 async function openReader(page, url = READER, settings = {}) {
   const origin = new URL(url).origin;
-  await page.goto(`${origin}/reader/index.html?book=none-${Date.now()}`, { waitUntil: 'domcontentloaded' });
+  // (A page of the same site that isn't the reader: a reader page left running could sweep or save over the storage set here.)
+  await page.goto(`${origin}/no-such-page-${Date.now()}`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(s => {
     localStorage.clear();
     for (const [k, v] of Object.entries(s)) localStorage.setItem(k, JSON.stringify(v));
