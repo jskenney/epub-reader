@@ -333,6 +333,15 @@ parting was rebuilt, and checked over the reviewer's dozen kinds of file as well
 it is: a 403 can't be told from a file that is there but forbidden, and refusing the save is the safe side.
 `LOOKAHEAD_SEC` and `NCACHE_SEC` still have no test (T-47).
 
+The fourth review (loop 4), by three new reviewers on `e83b33e`: one on loop 3's fixes (running the old and new
+text-file parting side by side, and fuzzing the CSS change), one an adversarial pass on the reader's own page and
+storage, one a regression pass using the reader as a person would. Findings:
+- **High:** H-31.
+- **Medium:** M-131 to M-134.
+- **Low:** L-308 to L-317.
+- **Tests:** T-48. **Documentation:** D-23.
+M-134, L-308, L-309 and L-310 were fixed at once, in `0095173`.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -365,13 +374,26 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-T-47 is open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+Loop 4's findings and T-47 are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
 TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| H-31 | `svgURL` doesn't check the file is an SVG: an XHTML page typed as SVG, opened in a new tab, runs a form's `javascript:` action as the reader (reproduced) | Security |
+| M-131 | nginx example: the sandbox misses book files named `index.*` and `.shtml`, `.svgz`, `.rss`, `.atom`, `.xsl` | Security |
+| M-132 | Indented-paragraph text without blank lines and with short (dialogue) paragraphs becomes one paragraph | Bug |
+| M-133 | Text hard-wrapped at more than 80 columns, with blank lines, is split at every line | Bug |
+| L-311 | A book's identifier (or title, without one) can name another book's position key: it takes that book's place and finished mark | Bug |
+| L-312 | `?get=` of a same-site address sent on to another site reports the same-site path to the site's API | Bug |
+| L-313 | A small unwrapped file (a few long lines) is joined into one paragraph | Bug |
+| L-314 | Code or logs with a few long lines lose their line breaks and indentation | Bug |
+| L-315 | A wrapped line starting "chapter three …" becomes a heading in the middle of a paragraph | Bug |
+| L-316 | An archive the in-place reader leaves to JSZip (ZIP64) isn't checked for overlapping files | Hardening |
+| L-317 | An SVG declared with a parameter (`image/svg+xml; charset=utf-8`) breaks; caption files (`text/vtt`) lose their type | Bug |
+| T-48 | No test of a non-SVG root in `svgURL`, of the sandboxed extensions, or of encoded paths in the test server's mirror | Tests |
+| D-23 | README: the `/bookshelf/` sandbox doesn't exempt `index.html` | Docs |
 | T-47 | `LOOKAHEAD_SEC` and `NCACHE_SEC` have no test: the mock server voice answers one request at a time, so a test can't tell the settings apart | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
@@ -419,6 +441,10 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| M-134 | The progress bar's marks were drawn evenly while its fill and clicks count sections by size | `0095173` |
+| L-308 | Finishing a book didn't mark its looser record, so leaving at once let an edited copy report it again (the rest of L-282) | `0095173` |
+| L-309 | The L-306 fix had folded a statement into its comment | `0095173` |
+| L-310 | A change of layout or text size sends a progress update (now in the README) | `0095173` |
 | H-30 | A book picture's blob takes the book's declared type: one declared `text/html`, opened in a new tab, runs the book's script as the reader (reproduced) | `8e7fc77` |
 | M-126 | `section_percentage` is 100 for a section shown whole (L-298), so another device opens that chapter at its end | `8e7fc77` |
 | M-127 | Hard-wrapped text marked by indentation loses its chapter headings into the paragraphs (L-294) | `8e7fc77` |
