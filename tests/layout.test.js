@@ -94,3 +94,50 @@ test('in full screen with the top bar hidden, no empty strip is left above the p
   assert.equal(await page.evaluate(() => document.querySelector('.app').classList.contains('fs')), true);
   assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.app')).paddingTop), '0px');
 });
+
+// Round 25 review, loop 5's review.
+test('a right-to-left book (dir on the html element, or direction in its stylesheet) can be read page by page to the end of a chapter', async () => {
+  for (const name of ['rtl-text.epub', 'rtl-css.epub']) {
+    for (const lay of ['one', 'two']) {
+      const page = await h.newPage();
+      await h.openReader(page, `${h.READER}?book=books/${name}`, { 'spine:layout': lay });
+      const pos = () => page.textContent('#spinePos');
+      const n = Number(/page \d+\/(\d+)/.exec(await pos())[1]);
+      assert.ok(n > 2, `${name} ${lay}: ${await pos()}`);
+      const shown = id => h.inFrame(page, (doc, id) => { const r = doc.getElementById(id).getBoundingClientRect(), w = doc.defaultView.innerWidth; return r.right > 0 && r.left < w; }, id);
+      assert.equal(await shown('p0'), true);
+      for (let k = 1; k < n; k++) await page.click('#nextBtn');
+      assert.match(await pos(), new RegExp(`page ${n}/${n}`));
+      assert.equal(await shown('p59'), true, `${name} ${lay}: the last paragraph on the last page`);
+      assert.equal(await shown('p0'), false);
+    }
+  }
+});
+
+test('a book in vertical text can be read to the end (laid out across, for now: E-29)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/vertical.epub`, { 'spine:layout': 'one' });
+  const n = Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+  assert.ok(n > 2, `pages: ${n}`);
+  await h.openReader(page, `${h.READER}?book=books/vertical.epub`, { 'spine:layout': 'scroll' });
+  assert.ok(await h.inFrame(page, doc => doc.scrollingElement.scrollHeight > doc.scrollingElement.clientHeight * 2), 'it scrolls');
+});
+
+test('a link given the focus on another page brings that page into view (round 25 review, M-142)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/far-link.epub`, { 'spine:layout': 'one' });
+  assert.match(await page.textContent('#spinePos'), /page 1\//);
+  await h.inFrame(page, doc => doc.getElementById('far').focus());
+  await page.waitForTimeout(200);
+  assert.ok(await h.inFrame(page, doc => { const r = doc.getElementById('far').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth; }), 'the focused link is in sight');
+  assert.doesNotMatch(await page.textContent('#spinePos'), /page 1\//);
+});
+
+test('an error stays in sight in full screen (round 25 review, L-333)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/nothing-here.epub`);
+  assert.match(await h.notice(page), /couldn't be opened/);
+  await page.keyboard.press('f'); await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => document.querySelector('.app').classList.contains('fs')), true);
+  assert.equal(await page.isVisible('#notice'), true);
+});

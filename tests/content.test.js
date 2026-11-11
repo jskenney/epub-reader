@@ -291,3 +291,24 @@ test('text shapes, loop 5: verse, Word text with tabs, short unwrapped lines, no
   await shape('code-tabs.txt');
   assert.match(await h.inFrame(page, doc => doc.querySelector('.txt-lines').innerHTML), / /, 'tab indentation kept');
 });
+
+// Round 25 review, loop 6.
+test('a document\'s relative link to another document beside it opens that one, at the place linked (round 25 review, M-141)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`, { 'spine:layout': 'scroll' });
+  await page.frameLocator('#page').locator('#tob').click();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B');
+  assert.match(await page.evaluate(() => location.search), /book=.*linkdoc%2Fb\.html/);
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('sec')?.getBoundingClientRect(); return r && r.top >= 0 && r.top < doc.defaultView.innerHeight; }), 5000), 'at the section');
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`);
+  await page.frameLocator('#page').locator('#tomd').click();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc C');
+});
+
+test('search says "+" only when there are more matches than listed (round 25 review, L-335)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:set:SEARCH_MAX': 1 });
+  await page.fill('#searchBox', 'lighthouse');
+  await page.waitForFunction(() => /of 1/.test(document.querySelector('#searchStatus').textContent));
+  assert.equal(await page.textContent('#searchStatus'), '1 of 1 matches');
+});

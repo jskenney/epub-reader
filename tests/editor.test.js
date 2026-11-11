@@ -882,3 +882,14 @@ test('a long front-matter line, many comments before a fragment, a long code spa
   // The download is plain bytes, not a page of the reader's origin (L-325).
   assert.equal(await page.evaluate(async u => (await fetch(u)).headers.get('content-type'), dl.url()), 'application/octet-stream');
 });
+
+test('a document with many unclosed comments after its body doesn\'t freeze typing in WYSIWYG (round 25 review, L-336)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('comment-bomb.html'));
+  const t0 = Date.now();
+  await inPage(page).locator('p', { hasText: 'Start.' }).first().click();
+  await page.keyboard.press('End'); await page.keyboard.type(' T');
+  await flush(page);
+  assert.match(await text(page), /Start\. T/);
+  assert.ok(Date.now() - t0 < 4000, `${Date.now() - t0} ms`);
+});

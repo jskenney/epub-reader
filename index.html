@@ -157,7 +157,9 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 
 /* full-screen reading: only the page remains */
 .app.fs{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
-.app.fs .bar,.app.fs .foot,.app.fs .toc,.app.fs .notice{display:none !important}
+.app.fs .bar,.app.fs .foot,.app.fs .toc,.app.fs .notice:not(.error){display:none !important}
+/* (An error stays in sight in full screen, over the page: round 25 review, L-333.) */
+.app.fs .notice.error{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:60;max-width:min(640px,calc(100% - 32px));box-shadow:var(--shadow)}
 /* The top and bottom bars turned off (SHOW_TOPBAR, SHOW_PROGRESS): an unseen corner at the top right brings the
    top bar back with a tap or click. */
 .app.no-bar .bar,.app.no-foot .foot{display:none}
@@ -607,7 +609,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0659</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0713</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1218,7 +1220,7 @@ const sameSite = (a, b) => a.hostname.replace(/^www\./, '') === b.hostname.repla
 // anything else, an HTML or SVG file say, is plain bytes (round 25 review, H-30). (SVG pictures are served cleaned,
 // by svgURL; a raster picture shows whatever its type, as browsers look at its bytes.)
 const SAFE_BLOB = /^(image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|audio\/[\w.+-]+|video\/[\w.+-]+|font\/[\w.+-]+|application\/(font-woff2?|x-font-[\w-]+|vnd\.ms-(opentype|fontobject))|text\/(css|vtt))$/i;   // (captions: L-317)
-const blobType = t => SAFE_BLOB.test(String(t || '').split(';')[0].trim()) ? t : 'application/octet-stream';
+const blobType = t => { const e = String(t || '').split(';')[0].trim().toLowerCase(); return SAFE_BLOB.test(e) ? e : 'application/octet-stream'; };   // (the checked form itself: L-339)
 function zipSource(zip){
   const blobs = new Set();
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
@@ -1881,7 +1883,7 @@ function clock(v){
 }
 function formatDuration(sec){
   if (sec == null || !(sec > 0)) return '';
-  const h = Math.floor(sec / 3600), mi = Math.round((sec % 3600) / 60);
+  const m = Math.round(sec / 60), h = Math.floor(m / 60), mi = m % 60;   // (whole minutes first, so never "1 h 60 min": L-334)
   return h ? `${h} h ${mi} min` : `${mi || 1} min`;
 }
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -1982,7 +1984,7 @@ async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey
     let lead = '', chars = 0;
     for (let k = 0; k < spine.length - 1 && k < 8 && chars < 4000; k++) {
       const t = await readText(zip, spine[k].path).catch(() => '') || '';
-      lead += fingerprint(t); chars += t.replace(/<[^>]*>/g, '').replace(/\s+/g, '').length;
+      lead += fingerprint(t); chars += t.replace(/<[^<>]*>/g, '').replace(/\s+/g, '').length;   // (not across another "<": many unclosed ones took time growing with the square: M-143)
     }
     if (chars >= 1000) {   // (too little text to tell books apart: no loose record)
       next.looseKey = 'spine:pos:loose:' + fingerprint(titleSpine + lead);
@@ -2551,7 +2553,11 @@ body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;over
 #${RID.clip}{height:100%;overflow:hidden}
 #${RID.flow}{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
 @media (max-width:640px){#${RID.flow}{column-count:1}}`;
+  // (Vertical text (writing-mode: vertical-rl, in Japanese and Chinese novels) set horizontally: the pages and
+  // the scroll layout follow lines down the page, so vertical text couldn't be read past its first screen. Laying
+  // it out vertically is an enhancement (E-29): round 25 review.)
   return `${frameCss}
+html,body,#${RID.flow},#${RID.flow} *{writing-mode:horizontal-tb !important}
 #${RID.flow}{line-height:${lineH} !important}
 #${RID.flow} :is(p,li,blockquote,dd,dt,td,th,div,span,a,em,strong,i,b,small,cite,q,sup,sub,section,article,aside){line-height:inherit !important}
 #${RID.flow} :is(h1,h2,h3,h4,h5,h6){line-height:${Math.max(1.15, lineH * 0.78).toFixed(2)} !important}
@@ -3124,9 +3130,13 @@ function geom(){
   if (!flow || !end) return null;
   const step = flow.clientWidth + (parseFloat(win.getComputedStyle(flow).columnGap) || 0);
   if (!(step > 0)) return null;
-  const left = flow.getBoundingClientRect().left;
-  const pages = Math.max(1, Math.floor((end.getBoundingClientRect().left - left + 1) / step) + 1);
-  return { doc, flow, step, pages, left };
+  // (Right to left (an Arabic or Hebrew book, dir="rtl" or direction:rtl): the columns run from the right edge
+  // leftwards, so pages are counted from the right and turned by moving the flow the other way: round 25 review.)
+  const box = flow.getBoundingClientRect(), left = box.left, right = box.right;
+  const rtl = win.getComputedStyle(flow).direction === 'rtl';
+  const pageAt = rect => ((rtl ? right - rect.right : rect.left - left) + 1) / step;
+  const pages = Math.max(1, Math.floor(pageAt(end.getBoundingClientRect())) + 1);
+  return { doc, flow, step, pages, left, rtl, pageAt: rect => Math.floor(pageAt(rect)) };
 }
 const scrolling = () => layout === 'scroll';
 const scroller = () => frame.contentDocument?.scrollingElement || null;
@@ -3148,7 +3158,7 @@ function showPage(n){
   const g = geom(); if (!g) return;
   cur.pages = g.pages;
   cur.page = Math.max(0, Math.min(g.pages - 1, n));
-  g.flow.style.transform = `translateX(${-Math.round(cur.page * g.step)}px)`;
+  g.flow.style.transform = `translateX(${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px)`;
   cur.f = fraction();
   updateProgress(); savePos();
 }
@@ -3163,7 +3173,7 @@ function position(frag, f){
   }
   const g = geom(); if (!g) return;
   const el = frag && (g.doc.getElementById(frag) || g.doc.getElementsByName(frag)[0]);
-  if (el) showPage(Math.floor((el.getBoundingClientRect().left - g.left + 1) / g.step));
+  if (el) showPage(g.pageAt(el.getBoundingClientRect()));
   else showPage(Math.round((f || 0) * (g.pages - 1)));
 }
 function relayout(){
@@ -3464,6 +3474,13 @@ function wireFrame(){
 // The reader's keys, wheel, swipes, dropping a book, waking the full-screen controls, and closing the menus: on
 // the page, and on the facing page of a spread too (round 23 review). Clicks and links are the page's own.
 function wirePageInput(doc){
+  // (Tab to a link on another page: that page is shown, so what has the focus is in sight: round 25 review, M-142.)
+  doc.addEventListener('focusin', e => {
+    if (scrolling() || doc !== frame.contentDocument || !e.target?.getBoundingClientRect) return;
+    const g = geom(); if (!g) return;
+    const p = Math.max(0, Math.min(g.pages - 1, g.pageAt(e.target.getBoundingClientRect())));
+    if (p !== cur.page) showPage(p);
+  });
   doc.addEventListener('pointerdown', () => { if (narrow.matches && tocIsOpen()) setToc(false); });   // (L-79)
   // Middle-click opens links in a new tab without a click event: only web links meant to (target=_blank) may.
   doc.addEventListener('auxclick', e => { const l = e.target.closest?.('a, area'); if (l && l.getAttribute('target') !== '_blank') e.preventDefault(); });
@@ -3517,9 +3534,18 @@ function onFrameClick(e){
   e.preventDefault();
   goTo(a.getAttribute('data-spine-path'), a.getAttribute('data-spine-frag'));
 }
+async function openLinkedDoc(u, frag){
+  const same = u.origin === location.origin, ref = same ? u.pathname : u.href;
+  history.pushState(null, '', `?${same ? 'book' : 'get'}=${encodeURIComponent(ref)}`);
+  await (same ? openFromUrl(ref) : openByAddress(ref));
+  if (frag && book?.doc) { const s = book.spine.find(x => (book.src.files?.get(x.path) || '').includes(`id="${frag}"`)); if (s) goTo(s.path, frag); }
+}
 function goTo(path, frag = ''){
   let idx = book.spine.findIndex(s => s.path === path);
   if (idx < 0) idx = book.spine.findIndex(s => pathKey(s.path) === pathKey(path));   // (case or Unicode form: L-48)
+  // (A document on a site linking to another document beside it: that one opened, as ?book= would: round 25 review,
+  // M-141.)
+  if (idx < 0 && book.doc?.base && docKind(path) && !ed.on) { openLinkedDoc(new URL(path.split('/').map(encodeURIComponent).join('/'), book.doc.base), frag); return; }
   if (idx < 0) { showNotice(`That link points to ${path}, which isn't part of the book's reading order.`, 'error'); return; }
   // (Choosing a chapter that failed to show tries it again: loop 5 review.)
   if (idx === cur.i && cur.shown && !cur.failed?.has(idx) && frame.contentDocument) { position(frag, 0); return; }
@@ -4240,7 +4266,7 @@ function pageOfRange(r, atEnd = false, g = geom()){   // (g: the layout, when me
   if (!g) return cur.page;
   const rects = r.getClientRects();
   const rect = (atEnd ? rects[rects.length - 1] : rects[0]) || r.getBoundingClientRect();
-  return Math.max(0, Math.min(g.pages - 1, Math.floor((rect.left - g.left + 1) / g.step)));
+  return Math.max(0, Math.min(g.pages - 1, g.pageAt(rect)));
 }
 const pageOfPos = (b, pos) => pageOfRange(rangeFor(b, pos, pos + 1));
 function wordStartAt(b, pos, lo, hi){
@@ -6886,6 +6912,7 @@ async function searchRun(q){
   // Start from the first match at or after the reading position.
   search.cur = Math.max(0, search.hits.findIndex(h => h.i >= cur.i));
   if (!search.hits.length) search.cur = -1;
+  search.more = more;   // (more than SEARCH_MAX, not exactly as many: L-335)
   searchRender(more);
   searchHighlight();
 }
@@ -6908,7 +6935,7 @@ function searchRender(more){
 }
 function searchCount(){
   const n = search.hits.length;
-  searchStatus(!n ? 'No matches' : `${search.cur + 1} of ${n}${n >= SEARCH_MAX ? '+' : ''} matches`);
+  searchStatus(!n ? 'No matches' : `${search.cur + 1} of ${n}${search.more ? '+' : ''} matches`);
   $('#searchPrev').disabled = $('#searchNext').disabled = n < 2;
   $('#searchResults').querySelectorAll('button[aria-current]').forEach(b => b.removeAttribute('aria-current'));
   const btn = $('#searchResults').querySelector(`button[data-n="${search.cur}"]`);
@@ -7689,7 +7716,7 @@ function utf8Declared(text){
   const utf = v => /^utf-?8$/i.test(v);
   let out = text.replace(/^(\uFEFF?\s*<\?xml\b[^>]*?\sencoding\s*=\s*["'])([\w.:-]+)/i, (m, a, v) => utf(v) ? m : a + 'UTF-8');
   // (Not in comments, nor in a script's, style's or textarea's text: round 24 review.)
-  const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)|<(script|style|textarea)\b[^>]*>[\s\S]*?(?:<\/\1(?=[\s>/])|$)/gi)].map(m => [m.index + (m[1] ? m[0].indexOf('>') + 1 : 0), m.index + m[0].length]);
+  const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)|<(script|style|textarea)\b[^<>]*>[\s\S]*?(?:<\/\1(?=[\s>/])|$)/gi)].map(m => [m.index + (m[1] ? m[0].indexOf('>') + 1 : 0), m.index + m[0].length]);
   return out.replace(/<meta\b(?:"[^"]*"|'[^']*'|[^'"<>])*>/gi, (tag, at) => {   // (not across another "<": slow on many unclosed tags, L-323)
     if (comments.some(([a, z]) => at >= a && at < z)) return tag;
     const attrs = [...tag.matchAll(/\s([^\s"'=\/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g)];
@@ -7775,7 +7802,7 @@ async function epubPack(b, changes){
   // (The package's own dcterms:modified, not one refining something else; added to an EPUB 3 package without one.)
   const opfFix = t => {
     let done = false;
-    const u = t.replace(/(<(?:[\w-]+:)?meta\b[^>]*>)([^<]*)(<\/(?:[\w-]+:)?meta\s*>)/gi, (m, open, v, close) => {
+    const u = t.replace(/(<(?:[\w-]+:)?meta\b[^<>]*>)([^<]*)(<\/(?:[\w-]+:)?meta\s*>)/gi, (m, open, v, close) => {
       if (done || !/\bproperty\s*=\s*["']dcterms:modified["']/i.test(open) || /\brefines\s*=/i.test(open)) return m;
       done = true; return open + now + close;
     });
@@ -8218,11 +8245,11 @@ function editSerialize(){
   if (r) {
     const ws = t.slice(r.start, r.end).match(/\s*$/)[0], after = t.slice(r.after);
     // (Markup after </body> is moved into the body by a parser: written inside it, once: round 24 review.)
-    if (/\S/.test(after.replace(/<\/html\s*>/gi, '').replace(/<!--[\s\S]*?-->/g, ''))) {
+    if (/\S/.test(after.replace(/<\/html\s*>/gi, '').replace(/<!--[\s\S]*?(?:-->|$)/g, ''))) {   // (an unclosed comment to the end, as a browser reads it: L-336)
       // (Comments there stay after the body: a parser keeps them outside it.)
       const end = after.search(/<\/html\s*>/i), mid = end < 0 ? after : after.slice(0, end), last = end < 0 ? '' : after.slice(end).replace(/^<\/html\s*>/i, '');
-      const notes = (mid.match(/<!--[\s\S]*?-->/g) || []).join('\n');
-      return t.slice(0, r.start) + inner.replace(/\s+$/, '') + '\n</body>\n' + (notes ? notes + '\n' : '') + '</html>' + (/\S/.test(last.replace(/<!--[\s\S]*?-->/g, '')) ? '\n' : last || '\n');
+      const notes = (mid.match(/<!--[\s\S]*?(?:-->|$)/g) || []).join('\n');
+      return t.slice(0, r.start) + inner.replace(/\s+$/, '') + '\n</body>\n' + (notes ? notes + '\n' : '') + '</html>' + (/\S/.test(last.replace(/<!--[\s\S]*?(?:-->|$)/g, '')) ? '\n' : last || '\n');
     }
     return t.slice(0, r.start) + inner.replace(/\s+$/, '') + ws + t.slice(r.end);
   }
@@ -8240,7 +8267,7 @@ const mdPlain = (el, ok = []) => [...el.attributes].every(a => ok.includes(a.nam
 const mdKept = k => ed.kept[k] ?? '';
 const mdComment = c => { const k = edKeepOf(c.data); return k != null ? mdKept(k) : `<!--${c.data}-->`; };
 function htmlToMarkdown(root){
-  const md = mdBlocks(root).replace(/\n{3,}/g, '\n\n').replace(/^\n+|\s+$/g, '');
+  const md = mdBlocks(root).replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
   return md ? md + '\n' : '';
 }
 const mdIsBlock = c => c.nodeType === 1 && (MD_BLOCKS.has(c.localName) || (edKeepOf(c.getAttribute('data-ed-keep')) != null && /^<(script|style|iframe|object|embed|template|noscript|frameset|frame)\b/i.test(mdKept(edKeepOf(c.getAttribute('data-ed-keep')))) && !c.parentElement?.closest('p, li, td, th, h1, h2, h3, h4, h5, h6')));

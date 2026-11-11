@@ -834,6 +834,30 @@ def main():
     outer = local(b"a.txt", inner)
     cd = central(b"a.txt", inner, 0) + central(b"b.txt", b"hello", 30 + 5)
     (books / "nested.zip.epub").write_bytes(outer + cd + struct.pack("<IHHHHIIH", 0x06054b50, 0, 0, 2, 2, len(cd), len(outer), 0))
+    # Round 25 review, loop 5's review: right-to-left text (dir on the html element, and direction in a stylesheet),
+    # long enough for several pages; vertical text.
+    ar = " ".join(["هذا نص عربي طويل للاختبار في القارئ"] * 12)
+    for name, html_dir, css in (("rtl-text", ' dir="rtl"', ""), ("rtl-css", "", "<style>body{direction:rtl}</style>")):
+        chap = f'<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ar"{html_dir}><head><title>t</title>{css}</head><body><h1>فصل</h1>' + "".join(f"<p id=\'p{i}\'>{i}. {ar}</p>" for i in range(60)) + "</body></html>"
+        epub_items(books / f"{name}.epub", name, [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "c2"],
+                   {"c1.xhtml": chap, "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Second.</p>")}, f"urn:{name}")
+    vert = "".join(f"<p>{i}。これは縦書きの文章です。" + "文章" * 40 + "</p>" for i in range(40))
+    epub_items(books / "vertical.epub", "Vertical", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("Vertical", f"<h1>縦</h1>{vert}", "<style>html{writing-mode:vertical-rl}</style>", "ja")}, "urn:vertical")
+    # Round 25 review, loop 6: documents linking to each other (M-141); a link far down a chapter (M-142); unclosed
+    # "<" in a leading chapter (M-143); unclosed comments after a document's body (L-336); an unlisted XML type
+    # (L-338); a picture typed with spaces and capitals (L-339).
+    (books / "linkdoc").mkdir()
+    (books / "linkdoc" / "a.html").write_text('<!DOCTYPE html><html><head><title>Doc A</title></head><body><h1>Doc A</h1><p><a id="tob" href="b.html#sec">to B</a> <a id="tomd" href="c.md">to C</a></p></body></html>')
+    (books / "linkdoc" / "b.html").write_text('<!DOCTYPE html><html><head><title>Doc B</title></head><body><h1>Doc B</h1>' + "".join(f"<p>Filler {i}.</p>" for i in range(80)) + '<h2 id="sec">Section</h2><p>Here.</p></body></html>')
+    (books / "linkdoc" / "c.md").write_text("# Doc C\n\nMarkdown.\n")
+    epub(books / "far-link.epub", "Far Link", [("c1.xhtml", "One", "<h1>One</h1>" + paragraphs("Far", 30) + '<p><a id="far" href="c2.xhtml">far link</a></p>'), ("c2.xhtml", "Two", "<h1>Two</h1><p>Two.</p>")], uid="urn:far-link")
+    epub_items(books / "lt-bomb.epub", "Lt Bomb", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "c2"],
+               {"c1.xhtml": "<html><body><p>x</p><p>" + "< " * 600000, "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Two.</p>")}, "urn:lt-bomb")
+    (books / "comment-bomb.html").write_text("<!DOCTYPE html><html><body><p>Start.</p></body>" + "<!--<" * 60000 + "</html>")
+    (books / "sandboxed" / "page.xpdl").write_text("<p>x</p>")
+    epub_items(books / "odd-type.epub", "Odd Type", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("p", "pic.png", "IMAGE/PNG ", "")], ["c1"],
+               {"c1.xhtml": xhtml("Odd Type", '<h1>Odd</h1><p><img src="pic.png" alt="p"/></p>'), "pic.png": png(4, 4, (10, 200, 10))}, "urn:odd-type")
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
     (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
     (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')

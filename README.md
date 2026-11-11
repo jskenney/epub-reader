@@ -85,8 +85,9 @@ scroll layouts keep the pages in order.
 EPUBs with `page-progression-direction="rtl"` (reflowable ones too, so a
 Japanese or Arabic novel turns the way its fixed cover does) and right-to-left
 manga. The left arrow key and a swipe to the right go on, and two-page spreads
-show the later page on the left. The book's information (I) shows its
-direction. If a book is marked right to left by mistake, turn on **Turn every
+of fixed-layout pages and comics show the later page on the left (a reflowable
+book's columns follow its text: right to left for Arabic or Hebrew, left to right
+otherwise). The book's information (I) shows its direction. If a book is marked right to left by mistake, turn on **Turn every
 book left to right** in Settings (`FORCE_LTR`).
 
 ## Editing documents
@@ -719,7 +720,7 @@ complete nginx setup for the reader at `/reader/`:
   a wrong type is refused) and `.wasm` as `application/wasm`.
 - **Book files sandboxed when opened on their own:** a link straight to a
   chapter, an HTML book or an SVG file would otherwise run its scripts on your
-  site, where the reader's settings and saved data are. HTML, XHTML, XML, XSL,
+  site, where the reader's settings and saved data are. HTML, XHTML, XML, XSL, MathML, RDF, OPF, NCX,
   RSS, Atom and SVG files under `/reader/` and `/bookshelf/` are sent with
   `Content-Security-Policy: sandbox`, a book's own `index.html` too; the reader's
   page, `/reader/index.html`, is exempted by an exact location. A folder under
@@ -751,7 +752,7 @@ handle /reader/* {
 	# Book files opened on their own run nothing (not the reader's own page). ">" defers this header so it
 	# replaces the policy above: Caddy runs a matched header line before an unmatched one.
 	@bookfiles {
-		path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
+		path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$
 		not path /reader/index.html
 	}
 	header @bookfiles >Content-Security-Policy "sandbox"
@@ -759,7 +760,7 @@ handle /reader/* {
 	file_server
 }
 handle /bookshelf/* {
-	@bookfiles path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
+	@bookfiles path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$
 	header @bookfiles Content-Security-Policy "sandbox"
 	header X-Content-Type-Options nosniff
 	root * /srv/www
@@ -767,9 +768,11 @@ handle /bookshelf/* {
 }
 ```
 
-Caddy already serves `.mjs` and `.wasm` with the right types. (The reader doesn't
-rely on the sandbox header: a book's pictures and files are served so they can't run
-as pages of your site anyway. It is a second line for links straight to book files.)
+Caddy already serves `.mjs` and `.wasm` with the right types. (Inside the reader, a
+book's pictures and files are served so they can't run as pages of your site. A link
+straight to a book file on your server is protected only by what the server sends:
+its type, `nosniff`, and this sandbox header for the extensions listed. Keep book
+folders free of other files, and send `nosniff`.)
 
 ## Settings
 

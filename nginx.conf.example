@@ -43,7 +43,7 @@ location ^~ /reader/ {
     # below (add one like it for each folder with its own copy of index.html). This location's add_header lines
     # replace the ones above, so those are repeated.
     location = /reader/index.html { }
-    location ~* \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$ {
+    location ~* \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$ {
         add_header Content-Security-Policy "sandbox" always;
         add_header X-Content-Type-Options nosniff always;
         add_header Referrer-Policy same-origin always;
@@ -70,7 +70,7 @@ location ^~ /reader/ {
 # when opened on their own, as under /reader/.
 location ^~ /bookshelf/ {
     add_header X-Content-Type-Options nosniff always;
-    location ~* \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$ { add_header Content-Security-Policy "sandbox" always; add_header X-Content-Type-Options nosniff always; }
+    location ~* \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom|mml|mathml|rdf|xpdl|xul|smil|opf|ncx)$ { add_header Content-Security-Policy "sandbox" always; add_header X-Content-Type-Options nosniff always; }
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
     location ~* \.md$ { types { } default_type text/markdown; charset utf-8; charset_types text/markdown; }
 }

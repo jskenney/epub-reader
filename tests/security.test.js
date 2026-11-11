@@ -255,7 +255,7 @@ test('book files opened on their own are sent sandboxed; the reader page isn\'t 
     if (policy) assert.equal(got, policy, path); else assert.notEqual(got, 'sandbox', path);
   }
   const conf = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'nginx.conf.example'), 'utf8');
-  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|shtml\|xml\|xsl\|xslt\|svgz\?\|rss\|atom\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
+  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|shtml\|xml\|xsl\|xslt\|svgz\?\|rss\|atom\|mml\|mathml\|rdf\|xpdl\|xul\|smil\|opf\|ncx\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
   assert.match(conf, /add_header Content-Security-Policy "sandbox" always;/);
 });
 
@@ -304,4 +304,14 @@ test('an archive read whole whose files overlap isn\'t read (round 25 review, T-
   const page = await h.newPage();
   await h.openReader(page, `${h.NORANGE}/reader/index.html?book=books/nested.zip.epub`);
   assert.match(await h.notice(page), /its files overlap/);
+});
+
+test('a small book of unclosed "<" doesn\'t freeze opening; a picture typed with spaces and capitals gets its plain type; .xpdl is sandboxed (round 25 review, M-143, L-339, L-338)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/lt-bomb.epub`);
+  assert.ok(Date.now() - t0 < 6000, `opened in ${Date.now() - t0} ms`);
+  await h.openReader(page, `${h.READER}?book=books/odd-type.epub`);
+  assert.equal(await h.inFrame(page, async doc => (await fetch(doc.querySelector('img').src)).headers.get('content-type')), 'image/png');
+  assert.equal((await fetch(`${h.SITE}/reader/books/sandboxed/page.xpdl`)).headers.get('content-security-policy'), 'sandbox');
 });
