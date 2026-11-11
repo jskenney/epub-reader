@@ -225,6 +225,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-theme:has(input:disabled){cursor:default;opacity:.6}
 
 .set-row input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--ribbon);flex:none}
+.set-row input[type=text]{width:11em;height:30px;box-sizing:border-box;flex:none;font:400 13px var(--font-mono);color:var(--ink);background:var(--paper);border:1px solid var(--field);border-radius:6px;padding:0 6px}
 .set-row input[type=number]{width:6.5em;height:30px;box-sizing:border-box;flex:none;font:400 13px var(--font-ui);color:var(--ink);background:var(--paper);border:1px solid var(--field);border-radius:6px;padding:0 6px}
 .set-row input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
 .set-themes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
@@ -603,7 +604,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0023</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0158</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -629,6 +630,10 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <div class="set-row"><span><label for="set-KEEP_POSITIONS_DAYS">Forget reading positions after (days)</label><small>For books not opened in that time. 0 keeps them.</small><small class="set-def"></small></span><input id="set-KEEP_POSITIONS_DAYS" type="number" min="0" max="36500" step="1" data-set="KEEP_POSITIONS_DAYS"></div>
         <div class="set-row"><span><label for="set-SEARCH_MAX">Search matches listed, at most</label><small class="set-def"></small></span><input id="set-SEARCH_MAX" type="number" min="1" max="100000" step="1" data-set="SEARCH_MAX"></div>
         <div class="set-row"><span><label for="set-COMIC_PART">Comic pages per section</label><small>For comics opened after the change; your place stays on the same page.</small><small class="set-def"></small></span><input id="set-COMIC_PART" type="number" min="2" max="1000" step="2" data-set="COMIC_PART"></div>
+      </fieldset>
+      <fieldset class="set-group"><legend>Progress sent to this site</legend>
+        <div class="set-row"><span><label for="set-API_PROGRESS">Where reading progress goes</label><small>For books opened from this site (or by their address), not files from this computer. An address on this site; empty sends nothing.</small><small class="set-def"></small></span><input id="set-API_PROGRESS" type="text" spellcheck="false" autocomplete="off" data-set="API_PROGRESS"></div>
+        <div class="set-row"><span><label for="set-API_COMPLETE">Where finishing a book goes</label><small>Sent once, the first time the end of a book is reached.</small><small class="set-def"></small></span><input id="set-API_COMPLETE" type="text" spellcheck="false" autocomplete="off" data-set="API_COMPLETE"></div>
       </fieldset>
       <fieldset class="set-group"><legend>Read aloud</legend>
         <div class="set-row"><span><label for="set-SLEEP_TIMER">Sleep timer in the read-aloud bar</label><small class="set-def"></small></span><input id="set-SLEEP_TIMER" type="checkbox" data-set="SLEEP_TIMER"></div>
@@ -1024,7 +1029,7 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
       return out;
     };
     files[name] = {
-      name, dir: name.endsWith('/'),
+      name, dir: name.endsWith('/'), size: usize,
       async async(type){
         let b = kept.get(name);
         if (!b) {   // a failed read isn't remembered: the next attempt tries again
@@ -1038,7 +1043,7 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
       },
     };
   }
-  return { files, file: name => { const f = files[name]; return f && !f.dir ? f : null; }, inPlace: true };
+  return { files, file: name => { const f = files[name]; return f && !f.dir ? f : null; }, inPlace: true, fileSize: size };
 }
 // An uploaded file, read in place (it can't be read once it is moved, deleted or replaced on disk).
 const zipFromBlob = blob => lazyZip(async (o, l) => {
@@ -1060,7 +1065,9 @@ function zipLib(){
 async function wholeFile(r){
   const buf = await r.arrayBuffer();
   if (!isZipBytes(buf)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
-  return { zip: await zipLib().loadAsync(buf) };
+  const zip = await zipLib().loadAsync(buf);
+  zip.fileSize = buf.byteLength;   // (sent with reading progress: E-22)
+  return { zip };
 }
 async function zipFromUrl(url, init = {}){
   let r;
@@ -1518,7 +1525,8 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   }
   return parts.length ? parts : [[]];
 }
-async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false, created = false, foreign = '' } = {}){
+// from: the address it was opened from (a book on a site; not a file from this computer), for reading progress (E-22).
+async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false, created = false, foreign = '', from = '' } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const text = decodeText(new Uint8Array(buffer), { http: charset, sniff: kind === 'html' });
   const built = await buildDocument(text, name, kind);
@@ -1540,6 +1548,7 @@ async function openDocument(buffer, name, kind, { base = null, key, seq, charset
     title, authors: meta.author ? [meta.author] : [], language, uid: '', info,
     manifest: new Map(spine.map(s => [s.id, s])), byPath: new Map(spine.map(s => [s.path, s])), spine, toc,
     urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:${kind}:${name}`,
+    from, size: buffer.byteLength, fingerprint: fingerprint(text),
     doc: { text, source: text, kind, name, base, handle, fresh, created, foreign } });
   if (!isStale(seq)) editOffered();
 }
@@ -1617,7 +1626,7 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
 const COMIC_IMG = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
 let COMIC_PART = 40;
 const comicPages = zip => Object.values(zip.files).filter(f => !f.dir && COMIC_IMG.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name));
-async function openComic(zip, name, { key, seq } = {}){
+async function openComic(zip, name, { key, seq, from = '' } = {}){
   if (!isStale(seq)) showStatus('Opening comic…');
   const pages = comicPages(zip);
   if (!pages.length) throw new Error('This archive has no page images in it.');
@@ -1677,12 +1686,13 @@ async function openComic(zip, name, { key, seq } = {}){
   const comicParts = new Map(parts.map((part, i) => [path(i), part.pages.map(f => f.name)]));
   await startBook({ seq, zip: src, src, opfPath: name + '.cbz', version: '', format: 'Comic book (CBZ)', comic: true, pageCount: pages.length, comicParts,
     title, authors, language, uid: '', info, manifest: new Map(items.map(s => [s.id, s])), byPath: new Map(items.map(s => [s.path, s])),
-    spine, toc, urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:cbz:${name}` });
+    spine, toc, urls: new Map(), sample: false, hasOverlays: false, key: key || `spine:pos:cbz:${name}`,
+    from, size: zip.fileSize ?? null, fingerprint: fingerprint(JSON.stringify(pages.map(f => f.name))) });
 }
 // A ZIP is opened as a comic when it is named .cbz, or has page images and no EPUB container.
 async function openZip(zip, name, opts = {}){
   if (/\.cbz$/i.test(name) || (!getFile(zip, 'META-INF/container.xml') && comicPages(zip).length)) return openComic(zip, name.replace(/\.(cbz|zip)$/i, ''), opts);
-  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, ''), seq: opts.seq });
+  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, ''), seq: opts.seq, from: opts.from });
 }
 
 /* ---------- descriptive metadata ---------- */
@@ -1779,7 +1789,7 @@ function descriptionParagraphs(raw){
 }
 
 /* ---------- opening a book ---------- */
-async function openBook(zip, { sample = false, name = '', seq } = {}){
+async function openBook(zip, { sample = false, name = '', seq, from = '' } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const cText = await readText(zip, 'META-INF/container.xml');
   if (!cText) throw new Error(zip.kind === 'dir'
@@ -1862,6 +1872,8 @@ async function openBook(zip, { sample = false, name = '', seq } = {}){
   // key's position without removing it (a copy without the identifier may still be read).
   next.legacyKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
   next.copyKeys = uid ? [stableKey] : [];
+  // (Sent with reading progress: E-22.)
+  Object.assign(next, { from, size: zip.raw?.fileSize ?? null, fingerprint: stableKey.slice('spine:pos:opf:'.length) });
   next.seq = seq;
   await startBook(next);
 }
@@ -1874,6 +1886,7 @@ const isStale = seq => seq != null && seq !== openSeq;
 async function startBook(next){
   if (isStale(next.seq)) { next.src?.dispose?.(); return; }
   editQuit(); ed.epub = null;   // (a book opened another way while editing: openFile and the rest have asked about unsaved changes)
+  progressFlush();   // (a place in the previous book not yet sent: E-22)
   if (book) book.src.dispose();
   // The narration audio belongs to the book it came from: a new book with the same audio path must not play
   // the previous book's recording (REVIEW.md M-17).
@@ -1906,6 +1919,7 @@ async function startBook(next){
   // another copy's, as the old file may still be read.)
   const loose = !saved && book.looseKey ? store.get(book.looseKey) : null;
   if (loose && loose.i < spine.length) { saved = { i: loose.i, f: loose.f }; store.set(book.key, saved); }
+  book.done = !!saved?.done;   // (the site was told it was finished: E-22)
   const lens = comicLens();
   if (lens && Number.isInteger(saved?.page) && saved.page >= 1) {   // (a comic: its page, wherever the sections now fall)
     let i = 0, end = lens[0];
@@ -3045,8 +3059,143 @@ function savePos(){
   if (!book || ed.on) return;   // (the editor's one long page isn't a place in the book: E-21)
   const pos = { i: cur.i, f: Math.round(fraction() * 1000) / 1000, t: Date.now() };   // t: last read, for sweepPositions
   if (comicLens()) { const at = comicPageShown(); if (at?.page) { pos.page = cur.comicPage = at.page; if (at.off) pos.off = at.off; } }
+  if (book.done) pos.done = 1;   // (finished, and the site told: E-22)
   store.set(book.key, pos);
   if (book.writeLoose) store.set(book.looseKey, pos);
+  progressMoved();
+}
+
+/* ---------- reading progress sent to the site (E-22) ----------
+   For a book opened from a web address (on this site, or another with ?get=; not a file from this computer, not
+   the sample), where the reader is goes to API_PROGRESS as JSON, a moment after the pages stop turning (or the
+   page stops scrolling a screen or more away from the last place sent), and on leaving the page; and the first
+   time the end of the book is reached, to API_COMPLETE. Both are addresses on this site, so the site's session
+   cookie goes with them. An address that doesn't answer with JSON (missing, an error, a web page, a sign-in page)
+   is taken to be no API and isn't tried again until the page is reloaded. */
+let API_PROGRESS = '/api/progress', API_COMPLETE = '/api/complete';   // reader-config.json and Settings; '' sends nothing
+const PROGRESS_WAIT = 2000;   // ms after the last page turn
+const api = { dead: new Set(), last: null, timer: 0, busy: false, again: false, finishing: null };
+// An API address as given: '' (none), or one on this site.
+function apiAddress(v){
+  v = v.trim();
+  if (v && new URL(v, location.href).origin !== location.origin) throw new Error('should be an address on this site');
+  return v;
+}
+// Each section's share of the book (its size: the text of a document's parts, a comic section's pages, an EPUB
+// chapter's size in the archive), or null where they aren't known (a folder book on a server): then each
+// section counts the same.
+function sectionWeights(){
+  if (book.weights?.spine === book.spine) return book.weights.w;
+  let w = comicLens();
+  if (!w && book.doc && book.src.files) w = book.spine.map(s => (book.src.files.get(s.path) || '').length);
+  else if (!w && book.src.raw?.files) w = book.spine.map(s => entrySize(book.src.raw, s.path));
+  if (w && !w.every(x => x > 0)) w = null;
+  book.weights = { spine: book.spine, w };
+  return w;
+}
+function entrySize(zip, p){
+  const own = n => n != null && Object.prototype.hasOwnProperty.call(zip.files, n) ? zip.files[n] : null;
+  const f = own(p) || own(p.replace(/^\/+/, '')) || own(foldedNames(zip).get(pathKey(p)));
+  return f ? f.size ?? f._data?.uncompressedSize ?? 0 : 0;
+}
+// How much of the book is read, 0 to 1: the sections before this one, and as much of this one as is read (a
+// two-page spread: the facing page too).
+function bookFraction(){
+  const n = book.spine.length, w = sectionWeights(), other = !frame2.hidden && cur.spreadOther > cur.i ? cur.spreadOther : -1;
+  if (!w) return Math.min(1, (cur.i + readFraction() + (other >= 0 ? 1 : 0)) / n);
+  let before = 0, total = 0;
+  w.forEach((x, j) => { total += x; if (j < cur.i) before += x; });
+  return Math.min(1, (before + w[cur.i] * readFraction() + (other >= 0 ? w[other] || 0 : 0)) / total);
+}
+// The section a point along the progress bar falls in (0 to 1), as bookFraction counts them.
+function sectionAt(x){
+  const n = book.spine.length, w = sectionWeights();
+  if (!w) return Math.min(n - 1, Math.max(0, Math.floor(x * n)));
+  const total = w.reduce((a, b) => a + b, 0);
+  let sum = 0;
+  for (let j = 0; j < n; j++) { sum += w[j]; if (x * total < sum) return j; }
+  return n - 1;
+}
+// Which book this is, as far as the reader can tell; null for a book that sends nothing.
+function bookIdentity(){
+  if (!book?.from || book.sample) return null;
+  const u = new URL(book.from);
+  return { identifier: book.uid || null, fingerprint: book.fingerprint || null, path: u.origin === location.origin ? u.pathname : null,
+    url: u.href, kind: book.doc ? book.doc.kind : book.comic ? 'cbz' : 'epub',
+    file_name: safeDecode(u.pathname.replace(/\/+$/, '').split('/').pop()) || null, size: book.size ?? null, title: book.title };
+}
+// The place now, to tell whether the reader has moved far enough from the last one sent.
+const placeNow = () => ({ book, i: cur.i, page: cur.page, scroll: scrolling(), top: scroller()?.scrollTop || 0 });
+function progressBody(){
+  const id = bookIdentity(); if (!id) return null;
+  const pct = x => Math.round(x * 1000) / 10;
+  return { ...id, section: cur.i, section_percentage: pct(readFraction()), book_percentage: pct(bookFraction()) };
+}
+// From savePos: a new place. The first one after a book opens is where it opened: not sent, only remembered.
+function progressMoved(){
+  if (!bookIdentity()) return;
+  if (api.last?.book !== book) api.last = placeNow();
+  else if (API_PROGRESS && !api.dead.has(API_PROGRESS)) { clearTimeout(api.timer); api.timer = setTimeout(progressSend, PROGRESS_WAIT); }
+  if (atBookEnd()) bookFinished();
+}
+// Far enough from the last place sent: another section, another page, or (scrolling) a screen or more away.
+function progressFar(){
+  const a = api.last, b = placeNow();
+  if (!a || a.book !== b.book || a.i !== b.i || a.scroll !== b.scroll) return true;
+  return b.scroll ? Math.abs(b.top - a.top) >= (scroller()?.clientHeight || 1) : a.page !== b.page;
+}
+async function progressSend(){
+  api.timer = 0;
+  if (ed.on || !progressFar()) return;   // (the editor's one long page isn't a place in the book)
+  if (api.busy) { api.again = true; return; }   // (one at a time: the newest place goes once this one is answered)
+  const body = progressBody(); if (!body) return;
+  api.last = placeNow(); api.busy = true;
+  await apiPost(API_PROGRESS, body);
+  api.busy = false;
+  if (api.again) { api.again = false; progressSend(); }
+}
+// Leaving the page, or another book opening: a place not yet sent goes now. (Leaving, the answer can't be waited
+// for: keepalive lets the request finish after the page has gone.)
+function progressFlush(leaving = false){
+  if (!api.timer) return;
+  clearTimeout(api.timer); api.timer = 0;
+  if (ed.on || !progressFar() || !API_PROGRESS || api.dead.has(API_PROGRESS)) return;
+  const body = progressBody(); if (!body) return;
+  api.last = placeNow();
+  if (!leaving) { apiPost(API_PROGRESS, body); return; }
+  try { fetch(new URL(API_PROGRESS, location.href), { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {}); } catch {}
+}
+window.addEventListener('pagehide', () => progressFlush(true));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') progressFlush(true); });
+// The last page of the last section shown (or, in a spread, facing).
+function atBookEnd(){
+  const last = book.spine.length - 1;
+  if (!frame2.hidden && cur.spreadOther === last) return true;
+  return cur.i === last && (scrolling() ? atBottom() : cur.page >= cur.pages - 1);
+}
+// The first time the end is reached: API_COMPLETE told, once. Remembered with the position once the site has
+// answered, so it isn't sent again (and is, another time, if the site didn't answer).
+async function bookFinished(){
+  const b = book;
+  if (b.done || api.finishing === b || !API_COMPLETE || api.dead.has(API_COMPLETE)) return;
+  const id = bookIdentity(); if (!id) return;
+  api.finishing = b;
+  if (await apiPost(API_COMPLETE, { ...id, completed: true })) {
+    b.done = true;
+    const pos = store.get(b.key); if (pos) store.set(b.key, { ...pos, done: 1 });
+  }
+  if (api.finishing === b) api.finishing = null;
+}
+// POST body as JSON; true once the site answers with JSON. Anything else marks the address as no API.
+async function apiPost(addr, body){
+  if (!addr || api.dead.has(addr)) return false;
+  let ok = false;
+  try {
+    const r = await fetch(new URL(addr, location.href), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (r.ok) { const t = await r.text(); JSON.parse(t); ok = t.trim() !== ''; }
+  } catch {}
+  if (!ok && !api.dead.has(addr)) { api.dead.add(addr); console.info(`${addr} didn't answer with JSON, so reading progress isn't sent there until the page is reloaded.`); }
+  return ok;
 }
 
 let wheelAcc = 0, wheelAt = 0;
@@ -3325,7 +3474,8 @@ function updateProgress(){
   updateTimeLeft();
   // (A fixed-layout page counts as read once shown, in any layout: progress reaches 100% on the last one.)
   // (A two-page spread: its later page is read too.)
-  const overall = Math.min(1, (cur.i + readFraction() + (!frame2.hidden && cur.spreadOther > cur.i ? 1 : 0)) / book.spine.length);
+  // (Each section counted by its size where that's known: E-22.)
+  const overall = bookFraction();
   const pct = Math.round(overall * 100);
   $('#ribbonFill').style.width = (overall * 100).toFixed(2) + '%';
   $('#ribbon').setAttribute('aria-valuenow', pct);
@@ -3398,7 +3548,7 @@ let relayoutFrame = 0;
 $('#ribbon').addEventListener('click', e => {
   if (!book) return;
   const r = e.currentTarget.getBoundingClientRect();
-  renderChapter(Math.floor(((e.clientX - r.left) / r.width) * book.spine.length));
+  renderChapter(sectionAt((e.clientX - r.left) / r.width));
 });
 // The ribbon as a slider over the sections: arrows step a section, Home and End go to the first and last
 // (REVIEW.md L-78). (Kept from the page-turning keys.)
@@ -6765,6 +6915,8 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   EDITING: ['boolean', v => { EDITING = v; }],
   GET_URLS: ['boolean', v => { GET_URLS = v; }],
   FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
+  API_PROGRESS: ['string', v => { API_PROGRESS = apiAddress(v); }],   // (E-22)
+  API_COMPLETE: ['string', v => { API_COMPLETE = apiAddress(v); }],
   KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, Math.round(v))); }],
@@ -8169,6 +8321,9 @@ const SET_VARS = {   // name: [the value now, what to do once it changes ('reloa
   SAVED_AUDIO_MB: [() => SAVED_AUDIO_MB, null],
   // (The voice models in use, and the names their saved speech is kept under, follow it.)
   FULL_PRECISION: [() => FULL_PRECISION, 'reload'],
+  // (Used from the next place sent; an address new here is tried even if another wasn't there: E-22.)
+  API_PROGRESS: [() => API_PROGRESS, null],
+  API_COMPLETE: [() => API_COMPLETE, null],
 };
 const siteValue = {}, loadedValue = {};   // the site's values, and those in use since the page loaded
 const setKey = name => `spine:set:${name}`;
@@ -8176,7 +8331,8 @@ const setKey = name => `spine:set:${name}`;
 function setVar(name, v){
   const [type, apply] = CONFIG_SETTINGS[name];
   if (typeof v !== type || (type === 'number' && !Number.isFinite(v))) return false;
-  apply(v); return true;
+  try { apply(v); } catch { return false; }   // (an API address on another site: E-22)
+  return true;
 }
 // The reader's value, saved as it is in use (after the limits).
 const setSave = (name, v) => store.set(setKey(name), v);
@@ -8204,7 +8360,7 @@ function setShown(name){
   const [get, after] = SET_VARS[name];
   return after === 'reload' && !LOCKED.has(name) ? store.get(setKey(name)) ?? siteValue[name] : get();
 }
-const setText = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v);
+const setText = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : v === '' ? 'none' : String(v);
 function setSync(){
   const f = $('#setForm');
   const theme = document.documentElement.getAttribute('data-theme') || 'system';
@@ -8214,7 +8370,7 @@ function setSync(){
   for (const el of f.querySelectorAll('[data-set]')) {
     const name = el.dataset.set, now = setShown(name), site = siteValue[name];
     if (el.type === 'checkbox') el.checked = now;
-    else if (document.activeElement !== el || Number(el.value) !== now) el.value = now;
+    else if (document.activeElement !== el || (el.type === 'text' ? el.value.trim() : Number(el.value)) !== now) el.value = now;
     el.disabled = LOCKED.has(name);
     el.closest('.set-row').classList.toggle('set-off', el.disabled);
     el.closest('.set-row').querySelector('.set-def').textContent = el.disabled ? 'Set by this site.' : now === site ? '' : `Changed: this site's default is ${setText(site)}.`;
@@ -8234,9 +8390,10 @@ function setChange(name, v){
     if (typeof v === CONFIG_SETTINGS[name][0]) setSave(name, v);
     return;
   }
-  if (!setVar(name, v)) return;
+  if (!setVar(name, v)) return false;
   setSave(name, get());
   if (get() !== before) after?.();   // (only for a real change: a new page or search loses the reader's place)
+  return true;
 }
 function setReset(){
   for (const [name, [get, after]] of Object.entries(SET_VARS)) {
@@ -8276,13 +8433,16 @@ $('#setClose').addEventListener('click', () => $('#setDialog').close());
 $('#setReset').addEventListener('click', setReset);
 $('#setReload').addEventListener('click', () => location.reload());
 $('#setForm').addEventListener('change', e => {
-  const el = e.target;
+  const el = e.target, typed = el.value?.trim();
+  let refused = false;
   if (el.name === 'theme') setTheme(el.value);
   else if (el.dataset.set) {
     if (el.type === 'checkbox') setChange(el.dataset.set, el.checked);
+    else if (el.type === 'text') refused = setChange(el.dataset.set, el.value) === false;   // (an address on another site: E-22)
     else if (el.value.trim() !== '' && Number.isFinite(Number(el.value))) setChange(el.dataset.set, Number(el.value));
   }
   setSync();
+  if (refused) el.closest('.set-row').querySelector('.set-def').textContent = `Not changed: ${typed} isn't on this site.`;
 });
 $('#setDialog').addEventListener('close', () => $('#setBtn').focus());
 
@@ -8296,6 +8456,7 @@ function configNow(){
     ALLOW_REMOTE_CONTENT: v('ALLOW_REMOTE_CONTENT'), ALLOW_EXTERNAL_LINKS: v('ALLOW_EXTERNAL_LINKS'), EDITING, GET_URLS,
     SHOW_CONTENTS: v('SHOW_CONTENTS'), SHOW_PROGRESS: v('SHOW_PROGRESS'), SHOW_TOPBAR: v('SHOW_TOPBAR'),
     TIME_LEFT: v('TIME_LEFT'), SLEEP_TIMER: v('SLEEP_TIMER'), FORCE_LTR: v('FORCE_LTR'),
+    API_PROGRESS: v('API_PROGRESS'), API_COMPLETE: v('API_COMPLETE'),
     KEEP_POSITIONS_DAYS: v('KEEP_POSITIONS_DAYS'), SEARCH_MAX: v('SEARCH_MAX'), COMIC_PART: v('COMIC_PART'),
     TTS_SERVER: { api: here(TTS_SERVER.api), voices: here(TTS_SERVER.voices) }, FULL_PRECISION: v('FULL_PRECISION'),
     LOOKAHEAD_SEC: v('LOOKAHEAD_SEC'), SAVED_AUDIO_MB: v('SAVED_AUDIO_MB'), NCACHE_SEC, SPAN_MAX: { ...SPAN_MAX },
@@ -8381,11 +8542,11 @@ async function openDefault(seq = ++openSeq){
     try {
       if (kind) {
         const got = await fetchDocument(u, kind, { cache: 'no-cache' });
-        if (got.buf) { await openDocument(got.buf, name, kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset }); return; }
+        if (got.buf) { await openDocument(got.buf, name, kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset, from: u.href }); return; }
       } else {
         const found = await zipFromUrl(u, { cache: 'no-cache' });
-        if (found.zip && /\.cbz$/i.test(u.pathname)) { await openZip(found.zip, name, { key: `spine:pos:url:${u.pathname}`, seq }); return; }
-        if (found.zip && getFile(found.zip, 'META-INF/container.xml')) { await openBook(zipSource(found.zip), { name: 'default', seq }); return; }
+        if (found.zip && /\.cbz$/i.test(u.pathname)) { await openZip(found.zip, name, { key: `spine:pos:url:${u.pathname}`, seq, from: u.href }); return; }
+        if (found.zip && getFile(found.zip, 'META-INF/container.xml')) { await openBook(zipSource(found.zip), { name: 'default', seq, from: u.href }); return; }
       }
     } catch (err) { console.warn(`${ref} couldn't be opened:`, err); }
   }
@@ -8436,7 +8597,7 @@ async function openForEdit(ref){
     if (isStale(seq)) return;
     if (got.miss) { if (!/^(404|410)$|not found|a web page came back/.test(got.miss)) gone = false; continue; }
     try {
-      await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset });
+      await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, charset: got.charset, from: u.href });
       if (!isStale(seq)) await editStart();
     } catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, ref), 'error'); } }
     return;
@@ -8445,7 +8606,7 @@ async function openForEdit(ref){
   if (!gone) { await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} couldn't be read from the site.`, 'error'); return; }
   // (Not there: a new, empty document with that name, ready to save.)
   try {
-    await openDocument(new ArrayBuffer(0), safeDecode(u.pathname.split('/').pop()).replace(/[\/\\]/g, '_'), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, created: true });
+    await openDocument(new ArrayBuffer(0), safeDecode(u.pathname.split('/').pop()).replace(/[\/\\]/g, '_'), kind, { base: new URL('.', u.href).href, key: `spine:pos:url:${u.pathname}`, seq, created: true, from: u.href });
     if (!isStale(seq)) await editStart({ mode: 'raw' });
   } catch (err) { if (!isStale(seq)) { hideStatus(); showNotice(friendly(err, ref), 'error'); } }
 }
@@ -8480,7 +8641,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
         if (anySite && got.host && got.host !== location.host) foreign = got.host;   // (where it came from, after any redirect)
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
-          { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign });
+          { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: u.href });
         if (isStale(seq)) return;
         if (foreign) showFrom(foreign);
         return;
@@ -8490,7 +8651,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
         if (found.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(found.miss)})`); continue; }
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
-        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq });
+        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, from: u.href });
         if (!isStale(seq) && book && !book.comic) book.fileName = safeDecode(u.pathname.split('/').pop());
         if (foreign && !isStale(seq)) showFrom(foreign);
         return;
@@ -8501,7 +8662,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
       if (!container || !parseDoc(container, 'application/xml')?.getElementsByTagNameNS('*', 'rootfile')[0]) {
         misses.push(foreign ? `${u.href} (${foreign} didn't give its META-INF/container.xml: not an EPUB folder, or not readable from here)` : `${u.pathname} (no META-INF/container.xml${anySite ? ', or it is sent on to another site: ?get= opens folder books on that site by their own address' : ''})`); continue;
       }
-      await openBook(src, { name, seq });
+      await openBook(src, { name, seq, from: u.href });
       if (!isStale(seq) && book) book.fileName = `${name || 'book'}.epub`;
       if (foreign && !isStale(seq)) showFrom(foreign);
       return;

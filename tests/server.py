@@ -39,6 +39,7 @@ args = ap.parse_args()
 
 seen, breeze_log, busy = [], [], threading.Lock()
 stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing)
+api_log = []   # reading progress posted to /api-log/... (GET /__api lists, DELETE /__api clears: E-22)
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
 head_on = [True]     # GET /__head?on=0 makes HEAD requests answer 405 (and ?on=1 again)
@@ -133,6 +134,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_response(302); self.send_header("Location", f"http://localhost:{m.group(1)}{m.group(2)}"); self.send_header("Content-Length", "0"); self.end_headers(); return
         if path == "/__bytes":
             return self.json(200, sent)
+        if path == "/__api":
+            return self.json(200, api_log)
         if path == "/__ranges":
             ranges_on[0] = "on=0" not in self.path
             return self.json(200, {"ranges": ranges_on[0]})
@@ -219,6 +222,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/__bytes"):
             sent.clear()
             return self.json(200, {"ok": True})
+        if self.path.startswith("/__api"):
+            api_log.clear()
+            return self.json(200, {"ok": True})
         (seen if self.path.startswith("/__log") else breeze_log).clear()
         if not self.path.startswith("/__log"):
             stall_next.clear()
@@ -226,6 +232,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path.startswith("/api-log/"):   # (a reading progress API that answers with JSON: E-22)
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            api_log.append({"path": path, "type": self.headers.get("Content-Type", ""), "body": json.loads(body or b"null")})
+            return self.json(200, {"ok": True})
         if not (args.breeze and path in ("/tts/v1/audio/speech", "/alt-tts/v1/audio/speech")):
             return self.json(404, {"detail": "Not Found"})
         body = self.rfile.read(int(self.headers["Content-Length"]))

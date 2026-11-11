@@ -281,10 +281,19 @@ brings a hidden top bar back.
 And E-27: the editor's Discard button (back to the text as last saved, after asking), with Done now keeping the
 changes for documents too, as it already did for EPUB chapters.
 
+Then the first part of E-22, as agreed: reading progress and finishing a book sent to the site. For a book opened
+from a web address (not a file from the reader's computer, not the sample), the place goes to `API_PROGRESS`
+(default `/api/progress`) as JSON a moment after the pages stop turning (or scrolling has moved a screen or more),
+and on leaving the page; the first time the end is reached, `API_COMPLETE` (default `/api/complete`) is told once.
+Each update says which book (identifier, fingerprint, path, address, kind, file name, size, title) and where
+(section, section_percentage and book_percentage, 0 to 100). An address that doesn't answer with JSON is taken to
+be no API until the page is reloaded. book_percentage counts each section by its size where that's known, and the
+progress bar now shows the same number. Signing in and the rest of E-22 are still to come.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 320 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 329 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -348,8 +357,8 @@ Save positions (and later bookmarks) on your server, so each device picks up whe
 A web app manifest and service worker, so the reader can be installed and open saved books offline.
 
 ### E-22. A server API
-Optional, multi-user server calls: saving files and EPUBs, reading progress and completion (for E-7), notes and
-bookmarks (for E-3), settings, and sign-in. The plan is in TODO.md.
+Optional, multi-user server calls: saving files and EPUBs, notes and bookmarks (for E-3), settings, and sign-in.
+Reading progress and completion are sent already (see Resolved); the plan for the rest is in TODO.md.
 
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
@@ -855,6 +864,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
 | E-23 | Editing an EPUB's existing chapters with the editor; the book saved re-packed (mimetype first and stored, `dcterms:modified` updated; over its file where the browser allows it) or the chapter downloaded alone; XHTML kept well-formed | `d4922f4` |
+| E-22 (progress) | Reading progress and finishing a book sent to the site (`API_PROGRESS`, `API_COMPLETE`), for books opened from a web address; an address that doesn't answer with JSON is left alone until the page is reloaded; book_percentage (and the progress bar) counts sections by their size | this update |
 | E-28 | Settings shows the version (one patch above the latest release, stamped by `tools/stamp-version.py`, with a GitHub link), and Generate config gives every setting in use as a `reader-config.json`, to copy or download | this update |
 | E-27 | Discard in the editor (the changes since the last save thrown away, after asking; for an EPUB, this chapter's); Done keeps a document's changes, unsaved, shown in the reading view and asked about before another book | this update |
 | E-26 | The contents (C), the bottom bar (P) and the top bar (N) as settings, in Settings and `reader-config.json` (`SHOW_CONTENTS`, `SHOW_PROGRESS`, `SHOW_TOPBAR`), the keys remembered; a tap at the top right corner brings a hidden top bar back | this update |

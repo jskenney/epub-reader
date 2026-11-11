@@ -1,7 +1,7 @@
 # Plan: editing, server saving and EPUB editing (E-21 to E-25)
 
 This file is the plan for five enhancements listed in REVIEW.md. REVIEW.md only names them; the design, the
-decisions behind it and the work to do are here. E-21, E-24 and E-23 are built; E-25 and E-22 aren't yet.
+decisions behind it and the work to do are here. E-21, E-24 and E-23 are built, and E-22's progress and completion calls; E-25 and the rest of E-22 aren't yet.
 
 | ID | What | Depends on |
 |---|---|---|
@@ -385,10 +385,11 @@ into the file.
 
 **Reading progress (E-7)**
 
-11. **Save your place** in a book.
+11. **Save your place** in a book. *Built:* `POST API_PROGRESS` (default `/api/progress`); see below.
 12. **Get your place** in a book.
 13. **List your books:** each one's place, when it was last read, and whether it is completed.
-14. **Mark a book as completed.**
+14. **Mark a book as completed.** *Built:* `POST API_COMPLETE` (default `/api/complete`), sent once,
+    automatically, the first time the end is reached.
 15. **Mark a book as not completed.**
 
 **Notes and bookmarks (E-3)**
@@ -417,6 +418,23 @@ into the file.
   package file), so positions saved locally and on the server match.
 - A file fetched from another site (`?get=`) is never saved to the server except by an explicit Save as.
 
+### Progress and completion (built)
+
+Agreed and built ahead of the rest, assuming the site's own session (no sign-in in the reader):
+
+- Only for books opened from a web address (this site, or another with `?get=`); not files from the reader's
+  computer, not the sample.
+- The body: `identifier`, `fingerprint`, `path`, `url`, `kind`, `file_name`, `size`, `title`, `section` (from 0),
+  `section_percentage` and `book_percentage` (0 to 100). No time. Completion: the first eight and
+  `"completed": true`.
+- Sent 2 seconds after the pages stop turning, after scrolling a screen or more, and on leaving the page
+  (keepalive); never on opening, never while editing.
+- book_percentage counts sections by size where known (EPUB chapter sizes in the archive, comic pages, document
+  text); the progress bar shows the same number.
+- An address that doesn't answer with JSON (any failure) is no API until the page is reloaded.
+- `API_PROGRESS` and `API_COMPLETE` in reader-config.json and Settings (lockable); `""` sends nothing; same site
+  only.
+
 ### What E-22 ships
 
 - The reader's side: Save to server (Save and Save as in the editor), progress saved and read (E-7 builds its
@@ -431,7 +449,8 @@ into the file.
 - [ ] The spec, reviewed before code.
 - [ ] Reference server: sign-in, sessions, files (with versions and path checks), progress, completion, notes,
       settings.
-- [ ] Reader: capability check, sign-in UI, Save to server, progress and completion calls, conflict handling.
+- [x] Reader: progress and completion calls.
+- [ ] Reader: capability check, sign-in UI, Save to server, conflict handling.
 - [ ] nginx example, README.
 - [ ] Tests: each call through the reader against the reference server; refused saves for signed-out users;
       conflicts; path escapes refused; forged cross-site requests refused.

@@ -229,6 +229,70 @@ Two more parameters open files by address:
   turn `?get=` off with `GET_URLS` in `reader-config.json` (and then take
   `https:` out of the policy).
 
+## Reading progress sent to your site
+
+For a book opened from a web address (from this site with `?book=`,
+`?get=`, `?edit=` or as the folder's default book, or from another site
+with `?get=`), the reader tells your site where the reader is, so a site
+with signed-in users can keep everyone's place. Books opened from the
+reader's own computer (picked or dropped) and the built-in sample send
+nothing. The requests go to addresses on the reader's own site, with its
+cookies, so whatever session your site has applies; the reader does no
+signing in of its own.
+
+- **`POST /api/progress`** (`API_PROGRESS`): a moment (2 seconds) after the
+  pages stop turning, or when the page stops scrolling a screen or more
+  away from the last place sent, and on leaving the page (or opening
+  another book) if a place hasn't been sent yet. Opening a book sends
+  nothing; nor does editing.
+- **`POST /api/complete`** (`API_COMPLETE`): once, the first time the last
+  page of the last section is reached (a document that fits on one page is
+  finished as it opens). Once your site has answered, the reader remembers
+  it with the book's position and doesn't send it again.
+
+Both send JSON (`Content-Type: application/json`):
+
+```json
+{
+  "identifier": "urn:uuid:1234…",
+  "fingerprint": "1x2y3z…",
+  "path": "/books/moby-dick.epub",
+  "url": "https://example.com/books/moby-dick.epub",
+  "kind": "epub",
+  "file_name": "moby-dick.epub",
+  "size": 734512,
+  "title": "Moby-Dick",
+  "section": 4,
+  "section_percentage": 37.5,
+  "book_percentage": 21.8
+}
+```
+
+| Field | What it is |
+|---|---|
+| `identifier` | The EPUB's own identifier (`dc:identifier`), or `null` (documents, comics, EPUBs without one). |
+| `fingerprint` | A hash of the book's contents: for an EPUB, its title, chapter files and last chapter (what the reader keys positions by when there's no identifier); for a document, its text; for a comic, its page names. |
+| `path` | The address's path on this site, or `null` for a book from another site. |
+| `url` | The full address it was opened from. |
+| `kind` | `epub`, `cbz`, `markdown`, `html` or `text`. |
+| `file_name` | The last part of the address (the folder's name for an EPUB folder). |
+| `size` | The file's size in bytes, or `null` where it isn't known (an EPUB folder). |
+| `title` | The book's title. |
+| `section` | Which section the reader is in, counting from 0 (a chapter, or a part of a comic or long document). |
+| `section_percentage` | How far through that section, 0 to 100. |
+| `book_percentage` | How far through the book, 0 to 100: each section counted by its size (an EPUB chapter's size in the archive, a comic section's pages, a document part's text), or all the same for an EPUB folder, whose sizes aren't known. The progress bar shows the same number. |
+
+`/api/complete` sends the first eight fields and `"completed": true`.
+
+Your site should answer with JSON (anything, such as `{"ok": true}`, with a
+2xx status). An answer that isn't JSON (a missing address, an error, a web
+page such as a "not found" or sign-in page, or no connection) is taken to
+mean there's no API there: the reader stops sending to that address until
+the page is reloaded. So a site without one only sees one request per page
+load. Set `API_PROGRESS` or `API_COMPLETE` to `""` (in `reader-config.json`,
+or in Settings) to send nothing at all. They must be addresses on the same
+site as the reader.
+
 ## Features
 
 - Search the whole book from the box above the contents (/ or Ctrl+F / ⌘F).
@@ -660,6 +724,8 @@ default books and the memory and request sizes stay the site's to set.
 | `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones (`?edit=` opens the document to read). |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `API_PROGRESS` ✓ ⚙ | `'/api/progress'` | Where reading progress is sent (see [Reading progress sent to your site](#reading-progress-sent-to-your-site)): an address on this site; `''` sends nothing. |
+| `API_COMPLETE` ✓ ⚙ | `'/api/complete'` | Where finishing a book is sent, once; `''` sends nothing. |
 | `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
 | `SHOW_CONTENTS` ✓ ⚙ | `true` | `false` starts with the contents closed (on a narrow screen they always start closed). C shows or hides them, and is remembered. |
 | `SHOW_PROGRESS` ✓ ⚙ | `true` | `false` hides the bottom bar (progress, position, Previous and Next). P shows or hides it, and is remembered. |
