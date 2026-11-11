@@ -13,19 +13,69 @@
 # check nothing has changed on disk. Delete fonts/ and run it again to update. The fonts are under the SIL
 # Open Font License.
 #
-#   --strict   check against fonts/SHA256SUMS and fail instead of fetching again: a changed or missing file
-#              on disk, or a font file Google now serves that isn't in the list, stops the run (nothing is
-#              replaced, and the list isn't rewritten). Needs the list: run once without --strict first.
+# It also fetches the fonts a site names in ADDITIONAL_FONTS, from ./reader-config.json (next to this script) and
+# from each reader-config.json given with --config, as fonts/g-<name>.css: the reader then loads them from here
+# instead of from Google Fonts. (Reading the configs needs python3.)
+#
+#   --strict       check against fonts/SHA256SUMS and fail instead of fetching again: a changed or missing file
+#                  on disk, or a font file Google now serves that isn't in the list, stops the run (nothing is
+#                  replaced, and the list isn't rewritten). Needs the list: run once without --strict first.
+#   --config FILE  another reader-config.json whose ADDITIONAL_FONTS to fetch (as many as you like)
+#   --list         print the reading fonts it would fetch (their ids and addresses) and stop: nothing is fetched
 set -euo pipefail
 cd "$(dirname "$0")"
 
-STRICT=0
-for arg in "$@"; do
-  case "$arg" in
+STRICT=0 LIST=0
+CONFIGS=()
+[ -f reader-config.json ] && CONFIGS+=(reader-config.json)
+while [ $# -gt 0 ]; do
+  case "$1" in
     --strict) STRICT=1 ;;
-    *) echo "Unknown option: $arg (options: --strict)" >&2; exit 2 ;;
+    --list) LIST=1 ;;
+    --config) [ $# -ge 2 ] || { echo "--config needs a file" >&2; exit 2; }; [ -f "$2" ] || { echo "No such file: $2" >&2; exit 2; }; CONFIGS+=("$2"); shift ;;
+    *) echo "Unknown option: $1 (options: --strict, --config FILE, --list)" >&2; exit 2 ;;
   esac
+  shift
 done
+
+# The reading fonts: "id family-spec" lines. FONTS entries with a Google Fonts family ({ id: 'literata', ...,
+# css: 'Literata:ital,...', ... }), then ADDITIONAL_FONTS from the configs, read by the same rules as the reader
+# (a family name as on fonts.google.com, optionally with its styles: "Lexend:wght@400;700"; id g-<name>).
+# (Ids and family specs contain no spaces, so a space separates them: "\t" in a sed replacement is GNU-only.)
+reading_fonts() {
+  grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1 \2/"
+  [ ${#CONFIGS[@]} -gt 0 ] || return 0
+  command -v python3 >/dev/null || { echo "python3 is needed to read ADDITIONAL_FONTS from ${CONFIGS[*]} (skipped)" >&2; return 0; }
+  python3 - "${CONFIGS[@]}" <<'PY'
+import json, re, sys
+seen = set()
+for path in sys.argv[1:]:
+    try:
+        v = json.load(open(path, encoding="utf-8")).get("ADDITIONAL_FONTS")
+    except Exception as e:
+        print(f"{path}: not read ({e})", file=sys.stderr); continue
+    if not v: continue
+    items = []
+    for part in (v if isinstance(v, list) else str(v).split("|")):   # (a list's entries each stand alone, as in the reader)
+        start = len(items)
+        for tk in (s.strip() for s in str(part).split(",")):
+            if not tk: continue
+            if len(items) > start and ":" in items[-1] and re.match(r"[a-z0-9]", tk): items[-1] += "," + tk
+            else: items.append(tk)
+    for s in items:
+        m = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9 ]{0,59}?)\s*(?::\s*([a-z]+(?:,[a-z]+)*@[0-9.,;]+))?", s)
+        if not m:
+            print(f'{path}: "{s}" isn\'t a Google Fonts family name (skipped)', file=sys.stderr); continue
+        name = re.sub(" +", " ", m.group(1)); slug = "g-" + name.lower().replace(" ", "-")
+        if slug in seen: continue
+        seen.add(slug)
+        print(slug, name.replace(" ", "+") + (":" + m.group(2) if m.group(2) else ""))
+PY
+}
+if [ "$LIST" = 1 ]; then
+  reading_fonts | while read -r id spec; do echo "$id https://fonts.googleapis.com/css2?family=$spec&display=swap"; done
+  exit 0
+fi
 
 DEST=fonts
 UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'   # asks for WOFF2
@@ -87,13 +137,11 @@ ui=$(grep -o "const UI_FONTS = '[^']*'" index.html | sed "s/const UI_FONTS = '//
 fetch ui "$ui"
 
 echo "Reading fonts"
-# FONTS entries with a Google Fonts family: { id: 'literata', ..., css: 'Literata:ital,...', ... }
 found=0
-# (Ids and family specs contain no spaces, so a space separates them: "\t" in a sed replacement is GNU-only.)
 while read -r id spec; do
   fetch "$id" "https://fonts.googleapis.com/css2?family=$spec&display=swap"
   found=1
-done < <(grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1 \2/")
+done < <(reading_fonts)
 [ "$found" = 1 ] || { echo "Couldn't find the FONTS list in index.html" >&2; exit 1; }
 
 # Record every font file for later runs (not with --strict: the list is what was checked against).
@@ -103,6 +151,8 @@ Self-hosted copies of the reader's fonts, fetched from Google Fonts by fetch-fon
 IBM Plex Sans, IBM Plex Mono, Literata, Source Serif 4, EB Garamond, Crimson Pro, Atkinson Hyperlegible,
 Gentium Book Plus, Alegreya and Lexend
 are licensed under the SIL Open Font License 1.1: https://openfontlicense.org
+Fonts named in ADDITIONAL_FONTS (fonts/g-*.css) are under the licences Google Fonts lists for them (most the
+SIL Open Font License 1.1, some the Apache License 2.0 or the Ubuntu Font Licence).
 NOTICE
 echo
 du -sh "$DEST" | awk '{print "Done: " $1 " in " $2 "/"}'

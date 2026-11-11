@@ -509,7 +509,8 @@ site as the reader.
 - Reading font picker (the Aa button): keep the book's own font, or override
   it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Gentium Book Plus,
   Alegreya, Atkinson Hyperlegible, Lexend, Georgia or your system sans-serif. Code keeps its monospace.
-  Add more in the `FONTS` list in `index.html`.
+  Add any Google Fonts family with `ADDITIONAL_FONTS` (see [Settings](#settings)),
+  or add one to the `FONTS` list in `index.html`.
 - The browser tab shows the book's cover as its icon (EPUB 3 `cover-image`,
   EPUB 2 `<meta name="cover">`, an image named "cover", or the first image on
   a cover page), and the site's favicon for books without one.
@@ -535,7 +536,8 @@ site as the reader.
   pictures from other sites, shortcuts, how long positions are kept, how many
   search matches are listed, comic section size, the sleep timer, how much
   speech is prepared ahead and saved, full-precision voice models, and the
-  addresses reading progress is asked for and sent to (see
+  more reading fonts (`ADDITIONAL_FONTS`), and the addresses reading progress is
+  asked for and sent to (see
   [Reading progress sent to your site](#reading-progress-sent-to-your-site)). Each
   starts at the site's value (see [Settings](#settings) below); one you change
   is marked with the site's default beside it, and Restore defaults puts them
@@ -567,7 +569,10 @@ sites. Without them it falls back to cdnjs and Google Fonts.
   so a changed or damaged file is refused rather than run.
 - **Fonts:** `fetch-fonts.sh` writes `fonts/ui.css` (IBM Plex Sans and Mono,
   Literata), one stylesheet per reading font in the font menu (read from
-  `FONTS` in `index.html`) and the WOFF2 files under `fonts/files/`. Google
+  `FONTS` in `index.html`), one for each font a site names in `ADDITIONAL_FONTS`
+  (`fonts/g-<name>.css`, from `./reader-config.json` beside the script and any
+  `--config path/to/reader-config.json` given; reading the configs needs python3;
+  `--list` prints what it would fetch) and the WOFF2 files under `fonts/files/`. Google
   changes its font files from time to time, so they can't be pinned in
   advance: each download must be a real WOFF2 file, and `fonts/SHA256SUMS`
   records them so later runs can check nothing has changed on disk. With
@@ -797,6 +802,7 @@ default books and the memory and request sizes stay the site's to set.
 | `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones (`?edit=` opens the document to read). |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lexend", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
 | `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |
 | `API_PROGRESS` ✓ ⚙ | `'/api/progress'` | Where reading progress is sent (see [Reading progress sent to your site](#reading-progress-sent-to-your-site)): an address on this site; `''` sends nothing. |
 | `API_COMPLETE` ✓ ⚙ | `'/api/complete'` | Where finishing a book is sent, once; `''` sends nothing. |

@@ -184,6 +184,22 @@ def main():
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
+    # More reading fonts (ADDITIONAL_FONTS): from Google (one a built-in font already, one not a family name), and one
+    # self-hosted as fetch-fonts.sh would (fonts/g-test-face.css, with a real WOFF2 file copied in).
+    (SITE / "folder-fonts").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-fonts" / "index.html")
+    (SITE / "folder-fonts" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ADDITIONAL_FONTS": ["Merriweather", "Lexend", "bad<name>", "Noto Serif:ital,wght@0,400;1,400"]}))
+    fl = SITE / "fontlib"
+    (fl / "fonts" / "files").mkdir(parents=True)
+    if (REPO / "libs").is_dir():
+        os.symlink(REPO / "libs", fl / "libs")
+    (fl / "fonts" / "ui.css").write_text("/* interface fonts: none here */\n")
+    woff = next((REPO / "fonts" / "files").rglob("*.woff2"), None) if (REPO / "fonts" / "files").is_dir() else None
+    if woff: shutil.copy(woff, fl / "fonts" / "files" / "t.woff2")
+    (fl / "fonts" / "g-test-face.css").write_text('@font-face{font-family:"Test Face";src:url(files/t.woff2) format("woff2")}\n')
+    (SITE / "folder-fonts-local").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-fonts-local" / "index.html")
+    (SITE / "folder-fonts-local" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/fontlib/", "ADDITIONAL_FONTS": "Test Face"}))
     # Self-hosted Pocket TTS with every library and runtime file but only the 8-bit model files (REVIEW.md
     # M-27): the full-precision model must come from the CDN. The stand-in worker answers "init" with an error
     # that names the addresses it was given.

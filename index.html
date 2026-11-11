@@ -608,7 +608,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.1316</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.1331</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -634,6 +634,9 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <div class="set-row"><span><label for="set-KEEP_POSITIONS_DAYS">Forget reading positions after (days)</label><small>For books not opened in that time. 0 keeps them.</small><small class="set-def"></small></span><input id="set-KEEP_POSITIONS_DAYS" type="number" min="0" max="36500" step="1" data-set="KEEP_POSITIONS_DAYS"></div>
         <div class="set-row"><span><label for="set-SEARCH_MAX">Search matches listed, at most</label><small class="set-def"></small></span><input id="set-SEARCH_MAX" type="number" min="1" max="100000" step="1" data-set="SEARCH_MAX"></div>
         <div class="set-row"><span><label for="set-COMIC_PART">Comic pages per section</label><small>For comics opened after the change; your place stays on the same page.</small><small class="set-def"></small></span><input id="set-COMIC_PART" type="number" min="2" max="1000" step="2" data-set="COMIC_PART"></div>
+      </fieldset>
+      <fieldset class="set-group"><legend>Fonts</legend>
+        <div class="set-row"><span><label for="set-ADDITIONAL_FONTS">More reading fonts</label><small>Google Fonts names, as written on fonts.google.com, separated by commas (Lexend, Merriweather). They're added to the Aa menu; loaded from Google unless this site has them.</small><small class="set-def"></small></span><input id="set-ADDITIONAL_FONTS" type="text" spellcheck="false" autocomplete="off" data-set="ADDITIONAL_FONTS"></div>
       </fieldset>
       <fieldset class="set-group"><legend>Progress sent to this site</legend>
         <div class="set-row"><span><label for="set-API_START">Where your place is asked for</label><small>As a book from this site opens; it goes to the place the site has for it. An address on this site; empty asks nothing.</small><small class="set-def"></small></span><input id="set-API_START" type="text" spellcheck="false" autocomplete="off" data-set="API_START"></div>
@@ -2914,8 +2917,10 @@ async function buildPage(src, path, item){
 const policyUrl = u => u.replace(/[;,'"\s]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 function bookPolicy(){
   const folder = policyUrl(book?.src?.base || '');
-  const fontCssFrom = fontsLocal ? policyUrl(fontsBase()) : ALLOW_CDN ? 'https://fonts.googleapis.com' : '';
-  const fontFilesFrom = fontsLocal ? policyUrl(fontsBase()) : ALLOW_CDN ? 'https://fonts.gstatic.com' : '';
+  // (A font of ADDITIONAL_FONTS that isn't self-hosted comes from Google Fonts, with the self-hosted ones.)
+  const google = ALLOW_CDN && (!fontsLocal || FONTS.some(f => f.extra && !f.local));
+  const fontCssFrom = [fontsLocal ? policyUrl(fontsBase()) : '', google ? 'https://fonts.googleapis.com' : ''].join(' ').trim();
+  const fontFilesFrom = [fontsLocal ? policyUrl(fontsBase()) : '', google ? 'https://fonts.gstatic.com' : ''].join(' ').trim();
   return [`default-src 'none'`, `img-src data: blob: ${folder}`, `media-src data: blob: ${folder}`,
     `font-src data: blob: ${fontFilesFrom} ${folder}`, `style-src 'unsafe-inline' data: ${fontCssFrom}`,
     `base-uri 'none'`, `form-action 'none'`].map(d => d.replace(/\s+/g, ' ').trim()).join('; ');
@@ -3936,7 +3941,8 @@ document.addEventListener('keydown', onKey);
 darkMq.addEventListener('change', () => { restyleFrame(); syncThemeBtn(); });
 
 /* Font picker */
-let fontFace = FONTS.some(f => f.id === store.get('spine:face')) ? store.get('spine:face') : 'book';
+// (A font of ADDITIONAL_FONTS is kept by its id until the list is known: then a font no longer on it is let go.)
+let fontFace = FONTS.some(f => f.id === store.get('spine:face')) || /^g-[a-z0-9-]+$/.test(store.get('spine:face') || '') ? store.get('spine:face') : 'book';
 const face = () => FONTS.find(f => f.id === fontFace) || FONTS[0];
 const faceStack = () => face().stack;
 /* Fonts: fonts/<id>.css under LIB_FILES when self-hosted (fetch-fonts.sh writes ui.css plus one file per
@@ -3945,6 +3951,7 @@ let fontsLocal = false;
 const fontsBase = () => new URL('fonts/', folderBase(LIB_FILES)).href;
 const NO_CSS = 'data:text/css,';
 function fontCss(f){
+  if (f.extra) return f.local ? fontsBase() + f.id + '.css' : ALLOW_CDN ? GF(f.css) : NO_CSS;   // (ADDITIONAL_FONTS)
   const id = f.css ? f.id : 'literata';   // the book's own font falls back to Literata
   if (fontsLocal) return fontsBase() + id + '.css';
   if (!ALLOW_CDN) return NO_CSS;
@@ -3966,6 +3973,50 @@ function loadPreviews(){
   const fams = FONTS.filter(f => f.css).map(f => 'family=' + f.css.split(':')[0]).join('&');
   const chars = [...new Set(FONTS.map(f => f.name).join('') + 'Aa')].join('');
   add(`https://fonts.googleapis.com/css2?${fams}&display=swap&text=${encodeURIComponent(chars)}`);
+}
+/* More reading fonts (ADDITIONAL_FONTS, in reader-config.json and Settings): any Google Fonts family by its name,
+   as written on fonts.google.com, optionally with the styles to load ("Lexend:wght@400;700"); without them, the
+   regular style only (the browser makes bold and italic from it). Self-hosted when fetch-fonts.sh has fetched it
+   (fonts/g-<name>.css, from a reader-config.json), otherwise from Google Fonts (unless ALLOW_CDN is off). */
+let ADDITIONAL_FONTS = '';
+const fontSlug = name => 'g-' + name.toLowerCase().replace(/ /g, '-');
+// "Lexend, Merriweather:ital,wght@0,400;1,400" as [{ name, axes }]: a piece starting with a lower-case letter or a
+// digit belongs to the styles before it (family names begin with a capital).
+// ("|" parts fonts outright: a list in reader-config.json is joined with it, so each entry stands alone.)
+function parseFontList(text){
+  const items = [];
+  for (const part of String(text).split('|')) {
+    const start = items.length;
+    for (const tk of part.split(',').map(s => s.trim())) {
+      if (!tk) continue;
+      if (items.length > start && items.at(-1).includes(':') && /^[a-z0-9]/.test(tk)) items[items.length - 1] += ',' + tk;
+      else items.push(tk);
+    }
+  }
+  return items.map(s => {
+    const m = /^([A-Za-z0-9][A-Za-z0-9 ]{0,59}?)\s*(?::\s*([a-z]+(?:,[a-z]+)*@[0-9.,;]+))?$/.exec(s);
+    if (!m) throw new Error(`"${s}" isn't a Google Fonts family name (letters, digits and spaces, as written on fonts.google.com)`);
+    return { name: m[1].replace(/ +/g, ' '), axes: m[2] || '' };
+  });
+}
+const fontListText = text => parseFontList(text).map(f => f.name + (f.axes ? ':' + f.axes : '')).join(', ');
+// The menu made again with this list's fonts after the built-in ones (any already there by name left out); whether
+// each is self-hosted, looked for once fonts/ is known.
+async function applyExtraFonts(){
+  for (let k = FONTS.length - 1; k >= 0; k--) if (FONTS[k].extra) FONTS.splice(k, 1);
+  const have = new Set(FONTS.map(f => f.name.toLowerCase()));
+  for (const { name, axes } of parseFontList(ADDITIONAL_FONTS)) {
+    if (have.has(name.toLowerCase())) continue;
+    have.add(name.toLowerCase());
+    FONTS.push({ id: fontSlug(name), name, note: 'Google Fonts', css: name.replace(/ /g, '+') + (axes ? ':' + axes : ''), stack: `"${name}", Georgia, serif`, extra: true, local: false });
+  }
+  const extras = FONTS.filter(f => f.extra);
+  if (fontsLocal) await Promise.all(extras.map(async f => { f.local = await realFile(fontsBase() + f.id + '.css').catch(() => false); }));
+  if (!FONTS.some(f => f.id === fontFace)) fontFace = 'book';
+  $('#fontMenu').querySelectorAll('.opt[data-face], .label.sep, #keysOpt').forEach(e => e.remove());
+  previewsLoaded = false;
+  buildFontMenu();
+  restyleFrame();
 }
 function buildFontMenu(){
   const menu = $('#fontMenu');
@@ -7200,6 +7251,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   API_PROGRESS: ['string', v => { API_PROGRESS = apiAddress(v); }],   // (E-22)
   API_COMPLETE: ['string', v => { API_COMPLETE = apiAddress(v); }],
   API_START: ['string', v => { API_START = apiAddress(v); }],
+  ADDITIONAL_FONTS: ['string', v => { ADDITIONAL_FONTS = fontListText(v); }],   // (a name, or a list in reader-config.json)
   KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, Math.round(v))); }],
@@ -7212,7 +7264,7 @@ const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
   theme: ['spine:theme', v => THEMES.includes(v), v => document.documentElement.setAttribute('data-theme', v)],
   layout: ['spine:layout', v => v in LAYOUTS, v => { layout = v; }],
   width: ['spine:width', v => WIDTHS.some(w => w[0].toLowerCase() === String(v).toLowerCase()), v => { widthStep = WIDTHS.findIndex(w => w[0].toLowerCase() === v.toLowerCase()); }],
-  font: ['spine:face', v => FONTS.some(f => f.id === v), v => { fontFace = v; }],
+  font: ['spine:face', v => FONTS.some(f => f.id === v) || /^g-[a-z0-9-]+$/.test(v), v => { fontFace = v; }],   // (g-: a font of ADDITIONAL_FONTS)
   fontSize: ['spine:font', v => typeof v === 'number' && v >= 70 && v <= 200, v => { fontPct = v; }],   // (the A−/A+ range)
   lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 2.6, v => { lineH = v; }],
   readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'server'].includes(v), v => { tts.engine = v; }],
@@ -7237,12 +7289,14 @@ async function loadConfig(){
   else { store.del(folderKey); if (store.get('spine:theme') == null) document.documentElement.removeAttribute('data-theme'); }   // (it had one before)
   if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return;
   readerConfig = cfg;
-  for (const [key, value] of Object.entries(cfg)) {
+  for (let [key, value] of Object.entries(cfg)) {
     if (key === 'LOCKED') continue;
     try {
       if (CONFIG_SETTINGS[key]) {
         const [type, apply] = CONFIG_SETTINGS[key];
         // (An empty name would be this page itself: L-83.)
+        // (A list of names, each on its own; one that isn't a family name is left out, as fetch-fonts.sh does.)
+        if (key === 'ADDITIONAL_FONTS' && Array.isArray(value)) value = value.map(String).filter(x => { try { parseFontList(x); return true; } catch (e) { console.warn(`${CONFIG_FILE}: ADDITIONAL_FONTS: ${e.message} (left out)`); return false; } }).join(' | ');
         if (type === 'books') { if (![value].flat().length || ![value].flat().every(v => typeof v === 'string' && v.trim())) throw new Error('should be a name or a list of names (not empty)'); }
         else if (typeof value !== type || value === null) throw new Error(`should be a ${type}`);
         if (type === 'number' && !Number.isFinite(value)) throw new Error('should be a finite number');
@@ -8667,6 +8721,7 @@ const SET_VARS = {   // name: [the value now, what to do once it changes ('reloa
   API_PROGRESS: [() => API_PROGRESS, null],
   API_COMPLETE: [() => API_COMPLETE, null],
   API_START: [() => API_START, null],
+  ADDITIONAL_FONTS: [() => ADDITIONAL_FONTS, () => applyExtraFonts()],
 };
 const siteValue = {}, loadedValue = {};   // the site's values, and those in use since the page loaded
 const setKey = name => `spine:set:${name}`;
@@ -8674,7 +8729,7 @@ const setKey = name => `spine:set:${name}`;
 function setVar(name, v){
   const [type, apply] = CONFIG_SETTINGS[name];
   if (typeof v !== type || (type === 'number' && !Number.isFinite(v))) return false;
-  try { apply(v); } catch { return false; }   // (an API address on another site: E-22)
+  try { apply(v); } catch (e) { setVar.why = e.message; return false; }   // (an API address on another site, a font name that isn't one)
   return true;
 }
 // The reader's value, saved as it is in use (after the limits).
@@ -8785,7 +8840,7 @@ $('#setForm').addEventListener('change', e => {
     else if (el.value.trim() !== '' && Number.isFinite(Number(el.value))) setChange(el.dataset.set, Number(el.value));
   }
   setSync();
-  if (refused) el.closest('.set-row').querySelector('.set-def').textContent = `Not changed: ${typed} isn't on this site.`;
+  if (refused) el.closest('.set-row').querySelector('.set-def').textContent = /^API_/.test(el.dataset.set) ? `Not changed: ${typed} isn't on this site.` : `Not changed: ${setVar.why}.`;
 });
 $('#setDialog').addEventListener('close', () => $('#setBtn').focus());
 
@@ -8800,6 +8855,7 @@ function configNow(){
     SHOW_CONTENTS: v('SHOW_CONTENTS'), SHOW_PROGRESS: v('SHOW_PROGRESS'), SHOW_TOPBAR: v('SHOW_TOPBAR'),
     TIME_LEFT: v('TIME_LEFT'), SLEEP_TIMER: v('SLEEP_TIMER'), FORCE_LTR: v('FORCE_LTR'),
     API_START: v('API_START'), API_PROGRESS: v('API_PROGRESS'), API_COMPLETE: v('API_COMPLETE'),
+    ADDITIONAL_FONTS: v('ADDITIONAL_FONTS') ? parseFontList(v('ADDITIONAL_FONTS')).map(f => f.name + (f.axes ? ':' + f.axes : '')) : [],
     KEEP_POSITIONS_DAYS: v('KEEP_POSITIONS_DAYS'), SEARCH_MAX: v('SEARCH_MAX'), COMIC_PART: v('COMIC_PART'),
     TTS_SERVER: { api: here(TTS_SERVER.api), voices: here(TTS_SERVER.voices) }, FULL_PRECISION: v('FULL_PRECISION'),
     LOOKAHEAD_SEC: v('LOOKAHEAD_SEC'), SAVED_AUDIO_MB: v('SAVED_AUDIO_MB'), NCACHE_SEC, SPAN_MAX: { ...SPAN_MAX },
@@ -8849,6 +8905,7 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   sweepPositions();
   $('#ttsSleep').hidden = !SLEEP_TIMER;   // (off: the sleep timer stays "off" and isn't shown)
   await Promise.all([setupFonts(), loadLib('jszip').catch(err => console.warn(err.message))]);
+  await applyExtraFonts().catch(err => console.warn(`ADDITIONAL_FONTS: ${err.message}`));
   $('#fontPct').textContent = fontPct + '%';
   setLine(lineH, false);   // applied, not saved: a reader's choice is saved when they make it
   setWidth(widthStep, false);

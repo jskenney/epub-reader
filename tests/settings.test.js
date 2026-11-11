@@ -512,3 +512,49 @@ test('saved speech is cut down to a lowered limit at once, and all of it goes at
   await page.reload(); await h.waitForBook(page);
   assert.ok(await h.waitFor(async () => (await count()) === 1, 5000), 'one 3 MB clip fits in 4 MB');
 });
+
+// More reading fonts: ADDITIONAL_FONTS.
+const fontNames = page => page.$$eval('#fontMenu .opt[data-face]', bs => bs.map(b => [b.dataset.face, b.querySelector('span').textContent]));
+test('ADDITIONAL_FONTS in reader-config.json adds Google Fonts families to the font menu (not one already there, not a bad name), loaded from Google when not self-hosted', async () => {
+  const page = await h.newPage();
+  const warned = []; page.on('console', m => { if (/ADDITIONAL_FONTS/.test(m.text())) warned.push(m.text()); });
+  // (On the site with no reader policy: the self-hosted policy in nginx.conf.example allows no font from Google,
+  // as the README says; the CDN version does.)
+  await h.openReader(page, `${h.PLAIN}/folder-fonts/index.html?book=/reader/books/long.epub`);
+  const names = await fontNames(page);
+  assert.deepEqual(names.filter(([id]) => id.startsWith('g-')), [['g-merriweather', 'Merriweather'], ['g-noto-serif', 'Noto Serif']]);
+  assert.equal(names.filter(([, n]) => n === 'Lexend').length, 1, 'the built-in Lexend only');
+  assert.ok(warned.some(w => /bad<name>/.test(w)), warned.join(' | '));
+  await page.click('#fontBtn'); await page.click('#fontMenu .opt[data-face="g-noto-serif"]');
+  await h.waitFor(() => page.blocked.some(u => /fonts\.googleapis\.com\/css2\?family=Noto\+Serif:ital,wght@0,400;1,400/.test(u)), 5000);
+  assert.ok(page.blocked.some(u => /family=Noto\+Serif/.test(u)), page.blocked.join(' '));
+  assert.match(await h.inFrame(page, doc => getComputedStyle(doc.querySelector('[id^="spine-flow"]').querySelector('p')).fontFamily), /Noto Serif/);
+  assert.match(await h.inFrame(page, doc => doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content), /font-src[^;]*https:\/\/fonts\.gstatic\.com/);
+  // Remembered across a reload.
+  await page.reload(); await h.waitForBook(page);
+  assert.equal(await page.getAttribute('#fontMenu .opt[data-face="g-noto-serif"]', 'aria-checked'), 'true');
+});
+
+test('a font of ADDITIONAL_FONTS self-hosted by fetch-fonts.sh (fonts/g-<name>.css) is loaded from the site, not Google', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-fonts-local/index.html?book=/reader/books/long.epub`);
+  await page.click('#fontBtn'); await page.click('#fontMenu .opt[data-face="g-test-face"]');
+  assert.ok(await h.waitFor(() => h.inFrame(page, async doc => { await doc.fonts.ready; return doc.fonts.check('16px "Test Face"') && [...doc.fonts].some(f => f.family.replace(/"/g, '') === 'Test Face' && f.status === 'loaded'); }), 8000), 'the font loads');
+  assert.equal(await h.inFrame(page, doc => doc.querySelector('[id^="spine-font"]').getAttribute('href')), `${h.SITE}/fontlib/fonts/g-test-face.css`);
+  assert.deepEqual(page.blocked.filter(u => /fonts\.(googleapis|gstatic)/.test(u)), []);
+});
+
+test('ADDITIONAL_FONTS in Settings: names added to the menu at once, a bad name refused with why, kept in Generate config', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.click('#setBtn');
+  await page.fill('#set-ADDITIONAL_FONTS', 'Lora, Merriweather:wght@400;700'); await page.press('#set-ADDITIONAL_FONTS', 'Tab');
+  const extra = async () => (await fontNames(page)).filter(([id]) => id.startsWith('g-'));
+  await h.waitFor(async () => (await extra()).length === 2, 5000);
+  assert.deepEqual(await extra(), [['g-lora', 'Lora'], ['g-merriweather', 'Merriweather']]);
+  await page.fill('#set-ADDITIONAL_FONTS', 'Lora, x"><b>'); await page.press('#set-ADDITIONAL_FONTS', 'Tab');
+  assert.match(await page.textContent('#set-ADDITIONAL_FONTS >> xpath=ancestor::div[1]'), /Not changed: .*isn't a Google Fonts family name/);
+  assert.equal(await page.inputValue('#set-ADDITIONAL_FONTS'), 'Lora, Merriweather:wght@400;700');
+  await page.click('#setGenerate');
+  assert.deepEqual(JSON.parse(await page.inputValue('#cfgText')).ADDITIONAL_FONTS, ['Lora', 'Merriweather:wght@400;700']);
+});

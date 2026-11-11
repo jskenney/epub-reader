@@ -284,3 +284,22 @@ test('the hook, scripts and page are checked out with LF line endings, whatever 
     assert.match(r.stdout, /eol: lf$/m, f);
   }
 });
+
+test('fetch-fonts.sh reads ADDITIONAL_FONTS from ./reader-config.json and --config files, by the reader\'s rules (--list fetches nothing)', () => {
+  const d = tempDir('fonts-');
+  fs.copyFileSync(path.join(REPO, 'fetch-fonts.sh'), path.join(d, 'fetch-fonts.sh'));
+  fs.copyFileSync(path.join(REPO, 'index.html'), path.join(d, 'index.html'));
+  fs.writeFileSync(path.join(d, 'reader-config.json'), JSON.stringify({ ADDITIONAL_FONTS: ['Merriweather', 'bad<name>', 'Noto Serif:ital,wght@0,400;1,400'] }));
+  const other = path.join(d, 'other.json');
+  fs.writeFileSync(other, JSON.stringify({ ADDITIONAL_FONTS: 'Lora, Merriweather' }));
+  const r = spawnSync('bash', ['fetch-fonts.sh', '--list', '--config', other], { cwd: d, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const extra = r.stdout.trim().split('\n').filter(l => l.startsWith('g-'));
+  assert.deepEqual(extra, [
+    'g-merriweather https://fonts.googleapis.com/css2?family=Merriweather&display=swap',
+    'g-noto-serif https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;1,400&display=swap',
+    'g-lora https://fonts.googleapis.com/css2?family=Lora&display=swap']);
+  assert.match(r.stdout, /^lexend https:\/\/fonts\.googleapis\.com\/css2\?family=Lexend/m, 'the built-in fonts too');
+  assert.match(r.stderr, /"bad<name>" isn't a Google Fonts family name \(skipped\)/);
+  assert.equal(fs.existsSync(path.join(d, 'fonts')), false, 'nothing fetched');
+});
