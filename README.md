@@ -728,8 +728,11 @@ The version in Settings is one patch release above the latest release tag
 (after `v0.60.0` it reads `v0.60.1`), with the date and time it was stamped in
 UTC: `Version v0.60.1 - 20261111.1430`. Run `python3 tools/stamp-version.py`
 before committing a change to `index.html` to bring it up to date
-(`--check` prints what it would write). To have that done on every commit,
-a git pre-commit hook that runs it can be added to your clone.
+(`--check` prints what it would write). `.githooks/pre-commit` does that on
+every commit that includes `index.html`; turn it on once per clone with
+`git config core.hooksPath .githooks` (skip it for one commit with
+`git commit --no-verify`). If `index.html` also has unstaged changes it stamps
+nothing and says so, rather than commit them too.
 
 ## Tests
 

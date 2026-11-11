@@ -1,0 +1,22 @@
+#!/bin/sh
+# Stamp the Settings dialog's version line (tools/stamp-version.py) whenever index.html is committed:
+# one patch release above the latest release tag, and the date and time now (UTC).
+#
+# Turn it on once per clone:   git config core.hooksPath .githooks
+# Skip it for one commit:      git commit --no-verify
+#
+# If index.html also has changes that aren't staged, it stamps nothing (adding the file would commit those too),
+# and says so.
+
+git diff --cached --name-only | grep -qx 'index.html' || exit 0
+
+if ! git diff --quiet -- index.html; then
+  echo "pre-commit: index.html has changes that aren't staged, so the version line wasn't stamped." >&2
+  echo "            Stage them (or stash them) and commit again, or run: python3 tools/stamp-version.py" >&2
+  exit 0
+fi
+
+command -v python3 >/dev/null 2>&1 || { echo "pre-commit: python3 not found; the version line wasn't stamped." >&2; exit 0; }
+
+python3 tools/stamp-version.py || { echo "pre-commit: tools/stamp-version.py failed; the version line wasn't stamped." >&2; exit 0; }
+git add index.html
