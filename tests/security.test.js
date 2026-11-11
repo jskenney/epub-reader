@@ -255,7 +255,7 @@ test('book files opened on their own are sent sandboxed; the reader page isn\'t 
     if (policy) assert.equal(got, policy, path); else assert.notEqual(got, 'sandbox', path);
   }
   const conf = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'nginx.conf.example'), 'utf8');
-  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|xml\|svg\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
+  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|shtml\|xml\|xsl\|xslt\|svgz\?\|rss\|atom\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
   assert.match(conf, /add_header Content-Security-Policy "sandbox" always;/);
 });
 
