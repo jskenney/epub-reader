@@ -188,7 +188,7 @@ def main():
     # self-hosted as fetch-fonts.sh would (fonts/g-test-face.css, with a real WOFF2 file copied in).
     (SITE / "folder-fonts").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-fonts" / "index.html")
-    (SITE / "folder-fonts" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ADDITIONAL_FONTS": ["Merriweather", "Lexend", "bad<name>", "Noto Serif:ital,wght@0,400;1,400"]}))
+    (SITE / "folder-fonts" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ADDITIONAL_FONTS": ["Merriweather", "Lexend", "bad<name>", "Noto Serif:ital,wght@0,400;1,400", "42dot Sans"]}))
     fl = SITE / "fontlib"
     (fl / "fonts" / "files").mkdir(parents=True)
     if (REPO / "libs").is_dir():

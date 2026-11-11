@@ -23,32 +23,37 @@
 #   --config FILE  another reader-config.json whose ADDITIONAL_FONTS to fetch (as many as you like)
 #   --list         print the reading fonts it would fetch (their ids and addresses) and stop: nothing is fetched
 set -euo pipefail
-cd "$(dirname "$0")"
 
 STRICT=0 LIST=0
 CONFIGS=()
-[ -f reader-config.json ] && CONFIGS+=(reader-config.json)
+# (Options first, from the folder it was run in: a --config path is as typed there: round 26 review, L-349.)
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict) STRICT=1 ;;
     --list) LIST=1 ;;
-    --config) [ $# -ge 2 ] || { echo "--config needs a file" >&2; exit 2; }; [ -f "$2" ] || { echo "No such file: $2" >&2; exit 2; }; CONFIGS+=("$2"); shift ;;
+    --config) [ $# -ge 2 ] || { echo "--config needs a file" >&2; exit 2; }; [ -f "$2" ] || { echo "No such file: $2" >&2; exit 2; }
+              case "$2" in /*) CONFIGS+=("$2") ;; *) CONFIGS+=("$PWD/$2") ;; esac; shift ;;
     *) echo "Unknown option: $1 (options: --strict, --config FILE, --list)" >&2; exit 2 ;;
   esac
   shift
 done
+cd "$(dirname "$0")"
+[ -f reader-config.json ] && CONFIGS=("$PWD/reader-config.json" ${CONFIGS[@]+"${CONFIGS[@]}"})
 
 # The reading fonts: "id family-spec" lines. FONTS entries with a Google Fonts family ({ id: 'literata', ...,
 # css: 'Literata:ital,...', ... }), then ADDITIONAL_FONTS from the configs, read by the same rules as the reader
 # (a family name as on fonts.google.com, optionally with its styles: "Lexend:wght@400;700"; id g-<name>).
 # (Ids and family specs contain no spaces, so a space separates them: "\t" in a sed replacement is GNU-only.)
+menu_fonts() { grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1 \2/"; }
 reading_fonts() {
-  grep -o "{ id: '[a-z0-9-]*'[^}]*css: '[^']*'" index.html | sed -E "s/^\{ id: '([^']*)'.*css: '([^']*)'.*/\1 \2/"
+  menu_fonts
   [ ${#CONFIGS[@]} -gt 0 ] || return 0
   command -v python3 >/dev/null || { echo "python3 is needed to read ADDITIONAL_FONTS from ${CONFIGS[*]} (skipped)" >&2; return 0; }
-  python3 - "${CONFIGS[@]}" <<'PY'
-import json, re, sys
-seen = set()
+  # (The menu's own families, which the reader leaves out of ADDITIONAL_FONTS, are left out here too: L-356.)
+  MENU=$(menu_fonts | cut -d' ' -f2 | sed 's/:.*//; s/+/ /g') python3 - "${CONFIGS[@]}" <<'PY'
+import json, os, re, sys
+menu = {n.strip().lower() for n in os.environ.get("MENU", "").splitlines() if n.strip()}
+found = {}   # slug -> (name, styles, where)
 for path in sys.argv[1:]:
     try:
         v = json.load(open(path, encoding="utf-8")).get("ADDITIONAL_FONTS")
@@ -60,16 +65,23 @@ for path in sys.argv[1:]:
         start = len(items)
         for tk in (s.strip() for s in str(part).split(",")):
             if not tk: continue
-            if len(items) > start and ":" in items[-1] and re.match(r"[a-z0-9]", tk): items[-1] += "," + tk
+            if len(items) > start and ":" in items[-1] and re.fullmatch(r"[a-z]+(@[0-9.;]*)?|[0-9.;]+", tk): items[-1] += "," + tk
             else: items.append(tk)
     for s in items:
         m = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9 ]{0,59}?)\s*(?::\s*([a-z]+(?:,[a-z]+)*@[0-9.,;]+))?", s)
         if not m:
             print(f'{path}: "{s}" isn\'t a Google Fonts family name (skipped)', file=sys.stderr); continue
-        name = re.sub(" +", " ", m.group(1)); slug = "g-" + name.lower().replace(" ", "-")
-        if slug in seen: continue
-        seen.add(slug)
-        print(slug, name.replace(" ", "+") + (":" + m.group(2) if m.group(2) else ""))
+        name = re.sub(" +", " ", m.group(1)); slug = "g-" + name.lower().replace(" ", "-"); styles = m.group(2) or ""
+        if name.lower() in menu: continue
+        if slug in found:
+            # (One family named twice: the styles given win over none; two different sets, the first, said so.)
+            had = found[slug]
+            if styles and not had[1]: found[slug] = (name, styles, path)
+            elif styles and styles != had[1]: print(f'{path}: "{name}" is also in {had[2]} with other styles ({had[1]}): those are fetched; name the same styles in both', file=sys.stderr)
+            continue
+        found[slug] = (name, styles, path)
+for slug, (name, styles, _) in found.items():
+    print(slug, name.replace(" ", "+") + (":" + styles if styles else ""))
 PY
 }
 if [ "$LIST" = 1 ]; then
@@ -107,11 +119,18 @@ fi
 KNOWN=""
 [ "$STRICT" = 1 ] && [ -f "$DEST/SHA256SUMS" ] && KNOWN=$(cut -d' ' -f3- "$DEST/SHA256SUMS")
 
-# fetch NAME CSS-URL: the stylesheet, its font files, and a local copy of the stylesheet pointing at them.
+# fetch NAME CSS-URL [optional]: the stylesheet, its font files, and a local copy of the stylesheet pointing at them.
+# An optional one (a family a config names) that Google doesn't give is skipped, with a warning, and the run goes on
+# (L-356).
+SKIPPED=""
 fetch() {
-  local name=$1 url=$2 css font file out
+  local name=$1 url=$2 optional=${3:-} css font file out
   echo "$name"
-  css=$(curl -fsSL --retry 3 -A "$UA" "$url")
+  if ! css=$(curl -fsSL --retry 3 -A "$UA" "$url"); then
+    [ -n "$optional" ] || { echo "  Couldn't fetch $url" >&2; exit 1; }
+    echo "  Couldn't fetch $url: is the family name as written on fonts.google.com? (skipped)" >&2
+    SKIPPED="$SKIPPED $name"; return 0
+  fi
   for font in $(printf '%s\n' "$css" | grep -o 'https://fonts\.gstatic\.com/[^)]*' | sort -u); do
     file=files/${font#https://fonts.gstatic.com/s/}
     case "/$file/" in */../*|*/./*) echo "  $font: a path that leaves fonts/files/ (refused)" >&2; exit 1 ;; esac
@@ -139,7 +158,8 @@ fetch ui "$ui"
 echo "Reading fonts"
 found=0
 while read -r id spec; do
-  fetch "$id" "https://fonts.googleapis.com/css2?family=$spec&display=swap"
+  case "$id" in g-*) fetch "$id" "https://fonts.googleapis.com/css2?family=$spec&display=swap" optional ;;
+                *) fetch "$id" "https://fonts.googleapis.com/css2?family=$spec&display=swap" ;; esac
   found=1
 done < <(reading_fonts)
 [ "$found" = 1 ] || { echo "Couldn't find the FONTS list in index.html" >&2; exit 1; }
@@ -156,3 +176,4 @@ SIL Open Font License 1.1, some the Apache License 2.0 or the Ubuntu Font Licenc
 NOTICE
 echo
 du -sh "$DEST" | awk '{print "Done: " $1 " in " $2 "/"}'
+if [ -n "$SKIPPED" ]; then echo "Not fetched (see above):$SKIPPED" >&2; exit 1; fi

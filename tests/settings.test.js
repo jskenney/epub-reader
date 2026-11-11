@@ -522,7 +522,8 @@ test('ADDITIONAL_FONTS in reader-config.json adds Google Fonts families to the f
   // as the README says; the CDN version does.)
   await h.openReader(page, `${h.PLAIN}/folder-fonts/index.html?book=/reader/books/long.epub`);
   const names = await fontNames(page);
-  assert.deepEqual(names.filter(([id]) => id.startsWith('g-')), [['g-merriweather', 'Merriweather'], ['g-noto-serif', 'Noto Serif']]);
+  // (A family whose name starts with a digit is a family, not the styles of the one before: round 26 review, L-350.)
+  assert.deepEqual(names.filter(([id]) => id.startsWith('g-')), [['g-merriweather', 'Merriweather'], ['g-noto-serif', 'Noto Serif'], ['g-42dot-sans', '42dot Sans']]);
   assert.equal(names.filter(([, n]) => n === 'Lexend').length, 1, 'the built-in Lexend only');
   assert.ok(warned.some(w => /bad<name>/.test(w)), warned.join(' | '));
   await page.click('#fontBtn'); await page.click('#fontMenu .opt[data-face="g-noto-serif"]');
@@ -557,4 +558,14 @@ test('ADDITIONAL_FONTS in Settings: names added to the menu at once, a bad name 
   assert.equal(await page.inputValue('#set-ADDITIONAL_FONTS'), 'Lora, Merriweather:wght@400;700');
   await page.click('#setGenerate');
   assert.deepEqual(JSON.parse(await page.inputValue('#cfgText')).ADDITIONAL_FONTS, ['Lora', 'Merriweather:wght@400;700']);
+});
+
+test('a font added in Settings on a site that self-hosts its fonts shows in the page open at once (its policy made again: round 26 review, L-348)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.PLAIN}/folder-fonts-local/index.html?book=/reader/books/long.epub`);
+  const policy = () => h.inFrame(page, doc => doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content);
+  assert.doesNotMatch(await policy(), /fonts\.googleapis\.com/);
+  await page.click('#setBtn');
+  await page.fill('#set-ADDITIONAL_FONTS', 'Merriweather'); await page.press('#set-ADDITIONAL_FONTS', 'Tab');
+  assert.ok(await h.waitFor(async () => /style-src[^;]*https:\/\/fonts\.googleapis\.com/.test(await policy()), 5000), 'the open page allows it');
 });

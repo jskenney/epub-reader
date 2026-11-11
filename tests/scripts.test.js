@@ -303,3 +303,18 @@ test('fetch-fonts.sh reads ADDITIONAL_FONTS from ./reader-config.json and --conf
   assert.match(r.stderr, /"bad<name>" isn't a Google Fonts family name \(skipped\)/);
   assert.equal(fs.existsSync(path.join(d, 'fonts')), false, 'nothing fetched');
 });
+
+test('fetch-fonts.sh: --config as typed from another folder; a family starting with a digit; the menu\'s own fonts left out; one family named twice with and without styles (round 26 review, L-349, L-350, L-356)', () => {
+  const d = tempDir('fonts2-');
+  fs.mkdirSync(path.join(d, 'site')); fs.mkdirSync(path.join(d, 'cfg'));
+  fs.copyFileSync(path.join(REPO, 'fetch-fonts.sh'), path.join(d, 'site', 'fetch-fonts.sh'));
+  fs.copyFileSync(path.join(REPO, 'index.html'), path.join(d, 'site', 'index.html'));
+  fs.writeFileSync(path.join(d, 'cfg', 'a.json'), JSON.stringify({ ADDITIONAL_FONTS: ['Noto Serif:wght@400;700', '42dot Sans', 'Merriweather', 'Lexend:wght@400;700'] }));
+  fs.writeFileSync(path.join(d, 'cfg', 'b.json'), JSON.stringify({ ADDITIONAL_FONTS: 'Merriweather:ital,wght@0,400;1,400' }));
+  const r = spawnSync('bash', ['site/fetch-fonts.sh', '--list', '--config', 'cfg/a.json', '--config', 'cfg/b.json'], { cwd: d, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.trim().split('\n').filter(l => l.startsWith('g-')), [
+    'g-noto-serif https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&display=swap',
+    'g-42dot-sans https://fonts.googleapis.com/css2?family=42dot+Sans&display=swap',
+    'g-merriweather https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;1,400&display=swap']);
+});
