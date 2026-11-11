@@ -299,3 +299,24 @@ test('the media keys play, pause, and go to the next and previous passage', asyn
   await page.evaluate(() => window.__ms.nexttrack());
   assert.ok(await h.waitFor(async () => (await h.breezeLog()).length, 15000), 'the next passage is asked for');
 });
+
+test('sleep timer: paused, it keeps the time it had left, and counts on when reading resumes (round 25 review, T-46)', async () => {
+  const page = await h.newPage();
+  await page.clock.install();
+  await h.openReader(page, LONG, serverVoice);
+  await startReading(page);
+  await page.selectOption('#ttsSleep', '15');
+  await fastForward(page, 300);
+  await page.keyboard.press(' ');   // pause with about 10 minutes left
+  assert.equal(await playing(page), false);
+  const left = async () => { const m = /Stops in (\d+):(\d\d)/.exec(await page.$eval('#ttsSleep', s => s.selectedOptions[0].textContent)); return m && Number(m[1]) * 60 + Number(m[2]); };
+  const before = await left();
+  assert.ok(before > 500 && before <= 600, `left when paused: ${before}`);
+  await fastForward(page, 600);
+  assert.ok(Math.abs((await left()) - before) <= 2, 'unchanged while paused');
+  await page.keyboard.press(' ');
+  assert.ok(await h.waitFor(() => playing(page), 5000));
+  await fastForward(page, 60);
+  assert.ok((await left()) < before - 30, 'counting again');
+});
+

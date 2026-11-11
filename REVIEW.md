@@ -328,11 +328,15 @@ reader (not re-checked in loop 2), one on operations, read aloud, the README and
 - **Medium:** M-126 to M-130.
 - **Low:** L-299 to L-307.
 - **Tests:** T-46. **Documentation:** D-22.
+Loop 3 fixed them in `8e7fc77` and `58499fb`, each with a test that fails on the code before it (the text-file
+parting was rebuilt, and checked over the reviewer's dozen kinds of file as well as the suite's). L-301 is left as
+it is: a 403 can't be told from a file that is there but forbidden, and refusing the save is the safe side.
+`LOOKAHEAD_SEC` and `NCACHE_SEC` still have no test (T-47).
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 360 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 372 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -361,30 +365,14 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Loop 3's findings are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+T-47 is open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
 TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
-| H-30 | A book picture's blob takes the book's declared type: one declared `text/html`, opened in a new tab, runs the book's script as the reader (reproduced) | Security |
-| M-126 | `section_percentage` is 100 for a section shown whole (L-298), so another device opens that chapter at its end | Bug |
-| M-127 | Hard-wrapped text marked by indentation loses its chapter headings into the paragraphs (L-294) | Bug |
-| M-128 | Unwrapped text with some indented lines is merged again (L-294 undoing M-122) | Bug |
-| M-129 | Nested or unclosed `attr(` in a book's CSS hangs the tab (each one re-reads the rest of the sheet) | Hang |
-| M-130 | nginx example: book files under `/bookshelf/` (and books under `/reader/`) opened directly run their scripts on the reader's origin | Security |
-| L-299 | Unwrapped text with scene breaks and short lines isn't a paragraph per line (M-125) | Bug |
-| L-300 | Indentation parting cuts lists, alternately indented poems and code (L-294) | Bug |
-| L-301 | A host answering 403 for a missing file still stops a folder book being saved (M-124) | Bug |
-| L-302 | `.gitattributes` misses the checksum lists, the workflow and `.gitignore` (M-121) | Tools |
-| L-303 | With remote content on, an SVG `<set>` on `href` gets round link handling (the animation is only removed when remote content is off) | Hardening |
-| L-304 | No limit on the total decompressed; entries can share data | Hardening |
-| L-305 | Lowering "saved speech kept" (or 0) frees nothing; the sweep only runs on saving | Bug |
-| L-306 | The export list's first shift-click uses the previous book's last-clicked item | Bug |
-| L-307 | nginx example: its `add_header` drops server-level headers (HSTS) for `/reader/`; no `gzip_vary` | Docs |
-| T-46 | Tests: the "until reloaded" half of a progress test can't fail; L-76's test can pass having tested nothing; the sample and the flush on opening another book aren't tested; saved speech eviction, media keys, the sleep timer while paused, `LOOKAHEAD_SEC`/`NCACHE_SEC`; the nginx types test is circular | Tests |
-| D-22 | README: the Tests section (six servers, about 50 minutes); an empty 2xx answer (204) counts as no API | Docs |
+| T-47 | `LOOKAHEAD_SEC` and `NCACHE_SEC` have no test: the mock server voice answers one request at a time, so a test can't tell the settings apart | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
 
@@ -431,6 +419,23 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-30 | A book picture's blob takes the book's declared type: one declared `text/html`, opened in a new tab, runs the book's script as the reader (reproduced) | `8e7fc77` |
+| M-126 | `section_percentage` is 100 for a section shown whole (L-298), so another device opens that chapter at its end | `8e7fc77` |
+| M-127 | Hard-wrapped text marked by indentation loses its chapter headings into the paragraphs (L-294) | `8e7fc77` |
+| M-128 | Unwrapped text with some indented lines is merged again (L-294 undoing M-122) | `8e7fc77` |
+| M-129 | Nested or unclosed `attr(` in a book's CSS hangs the tab (each one re-reads the rest of the sheet) | `8e7fc77` |
+| M-130 | nginx example: book files under `/bookshelf/` (and books under `/reader/`) opened directly run their scripts on the reader's origin | `8e7fc77` |
+| L-299 | Unwrapped text with scene breaks and short lines isn't a paragraph per line (M-125) | `8e7fc77` |
+| L-300 | Indentation parting cuts lists, alternately indented poems and code (L-294) | `8e7fc77` |
+| L-301 | A host answering 403 for a missing file still stops a folder book being saved (M-124) | Left as it is: refusing the save is the safe side |
+| L-302 | `.gitattributes` misses the checksum lists, the workflow and `.gitignore` (M-121) | `8e7fc77` |
+| L-303 | With remote content on, an SVG `<set>` on `href` gets round link handling (the animation is only removed when remote content is off) | `8e7fc77` |
+| L-304 | No limit on the total decompressed; entries can share data | `58499fb` |
+| L-305 | Lowering "saved speech kept" (or 0) frees nothing; the sweep only runs on saving | `8e7fc77` |
+| L-306 | The export list's first shift-click uses the previous book's last-clicked item | `58499fb` |
+| L-307 | nginx example: its `add_header` drops server-level headers (HSTS) for `/reader/`; no `gzip_vary` | `8e7fc77` |
+| T-46 | Tests: the "until reloaded" half of a progress test can't fail; L-76's test can pass having tested nothing; the sample and the flush on opening another book aren't tested; saved speech eviction, media keys, the sleep timer while paused, `LOOKAHEAD_SEC`/`NCACHE_SEC`; the nginx types test is circular | `8e7fc77`, `58499fb` (all but `LOOKAHEAD_SEC`/`NCACHE_SEC`: T-47) |
+| D-22 | README: the Tests section (six servers, about 50 minutes); an empty 2xx answer (204) counts as no API | `8e7fc77` |
 | M-123 | Enter in a Markdown list puts a lone LF into a CRLF file (CodeMirror's `lineSeparator` and the list addon; M-118) | `0690e9c` |
 | M-124 | A folder book with a remote (or missing) manifest item can't be saved at all (M-119) | `0690e9c` |
 | M-125 | Unwrapped text with blank lines between paragraphs loses its verse blocks and two-line headings (M-122) | `0690e9c` |
