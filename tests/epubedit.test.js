@@ -316,3 +316,15 @@ test('a folder book listing a file on another site, or one it doesn\'t have, is 
   assert.ok(got.order.includes('OEBPS/c3.xhtml'), JSON.stringify(got.order));
   assert.ok(!got.order.some(n => /clip\.mp4|gone\.png/.test(n)), JSON.stringify(got.order));
 });
+
+test('a book picked with no extension in its name is downloaded with .epub (round 25 review, loop 5)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, `${h.READER}?book=books/notes.md`, RAW);
+  await page.setInputFiles('#fileInput', { name: 'mybook', mimeType: '', buffer: fs.readFileSync(SRC) });
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'The Long Book' && document.querySelector('#status').hidden);
+  await startEditing(page);
+  await replace(page, '</p>', ' Edit.</p>');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  assert.equal(dl.suggestedFilename(), 'mybook.epub');
+});

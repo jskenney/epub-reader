@@ -748,17 +748,18 @@ handle /reader/* {
 	header Referrer-Policy same-origin
 	# Revalidate every file (cheap with ETags): a cached old library would fail a new index.html's hash.
 	header Cache-Control "no-cache"
-	# Book files opened on their own run nothing (not the reader's own page).
+	# Book files opened on their own run nothing (not the reader's own page). ">" defers this header so it
+	# replaces the policy above: Caddy runs a matched header line before an unmatched one.
 	@bookfiles {
-		path_regexp \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
+		path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
 		not path /reader/index.html
 	}
-	header @bookfiles Content-Security-Policy "sandbox"
+	header @bookfiles >Content-Security-Policy "sandbox"
 	root * /srv/www
 	file_server
 }
 handle /bookshelf/* {
-	@bookfiles path_regexp \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
+	@bookfiles path_regexp (?i)\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
 	header @bookfiles Content-Security-Policy "sandbox"
 	header X-Content-Type-Options nosniff
 	root * /srv/www
