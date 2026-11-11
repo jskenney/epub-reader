@@ -274,3 +274,42 @@ test('page turns stay lined up with the text after dozens of pages, when the tex
     await page.close();
   }
 });
+
+// How far text on the page shown runs past the edges of the text area (0: none).
+const overhang = page => page.evaluate(() => {
+  const d = document.querySelector('#page').contentDocument, flow = d.querySelector('[id^="spine-flow"]'), clip = flow.parentElement.getBoundingClientRect();
+  const w = d.createTreeWalker(flow, NodeFilter.SHOW_TEXT), r = d.createRange(); let n, worst = 0;
+  while ((n = w.nextNode())) { r.selectNodeContents(n); for (const q of r.getClientRects()) if (q.right > clip.left + 1 && q.left < clip.right - 1) worst = Math.max(worst, clip.left - q.left, q.right - clip.right); }
+  return worst;
+});
+const hitShown = (page, text) => page.evaluate(t => {
+  const d = document.querySelector('#page').contentDocument, flow = d.querySelector('[id^="spine-flow"]'), clip = flow.parentElement.getBoundingClientRect();
+  const w = d.createTreeWalker(flow, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) { const i = n.data.indexOf(t); if (i >= 0) { const r = d.createRange(); r.setStart(n, i); r.setEnd(n, i + t.length); const q = r.getBoundingClientRect(); return q.left >= clip.left - 1 && q.right <= clip.right + 1; } }
+  return null;
+}, text);
+
+test('hundreds of pages into a chapter, the page shown still lines up and a search hit there is on it (one column, a gap of a fraction of a pixel: round 26 review, M-150)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/pages-long.epub`, { 'spine:layout': 'one', 'spine:width': 3 });
+  await page.fill('#searchBox', 'Paragraph 1200:'); await page.keyboard.press('Enter');
+  assert.ok(await h.waitFor(async () => /^page (2\d\d|3\d\d)\//.test(await page.textContent('#fsPos')), 5000), await page.textContent('#fsPos'));
+  await page.waitForTimeout(200);
+  assert.equal(await hitShown(page, 'Paragraph 1200:'), true, 'the hit is on the page shown');
+  assert.ok(await overhang(page) < 1.5, `text ${await overhang(page)}px past an edge`);
+});
+
+test('a book\'s CSS on the reader\'s column flow (border, padding, width, zoom, transform, even !important) doesn\'t move the pages (round 26 review, M-149)', async () => {
+  for (const layout of ['two', 'one']) {
+    const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+    await h.openReader(page, `${h.READER}?book=books/pages-styled.epub`, { 'spine:layout': layout, 'spine:width': 1 });
+    for (let k = 0; k < 12; k++) await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(150);
+    assert.match(await page.textContent('#fsPos'), /^page 13\//, layout);
+    assert.ok(await overhang(page) < 1.5, `${layout}: text ${await overhang(page)}px past an edge`);
+    await page.fill('#searchBox', 'Paragraph 900:'); await page.keyboard.press('Enter');
+    await page.waitForTimeout(800);
+    assert.equal(await hitShown(page, 'Paragraph 900:'), true, `${layout}: the hit is on the page shown`);
+    await page.close();
+  }
+});

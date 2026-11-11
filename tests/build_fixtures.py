@@ -949,11 +949,17 @@ def main():
     raw_epub("rv-drm.epub", {"OEBPS/content.opf": opf3("Locked", [("c1.xhtml", "application/xhtml+xml")]),
              "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Pretend this is ciphertext.</p>'),
              "META-INF/encryption.xml": '<?xml version="1.0"?><encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#"><enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><enc:CipherData><enc:CipherReference URI="OEBPS/c1.xhtml"/></enc:CipherData></enc:EncryptedData></encryption>'})
+    words = "the keeper walked along the cliffs and counted the boats below in the quiet evening by the harbour lantern".split()
+    # One chapter of hundreds of pages, plain and with a book's CSS reaching the reader's column flow (round 26 review,
+    # M-149, M-150).
+    paras = "".join(f"<p>Paragraph {i}: " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + ".</p>" for i in range(1500))
+    epub(books / "pages-long.epub", "Pages Long", [("c1.xhtml", "One", paras, "")], uid="urn:pages-long")
+    epub(books / "pages-styled.epub", "Pages Styled", [("c1.xhtml", "One", paras,
+         "<style>div{border:3px solid red;padding:0 1.5em;width:85%;transform:scale(.9) !important} html{zoom:.9} body{transform:scale(.95)}</style>")], uid="urn:pages-styled")
     # A chapter of 20 MB of markup in a book of a few tens of KB (round 26 review, H-35).
     epub(books / "huge-chapter.epub", "Huge Chapter", [("c1.xhtml", "One", "<p>Start here.</p>", ""),
          ("c2.xhtml", "Two", "<p>The same line again and again.</p>" * (20 * 1024 * 1024 // 36), "")], uid="urn:huge-chapter")
     # One long section: dozens of pages to turn, for the page-turn drift check (text width margins in fractions of a pixel).
-    words = "the keeper walked along the cliffs and counted the boats below in the quiet evening by the harbour lantern".split()
     (books / "drift.md").write_text("# Drift\n\n" + "\n\n".join(f"Paragraph {i}. " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + "." for i in range(400)) + "\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

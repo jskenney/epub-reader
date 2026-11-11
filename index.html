@@ -645,7 +645,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2113</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2117</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -2609,12 +2609,21 @@ body{padding:var(--v) var(--m) calc(var(--vb) + 30vh) !important;height:auto !im
 ${common}
 body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;overflow:hidden !important}
 #${RID.clip}{height:100%;overflow:hidden}
-#${RID.flow}{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word}
-@media (max-width:640px){#${RID.flow}{column-count:1}}`;
+#${RID.flow}{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word;
+  transform:translateX(var(--spine-x,0px)) !important}
+@media (max-width:640px){#${RID.flow}{column-count:1}}
+@supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px)}}`;
   // (Vertical text (writing-mode: vertical-rl, in Japanese and Chinese novels) set horizontally: the pages and
   // the scroll layout follow lines down the page, so vertical text couldn't be read past its first screen. Laying
   // it out vertically is an enhancement (E-29): round 25 review.)
+  // (The page turn steps by the column flow's width and gap, so neither may be anything but the reader's: no padding,
+  // border, margin, zoom or transform from a book's CSS on the flow or around it (round 26 review, M-149), and both
+  // in whole pixels where the browser can round them, as a fraction of one is laid out snapped to 1/64 px and the
+  // difference grew page by page (M-150).)
   return `${frameCss}
+#${RID.clip},#${RID.flow}{padding:0 !important;border:0 !important;margin:0 !important;box-sizing:content-box !important;min-width:0 !important;max-width:none !important;float:none !important;position:static !important;zoom:normal !important}
+#${RID.clip}{width:auto !important;transform:none !important}
+html,body{zoom:normal !important;transform:none !important}
 html,body,#${RID.flow},#${RID.flow} *{writing-mode:horizontal-tb !important}
 #${RID.flow}{line-height:${lineH} !important}
 #${RID.flow} :is(p,li,blockquote,dd,dt,td,th,div,span,a,em,strong,i,b,small,cite,q,sup,sub,section,article,aside){line-height:inherit !important}
@@ -2921,7 +2930,8 @@ async function buildPage(src, path, item){
   }
   const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(fx); head.append(ov);
   if (sBody) {
-    for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.value);
+    // (Without "!important" in a paged page's body style, which would outdo the reader's own layout rules: M-149.)
+    for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.name === 'style' && !fx ? a.value.replace(/!\s*important/gi, '') : a.value);
   }
   // (A fixed-layout page keeps the book's structure, with no wrappers in its body, so selectors such as
   // "body > p" still match: search and reading aloud read its body then: textBlocks.)
@@ -3188,10 +3198,11 @@ function geom(){
   const doc = frame.contentDocument, win = frame.contentWindow;
   const flow = doc?.getElementById(RID.flow), end = doc?.getElementById(RID.end);
   if (!flow || !end) return null;
-  // (The flow's exact width: clientWidth is rounded to a whole pixel, and a text width's margin is often a
-  // fraction of one, so each page turn was off by up to half a pixel and the text crept past an edge, a character
-  // or more after some dozens of pages.)
-  const step = flow.getBoundingClientRect().width + (parseFloat(win.getComputedStyle(flow).columnGap) || 0);
+  // (The flow's exact width, in its own pixels: clientWidth is rounded to a whole pixel, and a text width's margin is
+  // often a fraction of one, so each page turn was off by up to half a pixel and the text crept past an edge, a
+  // character or more after some dozens of pages.)
+  const cs = win.getComputedStyle(flow);
+  const step = parseFloat(cs.width) + (parseFloat(cs.columnGap) || 0);
   if (!(step > 0)) return null;
   // (Right to left (an Arabic or Hebrew book, dir="rtl" or direction:rtl): the columns run from the right edge
   // leftwards, so pages are counted from the right and turned by moving the flow the other way: round 25 review.)
@@ -3221,7 +3232,8 @@ function showPage(n){
   const g = geom(); if (!g) return;
   cur.pages = g.pages;
   cur.page = Math.max(0, Math.min(g.pages - 1, n));
-  g.flow.style.transform = `translateX(${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px)`;
+  // (Through the reader's own !important rule, which a book's CSS can't outdo: M-149.)
+  g.flow.style.setProperty('--spine-x', `${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px`);
   cur.f = fraction();
   updateProgress(); savePos();
 }
