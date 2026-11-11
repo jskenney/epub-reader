@@ -356,6 +356,15 @@ Loop 5 fixed them in `c9e6702`, each with a test that fails on the code before i
 (checked by reading) and L-324 (timed in Node: a 30 MB line now splits in 48 ms). The text-file changes are the text
 reviewer's, checked over their 52 files and the 18 real books, and the suite's text shapes.
 
+The sixth review (of loop 5), by three new reviewers on `54ce69c`: one on loop 5's fixes, one a fresh full pass of
+the areas this round had barely touched (search, layouts, read aloud, export, settings, the README), and one a
+further adversarial pass (no way found to run script in the reader's origin through the reader itself). Findings:
+- **High:** H-32, H-33.
+- **Medium:** M-140 to M-143.
+- **Low:** L-331 to L-339.
+- **Documentation:** D-25, D-26. **Enhancement:** E-29 (vertical text laid out vertically).
+M-140, L-331 and L-332 were fixed at once, in `a9fee6d`.
+
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
@@ -389,13 +398,28 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-T-47 is open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
+The sixth review's findings and T-47 are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
 TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| H-32 | Right-to-left books (Arabic, Hebrew: `dir="rtl"` or `direction:rtl`) show only the first page of each chapter in the page layouts | Bug |
+| H-33 | Books in vertical text (`writing-mode: vertical-rl`) can't be read past the first screen of a chapter, in any layout | Bug |
+| M-141 | Relative links between HTML or Markdown documents don't open the other document, though the README says they do | Bug |
+| M-142 | Tab moves the focus to links on other pages while the page stays put | Accessibility |
+| M-143 | A 2 KB EPUB freezes the tab as it opens (a tag-stripping pattern over its leading chapters) | Hang |
+| L-333 | Notices are hidden in full screen, and not announced | Accessibility |
+| L-334 | Durations can read "1 h 60 min" | Bug |
+| L-335 | The search count says "500+" with exactly 500 matches | Bug |
+| L-336 | Typing in WYSIWYG freezes on a document with many unclosed comments | Hang |
+| L-337 | More patterns slow on hostile text: Markdown write-back, saving HTML, packing an EPUB | Hang |
+| L-338 | The sandbox in the nginx and Caddy examples is a list of extensions: a server typing another extension as XML leaves it active | Hardening |
+| L-339 | `blobType` keeps the book's own type string after checking its trimmed form | Hardening |
+| D-25 | README: reflowable right-to-left books don't show "the later page on the left" | Docs |
+| D-26 | README: overstates how book files are protected when linked to directly | Docs |
+| [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
 | T-47 | `LOOKAHEAD_SEC` and `NCACHE_SEC` have no test: the mock server voice answers one request at a time, so a test can't tell the settings apart | Tests |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
@@ -429,6 +453,11 @@ A web app manifest and service worker, so the reader can be installed and open s
 Optional, multi-user server calls: saving files and EPUBs, notes and bookmarks (for E-3), settings, and sign-in.
 Reading progress and completion are sent already (see Resolved); the plan for the rest is in TODO.md.
 
+### E-29. Vertical text
+Books written in vertical text (`writing-mode: vertical-rl`, as many Japanese and Chinese novels are) laid out
+vertically, with pages turning right to left and the scroll layout scrolling sideways. Until then they are laid out
+across, so they can be read (H-33).
+
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
 
@@ -443,6 +472,9 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| M-140 | README's Caddy example: the sandbox header ran before the reader policy, which replaced it (and was case-sensitive) | `a9fee6d` |
+| L-331 | A download whose name has no extension lost the one Chromium added from its type | `a9fee6d` |
+| L-332 | An audiobook cover's type was taken from its blob, not its bytes | `a9fee6d` |
 | M-135 | A folder book's picture of another declared type (an SVG typed PNG) is served as the site's own file: on a server without the example's sandbox header, opened in a new tab, its script runs as the reader | `c9e6702` |
 | M-136 | A long front-matter line in Markdown freezes the tab (a regex that backtracks) | `c9e6702` |
 | M-137 | Verse with longer lines (poetry, plays, contents with page numbers) is joined into paragraphs (as before this round) | `c9e6702` |
