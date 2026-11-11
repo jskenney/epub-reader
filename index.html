@@ -607,7 +607,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0409</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0503</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -917,8 +917,15 @@ function crc32(b, prev = 0){   // (prev: the checksum so far, to continue it ove
 }
 // Inflate, stopping as soon as the output passes the size the archive declares: a small entry that would
 // inflate to gigabytes (a "decompression bomb") fails instead of filling the memory.
+// Over INFLATE_BURST bytes asked for within INFLATE_WINDOW ms: refused (MAX_ENTRY is per file; a page naming many
+// huge files could take minutes and gigabytes: round 25 review, L-304).
+const INFLATE_BURST = 2 * 1024 ** 3, INFLATE_WINDOW = 20000, inflated = [];   // (not 2048 << 20, which overflows to a negative number)
 async function inflateRaw(data, expected, name){
   if (!expected && !data.length) return new Uint8Array(0);   // an empty entry some archivers mark as deflated
+  const now = Date.now();
+  while (inflated.length && inflated[0][0] < now - INFLATE_WINDOW) inflated.shift();
+  if (inflated.reduce((a, x) => a + x[1], 0) + expected > INFLATE_BURST) throw new Error(`${name}: not decompressed (the book asks for more than 2 GB at once)`);
+  inflated.push([now, expected]);
   try { return await inflate(data, expected, name); }
   catch (e) { throw /damaged archive/.test(e.message) ? e : new Error(`${name}: damaged archive (${e.message || 'bad compressed data'})`); }
 }
@@ -982,7 +989,7 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
   if (!cd) return null;
   if (cd.length < cdSize) return null;
   // A plain object would let an entry named "__proto__" change it, and "constructor" look like an entry.
-  const files = Object.create(null), kept = new Map();
+  const files = Object.create(null), kept = new Map(), spans = [];
   let keptBytes = 0;
   const keep = (name, bytes) => {
     kept.set(name, bytes); keptBytes += bytes.length;
@@ -1009,6 +1016,7 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
       else { try { name = strict.decode(raw); } catch { name = latin.decode(raw); } }
     }
     const damaged = why => new Error(`${name}: damaged archive (${why})`);
+    if (!name.endsWith('/')) spans.push([rawLocal, csize]);
     let checked = false;
     // The local header and the data in one read: the header's own extra field is usually the central one's
     // size, with a margin; if it is longer, the data is read separately.
@@ -1047,6 +1055,9 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
       },
     };
   }
+  // Files sharing their data (an archive made to multiply what is decompressed) aren't read (round 25 review, L-304).
+  spans.sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < spans.length; i++) if (spans[i - 1][0] + spans[i - 1][1] + 30 > spans[i][0]) throw new Error('damaged archive (its files overlap)');
   return { files, file: name => { const f = files[name]; return f && !f.dir ? f : null; }, inPlace: true, fileSize: size };
 }
 // An uploaded file, read in place (it can't be read once it is moved, deleted or replaced on disk).
@@ -1190,6 +1201,12 @@ async function sha1(bytes){
 // The same site for a redirect: the same host, give or take "www." and a move to https (round 24 review).
 const sameSite = (a, b) => a.hostname.replace(/^www\./, '') === b.hostname.replace(/^www\./, '')
   && ((a.protocol === b.protocol && a.port === b.port) || (b.protocol === 'http:' && a.protocol === 'https:' && /^(80)?$/.test(b.port) && /^(443)?$/.test(a.port)));
+// A blob made from a book's file is given the book's type only for pictures, sound, video, fonts and CSS, which
+// can't run script when opened on their own ("Open image in new tab" shows a blob in the reader's own origin);
+// anything else, an HTML or SVG file say, is plain bytes (round 25 review, H-30). (SVG pictures are served cleaned,
+// by svgURL; a raster picture shows whatever its type, as browsers look at its bytes.)
+const SAFE_BLOB = /^(image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|audio\/[\w.+-]+|video\/[\w.+-]+|font\/[\w.+-]+|application\/(font-woff2?|x-font-[\w-]+|vnd\.ms-(opentype|fontobject))|text\/css)$/i;
+const blobType = t => SAFE_BLOB.test(String(t || '').split(';')[0].trim()) ? t : 'application/octet-stream';
 function zipSource(zip){
   const blobs = new Set();
   let disposed = false;   // (a URL made for a book already closed is revoked at once: L-46)
@@ -1206,7 +1223,7 @@ function zipSource(zip){
       // (Fonts too: a data: copy pasted into every place the font is named could make pages of hundreds of MB.)
       let data = await f.async('uint8array');
       const key = lookObf(this.obf, p, n => Object.prototype.hasOwnProperty.call(zip.files || {}, n) ? n : foldedNames(zip).get(pathKey(n))); if (key) data = unobfuscate(data, key);
-      const u = URL.createObjectURL(new Blob([data], { type }));
+      const u = URL.createObjectURL(new Blob([data], { type: blobType(type) }));
       if (disposed) { URL.revokeObjectURL(u); return null; }
       blobs.add(u); return u;
     },
@@ -1256,7 +1273,7 @@ function dirSource(base){
         if (r.redirected && !sameSite(new URL(r.url), new URL(root))) return null;   // (sent on to another site: round 24 review)
         const data = unobfuscate(new Uint8Array(await r.arrayBuffer()), key);
         if (this.disposed) return null;   // (the book was closed meanwhile)
-        const b = URL.createObjectURL(new Blob([data], { type }));
+        const b = URL.createObjectURL(new Blob([data], { type: blobType(type) }));
         this.blobs.add(b); return b;
       } catch { return null; }
     },
@@ -1281,13 +1298,14 @@ async function coverUrl(b){
   const item = all.find(i => i.props.includes('cover-image')) || (b.coverId && b.manifest.get(b.coverId))
     || all.find(i => /^image\//.test(i.type) && /cover/i.test(`${i.id} ${i.href}`));
   if (!item) return null;
-  if (/^image\//.test(item.type)) return b.src.url(item.path, item.type);
+  const pic = (path, type) => /svg/i.test(type) || /\.svg$/i.test(path) ? svgURL(path, 'image/svg+xml', b) : b.src.url(path, type);   // (H-30)
+  if (/^image\//.test(item.type)) return pic(item.path, item.type);
   if (/html|xml/.test(item.type)) {   // a cover page: use its first image
     const t = await readText(b.src, item.path);
     const doc = t && (parseDoc(t, 'application/xhtml+xml') || parseDoc(t, 'text/html'));
     const el = doc && [...doc.getElementsByTagNameNS('*', 'img'), ...doc.getElementsByTagNameNS('*', 'image')][0];
     const src = el && (el.getAttribute('src') || el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href'));
-    if (src && !isExternal(src)) { const path = resolve(item.path, src); return b.src.url(path, b.byPath.get(path)?.type || MIME[ext(path)] || 'image/png'); }
+    if (src && !isExternal(src)) { const path = resolve(item.path, src); return pic(path, b.byPath.get(path)?.type || MIME[ext(path)] || 'image/png'); }
   }
   return null;
 }
@@ -1449,23 +1467,45 @@ function textToHtml(raw){
     return lines.length === 1 && /[A-Z]/.test(first) && !/[a-z]/.test(first) && first.length <= 50 && first.split(/\s+/).length <= 8 && !/[,;!?]$/.test(first);
   };
   const inline = s => escHtml(s).replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
-  // Blocks are parted by blank lines. A file with almost none (round 25 review, M-122, M-125, L-294): parted
-  // where a line starts indented, when that is how its paragraphs are marked (some lines indented, most not);
-  // otherwise, if its lines are long (one line per paragraph, unwrapped), at each line; else (a hard-wrapped
-  // file with no blank lines at all) as one block, as before.
-  const blank = (t.match(/\n[ \t]*\n/g) || []).length, few = lens.length > 20 && blank < lens.length * 0.05;
-  const indented = (t.match(/\n[ \t]+\S/g) || []).length;
-  const parting = !few ? /\n[ \t]*\n+/ : indented >= lens.length * 0.03 && indented <= lens.length * 0.6 ? /\n(?:[ \t]*\n)*(?=[ \t]+\S)/ : wrap > 100 ? /\n+/ : /\n[ \t]*\n+/;
-  const blocks = t.split(parting).map(b => b.trimEnd()).filter(b => b.trim());   // (trimEnd: a regex here is quadratic on long runs of spaces)
-  // (Unwrapped text with blank lines: a block of several long lines is one paragraph per line, M-125.)
-  const longLines = wrap > 160;
-  const items = blocks.map(b => {
-    const lines = b.split('\n').filter(l => l.trim());
+  // The blocks (paragraphs, verse, headings) as lists of lines. A file is read as one of two kinds (round 25
+  // review, M-122, M-125, L-294, and loop 3's review of them):
+  // - unwrapped: a line per paragraph (lines long, or of every length, rather than packed up to one width). Each
+  //   line is a block, except where blank lines set apart a few short lines together (a stanza, a two-line
+  //   heading).
+  // - hard-wrapped (packed up to a width): blocks are parted by blank lines. With almost none, a heading line
+  //   ("CHAPTER II") is a block of its own, and if the paragraphs are marked by indenting their first line (long
+  //   indented lines, paragraphs of several lines), each starts a block.
+  const clustered = lens.filter(n => n >= wrap * 0.75 && n <= wrap).length / (lens.length || 1);
+  const unwrapped = wrap > 200 || (wrap > 80 && clustered < 0.6);
+  const rows = t.split('\n').map(l => l.trimEnd());
+  const groups = [[]];
+  for (const l of rows) { if (l.trim()) groups.at(-1).push(l); else if (groups.at(-1).length) groups.push([]); }
+  if (!groups.at(-1).length) groups.pop();
+  const few = lens.length > 20 && groups.length < lens.length * 0.05;
+  const indentedRows = rows.filter(l => /^[ \t\u3000]+\S/.test(l));
+  const paraIndent = !unwrapped && few && indentedRows.length >= lens.length * 0.03 && indentedRows.length <= lens.length * 0.6
+    && indentedRows.reduce((a, l) => a + l.trim().length, 0) / indentedRows.length >= wrap * 0.6 && lens.length / indentedRows.length >= 2.5;
+  const headLine = l => { const s = l.trim(); return s.length <= 60 && (TXT_HEAD.test(s) || TXT_SOLO.test(s)); };
+  const blocks = [];
+  for (const g of groups) {
+    if (unwrapped) {
+      if (g.length > 1 && g.every(l => l.trim().length < Math.min(70, wrap * 0.5))) blocks.push(g);
+      else for (const l of g) blocks.push([l]);
+    } else if (few) {
+      let cur = [];
+      for (const l of g) {
+        if (headLine(l)) { if (cur.length) blocks.push(cur); blocks.push([l]); cur = []; continue; }
+        if (paraIndent && cur.length && /^[ \t\u3000]+\S/.test(l)) { blocks.push(cur); cur = []; }
+        cur.push(l);
+      }
+      if (cur.length) blocks.push(cur);
+    } else blocks.push(g);
+  }
+  const items = blocks.map(lines => {
     if (isHeading(lines)) {
       const level = /^(book|part|volume)\b/i.test(lines[0].trim()) ? 'h1' : 'h2';
       return { heading: true, level, html: lines.map(l => inline(l.trim())).join('<br> ') };
     }
-    if (longLines && lines.length > 1 && lines.every(l => l.trim().length > 80)) return { html: lines.flatMap(l => txtPieces(l.trim())).map(s => `<p>${inline(s)}</p>`).join('\n') };
     const longish = lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;
     // (A paragraph, or block of lines, too long to be one: in pieces, so the document can be split into sections
     // between them: round 25 review, L-286.)
@@ -2029,8 +2069,8 @@ function typeOf(path){ return book.byPath.get(path)?.type || MIME[ext(path)] || 
 // resource document (<use href="x.svg#a">, filter:url(x.svg#f)) it is a document of its own, which the cleaning
 // of pages never saw (round 25 review, L-287): no script, no handlers, no address but its own fragments (and data:
 // pictures), its styles through the same CSS cleaning as a page's.
-async function svgURL(path, type){
-  const b = book, t = await b.src.text(path); if (t == null) return null;
+async function svgURL(path, type, b = book){
+  const t = await b.src.text(path); if (t == null) return null;
   const d = new DOMParser().parseFromString(t, 'image/svg+xml');
   if (!d.documentElement || d.getElementsByTagName('parsererror').length) return null;
   d.querySelectorAll('script, foreignObject, iframe, object, embed, a').forEach(e => e.replaceWith(...(e.localName === 'a' ? e.childNodes : [])));
@@ -2183,25 +2223,28 @@ const SUBSTITUTIONS = /^(var|env|if|attr|inherit|first-valid)$/;
 // Is an attr() typed as an address? Read from its tokens (names decoded, comments skipped): after the attribute's
 // name and before any fallback, a "url" unit or a type(<url>) or type(<image>). "attr(data-url)", "attr(href)" and
 // fallback strings are text (loop 6 review).
-function attrAddress(text){
-  const toks = cssTokens(text);
-  let k = 1;
+// toks[from] is the attr( function; to: where to stop (its ")", or the end). On the tokens already read, not the
+// rest of the sheet read again for each one (nested attr( took time growing with the square: round 25 review, M-129).
+function attrAddress(toks, from, to = toks.length){
+  let k = from + 1;
   const skip = () => { while (toks[k]?.t === 'ws' || toks[k]?.t === 'comment') k++; };
   skip(); if (toks[k]?.t === 'ident') k++;   // the attribute's name
-  for (const stack = []; k < toks.length; k++) {
+  // (types: how many type( are open, kept as it goes rather than looked for in the stack each time: M-129.)
+  for (let stack = [], types = 0; k < to; k++) {
     const tk = toks[k];
-    if (tk.t === 'function' || tk.t === '(') stack.push(tk.t === 'function' ? String(tk.v).toLowerCase() : '(');
-    else if (tk.t === ')') { if (!stack.length) return false; stack.pop(); }
+    if (tk.t === 'function' || tk.t === '(') { const v = tk.t === 'function' ? String(tk.v).toLowerCase() : '('; stack.push(v); if (v === 'type') types++; }
+    else if (tk.t === ')') { if (!stack.length) return false; if (stack.pop() === 'type') types--; }
     else if (tk.t === ',' && !stack.length) return false;   // (the fallback follows)
     else if (tk.t === 'ident') {
       const v = String(tk.v).toLowerCase();
-      if ((!stack.length && v === 'url') || (stack.includes('type') && (v === 'url' || v === 'image'))) return true;
+      if ((!stack.length && v === 'url') || (types > 0 && (v === 'url' || v === 'image'))) return true;
     }
   }
   return false;
 }
 function cssRefs(css){
   const toks = cssTokens(css), refs = [], fns = [];
+  let openAttrs = 0, badAt = -1;
   let block = 0, late = false;   // late: past the point where @import is allowed (anything but @charset and @layer x;)
   let nsOk = true;   // still where @namespace counts (before any rule): only those are moved (loop 4 review)
   const next = k => { while (toks[k]?.t === 'ws' || toks[k]?.t === 'comment') k++; return k; };
@@ -2221,16 +2264,22 @@ function cssRefs(css){
       // (Each entry points to the nearest such function around it, so this is one step, not a walk back: loop 4.)
       const img = IMAGE_STRING_FNS.test(tk.v) ? null : fns.at(-1)?.img;
       if (img && (SUBSTITUTIONS.test(tk.v) || tk.v.startsWith('--'))) img.bad = true;
-      const entry = { v: tk.v, s: tk.s, bad };
+      const entry = { v: tk.v, s: tk.s, bad, k };
+      // (More than 32 attr( inside each other: the outermost is blocked whole, and those inside it aren't looked
+      // into one by one, which took time growing with the square of their number: M-129.)
+      if (tk.v === 'attr' && ++openAttrs > 32 && badAt < 0) { badAt = fns.findIndex(f => f.v === 'attr'); fns[badAt].bad = true; }
       entry.img = IMAGE_STRING_FNS.test(tk.v) ? entry : img;
       fns.push(entry);
     }
     else if (tk.t === '(') fns.push({ v: '(', s: tk.s, img: fns.at(-1)?.img });
     else if (tk.t === ')') {
       const f = fns.pop();
+      if (f?.v === 'attr') openAttrs--;
+      const inBad = badAt >= 0 && fns.length > badAt;
+      if (badAt >= 0 && fns.length === badAt) badAt = -1;
       // attr() typed as an address takes it from an HTML attribute, out of this cleaner's sight: blocked wherever
       // it is (browsers don't fetch these yet; loop 5 review). attr() of other types is left alone.
-      if (f?.v === 'attr' && attrAddress(css.slice(f.s, tk.e))) f.bad = true;
+      if (f?.v === 'attr' && !inBad && !f.bad && attrAddress(toks, f.k, k)) f.bad = true;
       if (f?.bad) { while (refs.length && refs.at(-1).s >= f.s) refs.pop(); refs.push({ s: f.s, e: tk.e, ref: '', kind: 'blocked' }); }
     }
     else if (tk.t === 'string' && /^(-webkit-)?image-set$|^image$/.test(fns.at(-1)?.v || '')) refs.push({ s: tk.s, e: tk.e, ref: tk.v, kind: 'image' });
@@ -2263,7 +2312,9 @@ function cssRefs(css){
   }
   // A function still open at the end of the sheet is closed there by the browser: one to be blocked is blocked
   // to the end (loop 4 review).
-  const open = fns.find(f => f.bad || (f.v === 'attr' && attrAddress(css.slice(f.s))));
+  // (At most 32 open attr( looked into; past that, the outermost is blocked: M-129.)
+  let looked = 0;
+  const open = fns.find(f => f.bad || (f.v === 'attr' && (++looked > 32 || attrAddress(toks, f.k))));
   if (open) { while (refs.length && refs.at(-1).s >= open.s) refs.pop(); refs.push({ s: open.s, e: css.length, ref: '', kind: 'blocked' }); }
   return refs;
 }
@@ -2597,6 +2648,9 @@ function sanitize(doc){
   // the book policy blocks the object itself): L-40.
   doc.querySelectorAll('object').forEach(o => o.replaceWith(...[...o.childNodes].filter(n => n.localName !== 'param')));
   doc.querySelectorAll('script,object,embed,iframe,frame,frameset,base,meta[http-equiv],template').forEach(e => e.remove());
+  // (Animations that set an address get round link handling, remote content on or off; and a link left without an
+  // address keeps no target: round 25 review, L-303.)
+  doc.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
   for (const el of doc.body.querySelectorAll('*')) {
     // (A name, or id, that would hide one of the page's own methods (document.getElementById, say), which the
     // reader uses: dropped (round 25 review, L-288). A named img, form or embed shows on the document (an img by its
@@ -2676,7 +2730,7 @@ function stripRemote(doc){
 function markLinks(doc, path){
   for (const a of doc.querySelectorAll('a, area')) {
     const raw = a.getAttribute('href') ?? a.getAttributeNS(XLINK, 'href');
-    if (raw == null) continue;
+    if (raw == null) { a.removeAttribute('target'); continue; }   // (L-303)
     const h = urlText(raw);
     const drop = () => { a.removeAttribute('href'); a.removeAttributeNS(XLINK, 'href'); };
     if (/^(https?|mailto|tel):/i.test(h) || /^[\\/]{2}/.test(h)) {
@@ -3215,7 +3269,9 @@ const placeNow = () => ({ book, i: cur.i, page: cur.page, scroll: scrolling(), t
 function progressBody(){
   const id = bookIdentity(); if (!id) return null;
   const pct = x => Math.round(x * 1000) / 10;
-  return { ...id, section: cur.i, section_percentage: pct(readFraction()), book_percentage: pct(bookFraction()) };
+  // (section_percentage is the place in the section, as it is kept here, so another device goes there: a section
+  // shown whole on this screen counts as read for book_percentage, but is still at its start: round 25 review.)
+  return { ...id, section: cur.i, section_percentage: pct(fraction()), book_percentage: pct(bookFraction()) };
 }
 // From savePos: a new place. The first one after a book opens is where it opened: not sent, only remembered.
 function progressMoved(){
@@ -5375,6 +5431,9 @@ const clipStore = (() => {
       if (++saves % 10 === 1) sweep((SAVED_AUDIO_MB + Math.max(api.extraMB, exportRoom())) * 1048576);
     },
     size: () => sweep(Infinity, true),   // (only counts: L-e of round 13's review)
+    // Down to the limit now (as the page starts, the setting changes, or an export ends), not only when audio is
+    // saved; 0 keeps nothing, unless an export is keeping room (round 25 review, L-305).
+    trim(){ const mb = SAVED_AUDIO_MB + Math.max(api.extraMB, exportRoom()); return mb > 0 ? sweep(mb * 1048576) : api.clear(); },
     clear: () => run('readwrite', st => st.clear())
   };
   return api;
@@ -6410,7 +6469,7 @@ async function abRun(units, mode, target, format = 'aac'){
     if (!ab.files.length) throw new Error(ab.unreadable.length && !ab.skipped.length ? `the chosen chapters couldn't be read: ${ab.unreadable.join(', ')}` : 'the chosen chapters have no text to read');
     store.del('spine:exportRoom');   // (finished: the extra room in the saved audio isn't needed now)
   } finally {
-    clipStore.extraMB = 0;
+    clipStore.extraMB = 0; clipStore.trim();   // (L-305)
     if (freshTarget && !ab.files.length) await target.remove?.().catch(() => {});
   }
 }
@@ -6528,7 +6587,7 @@ async function abOpen(){
   // (The dialog opens at once; which formats this browser can make is filled in when the check is done.)
   abFormatCheck().then(() => { $('#abDialog').dataset.formats = 'checked'; if ($('#abDialog').open) abSummary(); });
   if (!ab.running && (!ab.units.length || ab.book !== book)) {
-    ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; delete $('#abList').dataset.measured;
+    ab.units = book.comic ? [] : abBuildUnits(); ab.book = book; ab.note = ''; ab.last = -1;   // (no shift-click range from another book: L-306) delete $('#abList').dataset.measured;
     $('#abDone').replaceChildren(); $('#abDone').hidden = true;
   }
   abFillList();
@@ -8478,7 +8537,7 @@ const SET_VARS = {   // name: [the value now, what to do once it changes ('reloa
   COMIC_PART: [() => COMIC_PART, null],
   SLEEP_TIMER: [() => SLEEP_TIMER, () => { $('#ttsSleep').hidden = !SLEEP_TIMER; if (!SLEEP_TIMER && sleep.mode !== 'off') setSleep('off'); }],
   LOOKAHEAD_SEC: [() => LOOKAHEAD_SEC, null],
-  SAVED_AUDIO_MB: [() => SAVED_AUDIO_MB, null],
+  SAVED_AUDIO_MB: [() => SAVED_AUDIO_MB, () => clipStore.trim()],   // (L-305)
   // (The voice models in use, and the names their saved speech is kept under, follow it.)
   FULL_PRECISION: [() => FULL_PRECISION, 'reload'],
   // (Used from the next place sent; an address new here is tried even if another wasn't there: E-22.)
@@ -8659,6 +8718,9 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
 (async () => {
   await loadConfig();
   loadUserSettings();
+  // (Saved speech over a limit lowered since the last visit, or any with a limit of 0: L-305. Only then, so a page
+  // load doesn't open the saved speech for nothing.)
+  { const was = store.get('spine:savedAudioMB'); if (was == null ? SAVED_AUDIO_MB === 0 : SAVED_AUDIO_MB < was) clipStore.trim(); store.set('spine:savedAudioMB', SAVED_AUDIO_MB); }
   $('#setBtn').disabled = false;   // (not before: the dialog compares with the site's values, known only now)
   $('#editPick').hidden = !EDITING;
   sweepPositions();

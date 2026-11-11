@@ -226,7 +226,7 @@ test('a voice server busy or away for a moment doesn\'t make passages read sente
   await h.clearBreezeLog();
   await h.openReader(page, LONG, serverVoice);
   await page.keyboard.press('r');
-  await h.waitFor(() => failed, 20000, 50);
+  assert.ok(await h.waitFor(() => failed, 20000, 50), 'the server was away once (round 25 review, T-46)');
   await page.waitForTimeout(1000);
   await h.clearBreezeLog();
   await page.keyboard.press('Escape'); await page.click('#ttsClose');
@@ -281,3 +281,21 @@ for (const mode of ['headers', 'mid']) {
   });
 }
 test.afterEach(() => h.clearBreezeLog());   // (a stall queued by a test that failed early mustn't stall the next one)
+
+// Round 25 review, loop 3 (T-46).
+test('the media keys play, pause, and go to the next and previous passage', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.__ms = {}; const set = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession); navigator.mediaSession.setActionHandler = (a, f) => { window.__ms[a] = f; try { set(a, f); } catch {} }; });
+  await h.openReader(page, LONG, serverVoice);
+  await startReading(page);
+  assert.deepEqual(await page.evaluate(() => ['play', 'pause', 'nexttrack', 'previoustrack'].map(a => typeof window.__ms[a])), ['function', 'function', 'function', 'function']);
+  await page.evaluate(() => window.__ms.pause());
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => navigator.mediaSession.playbackState), 'paused');
+  await page.evaluate(() => window.__ms.play());
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => navigator.mediaSession.playbackState), 'playing');
+  await h.clearBreezeLog();
+  await page.evaluate(() => window.__ms.nexttrack());
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).length, 15000), 'the next passage is asked for');
+});

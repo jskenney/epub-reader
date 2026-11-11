@@ -694,3 +694,21 @@ test('keepPart: an export that stops before any speech keeps no file; one that s
   const names = await p2.evaluate(() => Object.keys(window.__files));
   assert.ok(!names.some(n => /Chapter One/.test(n)), `the chapter it stopped in wasn't written: ${names}`);
 });
+
+// Round 25 review, loop 3.
+test('the export list\'s first shift-click in another book doesn\'t use the previous book\'s last click (round 25 review, L-306)', async () => {
+  const page = await h.newPage();
+  await openExport(page);
+  await page.click('#abList input >> nth=2');   // (the third, last clicked)
+  await page.click('#abCancel');
+  await page.click('#ttsClose');
+  await page.goto(`${h.READER}?book=books/long.epub`); await h.waitForBook(page);
+  await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
+  await page.click('#ttsExport');
+  await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured);
+  const before = await page.$$eval('#abList input', els => els.map(e => e.checked));
+  await page.click('#abList input >> nth=0', { modifiers: ['Shift'] });
+  const after = await page.$$eval('#abList input', els => els.map(e => e.checked));
+  assert.deepEqual(after, before.map((c, i) => i === 0 ? !c : c));
+  assert.deepEqual(page.errors, []);
+});

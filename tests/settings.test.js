@@ -488,3 +488,27 @@ test('Generate config shows every setting in use as a reader-config.json: the fo
   await page.click('#cfgDone');
   assert.equal(await page.evaluate(() => [document.querySelector('#cfgDialog').open, document.querySelector('#setDialog').open, document.activeElement.id]).then(x => x.join()), 'false,true,setGenerate');
 });
+
+// Round 25 review, loop 3.
+test('saved speech is cut down to a lowered limit at once, and all of it goes at 0, from Settings or a reload (round 25 review, L-305)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  const fill = () => page.evaluate(() => new Promise(res => {
+    const rq = indexedDB.open('spine-voice-audio', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('clips', { keyPath: 'key' }).createIndex('used', 'used');
+    rq.onsuccess = () => { const db = rq.result, tx = db.transaction('clips', 'readwrite'); for (let k = 0; k < 5; k++) tx.objectStore('clips').put({ key: 'k' + k, blob: new Blob([new Uint8Array(3 << 20)]), dur: 1, size: 3 << 20, used: Date.now() - k }); tx.oncomplete = () => { db.close(); res(); }; };
+  }));
+  const count = () => page.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-voice-audio', 1); rq.onsuccess = () => { const db = rq.result, c = db.transaction('clips').objectStore('clips').count(); c.onsuccess = () => { db.close(); res(c.result); }; }; }));
+  await fill();
+  assert.equal(await count(), 5);
+  await page.click('#setBtn');
+  await page.fill('#set-SAVED_AUDIO_MB', '7'); await page.press('#set-SAVED_AUDIO_MB', 'Tab');
+  assert.ok(await h.waitFor(async () => (await count()) === 2, 5000), 'two 3 MB clips fit in 7 MB');
+  await page.fill('#set-SAVED_AUDIO_MB', '0'); await page.press('#set-SAVED_AUDIO_MB', 'Tab');
+  assert.ok(await h.waitFor(async () => (await count()) === 0, 5000), '0 keeps none');
+  // A limit lowered since the last visit (here the reader's own, saved before the page was left): cut on the next load.
+  await page.evaluate(() => { localStorage.setItem('spine:set:SAVED_AUDIO_MB', '4'); localStorage.setItem('spine:savedAudioMB', '500'); });
+  await fill();
+  await page.reload(); await h.waitForBook(page);
+  assert.ok(await h.waitFor(async () => (await count()) === 1, 5000), 'one 3 MB clip fits in 4 MB');
+});

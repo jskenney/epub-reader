@@ -252,3 +252,12 @@ test('unwrapped text with blank lines keeps its two-line heading and its verse; 
   const n = Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
   assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('p').length) > 1 || n > 1);
 });
+
+test('text shapes: indented paragraphs keep their chapter headings; unwrapped text with some indented lines, or with scene breaks and short lines, is a paragraph per line (round 25 review, loop 3)', async () => {
+  const page = await h.newPage();
+  const shape = async name => { await h.openReader(page, `${h.READER}?book=books/${name}`); return h.inFrame(page, doc => ({ p: doc.querySelectorAll('p:not(.txt-lines)').length, lines: doc.querySelectorAll('.txt-lines').length })); };
+  assert.deepEqual(await shape('indent-heads.txt'), { p: 75, lines: 0 });
+  assert.deepEqual(await page.$$eval('#tocList a', as => as.map(a => a.textContent)), ['CHAPTER I', 'CHAPTER II', 'CHAPTER III', 'CHAPTER IV', 'CHAPTER V']);
+  assert.deepEqual(await shape('unwrapped-indent.txt'), { p: 100, lines: 0 });
+  assert.deepEqual(await shape('unwrapped-scenes.txt'), { p: 96, lines: 0 });
+});

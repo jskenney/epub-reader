@@ -758,6 +758,48 @@ def main():
     shutil.copytree(books / "abc", books / "abc-extra")
     opf_p = books / "abc-extra" / "OEBPS" / "content.opf"
     opf_p.write_text(opf_p.read_text().replace("</manifest>", '<item id="remote" href="https://example.com/clip.mp4" media-type="video/mp4"/><item id="gone" href="gone.png" media-type="image/png"/></manifest>'))
+    # Round 25 review, loop 3: text shapes the parting must keep: indented paragraphs with chapter headings set off
+    # by blank lines; unwrapped text with some lines indented; unwrapped text with scene breaks and short lines.
+    def wrap_lines(text, width=70, ind=""):
+        out, line = [], ind
+        for w in text.split():
+            if len(line) + len(w) + 1 > width and line.strip(): out.append(line); line = ""
+            line += (" " if line and line != ind else "") + w
+        out.append(line)
+        return out
+    sent = lambda: " ".join(rnd.choice(words) for _ in range(rnd.randint(6, 18))).capitalize() + "."
+    rows = []
+    for c in ["I", "II", "III", "IV", "V"]:
+        rows += ["", f"CHAPTER {c}", ""]
+        for _ in range(15): rows += wrap_lines(" ".join(sent() for _ in range(5)), 70, "    ")
+    (books / "indent-heads.txt").write_text("\n".join(rows) + "\n")
+    (books / "unwrapped-indent.txt").write_text("\n".join(("    " if i % 10 == 3 else "") + " ".join(sent() for _ in range(1 + i % 3)) for i in range(100)) + "\n")
+    rows = []
+    for s in range(8):
+        rows += ['"Yes," he said.' if p % 3 == 1 else " ".join(sent() for _ in range(3)) for p in range(12)] + [""]
+    (books / "unwrapped-scenes.txt").write_text("\n".join(rows))
+    # Round 25 review, loop 3: a picture declared text/html with a script in it (H-30); nested attr( in a book's CSS
+    # (M-129); an animation setting a link's address (L-303); an archive whose files share their data (L-304).
+    pic_html = png(4, 4, (200, 30, 30))
+    i_end = pic_html.rindex(b"IEND") - 4
+    chunk = b"tEXt" + b"c\x00<script>document.title='PWNED'</script>"
+    pic_html = pic_html[:i_end] + struct.pack(">I", len(chunk) - 4) + chunk + struct.pack(">I", zlib.crc32(chunk)) + pic_html[i_end:]
+    epub_items(books / "typed-pic.epub", "Typed Pic", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("p", "pic.png", "text/html", "")], ["c1"],
+               {"c1.xhtml": xhtml("Typed Pic", '<h1>Typed Pic</h1><p><img src="pic.png" alt="a picture"/></p>'), "pic.png": pic_html}, "urn:typed-pic")
+    nested = "attr(x " * 12000
+    epub_items(books / "attr-nest.epub", "Attr Nest", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("Attr Nest", "<h1>Attr Nest</h1><p>Still here.</p>", f"<style>h1 {{ color: {nested}{')' * 12000} }}</style><style>p {{ color: {nested} }}</style>")}, "urn:attr-nest")
+    epub_items(books / "set-href.epub", "Set Href", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("Set Href", f'<h1>Set Href</h1><svg xmlns="http://www.w3.org/2000/svg" width="200" height="40"><a target="_blank"><set attributeName="href" to="{REMOTE}/sneaky"/><text y="20">Click</text></a></svg>')}, "urn:set-href")
+    with zipfile.ZipFile(books / "overlap.epub", "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="a.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        z.writestr("a.opf", "x" * 100)
+        z.writestr("b.opf", "y" * 100)
+    data = bytearray((books / "overlap.epub").read_bytes())
+    cd = data.rindex(b"PK\x01\x02b.opf"[:4] + b"")  # (the last central entry: b.opf)
+    data[cd + 42:cd + 46] = data[data.rindex(b"PK\x01\x02", 0, cd) + 42:data.rindex(b"PK\x01\x02", 0, cd) + 46]   # (points at a.opf's data)
+    (books / "overlap.epub").write_bytes(bytes(data))
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
     (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
     (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')

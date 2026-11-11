@@ -279,7 +279,7 @@ test('stamp-version.py keeps the page\'s line endings; the pre-commit hook leave
 });
 
 test('the hook, scripts and page are checked out with LF line endings, whatever core.autocrlf says (round 25 review, M-121)', () => {
-  for (const f of ['.githooks/pre-commit', 'tools/stamp-version.py', 'fetch-libs.sh', 'index.html']) {
+  for (const f of ['.githooks/pre-commit', 'tools/stamp-version.py', 'fetch-libs.sh', 'index.html', 'checksums/libs.sha256', '.github/workflows/slow.yml']) {
     const r = spawnSync('git', ['-C', REPO, 'check-attr', 'eol', '--', f], { encoding: 'utf8' });
     assert.match(r.stdout, /eol: lf$/m, f);
   }

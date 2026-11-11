@@ -6,6 +6,8 @@
 
 # ^~: regular-expression locations elsewhere in the server (for example one for \.(js|css|html)$) don't take
 # over these files, which would drop the headers below.
+# A location with add_header of its own doesn't inherit the server's add_header lines (HSTS, say): repeat any
+# you send for the whole site in here too.
 location ^~ /reader/ {
     # Content-Security-Policy for the reader page (and, since the book frame inherits it, for book pages too):
     # code, styles, fonts and data only from this site, workers from blob: (the voices), WebAssembly allowed
@@ -34,6 +36,18 @@ location ^~ /reader/ {
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
     location ~* \.md$   { types { } default_type text/markdown; charset utf-8; charset_types text/markdown; }
 
+    # Book files opened on their own (a link straight to a chapter, an HTML book or an SVG picture) would run
+    # their scripts on the reader's origin, where its settings and saved data are: they're sent sandboxed, so
+    # they run nothing and have an origin of their own. The reader reads books with fetch, which this doesn't
+    # affect. Not index.html (the reader itself, and its copies in folders). This location's add_header lines
+    # replace the ones above, so those are repeated.
+    location ~* (?<!/index)\.(x?html?|xht|xml|svg)$ {
+        add_header Content-Security-Policy "sandbox" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy same-origin always;
+        add_header Cache-Control "no-cache" always;
+    }
+
     # Browsers keep every file but check it is still current each time (an unchanged file is a short 304 reply),
     # so a new index.html, config, library or model is used at once. (Keeping libraries for days without checking
     # would let an old copy meet a new index.html, whose integrity hash then refuses it.)
@@ -46,11 +60,15 @@ location ^~ /reader/ {
     # other clients would be affected; books, audio and models are left out of gzip_types anyway, since they
     # barely compress.
     gzip on;
+    gzip_vary on;   # (caches keep the compressed and plain copies apart)
     gzip_types text/css text/javascript application/javascript application/json application/wasm image/svg+xml text/markdown text/plain;
 }
 
-# Optional: books under /bookshelf/ (see BOOKSHELF in the README) with the same types.
+# Optional: books under /bookshelf/ (see BOOKSHELF in the README) with the same types, and their pages sandboxed
+# when opened on their own, as under /reader/.
 location ^~ /bookshelf/ {
+    add_header X-Content-Type-Options nosniff always;
+    location ~* \.(x?html?|xht|xml|svg)$ { add_header Content-Security-Policy "sandbox" always; add_header X-Content-Type-Options nosniff always; }
     location ~* \.(epub|cbz)$ { types { } default_type application/zip; }
     location ~* \.md$ { types { } default_type text/markdown; charset utf-8; charset_types text/markdown; }
 }

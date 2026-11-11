@@ -93,7 +93,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("ETag", self.file_validators[0])
             self.validators_sent = True
         if POLICY and not any(p and self.path.startswith(p) for p in args.csp_skip.split(",")):
-            self.send_header("Content-Security-Policy", POLICY)
+            # (Book files opened on their own are sandboxed, as nginx.conf.example sends them: round 25 review, M-130.)
+            book_page = re.search(r"(?<!/index)\.(x?html?|xht|xml|svg)$", self.path.split("?")[0], re.I)
+            self.send_header("Content-Security-Policy", "sandbox" if book_page else POLICY)
             self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
         if not self.path.startswith("/nocors/"):   # (E-24: a site that doesn't let other sites read its files)

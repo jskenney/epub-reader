@@ -313,7 +313,7 @@ place gone to this way isn't sent back to `/api/progress`. An answer to
 isn't sent either, until the page is reloaded.
 
 Your site should answer with JSON (anything, such as `{"ok": true}`, with a
-2xx status). An answer that isn't JSON (a missing address, an error, a web
+2xx status). An empty answer counts as no JSON: answer 200 with a body, not 204. An answer that isn't JSON (a missing address, an error, a web
 page such as a "not found" or sign-in page, or no connection) is taken to
 mean there's no API there: the reader stops sending to that address until
 the page is reloaded. So a site without one sees at most one request per
@@ -716,6 +716,13 @@ complete nginx setup for the reader at `/reader/`:
     works.
 - **The types the reader needs:** `.mjs` as `text/javascript` (with `nosniff`,
   a wrong type is refused) and `.wasm` as `application/wasm`.
+- **Book files sandboxed when opened on their own:** a link straight to a
+  chapter, an HTML book or an SVG file would otherwise run its scripts on your
+  site, where the reader's settings and saved data are. HTML, XHTML, XML and
+  SVG files (other than `index.html`) under `/reader/` and `/bookshelf/` are
+  sent with `Content-Security-Policy: sandbox`; the reader reads books with
+  `fetch`, which this doesn't affect. (Other servers: send the same header for
+  book files.)
 - **Caching that checks first** (`Cache-Control: no-cache`): browsers keep every
   file but ask whether it changed (an unchanged file is a short 304), so a new
   `index.html`, library or model is used at once. Long caching without checks
@@ -724,7 +731,9 @@ complete nginx setup for the reader at `/reader/`:
 - **`location ^~ /reader/`,** so regular-expression locations elsewhere in your
   server can't take over the reader's files (and drop these headers). Folders
   with their own link to `index.html` need the same block.
-- gzip for text and WebAssembly.
+- gzip for text and WebAssembly (with `gzip_vary`).
+- A location with `add_header` of its own drops the server's: repeat any you
+  send site-wide (HSTS, say) inside it.
 
 For Caddy, the same policy goes in a `header` directive:
 
@@ -849,7 +858,7 @@ temporary index.
 
 ```bash
 cd tests && npm install && npx playwright install chromium && cd ..   # once
-tests/run.sh                        # all tests (about eight minutes)
+tests/run.sh                        # all tests (about 50 minutes)
 tests/run.sh tests/urls.test.js     # one file
 SLOW=1 tests/run.sh                 # also load the real self-hosted Kokoro and Pocket TTS on the CPU
 NETWORK=1 tests/run.sh              # also load everything from the CDNs under the CDN version of the policy
@@ -857,11 +866,11 @@ NETWORK=1 tests/run.sh              # also load everything from the CDNs under t
 
 `run.sh` fetches the libraries and fonts if they're missing, builds a test
 site under `tests/site/` (books, documents, comics and a voice, made by
-`tests/build_fixtures.py`), and starts five local servers (`tests/server.py`):
-the site with a mock Breeze voice server, the same site answering missing files
-with 200 "not found" pages, one ignoring range requests, one sending the CDN
-version of the reader policy, and an "other site" that records any request a
-book makes to it. The browser is blocked from every other site, so the tests
+`tests/build_fixtures.py`), and starts six local servers (`tests/server.py`, ports
+8790 to 8795): the site with a mock Breeze voice server, the same site answering
+missing files with 200 "not found" pages, one ignoring range requests, one sending
+the CDN version of the reader policy, one with no reader policy at all (as any
+static server), and an "other site" that records any request a book makes to it. The browser is blocked from every other site, so the tests
 also check that nothing is fetched from elsewhere. They cover opening books and
 the `/bookshelf/` fallback, the default book (`default.epub`, `default.md`), per-folder configs, remote-content
 stripping and links, self-hosting and integrity checks, search, layouts,

@@ -90,7 +90,7 @@ test('an address that doesn\'t answer with JSON is taken to be no API until the 
     assert.equal(got.length, 1, `not tried again after ${reply.status} ${reply.type} ${JSON.stringify(reply.body)}`);
     await page.reload(); await h.waitForBook(page);
     await page.click('#nextBtn');
-    await h.waitFor(() => got.length === 2);
+    assert.ok(await h.waitFor(() => got.length === 2, 8000), 'tried again after a reload');
   }
 });
 
@@ -316,14 +316,14 @@ test('?edit= of an EPUB at its last page isn\'t reported finished, and opens the
   assert.match(await page.textContent('#editName'), /c2\.xhtml/);
 });
 
-test('reaching the end in two pages, where the last section fits on one spread, sends 100%, as the bar shows (round 25 review, L-298)', async () => {
+test('reaching the end in two pages, where the last section fits on one spread, sends 100% for the book, as the bar shows, and the section\'s start as its place (round 25 review, L-298 and loop 3)', async () => {
   const page = await apiPage();
   const got = await api(page);
   await h.openReader(page, LONG, { 'spine:layout': 'two' });
   await page.focus('#ribbon'); await page.keyboard.press('End');
   await h.waitFor(() => got.length >= 1);
   assert.equal(got.at(-1).body.book_percentage, 100);
-  assert.equal(got.at(-1).body.section_percentage, 100);
+  assert.equal(got.at(-1).body.section_percentage, 0, 'where another device should open it: the start, not the end');
   assert.equal(await page.textContent('#pct'), '100%');
 });
 
@@ -340,4 +340,16 @@ test('a book whose last chapter was edited keeps its finished mark through the l
   await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
   await page.waitForTimeout(1000);
   assert.equal(done.length, 1);
+});
+
+test('opening another book sends the last book\'s place not yet sent (round 25 review, T-46)', async () => {
+  const page = await apiPage();
+  const got = await api(page);
+  await h.openReader(page, LONG, { 'spine:layout': 'one' });
+  await page.click('#nextBtn'); await page.waitForTimeout(300);
+  assert.equal(got.length, 0);
+  await page.setInputFiles('#fileInput', `${__dirname}/site/reader/books/notes.md`);
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Notes');
+  assert.ok(await h.waitFor(() => got.length === 1, 3000), 'sent as the other book opened');
+  assert.equal(got[0].body.title, 'The Long Book');
 });

@@ -210,3 +210,51 @@ test('a cleaned SVG keeps its text in its own encoding, and loses its stylesheet
   await page.waitForTimeout(500);
   assert.deepEqual(await h.remoteLog(), []);
 });
+
+// Round 25 review, loop 3.
+test('a book\'s picture declared as HTML gets a blob of plain bytes, which can\'t run as a page; the picture still shows (round 25 review, H-30)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/typed-pic.epub`);
+  const r = await h.inFrame(page, async doc => { const img = doc.querySelector('img'); await img.decode().catch(() => {}); const res = await fetch(img.src); return { src: img.src, type: res.headers.get('content-type'), w: img.naturalWidth }; });
+  assert.match(r.src, /^blob:/);
+  assert.equal(r.type, 'application/octet-stream');
+  assert.ok(r.w > 0, 'the picture shows');
+  await page.goto(r.src).catch(() => {});
+  await page.waitForTimeout(300);
+  assert.notEqual(await page.title(), 'PWNED');
+});
+
+test('nested attr( in a book\'s CSS doesn\'t hang the page (round 25 review, M-129)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/attr-nest.epub`);
+  assert.ok(Date.now() - t0 < 6000, `opened in ${Date.now() - t0} ms`);
+  assert.match(await h.inFrame(page, doc => doc.body.innerText), /Still here/);
+});
+
+test('with remote content on, an animation setting a link\'s address is taken out, and a link without one keeps no target (round 25 review, L-303)', async () => {
+  const page = await h.newPage();
+  await h.clearRemoteLog();
+  await h.openReader(page, `${h.SITE}/folder-remote/index.html?book=/reader/books/set-href.epub`);
+  assert.deepEqual(await h.inFrame(page, doc => [doc.querySelectorAll('set').length, doc.querySelector('svg a').getAttribute('target')]), [0, null]);
+  await page.frameLocator('#page').locator('svg text').click();
+  await page.waitForTimeout(800);
+  assert.deepEqual((await h.remoteLog()).filter(r => /sneaky/.test(r.path || r)), []);
+});
+
+test('an archive whose files share their data isn\'t read (round 25 review, L-304)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/overlap.epub`);
+  assert.match(await h.notice(page), /overlap/);
+});
+
+test('book files opened on their own are sent sandboxed; the reader page isn\'t (round 25 review, M-130)', async () => {
+  for (const [path, policy] of [['/reader/books/after.html', 'sandbox'], ['/reader/books/doc.xhtml', 'sandbox'], ['/reader/index.html', null], ['/folder-cfg/index.html', null], ['/reader/books/notes.md', null]]) {
+    const r = await fetch(h.SITE + path);
+    const got = r.headers.get('content-security-policy');
+    if (policy) assert.equal(got, policy, path); else assert.notEqual(got, 'sandbox', path);
+  }
+  const conf = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'nginx.conf.example'), 'utf8');
+  assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|xml\|svg\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
+  assert.match(conf, /add_header Content-Security-Policy "sandbox" always;/);
+});

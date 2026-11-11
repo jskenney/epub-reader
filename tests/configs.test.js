@@ -91,6 +91,10 @@ test("the test server sends nginx.conf.example's types for the files whose types
   // (Every such block read: as many as there are location blocks setting a default_type.)
   assert.equal(blocks.length, active.split('\n').filter(l => /location\s+~\*/.test(l) && /default_type/.test(l)).length);
   const types = blocks.flatMap(m => m[1].split('|').map(ext => [ext.toLowerCase(), m[2].trim()]));
+  // (What the types must be, stated here: the server builds its table from the same file, so comparing the two alone
+  // would prove nothing: round 25 review, T-46.)
+  const want = { mjs: 'text/javascript', wasm: 'application/wasm', epub: 'application/zip', cbz: 'application/zip', md: 'text/markdown' };
+  assert.deepEqual(Object.fromEntries(types), want);
   const files = { mjs: '/reader/kokoro/ort/ort-wasm-simd-threaded.jsep.mjs', wasm: '/pocket-partial/pocket/ort/ort-wasm-simd-threaded.wasm',
     epub: '/reader/books/long.epub', cbz: '/reader/books/comic.cbz', md: '/reader/books/notes.md' };
   for (const [ext, type] of types) {

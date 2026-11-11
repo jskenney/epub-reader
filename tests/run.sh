@@ -8,7 +8,7 @@
 #   NETWORK=1 tests/run.sh          also check the CDN version of the reader policy (needs internet access)
 #
 # Needs Python 3, Node 20.10+, unzip, Playwright with Chromium, and for the export tests ffmpeg (cd tests && npm install && npx playwright install chromium).
-# Everything runs against local servers on ports 8790-8794; the browser is blocked from reaching other sites.
+# Everything runs against local servers on ports 8790-8795; the browser is blocked from reaching other sites.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
