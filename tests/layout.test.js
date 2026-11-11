@@ -395,11 +395,12 @@ test('a logo keeps the top bar two rows high on a phone; the title and authors c
 
 test('Read aloud from Text settings puts the focus on the read-aloud bar; closing the bar puts it on the page when the Read aloud button is hidden (round 26 review, L-355)', async () => {
   const page = await h.newPage({ viewport: { width: 1400, height: 800 } });
-  await h.openReader(page, `${h.SITE}/folder-notools/index.html?book=/reader/books/long.epub`);
+  await h.openReader(page, `${h.SITE}/folder-notools/index.html?book=/reader/books/long.epub`, { 'spine:ttsEngine': 'server' });   // (the test site's voice)
   await page.evaluate(() => document.querySelector('#setBtn').click());
   await page.click('#setText'); await page.click('#txtRead');
   assert.ok(await h.waitFor(() => page.isVisible('#tts'), 3000));
   assert.ok(await h.waitFor(() => page.evaluate(() => document.activeElement?.id === 'ttsPlay'), 3000), 'on Play');
+  assert.ok(await h.waitFor(() => h.spokenWord(page), 20000), 'reading, word by word (round 26 review, T-51)');
   await page.click('#ttsClose');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'page');
 });

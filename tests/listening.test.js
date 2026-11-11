@@ -320,3 +320,20 @@ test('sleep timer: paused, it keeps the time it had left, and counts on when rea
   assert.ok((await left()) < before - 30, 'counting again');
 });
 
+
+// T-47: what LOOKAHEAD_SEC changes, seen from outside. (NCACHE_SEC only acts after minutes of audio played.)
+test('LOOKAHEAD_SEC: 0 prepares nothing ahead of the passage being read; the default prepares the next ones while paused (round 25 review, T-47)', async () => {
+  const counts = [];
+  for (const ahead of [0, null]) {
+    const page = await h.newPage();
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, { ...serverVoice, ...(ahead === null ? {} : { 'spine:set:LOOKAHEAD_SEC': ahead }) });
+    await startReading(page);
+    await page.keyboard.press(' ');   // (paused: only preparing ahead asks for more)
+    await page.waitForTimeout(9000);
+    counts.push((await h.breezeLog()).filter(e => !e.stalled).length);
+    await page.close();
+  }
+  assert.equal(counts[0], 1, `with 0: ${counts[0]} passages asked for`);
+  assert.ok(counts[1] >= 2, `by default: ${counts[1]} passages asked for`);
+});
