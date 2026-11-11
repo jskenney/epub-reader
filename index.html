@@ -2603,6 +2603,7 @@ ${layout === 'two' ? `@media (min-width:641px){.cbz-page:nth-of-type(odd){justif
 ${layout === 'scroll' ? `.cbz-page{height:auto;break-after:auto;margin:0 auto 8px}
 .cbz-page img{max-height:none !important;max-width:min(100%,1100px) !important}` : ''}`;
 }
+const pinCss = css => `@layer spine-pins{\n${css}\n}`;
 function overrideCss(fx = null){
   const t = tokens(), dark = isDark();
   if (fx) return fixedCss(fx, t, dark);
@@ -2620,12 +2621,18 @@ body{padding:var(--v) var(--m) calc(var(--vb) + 30vh) !important;height:auto !im
 #${RID.flow}{height:auto;column-count:auto;transform:none !important;overflow-wrap:break-word}`
     : `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:100% !important;overflow:hidden !important}
 ${common}
-body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;overflow:hidden !important}
-#${RID.clip}{height:100%;overflow:hidden}
-#${RID.flow}{height:100%;column-count:${layout === 'two' ? 2 : 1};column-gap:var(--g);column-fill:auto;column-rule:1px solid ${t.rule};overflow-wrap:break-word;
+body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;overflow:hidden !important;
+  position:static !important;inset:auto !important;display:block !important;columns:auto !important;float:none !important}
+html{padding:0 !important;border:0 !important}
+html,body{translate:none !important;scale:none !important;rotate:none !important;content-visibility:visible !important;contain:none !important}
+#${RID.clip}{height:100% !important;max-height:none !important;min-height:0 !important;overflow:hidden !important}
+#${RID.flow}{height:100% !important;max-height:none !important;min-height:0 !important;column-count:${layout === 'two' ? 2 : 1} !important;column-width:auto !important;
+  column-gap:var(--g) !important;column-fill:auto !important;column-rule:1px solid ${t.rule};overflow-wrap:break-word;
   transform:translateX(var(--spine-x,0px)) !important}
-@media (max-width:640px){#${RID.flow}{column-count:1}}
-@supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px)}}`;
+#${RID.clip},#${RID.flow}{translate:none !important;scale:none !important;rotate:none !important;content-visibility:visible !important;contain:none !important;display:block !important}
+#${RID.flow} *{content-visibility:visible !important}
+@media (max-width:640px){#${RID.flow}{column-count:1 !important}}
+@supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px) !important}}`;
   // (Small vertical elements in a horizontal page keep it: a table's vertical headers, SVG text: round 25 review,
   // L-341.)
   // (Vertical text (writing-mode: vertical-rl, in Japanese and Chinese novels) set horizontally: the pages and
@@ -2922,7 +2929,12 @@ async function buildPage(src, path, item){
   }
   const head = out.head, budget = cssBudget(), linked = new Set();
   // (A fixed-layout page has the book's styles only: none of the reader's fonts, sizes or colours.)
-  head.innerHTML = `<meta charset="utf-8"><link id="${RID.font}" rel="stylesheet" href="${fx ? NO_CSS : fontHref()}"><style id="${RID.base}"></style>`;
+  // (The reader's rules again in a layer of their own, named before any of the book's: an important declaration in an
+  // earlier layer wins over a later layer's and over unlayered ones, so a book's "!important", in a layer of its own
+  // or not, can't undo the reader's (round 27 review, H-37). Its normal declarations lose to the unlayered copy
+  // below, which is the same, so nothing else changes.)
+  head.innerHTML = `<meta charset="utf-8"><style id="${RID.override}-pin"></style><link id="${RID.font}" rel="stylesheet" href="${fx ? NO_CSS : fontHref()}"><style id="${RID.base}"></style>`;
+  head.querySelector(`#${RID.override}-pin`).textContent = pinCss(overrideCss(fx));
   head.querySelector('#' + RID.base).textContent = fx ? '' : baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
     if (n.localName === 'link') {
@@ -3249,7 +3261,9 @@ function showPage(n){
   cur.pages = g.pages;
   cur.page = Math.max(0, Math.min(g.pages - 1, n));
   // (Through the reader's own !important rule, which a book's CSS can't outdo: M-149.)
-  g.flow.style.setProperty('--spine-x', `${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px`);
+  // (With priority: an inline important value beats a book's "--spine-x: … !important", layered or not: round 27
+  // review, H-36.)
+  g.flow.style.setProperty('--spine-x', `${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px`, 'important');
   cur.f = fraction();
   updateProgress(); savePos();
 }
@@ -3651,6 +3665,8 @@ function onFrameClick(e){
 // Going to another document or book, by a link or by Back and Forward: an export running or unsaved changes are
 // asked about first (round 25 review, M-145).
 const leaveOk = () => (!ab.running || confirm('An audiobook of this book is being made. Stop it and open the other book?')) && editLeaveOk();
+// (The same questions, with what they let go done only once the other book has opened: M-154.)
+const leaveAsk = () => (!ab.running || confirm('An audiobook of this book is being made. Stop it and open the other book?')) ? editLeaveAsk() : null;
 // The place linked to in a document: the part holding that id.
 function docFrag(frag){
   if (!frag || !book?.doc) return;
@@ -3659,10 +3675,11 @@ function docFrag(frag){
 // A document's link to another document or book beside it: opened only once it is found (a missing one leaves
 // this one open, with a notice: M-144), and then added to the history, so Back returns here (M-145).
 async function openLinkedDoc(u, frag){
-  if (!leaveOk()) return;
+  const go = leaveAsk(); if (!go) return;
   const same = u.origin === location.origin, ref = same ? u.pathname : u.href;
   const ok = await (same ? openFromUrl(ref, { keep: true }) : openByAddress(ref, { keep: true }));
   if (!ok) return;
+  go();
   history.pushState(null, '', `?${same ? 'book' : 'get'}=${encodeURIComponent(ref)}`);
   shownAddress = location.href;
   docFrag(frag);
@@ -3673,8 +3690,9 @@ window.addEventListener('popstate', async () => {
   if (location.href === shownAddress) return;
   if (!leaveOk()) { history.pushState(null, '', shownAddress); return; }
   shownAddress = location.href;
-  const q = new URLSearchParams(location.search), ref = q.get('book'), getRef = q.get('get');
-  await (getRef ? openByAddress(getRef) : ref ? openFromUrl(ref) : openDefault());
+  const q = new URLSearchParams(location.search), ref = q.get('book'), getRef = q.get('get'), editRef = q.get('edit');
+  // (As the page starts: an ?edit= entry opens its document for editing: round 27 review, M-153.)
+  await (editRef ? openForEdit(editRef) : getRef ? openByAddress(getRef) : ref ? openFromUrl(ref) : openDefault());
 });
 function goTo(path, frag = '', href = ''){
   let idx = book.spine.findIndex(s => s.path === path);
@@ -3705,7 +3723,7 @@ function restyleFrame(){
   const b = doc.getElementById(RID.base), o = doc.getElementById(RID.override);
   const fixed = !!fxlOf(doc);
   if (b) b.textContent = fixed ? '' : baseCss();
-  if (o) { const fx = fxlOf(doc); o.textContent = overrideCss(fx && { w: fx[0], h: fx[1] }); }
+  if (o) { const fx = fxlOf(doc), css = overrideCss(fx && { w: fx[0], h: fx[1] }); o.textContent = css; const pin = doc.getElementById(RID.override + '-pin'); if (pin) pin.textContent = pinCss(css); }
   const l = doc.getElementById(RID.font), h = fontHref();
   if (l && !fixed && l.getAttribute('href') !== h) {
     l.addEventListener('load', () => (doc.fonts?.ready || Promise.resolve()).then(relayout), { once: true });
@@ -8215,23 +8233,30 @@ function editQuit(){
   if (book) document.title = book.title;
 }
 // Before opening another book: unsaved changes are let go only if the reader agrees.
-function editLeaveOk(){
-  if (ed.on && editWaitSave()) return false;
+// Leaving this book: asked about what would be lost (null: called off), and what letting it go takes, done by the
+// function returned: at once, or only once the other book has opened (a document's link to one that isn't there
+// leaves this one, with its changes still kept: round 27 review, M-154).
+function editLeaveAsk(){
+  if (ed.on && editWaitSave()) return null;
   if (ed.on) editFlush();
+  const acts = [];
   // (A document left with changes by Done, not saved: asked about too.)
   if (!ed.on && book?.doc?.unsaved) {
-    if (!confirm(`${book.doc.name} has unsaved changes. Open the other book and lose them?`)) return false;
-    draftDel(docDraftKey(book.doc)); book.doc.unsaved = false;
+    if (!confirm(`${book.doc.name} has unsaved changes. Open the other book and lose them?`)) return null;
+    const doc = book.doc, key = docDraftKey(doc);
+    acts.push(() => { draftDel(key); doc.unsaved = false; });
   }
   // (An EPUB with chapters edited and not saved, this one or others: asked about once: E-23.)
   const waiting = [...(book?.unsaved || [])].filter(p => !(ed.on && ed.epub?.path === p)), count = waiting.length + (editDirty() && ed.epub ? 1 : 0);
-  if (count && !confirm(`${count} edited chapter${count > 1 ? 's' : ''} of this book ${count > 1 ? "aren't" : "isn't"} saved. Open the other book and lose ${count > 1 ? 'them' : 'it'}?`)) return false;
-  for (const p of waiting) draftDel(`epub:${book.key}:${p}`);
-  if (editDirty() && !ed.epub && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return false;
-  if (editDirty()) { clearTimeout(ed.draftTimer); draftDel(draftKey()); }
-  editQuit(); ed.epub = null;
-  return true;
+  if (count && !confirm(`${count} edited chapter${count > 1 ? 's' : ''} of this book ${count > 1 ? "aren't" : "isn't"} saved. Open the other book and lose ${count > 1 ? 'them' : 'it'}?`)) return null;
+  const bookKey = book?.key;
+  acts.push(() => { for (const p of waiting) draftDel(`epub:${bookKey}:${p}`); });
+  if (editDirty() && !ed.epub && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return null;
+  if (editDirty()) { const key = draftKey(); acts.push(() => { clearTimeout(ed.draftTimer); draftDel(key); }); }
+  acts.push(() => { editQuit(); ed.epub = null; });
+  return () => acts.forEach(f => f());
 }
+function editLeaveOk(){ const go = editLeaveAsk(); if (!go) return false; go(); return true; }
 const EDIT_NEW = {
   markdown: ['Untitled.md', '# Untitled\n\n'],
   html: ['Untitled.html', '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Untitled</title>\n</head>\n<body>\n<h1>Untitled</h1>\n<p></p>\n</body>\n</html>\n'],

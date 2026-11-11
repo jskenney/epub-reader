@@ -992,6 +992,16 @@ def main():
          "".join(f"<p>Opening paragraph {i} with some words to fill the page before the long link starts.</p>" for i in range(12))
          + '<p><a id="split" href="#target">' + " ".join(f"linkword{i}" for i in range(1500)) + "</a></p>"
          + "".join(f"<p>After {i}.</p>" for i in range(40)) + '<h2 id="target">Target</h2><p>Arrived.</p>', "")], uid="urn:split-link")
+    # Book CSS aimed at the reader's paging (round 27 review, H-36, H-37, M-155): each must page as the plain one does.
+    hp = "".join(f"<p id='hp{i}'>Paragraph {i}: " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + ".</p>" for i in range(240))
+    hostile = {"plain": "", "varx": "div{--spine-x:0px !important}", "layer": "@layer x{div{transform:none !important}}",
+               "layer2": "@layer x{body{padding:0 !important;height:auto !important;overflow:visible !important}html{overflow:auto !important;height:auto !important}div{column-count:auto !important;height:auto !important}}",
+               "height": "div{height:auto !important}", "htmlpad": "html{padding-top:300px !important}",
+               "bodypos": "body{position:relative !important;top:-250px !important}", "translate": "div{translate:-200px 0 !important}",
+               "bscale": "body{scale:0.3}", "bcols": "body{column-count:2 !important}",
+               "grid": "body{display:grid !important;grid-template-columns:1fr 300px !important}", "cv": "p{content-visibility:auto}"}
+    for k, c in hostile.items():
+        epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
     # A chapter of 20 MB of markup in a book of a few tens of KB (round 26 review, H-35).
     epub(books / "huge-chapter.epub", "Huge Chapter", [("c1.xhtml", "One", "<p>Start here.</p>", ""),
          ("c2.xhtml", "Two", "<p>The same line again and again.</p>" * (20 * 1024 * 1024 // 36), "")], uid="urn:huge-chapter")

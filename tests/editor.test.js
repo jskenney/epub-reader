@@ -941,3 +941,33 @@ test('a file mostly LF with some CRLF lines: an edit undone leaves it unchanged 
   await typeAtEnd(page, 'x'); await page.keyboard.press('Backspace'); await page.waitForTimeout(300);
   assert.doesNotMatch(await page.textContent('#editName'), /unsaved/);
 });
+
+test('Back to an ?edit= entry opens that document again, not the default book (round 27 review, M-153)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?edit=books/linkdoc/a.html`, RAW);
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'), null, { timeout: 15000 });
+  await page.click('#editDone');
+  await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
+  await page.frameLocator('#page').locator('#tob').click();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B' && /linkdoc%2Fb\.html/.test(location.search));
+  await page.goBack();
+  await page.waitForFunction(() => /edit=/.test(location.search));
+  assert.ok(await h.waitFor(async () => (await page.textContent('#bookTitle')) === 'Doc A', 10000), await page.textContent('#bookTitle'));
+});
+
+test('unsaved changes and a link to a missing document: the changes stay kept, and the next link asks again (round 27 review, M-154)', async () => {
+  const page = await h.newPage();
+  const asked = [];
+  page.on('dialog', d => { asked.push(d.message()); d.accept(); });
+  await h.openReader(page, `${h.READER}?edit=books/linkdoc/e.html`, RAW);
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'), null, { timeout: 15000 });
+  await typeAtEnd(page, '<p>Changed.</p>');
+  await page.click('#editDone');
+  await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
+  await page.frameLocator('#page').locator('#miss').click();
+  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /missing\.html/);
+  assert.equal(asked.length, 1);
+  assert.equal(await page.textContent('#bookTitle'), 'Doc E');
+  await page.frameLocator('#page').locator('#up').click();
+  assert.ok(await h.waitFor(() => asked.length === 2, 3000), 'asked again before leaving the changes');
+});

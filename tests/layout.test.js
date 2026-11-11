@@ -404,3 +404,19 @@ test('Read aloud from Text settings puts the focus on the read-aloud bar; closin
   await page.click('#ttsClose');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'page');
 });
+
+test('book CSS aimed at the reader\'s paging (--spine-x, @layer, the flow\'s height, html padding, body position, columns or grid, translate and scale, content-visibility) pages as a plain book does (round 27 review, H-36, H-37, M-155)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  const count = async () => Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+  await h.openReader(page, `${h.READER}?book=books/hostile-plain.epub`, { 'spine:layout': 'one' });
+  const n = await count();
+  for (const k of ['varx', 'layer', 'layer2', 'height', 'htmlpad', 'bodypos', 'translate', 'bscale', 'bcols', 'grid', 'cv']) {
+    await h.openReader(page, `${h.READER}?book=books/hostile-${k}.epub`, { 'spine:layout': 'one' });
+    assert.equal(await count(), n, `${k}: the page count`);
+    for (let i = 1; i < n; i++) await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(150);
+    assert.match(await page.textContent('#spinePos'), new RegExp(`page ${n}/${n}`), k);
+    assert.ok(await overhang(page) < 1.5, `${k}: text ${await overhang(page)}px past an edge`);
+    assert.equal(await h.inFrame(page, doc => { const r = doc.getElementById('hp239').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth && r.top >= 0 && r.bottom <= doc.defaultView.innerHeight + 1; }), true, `${k}: the last paragraph on the last page`);
+  }
+});
