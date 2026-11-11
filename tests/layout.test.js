@@ -379,3 +379,27 @@ test('the place saved is exact enough to come back to the same page in a section
   // (Exact to well under half a page of a 5000-page section.)
   assert.ok(Math.abs(f - (p - 1) / (n - 1)) < 1e-4, `f ${f}, page ${p} of ${n}`);
 });
+
+test('a logo keeps the top bar two rows high on a phone; the title and authors can be read in full (their title); NAVBAR_LINK written without https:// is taken as the web address (round 26 review, L-351, L-352, L-353)', async () => {
+  const page = await h.newPage({ viewport: { width: 400, height: 800 } });
+  const barH = () => page.evaluate(() => document.querySelector('.bar').getBoundingClientRect().height);
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  const plain = await barH();
+  assert.equal(await page.getAttribute('#bookTitle', 'title'), 'The Long Book');
+  assert.equal(await page.getAttribute('#bookAuthor', 'title'), 'Test Author');
+  await h.openReader(page, `${h.SITE}/folder-brand3/index.html?book=/reader/books/long.epub`);
+  await page.waitForFunction(() => document.querySelector('#navLogo img')?.complete);
+  assert.ok(await barH() <= plain + 2, `${await barH()} with the logo, ${plain} without`);
+  assert.equal(await page.getAttribute('#navLogo a', 'href'), 'https://www.example.com/home');
+});
+
+test('Read aloud from Text settings puts the focus on the read-aloud bar; closing the bar puts it on the page when the Read aloud button is hidden (round 26 review, L-355)', async () => {
+  const page = await h.newPage({ viewport: { width: 1400, height: 800 } });
+  await h.openReader(page, `${h.SITE}/folder-notools/index.html?book=/reader/books/long.epub`);
+  await page.evaluate(() => document.querySelector('#setBtn').click());
+  await page.click('#setText'); await page.click('#txtRead');
+  assert.ok(await h.waitFor(() => page.isVisible('#tts'), 3000));
+  assert.ok(await h.waitFor(() => page.evaluate(() => document.activeElement?.id === 'ttsPlay'), 3000), 'on Play');
+  await page.click('#ttsClose');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'page');
+});
