@@ -73,14 +73,18 @@ test('a folder\'s reader-config.json turns them off, or locks one; a narrow scre
   assert.equal(await saved(page, 'SHOW_CONTENTS'), null, 'on a narrow screen C only opens them');
 });
 
-test('with the top bar hidden, its corner button sits in a strip of its own above the page, covering none of it (round 25 review, L-289)', async () => {
+test('with the top bar hidden, the page goes up to the top, and its corner button covers none of the text (round 25 review, L-289)', async () => {
   for (const viewport of [{ width: 1280, height: 800 }, { width: 400, height: 760 }]) {
     const page = await h.newPage({ viewport });
     await h.openReader(page, `${h.READER}?book=books/long.epub`);
     await page.keyboard.press('n'); await page.waitForTimeout(300);
-    const r = await page.evaluate(() => { const c = document.querySelector('#barCorner').getBoundingClientRect(), p = document.querySelector('#stage').getBoundingClientRect(); return { cb: c.bottom, cl: c.left, pt: p.top, pr: p.right }; });
-    assert.ok(r.cb <= r.pt, `corner bottom ${r.cb}, page top ${r.pt} (${viewport.width})`);
-    assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id, [viewport.width - 30, Math.round(r.pt + 10)]), 'page');
+    const r = await page.evaluate(() => {
+      const c = document.querySelector('#barCorner').getBoundingClientRect(), f = document.querySelector('#page'), fr = f.getBoundingClientRect();
+      const first = f.contentDocument.querySelector('h1, p').getBoundingClientRect();
+      return { cb: c.bottom, stage: document.querySelector('#stage').getBoundingClientRect().top, text: fr.top + first.top };
+    });
+    assert.ok(r.stage <= 20, `the page starts at ${r.stage} (${viewport.width})`);
+    assert.ok(r.cb <= r.text, `corner bottom ${r.cb}, text top ${r.text} (${viewport.width})`);
     await page.click('#barCorner');
     assert.equal(await page.isVisible('#tocBtn'), true);
   }

@@ -588,7 +588,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-286 | A huge paragraph or block of short lines was never split into sections | `dc862b1` |
 | L-287 | SVG files used as resource documents were served uncleaned (the book policy stopped their loads) | `dc862b1` |
 | L-288 | Names and ids hiding the page's own methods (`getElementById`) stopped a chapter showing | `dc862b1` |
-| L-289 | The hidden top bar's corner button covered part of the page | `dc862b1` |
+| L-289 | The hidden top bar's corner button covered part of the page | `dc862b1`; reworked after you saw the page pushed down: the button now sits in the page's own top margin and padding, with no strip of its own |
 | T-43 | No workflow runs the suite on push | Left as it is, by your decision (Actions time) |
 | T-44 | Tests for round 25's cases (progress with `?get=` and `?edit=`, leaving mid-send, text files, SVG resources) | `b61ae9f` to `dc862b1` |
 | D-20 | README corrections (requests per address, finished on opening at the end, `?edit=` of an EPUB, the Settings list, pinned libraries) | `b61ae9f`, `dc862b1` |
