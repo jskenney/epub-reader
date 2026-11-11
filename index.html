@@ -647,7 +647,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2213</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2216</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1747,6 +1747,11 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
   }
   const language = langCode(meta.language);
   const title = meta.title || doc.querySelector('h1, h2')?.textContent.replace(/\s+/g, ' ').trim() || name.replace(DOC_EXT, '') || 'Untitled';
+  // The document's direction, on html or body or a wrapper around all of it, carried to every part (the parts are
+  // made of what is inside them: round 25 review, M-148).
+  const kids = [...doc.body.children], wrap = kids.length === 1 && ![...doc.body.childNodes].some(n => n.nodeType === 3 && n.data.trim()) ? kids[0] : null;
+  const dirOf = el => (el?.getAttribute('dir') || '').trim().toLowerCase();
+  const dir = [doc.documentElement, doc.body, wrap].map(dirOf).find(d => ['rtl', 'ltr', 'auto'].includes(d)) || '';
 
   const parts = splitDocument(doc, whole ? { maxLen: Infinity } : {});
   const path = i => `part-${String(i + 1).padStart(3, '0')}.html`;
@@ -1780,7 +1785,7 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
   parts.forEach((part, i) => {
     // (Comments too: the editor writes them back, and stands some of its own in for what it puts aside: E-21.)
     const body = part.map(nd => nd.nodeType === 1 ? nd.outerHTML : nd.nodeType === 3 ? escHtml(nd.textContent) : nd.nodeType === 8 ? `<!--${nd.data}-->` : '').join('');
-    files.set(path(i), `<!DOCTYPE html><html${language ? ` lang="${escHtml(language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(title)}</title>${headExtra}</head><body>${body}</body></html>`);
+    files.set(path(i), `<!DOCTYPE html><html${language ? ` lang="${escHtml(language)}"` : ''}${dir ? ` dir="${dir}"` : ''}><head><meta charset="utf-8"><title>${escHtml(title)}</title>${headExtra}</head><body>${body}</body></html>`);
     for (const nd of part) {
       if (nd.nodeType !== 1) continue;
       for (const h of [nd, ...nd.querySelectorAll('h1, h2, h3')].filter(h => /^h[1-3]$/i.test(h.localName))) {
@@ -3565,7 +3570,11 @@ function wirePageInput(doc){
   doc.addEventListener('focusin', e => {
     if (scrolling() || doc !== frame.contentDocument || !e.target?.getBoundingClientRect) return;
     const g = geom(); if (!g) return;
-    const p = Math.max(0, Math.min(g.pages - 1, g.pageAt(e.target.getBoundingClientRect())));
+    // (A link running onto the next page, clicked there: part of it is on this page, so the page stays, and the
+    // click lands: round 25 review, M-146.)
+    const rects = [...(e.target.getClientRects?.() || [])].filter(r => r.width || r.height);
+    if (rects.some(r => g.pageAt(r) === cur.page)) return;
+    const p = Math.max(0, Math.min(g.pages - 1, g.pageAt(rects[0] || e.target.getBoundingClientRect())));
     if (p !== cur.page) showPage(p);
   });
   doc.addEventListener('pointerdown', () => { if (narrow.matches && tocIsOpen()) setToc(false); });   // (L-79)
@@ -7629,9 +7638,11 @@ async function editMakeApi(host){
 function editTopHeading(){
   const d = frame.contentDocument, w = frame.contentWindow; if (!d || !w) return '';
   let id = '';
+  // (By page, not by the left edge: in a right-to-left book later pages are to the left: round 25 review, M-147.)
+  const g = scrolling() ? null : geom();
   for (const h of d.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]')) {
     const r = h.getBoundingClientRect();
-    if (scrolling() ? r.top < 60 : r.left < w.innerWidth - 1) id = h.id; else break;
+    if (scrolling() ? r.top < 60 : g ? g.pageAt(r) <= cur.page : r.left < w.innerWidth - 1) id = h.id; else break;
   }
   return id;
 }

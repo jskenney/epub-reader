@@ -317,3 +317,20 @@ test('a book\'s CSS on the reader\'s column flow (border, padding, width, zoom, 
     await page.close();
   }
 });
+
+test('a link running onto the next page, clicked there, is followed (the page doesn\'t turn back first: round 25 review, M-146)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/split-link.epub`, { 'spine:layout': 'one' });
+  // To a page holding a later part of the link, whose start is on a page before.
+  const where = () => h.inFrame(page, doc => {
+    const a = doc.getElementById('split'), w = doc.defaultView.innerWidth, rs = [...a.getClientRects()];
+    const shown = rs.find(r => r.left >= 0 && r.right <= w && r.width > 20);
+    return { startBefore: rs[0].right <= 0, shown: shown && { x: shown.left + shown.width / 2, y: shown.top + shown.height / 2 } };
+  });
+  let at = null;
+  for (let k = 0; k < 12 && !at; k++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(80); const w = await where(); if (w.startBefore && w.shown) at = w.shown; }
+  assert.ok(at, 'a page with the rest of the link');
+  const box = await page.locator('#page').boundingBox();
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('target').getBoundingClientRect(); return r.left >= 0 && r.right <= doc.defaultView.innerWidth; }), 5000), 'the link was followed');
+});

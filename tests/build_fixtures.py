@@ -872,6 +872,13 @@ def main():
         chap = f'<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ar"{html_dir}><head><title>t</title>{css}</head><body><h1>فصل</h1>' + "".join(f"<p id=\'p{i}\'>{i}. {ar}</p>" for i in range(60)) + "</body></html>"
         epub_items(books / f"{name}.epub", name, [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "c2"],
                    {"c1.xhtml": chap, "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Second.</p>")}, f"urn:{name}")
+    # Right-to-left documents: dir on html, and a Markdown file wrapped in a dir="rtl" block (round 25 review, M-148).
+    (books / "rtl-doc.html").write_text('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>RTL Doc</title></head><body><h1>عنوان</h1>' + "".join(f"<p>{i}. {ar}</p>" for i in range(30)) + "</body></html>", encoding="utf-8")
+    (books / "rtl-doc.md").write_text('<div dir="rtl">\n\n# عنوان\n\n' + "\n\n".join(f"{i}. {ar}" for i in range(30)) + "\n\n</div>\n", encoding="utf-8")
+    # Right to left with headings through the chapter, for the editor's place (round 25 review, M-147).
+    chap = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ar" dir="rtl"><head><title>t</title></head><body>' + "".join(
+        f"<h2 id='h{k}'>قسم {k}</h2>" + "".join(f"<p>{k}.{i}. {ar}</p>" for i in range(8)) for k in range(10)) + "</body></html>"
+    epub_items(books / "rtl-heads.epub", "rtl-heads", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"], {"c1.xhtml": chap}, "urn:rtl-heads")
     vert = "".join(f"<p>{i}。これは縦書きの文章です。" + "文章" * 40 + "</p>" for i in range(40))
     epub_items(books / "vertical.epub", "Vertical", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"],
                {"c1.xhtml": xhtml("Vertical", f"<h1>縦</h1>{vert}", "<style>html{writing-mode:vertical-rl}</style>", "ja")}, "urn:vertical")
@@ -965,6 +972,11 @@ def main():
     epub(books / "pages-long.epub", "Pages Long", [("c1.xhtml", "One", paras, "")], uid="urn:pages-long")
     epub(books / "pages-styled.epub", "Pages Styled", [("c1.xhtml", "One", paras,
          "<style>div{border:3px solid red;padding:0 1.5em;width:85%;transform:scale(.9) !important} html{zoom:.9} body{transform:scale(.95)}</style>")], uid="urn:pages-styled")
+    # A link long enough to run across pages, and its target at the end (round 25 review, M-146).
+    epub(books / "split-link.epub", "Split Link", [("c1.xhtml", "One",
+         "".join(f"<p>Opening paragraph {i} with some words to fill the page before the long link starts.</p>" for i in range(12))
+         + '<p><a id="split" href="#target">' + " ".join(f"linkword{i}" for i in range(1500)) + "</a></p>"
+         + "".join(f"<p>After {i}.</p>" for i in range(40)) + '<h2 id="target">Target</h2><p>Arrived.</p>', "")], uid="urn:split-link")
     # A chapter of 20 MB of markup in a book of a few tens of KB (round 26 review, H-35).
     epub(books / "huge-chapter.epub", "Huge Chapter", [("c1.xhtml", "One", "<p>Start here.</p>", ""),
          ("c2.xhtml", "Two", "<p>The same line again and again.</p>" * (20 * 1024 * 1024 // 36), "")], uid="urn:huge-chapter")

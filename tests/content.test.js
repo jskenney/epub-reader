@@ -377,3 +377,11 @@ test('after following a document\'s link, Back and Forward open the documents ag
   await page.goForward();
   await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B');
 });
+
+test('an HTML or Markdown document marked right to left (on html, or a wrapper around it all) reads right to left (round 25 review, M-148)', async () => {
+  const page = await h.newPage();
+  for (const name of ['rtl-doc.html', 'rtl-doc.md']) {
+    await h.openReader(page, `${h.READER}?book=books/${name}`);
+    assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.querySelector('[id^="spine-flow"]')).direction), 'rtl', name);
+  }
+});

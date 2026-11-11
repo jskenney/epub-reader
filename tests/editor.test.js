@@ -912,3 +912,19 @@ test('with the top bar hidden, its corner button covers neither the editor\'s bu
     assert.equal(await b.evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.right - 2, r.top + 1)); }), true);
   }
 });
+
+test('a right-to-left chapter: Edit, then Done, comes back to the heading of the page that was shown (round 25 review, M-147)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/rtl-heads.epub`, { 'spine:layout': 'one' });
+  const pos = async () => Number((await page.textContent('#spinePos')).match(/page (\d+)\//)[1]);
+  for (let k = 0; k < 6; k++) { await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(60); }
+  if (await pos() === 1) for (let k = 0; k < 6; k++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(60); }
+  const before = await pos();
+  assert.ok(before > 3, `page ${before}`);
+  await startEditing(page);
+  await page.click('#editDone');
+  await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
+  await page.waitForTimeout(500);
+  const after = await pos();
+  assert.ok(after > 1 && after <= before, `page ${after}, was ${before}`);
+});
