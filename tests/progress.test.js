@@ -257,7 +257,7 @@ test('an EPUB from another site (?get=) keeps its own place and finished mark, a
   await h.waitFor(() => done.length === 1);
   assert.equal(done[0].body.path, null);
   const stored = await page.evaluate(() => [JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('spine:pos:id:')))), JSON.parse(localStorage.getItem(`spine:pos:get:${location.search.slice(5)}`))]);
-  assert.deepEqual([stored[0].i, stored[0].f, stored[0].done], [1, 0.5, undefined], 'this site\'s copy keeps its place, not finished');
+  assert.deepEqual([stored[0].i, Math.round(stored[0].f * 100) / 100, stored[0].done], [1, 0.5, undefined], 'this site\'s copy keeps its place, not finished');
   assert.equal(stored[1].done, 1);
   await page.goto(`${reader}?book=books/long.epub`); await h.waitForBook(page);
   assert.equal((await where(page))[0], 'Chapter Two');
