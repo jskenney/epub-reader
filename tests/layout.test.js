@@ -177,3 +177,17 @@ test('CONTENTS_TITLE takes any text; a tall logo keeps within the bar; a link th
   assert.equal((await page.textContent('#tocBtn')).trim(), 'Contents');
   assert.equal(await page.isHidden('#navLogo'), true);
 });
+
+test('the contents show the book\'s title and authors only while the top bar is hidden (they are in the bar otherwise)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  assert.equal(await page.isVisible('#bookTitle'), true);
+  assert.equal(await page.isHidden('#metaTitle'), true);
+  assert.equal(await page.isHidden('#metaAuthors'), true);
+  await page.keyboard.press('n'); await page.waitForTimeout(200);
+  assert.equal(await page.isVisible('#metaTitle'), true);
+  assert.equal(await page.textContent('#metaTitle'), 'The Long Book');
+  assert.equal(await page.isVisible('#metaAuthors'), true);
+  await page.keyboard.press('n'); await page.waitForTimeout(200);
+  assert.equal(await page.isHidden('#metaTitle'), true);
+});
