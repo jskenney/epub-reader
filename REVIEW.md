@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-11, round 25): `index.html` (about 8,700 lines), the fetch scripts,
+Review of the repository (2026-11-11, round 26): `index.html` (about 9,200 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -378,10 +378,61 @@ the last of the six loops.
 - **Tests:** T-50. **Documentation:** D-27.
 
 
+### Round 26
+
+Round 26 is a full review of the repository at `6808bfe` by three independent reviewers, each on a copy of its own.
+It came after the features added since round 25:
+- three more reading fonts and `ADDITIONAL_FONTS`;
+- `CONTENTS_TITLE`, `NAVBAR_ICON` and `NAVBAR_LINK`;
+- the contents' title shown only while the top bar is hidden;
+- the `SHOW_*` switches for the top bar's controls, and the Text settings dialog;
+- the page-turn step taken from the text's exact width.
+
+The reviewers covered:
+1. Those features, and the settings and interface they touch.
+2. An adversarial pass on everything a book, document or address controls, plus the book pipeline and paged
+   layout, re-checking the open items.
+3. Read aloud, reading progress and positions, the editor, operations, the README and the tests.
+
+Each was given the code and the areas to cover, not the author's conclusions. The first two found the same paging
+problem as the third (M-149), and two found the same `fetch-fonts.sh` path problem (L-349); each is listed once.
+
+None found a way for a book or document to run script in the reader's page.
+
+**A link reaching another site (H-34).** A document's link written as `.///host/x.html` resolves to a
+protocol-relative address, and is opened as a linked document from that other site. This works even with external
+links off. It comes from M-141's links between documents.
+
+**A small book freezing the tab (H-35).** A 144 KB EPUB whose chapter inflates to 40 MB of markup freezes the tab
+for minutes, and a 1 MB one crashes it: no size limit applies to markup short of `MAX_ENTRY` (512 MB).
+
+**This session's page-turn fix, only partly right.**
+- It took the exact width but not the column gap, which Chromium snaps to 1/64 px, so the step still drifts over
+  hundreds of pages (M-150).
+- Its bounding-box width now counts a border, zoom or transform that a book's own CSS puts on the reader's column
+  flow. Padding there was already miscounted before (M-149).
+
+**Re-checked open items.** M-144 to M-148, L-340, L-342 and L-346 still reproduce. L-341, L-343 to L-345 and L-347
+are unchanged in the code. They stay open.
+
+**What held up.**
+- **Reader and site addresses:** `siteOrWeb`, the `SHOW_*` switches (hidden at every width and out of the Tab
+  order), the Text settings dialog's focus and keys, and `?book=`/`?get=` address checks.
+- **Containment:** `dirSource.url` stays inside the book's folder; the ZIP reader's limits and the position keys hold.
+- **Progress API:** its fields, flushing and guards.
+- **Ordinary books:** paging across resizes and reloads, left to right and right to left.
+- **Version tools:** the stamp script and the pre-commit hook.
+
+Findings:
+- **High:** H-34, H-35.
+- **Medium:** M-149 to M-152.
+- **Low:** L-348 to L-358.
+- **Tests:** T-51, T-52. **Documentation:** D-28 to D-31.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 391 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 401 tests pass (at `6808bfe`). Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -410,13 +461,37 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-The final review's findings, T-47 and E-29 are open (below), with the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in
-TODO.md). L-110 and T-43 are left as they are, by your decision (see Resolved).
+Round 26's findings are open (below), with what was left open after round 25 (M-144 to M-148, L-340 to L-347,
+T-50, D-27), T-47 and E-29, and the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110
+and T-43 are left as they are, by your decision (see Resolved).
 
 ## Open items
 
 | ID | Title | Kind |
 |---|---|---|
+| H-34 | A document's link such as `.///evil.example/x.html` (also `.\\host/…`, `a/..///host/…`) is marked internal, resolves to `//host/…`, and `goTo` opens it as a linked document from that other site, replacing the document with its page. This works even with `ALLOW_EXTERNAL_LINKS` off; it needs `GET_URLS` (default) and CORS from that site. Reproduced. | Security |
+| H-35 | No size limit for markup below `MAX_ENTRY` (512 MB): a 144 KB EPUB with a 40 MB chapter froze the tab for over 3 minutes, and a 1 MB one (300 MB chapter) crashed it. Reproduced. | Hardening |
+| M-149 | A book's CSS can restyle the reader's column flow and clip (padding, border, width, margin, zoom, transform; `transform: … !important` on the flow beats the page turn). The page step then misses the real column stride, and text runs further past the edges with each turn. Border, zoom and transform regressed with `6808bfe`; padding and width were wrong before. Reproduced. | Bug |
+| M-150 | The page step still drifts: the column gap `max(32px,4vw)` is fractional on frames wider than 800px and laid out snapped to 1/64 px. In one column at 1280px, the text is 4px past the left edge after about 280 turns, and search hits, read-aloud following, Tab to a link and fragment links land one page early (`pageAt` floors). Two columns drift the other way. Reproduced. | Bug |
+| M-151 | Two elements have `id="tocHead"`: the new sidebar title block hides the "Contents" heading while the top bar shows, and names the contents navigation (`aria-labelledby`) with the book's title and description. Reproduced. | Accessibility |
+| M-152 | With the top bar hidden, the invisible top-right corner button covers the editor's Save as… button: clicking it shows the bar instead (and saves that choice). It also covers the top of a notice's button, and that corner of scroll, comic and fixed-layout pages. Reproduced. | Bug |
+| L-348 | A font added in Settings' `ADDITIONAL_FONTS`, on a site that self-hosts fonts, is blocked in the open chapter (its frame policy was set without Google) until the next chapter is built; a one-part document never gets it. Reproduced. | Bug |
+| L-349 | `fetch-fonts.sh --config` with a relative path fails when run from another folder (the script changes folder before reading its options). Reproduced. | Bug |
+| L-350 | A config list of fonts in which a family name starts with a digit (`"42dot Sans"`) drops every extra font: the list is stored joined with commas and parsed again, and the digit is taken as the previous font's styles. Reproduced. | Bug |
+| L-351 | A `NAVBAR_ICON` logo makes the top bar three rows tall on phones (≤520px: `.book-id` keeps a fixed basis). Reproduced. | Layout |
+| L-352 | While the top bar shows, a long title or author list is cut off with no way to read it in full (no `title`, not in Information). Read. | Accessibility |
+| L-353 | `NAVBAR_LINK` without a scheme (`www.example.com`) becomes a link inside the reader's folder, with no warning. Read. | Bug |
+| L-354 | A book's CSS can hide or move the end-of-chapter marker (`display:none !important`, or far off with `position:absolute`), making a chapter one page or thousands of empty ones. Reproduced. | Hardening |
+| L-355 | With `SHOW_READ_ALOUD` false, Read aloud from Text settings leaves focus on the page body, and the read-aloud bar's × sends focus to the hidden button. Reproduced. | Accessibility |
+| L-356 | `fetch-fonts.sh` reads `ADDITIONAL_FONTS` differently from the reader: it fetches fonts already in the menu (Lexend), keeps only the first style spec when two configs name one family, and one misspelt family stops the whole run (`curl -f` under `set -e`). Read, `--list`. | Bug |
+| L-357 | Editor, a file mostly LF with some CRLF lines: undo leaves it marked changed, and saving rewrites the untouched CRLF lines as LF. Read. | Bug |
+| L-358 | A saved place can come back a page off in a section of over about 1000 pages (`f` is saved to 0.001). Read (arithmetic). | Bug |
+| T-51 | No tests of: one-column or Full-width drift over hundreds of pages, a search hit or fragment deep in a chapter, book CSS on the flow (padding, border, width), the Contents heading and navigation name, the corner covering no control, L-348 to L-350, `fetch-fonts.sh --config` from another folder, and Text settings → Read aloud actually playing and where focus goes. | Tests |
+| T-52 | Two tests fail outside a full checkout: the nginx types test needs `kokoro/` (435 MB, fetched separately) and the M-121 line-endings test needs `.git`. They should use a fixture or skip. | Tests |
+| D-28 | README on `fetch-fonts.sh`: still says it reads only `index.html` and has no `--list` (it reads `reader-config.json` and `--config` files, and has `--list`); upgrading should say to rerun it after changing `ADDITIONAL_FONTS`; the `ADDITIONAL_FONTS` examples use Lexend, now built in. | Docs |
+| D-29 | README's `SHOW_*` row says each control's keyboard shortcut still works: only Read aloud (R), theme (T), layout (L) and full screen (F) have one. | Docs |
+| D-30 | README's `SPAN_MAX` row doesn't give its config form (`{"kokoro":350,"pocket":600,"server":600}`) or say values outside 21–5000 are dropped. | Docs |
+| D-31 | README's Caddy example exempts only `/reader/index.html` from the sandbox, with no note (as the nginx section has) that a folder's own copy of `index.html` needs exempting too. | Docs |
 | M-144 | A document's link to a missing file, or up a folder (`../other/b.html`, resolved inside its own folder), replaces the document with the default book, and the address keeps the missing name | Bug |
 | M-145 | Following a document's link: Back and Forward change only the address (no `popstate`); unsaved changes and a running export aren't asked about | Bug |
 | M-146 | The focus handler (M-142) turns back a page when a link running onto the next page is clicked there, and the click is lost | Bug |
@@ -476,8 +551,11 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. E-25, E-22, as laid out in TODO.md.
-2. The other enhancements, as wanted.
+1. H-34 and H-35 (a document's link reaching another site; a small book freezing the tab).
+2. M-149 and M-150 together (pin the reader's column flow against book CSS, and step by the real column stride), then M-151 and M-152.
+3. The open lows, tests and docs from rounds 25 and 26.
+4. E-25, E-22, as laid out in TODO.md.
+5. The other enhancements, as wanted.
 
 ## Resolved
 
