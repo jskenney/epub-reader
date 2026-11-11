@@ -288,12 +288,16 @@ and on leaving the page; the first time the end is reached, `API_COMPLETE` (defa
 Each update says which book (identifier, fingerprint, path, address, kind, file name, size, title) and where
 (section, section_percentage and book_percentage, 0 to 100). An address that doesn't answer with JSON is taken to
 be no API until the page is reloaded. book_percentage counts each section by its size where that's known, and the
-progress bar now shows the same number. Signing in and the rest of E-22 are still to come.
+progress bar now shows the same number. Then `API_START` (default `/api/position`): asked as such a book opens,
+with the same fields but no place; the site answers with section, section_percentage and book_percentage (all
+null for a book it doesn't know), and the book goes there unless the reader has already moved. An answer that
+isn't JSON means the site keeps no places, so progress isn't sent either. Signing in and the rest of E-22 are
+still to come.
 
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 329 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 333 tests pass. Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -864,7 +868,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | E-5 | More themes: Sepia and Black (for OLED screens) as well as Light, Dark and System | `21c0be9` to `fd47b98` |
 | E-11 | A settings panel: a Settings dialog for the theme and the reader options that were only in `index.html` or `reader-config.json` | `21c0be9` to `fd47b98` |
 | E-23 | Editing an EPUB's existing chapters with the editor; the book saved re-packed (mimetype first and stored, `dcterms:modified` updated; over its file where the browser allows it) or the chapter downloaded alone; XHTML kept well-formed | `d4922f4` |
-| E-22 (progress) | Reading progress and finishing a book sent to the site (`API_PROGRESS`, `API_COMPLETE`), for books opened from a web address; an address that doesn't answer with JSON is left alone until the page is reloaded; book_percentage (and the progress bar) counts sections by their size | this update |
+| E-22 (progress) | Reading progress and finishing a book sent to the site (`API_PROGRESS`, `API_COMPLETE`), and the place asked for as a book opens (`API_START`), for books opened from a web address; an address that doesn't answer with JSON is left alone until the page is reloaded; book_percentage (and the progress bar) counts sections by their size | this update |
 | E-28 | Settings shows the version (one patch above the latest release, stamped by `tools/stamp-version.py`, with a GitHub link), and Generate config gives every setting in use as a `reader-config.json`, to copy or download | this update |
 | E-27 | Discard in the editor (the changes since the last save thrown away, after asking; for an EPUB, this chapter's); Done keeps a document's changes, unsaved, shown in the reading view and asked about before another book | this update |
 | E-26 | The contents (C), the bottom bar (P) and the top bar (N) as settings, in Settings and `reader-config.json` (`SHOW_CONTENTS`, `SHOW_PROGRESS`, `SHOW_TOPBAR`), the keys remembered; a tap at the top right corner brings a hidden top bar back | this update |

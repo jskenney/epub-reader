@@ -16,15 +16,22 @@ async function api(page, path = '**/api/progress', reply = { status: 200, type: 
   const got = [];
   await page.route(path, route => {
     const r = route.request();
-    got.push({ method: r.method(), body: JSON.parse(r.postData() || 'null'), type: r.headers()['content-type'] });
+    got.push({ url: r.url(), method: r.method(), body: JSON.parse(r.postData() || 'null'), type: r.headers()['content-type'] });
     return route.fulfill({ status: reply.status, contentType: reply.type, body: reply.body });
   });
   return got;
 }
+// A page whose site knows no places (API_START answers nulls, as for a book it doesn't know); a test's own route
+// for /api/position, added later, is used instead.
+async function apiPage() {
+  const page = await h.newPage();
+  await api(page, '**/api/position', { status: 200, type: 'application/json', body: '{"section":null,"section_percentage":null,"book_percentage":null}' });
+  return page;
+}
 const turn = (page, n = 1) => (async () => { for (let k = 0; k < n; k++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(80); } })();
 
 test('turning pages sends where the reader is, once they stop, with what identifies the book; opening sends nothing (E-22)', async () => {
-  const page = await h.newPage();
+  const page = await apiPage();
   const got = await api(page);
   await h.openReader(page, LONG, { 'spine:layout': 'one' });
   await page.waitForTimeout(2600);
@@ -46,7 +53,7 @@ test('turning pages sends where the reader is, once they stop, with what identif
 });
 
 test('scrolling sends once the page has moved a screen or more from the last place sent (E-22)', async () => {
-  const page = await h.newPage();
+  const page = await apiPage();
   const got = await api(page);
   await h.openReader(page, LONG, { 'spine:layout': 'scroll' });
   const scrollBy = y => h.inFrame(page, (doc, y) => { doc.scrollingElement.scrollTop += y; }, y);
@@ -60,7 +67,7 @@ test('scrolling sends once the page has moved a screen or more from the last pla
 });
 
 test('book_percentage counts each chapter by its size: the start of the last, short chapter is past two thirds; the bar shows the same (E-22)', async () => {
-  const page = await h.newPage();
+  const page = await apiPage();
   const got = await api(page);
   await h.openReader(page, LONG, { 'spine:layout': 'one' });
   await page.focus('#ribbon'); await page.keyboard.press('End');
@@ -73,7 +80,7 @@ test('book_percentage counts each chapter by its size: the start of the last, sh
 
 test('an address that doesn\'t answer with JSON is taken to be no API until the page is reloaded (E-22)', async () => {
   for (const reply of [{ status: 200, type: 'text/html', body: '<!DOCTYPE html><title>Not found</title>' }, { status: 404, type: 'application/json', body: '{}' }, { status: 200, type: 'application/json', body: '' }]) {
-    const page = await h.newPage();
+    const page = await apiPage();
     const got = await api(page, '**/api/progress', reply);
     await h.openReader(page, LONG, { 'spine:layout': 'one' });
     await page.click('#nextBtn');
@@ -88,8 +95,8 @@ test('an address that doesn\'t answer with JSON is taken to be no API until the 
 });
 
 test('books from this computer and the sample send nothing; an empty address sends nothing (E-22)', async () => {
-  const page = await h.newPage();
-  const got = await api(page, '**/api/**');
+  const page = await apiPage();
+  const all = await api(page, '**/api/**'), got = { get length(){ return all.filter(r => !r.url.endsWith('/api/position')).length; } };
   await h.openReader(page, LONG, { 'spine:layout': 'one' });
   await page.setInputFiles('#fileInput', `${__dirname}/site/reader/books/long.epub`);
   await page.waitForFunction(() => document.querySelector('#status').hidden);
@@ -101,7 +108,7 @@ test('books from this computer and the sample send nothing; an empty address sen
 });
 
 test('reaching the end tells API_COMPLETE once; it isn\'t told again when the book is opened another time (E-22)', async () => {
-  const page = await h.newPage();
+  const page = await apiPage();
   const done = await api(page, '**/api/complete');
   await h.openReader(page, LONG, { 'spine:layout': 'scroll' });
   await page.focus('#ribbon'); await page.keyboard.press('End');
@@ -127,7 +134,7 @@ test('reaching the end tells API_COMPLETE once; it isn\'t told again when the bo
 });
 
 test('a comic sends its kind and size; a document opened by ?get= from this site, all on one page, is finished as it opens (E-22)', async () => {
-  const page = await h.newPage();
+  const page = await apiPage();
   const got = await api(page), done = await api(page, '**/api/complete');
   await h.openReader(page, `${h.READER}?book=books/comic.cbz`, { 'spine:layout': 'one' });
   await page.click('#nextBtn');
@@ -147,12 +154,13 @@ test('a place not yet sent goes as the page is left (E-22)', async () => {
   // (Sent with keepalive as the page goes, which the browser finishes on its own: the test server records it.)
   const log = async () => (await fetch(`${h.SITE}/__api`)).json();
   await fetch(`${h.SITE}/__api`, { method: 'DELETE' });
-  const page = await h.newPage();
-  await h.openReader(page, LONG, { 'spine:layout': 'one', 'spine:set:API_PROGRESS': '/api-log/progress' });
+  const page = await apiPage();
+  await h.openReader(page, LONG, { 'spine:layout': 'one', 'spine:set:API_PROGRESS': '/api-log/progress', 'spine:set:API_START': '/api-log/position' });
   await page.click('#nextBtn'); await page.waitForTimeout(200);
-  assert.equal((await log()).length, 0);
+  const progress = async () => (await log()).filter(r => r.path === '/api-log/progress');
+  assert.equal((await progress()).length, 0);
   await page.goto(`${h.SITE}/reader/books/notes.md`);
-  const got = await h.waitFor(async () => { const l = await log(); return l.length ? l : null; }, 5000);
+  const got = await h.waitFor(async () => { const l = await progress(); return l.length ? l : null; }, 5000);
   assert.equal(got?.length, 1);
   assert.equal(got[0].path, '/api-log/progress');
   assert.match(got[0].type, /application\/json/);
@@ -161,7 +169,7 @@ test('a place not yet sent goes as the page is left (E-22)', async () => {
 });
 
 test('API_PROGRESS set in Settings, and in Generate config; an address on another site is refused (E-22)', async () => {
-  const page = await h.newPage();
+  const page = await apiPage();
   const got = await api(page, '**/elsewhere/progress');
   await h.openReader(page, LONG, { 'spine:layout': 'one', 'spine:set:API_PROGRESS': '/elsewhere/progress' });
   await page.click('#nextBtn');
@@ -178,4 +186,60 @@ test('API_PROGRESS set in Settings, and in Generate config; an address on anothe
   const cfg = JSON.parse(await page.inputValue('#cfgText'));
   assert.equal(cfg.API_PROGRESS, '');
   assert.equal(cfg.API_COMPLETE, '/api/complete');
+});
+
+// API_START (E-22): asked as the book opens; its place is gone to.
+const where = page => page.evaluate(() => [document.querySelector('#chapLabel').textContent, document.querySelector('#spinePos').textContent]);
+test('API_START is asked with what identifies the book as it opens, and the book goes to the place it answers; that isn\'t sent back (E-22)', async () => {
+  const page = await apiPage();
+  const asked = await api(page, '**/api/position', { status: 200, type: 'application/json', body: '{"section":1,"section_percentage":50,"book_percentage":40}' });
+  const got = await api(page);
+  await h.openReader(page, LONG, { 'spine:layout': 'one' });
+  await page.waitForFunction(() => document.querySelector('#chapLabel').textContent === 'Chapter Two');
+  assert.equal(asked.length, 1);
+  const b = asked[0].body;
+  assert.equal(asked[0].method, 'POST');
+  assert.deepEqual(Object.keys(b).sort(), ['file_name', 'fingerprint', 'identifier', 'kind', 'path', 'size', 'title', 'url']);
+  assert.equal(b.identifier, 'urn:long');
+  const [, pos] = await where(page);
+  const [, n, of] = /page (\d+)\/(\d+)/.exec(pos).map(Number);
+  assert.ok(n > 1 && Math.abs((n - 1) / (of - 1) - 0.5) < 0.2, `halfway through Chapter Two: ${pos}`);
+  await page.waitForTimeout(2600);
+  assert.equal(got.length, 0, 'the place from the site isn\'t sent back to it');
+  await page.click('#nextBtn');
+  await h.waitFor(() => got.length === 1);
+  assert.equal(got[0].body.section, 1);
+});
+
+test('API_START: nulls (a book the site doesn\'t know) leave the book where this browser had it; book_percentage alone is gone to (E-22)', async () => {
+  const page = await apiPage();
+  await h.openReader(page, LONG, { 'spine:layout': 'one', 'spine:pos:urn:long': { i: 1, f: 0, t: Date.now() } });
+  await page.waitForTimeout(600);
+  assert.equal((await where(page))[0], 'Chapter Two');
+  await api(page, '**/api/position', { status: 200, type: 'application/json', body: '{"section":null,"section_percentage":null,"book_percentage":90}' });
+  await page.reload(); await h.waitForBook(page);
+  await page.waitForFunction(() => document.querySelector('#chapLabel').textContent === 'Chapter Three');
+});
+
+test('API_START answering with anything but JSON: progress isn\'t sent either, until the page is reloaded (E-22)', async () => {
+  const page = await apiPage();
+  const asked = await api(page, '**/api/position', { status: 200, type: 'text/html', body: '<!DOCTYPE html><title>Sign in</title>' });
+  const got = await api(page);
+  await h.openReader(page, LONG, { 'spine:layout': 'one' });
+  await h.waitFor(() => asked.length === 1);
+  await page.click('#nextBtn'); await turn(page, 2); await page.waitForTimeout(2800);
+  assert.equal(got.length, 0);
+  assert.equal((await where(page))[0], 'Chapter One');
+});
+
+test('API_START: a place that comes after the reader has already turned a page is left alone (E-22)', async () => {
+  const page = await apiPage();
+  await page.route('**/api/position', async route => { await new Promise(r => setTimeout(r, 2500)); await route.fulfill({ status: 200, contentType: 'application/json', body: '{"section":2,"section_percentage":0,"book_percentage":80}' }); });
+  await page.goto(`${h.SITE}/reader/index.html?book=none-${Date.now()}`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('spine:layout', '"one"'); });
+  await page.goto(LONG);
+  await page.waitForFunction(() => document.querySelector('#chapLabel')?.textContent === 'Chapter One');
+  await page.click('#nextBtn');
+  await page.waitForTimeout(3500);
+  assert.equal((await where(page))[0], 'Chapter One');
 });

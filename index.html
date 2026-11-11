@@ -604,7 +604,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0158</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0230</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -632,6 +632,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <div class="set-row"><span><label for="set-COMIC_PART">Comic pages per section</label><small>For comics opened after the change; your place stays on the same page.</small><small class="set-def"></small></span><input id="set-COMIC_PART" type="number" min="2" max="1000" step="2" data-set="COMIC_PART"></div>
       </fieldset>
       <fieldset class="set-group"><legend>Progress sent to this site</legend>
+        <div class="set-row"><span><label for="set-API_START">Where your place is asked for</label><small>As a book from this site opens; it goes to the place the site has for it. An address on this site; empty asks nothing.</small><small class="set-def"></small></span><input id="set-API_START" type="text" spellcheck="false" autocomplete="off" data-set="API_START"></div>
         <div class="set-row"><span><label for="set-API_PROGRESS">Where reading progress goes</label><small>For books opened from this site (or by their address), not files from this computer. An address on this site; empty sends nothing.</small><small class="set-def"></small></span><input id="set-API_PROGRESS" type="text" spellcheck="false" autocomplete="off" data-set="API_PROGRESS"></div>
         <div class="set-row"><span><label for="set-API_COMPLETE">Where finishing a book goes</label><small>Sent once, the first time the end of a book is reached.</small><small class="set-def"></small></span><input id="set-API_COMPLETE" type="text" spellcheck="false" autocomplete="off" data-set="API_COMPLETE"></div>
       </fieldset>
@@ -1906,6 +1907,7 @@ async function startBook(next){
   if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, comic (.cbz), text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info');
   else hideNotice();
 
+  const asked = positionAsk();   // (the place the site has for this book, if it keeps one: E-22)
   let saved = store.get(book.key);
   const earlier = [...(book.legacyKeys || []).map(k => [k, true]), ...(book.copyKeys || []).map(k => [k, false])];
   for (const [k, move] of saved ? [] : earlier) {
@@ -1929,10 +1931,12 @@ async function startBook(next){
     // (Scrolling: as far down that page as it was.)
     const el = frame.contentDocument?.getElementById(frag), se = scroller();
     if (scrolling() && saved.off > 0 && saved.off <= 1 && el && se && cur.i === i) scrollTo(el.getBoundingClientRect().top + se.scrollTop - 24 + saved.off * el.getBoundingClientRect().height);
+    positionAnswered(next, asked);
     return;
   }
   const i = saved && saved.i < spine.length ? saved.i : 0;
   await renderChapter(i, { fraction: saved?.f || 0 });
+  positionAnswered(next, asked);
 }
 
 async function loadToc(b, spineEl){
@@ -3071,10 +3075,14 @@ function savePos(){
    page stops scrolling a screen or more away from the last place sent), and on leaving the page; and the first
    time the end of the book is reached, to API_COMPLETE. Both are addresses on this site, so the site's session
    cookie goes with them. An address that doesn't answer with JSON (missing, an error, a web page, a sign-in page)
-   is taken to be no API and isn't tried again until the page is reloaded. */
-let API_PROGRESS = '/api/progress', API_COMPLETE = '/api/complete';   // reader-config.json and Settings; '' sends nothing
+   is taken to be no API and isn't tried again until the page is reloaded.
+   As such a book opens, API_START is asked where the reader is in it (the same fields, without the place). The
+   site answers with section, section_percentage and book_percentage (all null for a book it doesn't know); with
+   numbers, the book goes there, unless the reader has already moved. An answer that isn't JSON means the site
+   keeps no places: progress isn't sent either. */
+let API_PROGRESS = '/api/progress', API_COMPLETE = '/api/complete', API_START = '/api/position';   // reader-config.json and Settings; '' sends nothing
 const PROGRESS_WAIT = 2000;   // ms after the last page turn
-const api = { dead: new Set(), last: null, timer: 0, busy: false, again: false, finishing: null };
+const api = { dead: new Set(), last: null, opened: null, timer: 0, busy: false, again: false, finishing: null };
 // An API address as given: '' (none), or one on this site.
 function apiAddress(v){
   v = v.trim();
@@ -3134,13 +3142,14 @@ function progressBody(){
 // From savePos: a new place. The first one after a book opens is where it opened: not sent, only remembered.
 function progressMoved(){
   if (!bookIdentity()) return;
-  if (api.last?.book !== book) api.last = placeNow();
+  if (api.last?.book !== book) api.last = api.opened = placeNow();
   else if (API_PROGRESS && !api.dead.has(API_PROGRESS)) { clearTimeout(api.timer); api.timer = setTimeout(progressSend, PROGRESS_WAIT); }
   if (atBookEnd()) bookFinished();
 }
-// Far enough from the last place sent: another section, another page, or (scrolling) a screen or more away.
-function progressFar(){
-  const a = api.last, b = placeNow();
+// Far enough from the last place sent (or another): another section, another page, or (scrolling) a screen or
+// more away.
+function progressFar(a = api.last){
+  const b = placeNow();
   if (!a || a.book !== b.book || a.i !== b.i || a.scroll !== b.scroll) return true;
   return b.scroll ? Math.abs(b.top - a.top) >= (scroller()?.clientHeight || 1) : a.page !== b.page;
 }
@@ -3180,22 +3189,56 @@ async function bookFinished(){
   if (b.done || api.finishing === b || !API_COMPLETE || api.dead.has(API_COMPLETE)) return;
   const id = bookIdentity(); if (!id) return;
   api.finishing = b;
-  if (await apiPost(API_COMPLETE, { ...id, completed: true })) {
+  if (await apiPost(API_COMPLETE, { ...id, completed: true }) !== null) {
     b.done = true;
     const pos = store.get(b.key); if (pos) store.set(b.key, { ...pos, done: 1 });
   }
   if (api.finishing === b) api.finishing = null;
 }
-// POST body as JSON; true once the site answers with JSON. Anything else marks the address as no API.
+// POST body as JSON: { value } once the site answers with JSON, else null, and the address is marked as no API.
 async function apiPost(addr, body){
-  if (!addr || api.dead.has(addr)) return false;
-  let ok = false;
+  if (!addr || api.dead.has(addr)) return null;
+  let got = null;
   try {
     const r = await fetch(new URL(addr, location.href), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (r.ok) { const t = await r.text(); JSON.parse(t); ok = t.trim() !== ''; }
+    if (r.ok) { const t = await r.text(); if (t.trim()) got = { value: JSON.parse(t) }; }
   } catch {}
-  if (!ok && !api.dead.has(addr)) { api.dead.add(addr); console.info(`${addr} didn't answer with JSON, so reading progress isn't sent there until the page is reloaded.`); }
-  return ok;
+  if (!got && !api.dead.has(addr)) { api.dead.add(addr); console.info(`${addr} didn't answer with JSON, so reading progress isn't sent there until the page is reloaded.`); }
+  return got;
+}
+// As a book opens: the place the site has for it, as { i, f }; null if it has none, or the book sends nothing.
+// No JSON: the site keeps no places, so progress isn't sent either.
+async function positionAsk(){
+  const id = bookIdentity();
+  if (!id || !API_START || api.dead.has(API_START)) return null;
+  const b = book, got = await apiPost(API_START, id);
+  if (!got) { if (API_PROGRESS) api.dead.add(API_PROGRESS); return null; }
+  const v = got.value, num = x => typeof x === 'number' && Number.isFinite(x);
+  if (!v || typeof v !== 'object' || book !== b) return null;
+  const n = b.spine.length, pct = x => Math.min(1, Math.max(0, x / 100));
+  if (Number.isInteger(v.section) && v.section >= 0 && v.section < n) return { i: v.section, f: num(v.section_percentage) ? pct(v.section_percentage) : 0 };
+  if (num(v.book_percentage)) return placeAt(pct(v.book_percentage));
+  return null;
+}
+// The section and the place in it a fraction of the book falls at, as bookFraction counts them.
+function placeAt(x){
+  const n = book.spine.length, w = sectionWeights() || book.spine.map(() => 1);
+  const total = w.reduce((a, c) => a + c, 0);
+  let sum = 0;
+  for (let j = 0; j < n; j++) { if (x * total < sum + w[j] || j === n - 1) return { i: j, f: Math.min(1, Math.max(0, (x * total - sum) / w[j])) }; sum += w[j]; }
+  return { i: 0, f: 0 };
+}
+// Once the book has opened where this browser left it: to the site's place, if it has one, the book is still
+// open and the reader hasn't moved, edited or started reading aloud meanwhile. Where it is is then the last place
+// sent (it came from the site).
+async function positionAnswered(b, asked){
+  const at = await asked;
+  if (!at || book !== b || ed.on || tts.open || api.opened?.book !== b || progressFar(api.opened)) return;
+  if (at.i === cur.i && Math.abs(at.f - fraction()) < 0.005) return;   // (already there)
+  await renderChapter(at.i, { fraction: at.f });
+  if (book !== b) return;
+  clearTimeout(api.timer); api.timer = 0;
+  api.last = placeNow();
 }
 
 let wheelAcc = 0, wheelAt = 0;
@@ -6917,6 +6960,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
   API_PROGRESS: ['string', v => { API_PROGRESS = apiAddress(v); }],   // (E-22)
   API_COMPLETE: ['string', v => { API_COMPLETE = apiAddress(v); }],
+  API_START: ['string', v => { API_START = apiAddress(v); }],
   KEEP_POSITIONS_DAYS: ['number', v => { KEEP_POSITIONS_DAYS = v > 0 ? Math.min(36500, Math.max(1, Math.round(v))) : 0; }],   // (whole days; under one is one, not 0, "keep forever")
   LOOKAHEAD_SEC: ['number', v => { LOOKAHEAD_SEC = Math.min(1800, Math.max(0, Math.round(v))); }],
   SAVED_AUDIO_MB: ['number', v => { SAVED_AUDIO_MB = Math.min(1e6, Math.max(0, Math.round(v))); }],
@@ -8324,6 +8368,7 @@ const SET_VARS = {   // name: [the value now, what to do once it changes ('reloa
   // (Used from the next place sent; an address new here is tried even if another wasn't there: E-22.)
   API_PROGRESS: [() => API_PROGRESS, null],
   API_COMPLETE: [() => API_COMPLETE, null],
+  API_START: [() => API_START, null],
 };
 const siteValue = {}, loadedValue = {};   // the site's values, and those in use since the page loaded
 const setKey = name => `spine:set:${name}`;
@@ -8456,7 +8501,7 @@ function configNow(){
     ALLOW_REMOTE_CONTENT: v('ALLOW_REMOTE_CONTENT'), ALLOW_EXTERNAL_LINKS: v('ALLOW_EXTERNAL_LINKS'), EDITING, GET_URLS,
     SHOW_CONTENTS: v('SHOW_CONTENTS'), SHOW_PROGRESS: v('SHOW_PROGRESS'), SHOW_TOPBAR: v('SHOW_TOPBAR'),
     TIME_LEFT: v('TIME_LEFT'), SLEEP_TIMER: v('SLEEP_TIMER'), FORCE_LTR: v('FORCE_LTR'),
-    API_PROGRESS: v('API_PROGRESS'), API_COMPLETE: v('API_COMPLETE'),
+    API_START: v('API_START'), API_PROGRESS: v('API_PROGRESS'), API_COMPLETE: v('API_COMPLETE'),
     KEEP_POSITIONS_DAYS: v('KEEP_POSITIONS_DAYS'), SEARCH_MAX: v('SEARCH_MAX'), COMIC_PART: v('COMIC_PART'),
     TTS_SERVER: { api: here(TTS_SERVER.api), voices: here(TTS_SERVER.voices) }, FULL_PRECISION: v('FULL_PRECISION'),
     LOOKAHEAD_SEC: v('LOOKAHEAD_SEC'), SAVED_AUDIO_MB: v('SAVED_AUDIO_MB'), NCACHE_SEC, SPAN_MAX: { ...SPAN_MAX },

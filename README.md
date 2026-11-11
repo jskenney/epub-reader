@@ -240,6 +240,10 @@ nothing. The requests go to addresses on the reader's own site, with its
 cookies, so whatever session your site has applies; the reader does no
 signing in of its own.
 
+- **`POST /api/position`** (`API_START`): as the book opens, to ask where the
+  reader is in it (see below). The book opens where this browser left it,
+  and moves to your site's place when the answer comes, unless the reader
+  has already turned a page, started editing or reading aloud.
 - **`POST /api/progress`** (`API_PROGRESS`): a moment (2 seconds) after the
   pages stop turning, or when the page stops scrolling a screen or more
   away from the last place sent, and on leaving the page (or opening
@@ -283,6 +287,19 @@ Both send JSON (`Content-Type: application/json`):
 | `book_percentage` | How far through the book, 0 to 100: each section counted by its size (an EPUB chapter's size in the archive, a comic section's pages, a document part's text), or all the same for an EPUB folder, whose sizes aren't known. The progress bar shows the same number. |
 
 `/api/complete` sends the first eight fields and `"completed": true`.
+`/api/position` sends the first eight fields, and your site answers with the
+place it has for that book:
+
+```json
+{ "section": 4, "section_percentage": 37.5, "book_percentage": 21.8 }
+```
+
+or all three `null` for a book it doesn't know (the book then stays where
+this browser left it). `section` and `section_percentage` are used when
+`section` is a section the book has; otherwise `book_percentage` alone. A
+place gone to this way isn't sent back to `/api/progress`. An answer to
+`/api/position` that isn't JSON means your site keeps no places: progress
+isn't sent either, until the page is reloaded.
 
 Your site should answer with JSON (anything, such as `{"ok": true}`, with a
 2xx status). An answer that isn't JSON (a missing address, an error, a web
@@ -290,7 +307,7 @@ page such as a "not found" or sign-in page, or no connection) is taken to
 mean there's no API there: the reader stops sending to that address until
 the page is reloaded. So a site without one only sees one request per page
 load. Set `API_PROGRESS` or `API_COMPLETE` to `""` (in `reader-config.json`,
-or in Settings) to send nothing at all. They must be addresses on the same
+or in Settings) to send nothing at all (and `API_START` to ask nothing). They must be addresses on the same
 site as the reader.
 
 ## Features
@@ -724,6 +741,7 @@ default books and the memory and request sizes stay the site's to set.
 | `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones (`?edit=` opens the document to read). |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |
 | `API_PROGRESS` ✓ ⚙ | `'/api/progress'` | Where reading progress is sent (see [Reading progress sent to your site](#reading-progress-sent-to-your-site)): an address on this site; `''` sends nothing. |
 | `API_COMPLETE` ✓ ⚙ | `'/api/complete'` | Where finishing a book is sent, once; `''` sends nothing. |
 | `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |

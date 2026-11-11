@@ -386,7 +386,7 @@ into the file.
 **Reading progress (E-7)**
 
 11. **Save your place** in a book. *Built:* `POST API_PROGRESS` (default `/api/progress`); see below.
-12. **Get your place** in a book.
+12. **Get your place** in a book. *Built:* `POST API_START` (default `/api/position`), as a book opens.
 13. **List your books:** each one's place, when it was last read, and whether it is completed.
 14. **Mark a book as completed.** *Built:* `POST API_COMPLETE` (default `/api/complete`), sent once,
     automatically, the first time the end is reached.
