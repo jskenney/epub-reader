@@ -173,13 +173,15 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .app:not(.no-bar) #metaTitle,.app:not(.no-bar) #metaAuthors{display:none}
 /* (With nothing else in it, the block takes no room either, so the search box lines up with the top of the page;
    a description there starts at the top.) */
-.app:not(.no-bar) #tocHead:not(:has(#metaDesc:not([hidden]))){display:none}
+.app:not(.no-bar) #tocMeta:not(:has(#metaDesc:not([hidden]))){display:none}
 .app:not(.no-bar) #metaDesc{margin-top:0}
 /* (The page's own top margin and padding take it, so it covers none of the text (L-289), with no strip of its own
    above the page, which pushed the page down when the bar was hidden.) */
 .bar-corner{position:fixed;top:0;right:0;z-index:40;width:96px;height:36px;padding:0;border:0;background:transparent;cursor:pointer;opacity:0}
 .bar-corner:focus-visible{opacity:1;outline:2px solid var(--ribbon);outline-offset:-4px}
 .app.fs ~ .bar-corner,.app.fs .bar-corner{display:none}
+/* (Not over the editor's buttons (Save as…) or a notice's: round 26 review, M-152.) */
+.app.editing .bar-corner,.app:has(#notice:not([hidden])) .bar-corner{display:none}
 .app.fs .main{padding-block:0;gap:0}
 .app.fs #page,.app.fs #page2,.app.fs .stage.fxl{border:0;border-radius:0;box-shadow:none}
 .fs-pill{position:fixed;z-index:15;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));
@@ -428,7 +430,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 
   <div class="main">
     <aside class="toc" id="toc" aria-label="Book contents">
-      <div id="tocHead">
+      <div id="tocMeta">
         <h1 class="meta-title" id="metaTitle"></h1>
         <p class="meta-authors" id="metaAuthors"></p>
         <details class="desc" id="metaDesc" hidden>

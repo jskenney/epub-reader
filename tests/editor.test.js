@@ -893,3 +893,22 @@ test('a document with many unclosed comments after its body doesn\'t freeze typi
   assert.match(await text(page), /Start\. T/);
   assert.ok(Date.now() - t0 < 4000, `${Date.now() - t0} ms`);
 });
+
+test('with the top bar hidden, its corner button covers neither the editor\'s buttons nor a notice\'s (round 26 review, M-152)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  const clear = sel => page.evaluate(s => {
+    const b = document.querySelector(s), r = b.getBoundingClientRect();
+    return [[r.left + 2, r.top + 2], [r.right - 2, r.top + 2], [r.left + r.width / 2, r.top + r.height / 2]].every(([x, y]) => b.contains(document.elementFromPoint(x, y)));
+  }, sel);
+  await h.openReader(page, doc('notes.md'), RAW);
+  await startEditing(page);
+  await page.focus('#tocBtn'); await page.keyboard.press('n');   // (the top bar hidden while editing)
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.bar')).display === 'none');
+  for (const sel of ['#editSaveAs', '#editSave', '#editDone']) if (await page.isVisible(sel)) assert.equal(await clear(sel), true, sel);
+  await h.openReader(page, `${h.READER}?book=books/huge-chapter.epub`, { 'spine:set:SHOW_TOPBAR': false });
+  await page.click('#toc :is(a,button):has-text("Two")');
+  await page.waitForFunction(() => !document.querySelector('#notice').hidden, null, { timeout: 15000 });
+  for (const b of await page.$$('#notice button:visible')) {
+    assert.equal(await b.evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.right - 2, r.top + 1)); }), true);
+  }
+});

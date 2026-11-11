@@ -190,6 +190,10 @@ test('the contents show the book\'s title and authors only while the top bar is 
   assert.equal(await page.isVisible('#metaAuthors'), true);
   await page.keyboard.press('n'); await page.waitForTimeout(200);
   assert.equal(await page.isHidden('#metaTitle'), true);
+  // The contents keep their "Contents" heading, which names their navigation (round 26 review, M-151).
+  assert.equal(await page.isVisible('#tocNav h2'), true);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('[id="tocHead"]').length), 1);
+  assert.equal(await page.evaluate(() => document.getElementById(document.querySelector('#tocNav').getAttribute('aria-labelledby')).textContent.trim()), 'Contents');
   // With the title hidden, the search box lines up with the top of the page.
   const tops = await page.evaluate(() => [document.querySelector('#toc .search').getBoundingClientRect().top, document.querySelector('#page').getBoundingClientRect().top]);
   assert.ok(Math.abs(tops[0] - tops[1]) <= 1, `search ${tops[0]}, page ${tops[1]}`);
