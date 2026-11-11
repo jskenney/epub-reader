@@ -312,3 +312,31 @@ test('search says "+" only when there are more matches than listed (round 25 rev
   await page.waitForFunction(() => /of 1/.test(document.querySelector('#searchStatus').textContent));
   assert.equal(await page.textContent('#searchStatus'), '1 of 1 matches');
 });
+
+test('a document\'s link with empty steps (".///host/…", ".\\\\host/…", "a/..///host/…") doesn\'t open a page of another site (round 26 review, H-34)', async () => {
+  const page = await h.newPage();
+  const asked = [];
+  await page.route(/evil\.example/, r => { asked.push(r.request().url()); r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/html' }, body: '<title>Sign in again</title><h1>Sign in again</h1>' }); });
+  const errors = []; page.on('pageerror', e => errors.push(String(e)));
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/d.html`, { 'spine:layout': 'scroll' });
+  for (const id of ['x1', 'x2', 'x3', 'x4']) {
+    await page.frameLocator('#page').locator('#' + id).click();
+    await page.waitForTimeout(400);
+    assert.equal(await page.textContent('#bookTitle'), 'Doc D', id);
+  }
+  assert.deepEqual(asked, []);
+  assert.deepEqual(errors, []);
+  assert.doesNotMatch(await page.evaluate(() => location.search), /get=|evil/);
+});
+
+test('a chapter of more than 16 MB of markup is refused with a notice, quickly, and the rest of the book still reads (round 26 review, H-35)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/huge-chapter.epub`);
+  const t0 = Date.now();
+  await page.click('#toc :is(a,button):has-text("Two")');
+  await page.waitForFunction(() => /too large to show/.test(document.querySelector('#notice')?.textContent || ''), null, { timeout: 15000 });
+  assert.ok(Date.now() - t0 < 15000);
+  assert.match(await page.textContent('#notice'), /c2\.xhtml is too large to show \(2\d MB of text; the limit is 16 MB\)/);
+  await page.click('#toc :is(a,button):has-text("One")');
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => /Start here/.test(doc.body.textContent)), 5000));
+});

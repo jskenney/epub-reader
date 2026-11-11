@@ -645,7 +645,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.1958</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.2113</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -916,7 +916,7 @@ function foldedNames(zip){
 // lenient for uploads as in place. Anything but stored or deflated is left to JSZip.
 function checkedEntry(zip, f){
   const d = f._data, name = f.name;
-  return { name, dir: f.dir, async async(type){
+  return { name, dir: f.dir, size: d.uncompressedSize, async async(type){
     if (d.uncompressedSize > MAX_ENTRY) throw new Error(tooLarge(name, d.uncompressedSize));
     const raw = d.compressedContent instanceof Uint8Array ? d.compressedContent : null, magic = d.compression?.magic;
     if (!raw || (magic !== '\x00\x00' && magic !== '\x08\x00')) return f.async(type);
@@ -1001,6 +1001,11 @@ const KEEP_RE = /(\.(x?html?|opf|ncx|xml|css|smil|svg|txt|md)|^mimetype)$/i;
 const KEEP_MAX = 4 << 20;
 const MAX_ENTRY = 512 << 20;   // a file inside a book larger than this isn't decompressed (it would fill memory)
 const tooLarge = (name, n) => `${name} is too large to open (${Math.round(n / 1048576)} MB; the limit is ${MAX_ENTRY / 1048576} MB)`;
+// A page, style sheet or contents file (text) larger than this isn't read: a chapter of 32 MB of markup froze the tab
+// for minutes, and one of 300 MB, compressed into a book of 1 MB, crashed it; 16 MB still shows in a few seconds
+// (round 26 review, H-35). Pictures, audio and video keep MAX_ENTRY.
+const MAX_MARKUP = 16 << 20;
+const tooLong = (name, n) => `${name} is too large to show (${Math.round(n / 1048576)} MB of text; the limit is ${MAX_MARKUP / 1048576} MB)`;
 // read(offset, length) -> Promise<Uint8Array>. lenientChecksums: a file whose checksum doesn't match is used
 // anyway, with a console warning, as JSZip does (for uploads, where a change on disk can't be the cause: the
 // browser refuses to read a changed file).
@@ -1272,7 +1277,13 @@ function zipSource(zip){
     // (The archive itself, for packing an edited book; swapped for the packed one once saved over the file: E-23.)
     get raw(){ return zip; }, swap(z){ zip = z; },
     async bytes(p){ const f = getFile(zip, p); return f ? f.async('uint8array') : null; },
-    async text(p){ const f = getFile(zip, p); return f ? decodeText(await f.async('uint8array'), { fallback: 'utf-8' }) : null; },
+    async text(p){
+      const f = getFile(zip, p); if (!f) return null;
+      if (f.size > MAX_MARKUP) throw new Error(tooLong(p, f.size));
+      const b = await f.async('uint8array');
+      if (b.length > MAX_MARKUP) throw new Error(tooLong(p, b.length));
+      return decodeText(b, { fallback: 'utf-8' });
+    },
     async exists(p){ return !!getFile(zip, p); },
     obf: null,   // obfuscated fonts: path -> key (fontKeys)
     async url(p, type){
@@ -1300,10 +1311,14 @@ function dirSource(base){
       try {
         const r = await fetch(u); if (!r.ok) return null;
         if (r.redirected && !sameSite(new URL(r.url), new URL(root))) return null;   // (sent on to another site: round 24 review)
-        const t = decodeText(new Uint8Array(await r.arrayBuffer()), { http: charsetOf(r), fallback: 'utf-8' });
+        const n = Number(r.headers.get('content-length'));   // (H-35: known before reading, unless compressed or not sent)
+        if (n > MAX_MARKUP && !r.headers.get('content-encoding')) { r.body?.cancel(); throw Object.assign(new Error(tooLong(p, n)), { tooLong: true }); }
+        const buf = new Uint8Array(await r.arrayBuffer());
+        if (buf.length > MAX_MARKUP) throw Object.assign(new Error(tooLong(p, buf.length)), { tooLong: true });
+        const t = decodeText(buf, { http: charsetOf(r), fallback: 'utf-8' });
         // (A site's "not found" page sent with status 200 isn't the file: round 13 review.)
         return await isSoftNotFound(u, t) ? null : t;
-      } catch { return null; }
+      } catch (e) { if (e?.tooLong) throw e; return null; }
     },
     async exists(p){ return !!abs(p); },
     // (A file's bytes, for packing an edited book: E-23.)
@@ -3602,7 +3617,13 @@ function goTo(path, frag = ''){
   if (idx < 0) idx = book.spine.findIndex(s => pathKey(s.path) === pathKey(path));   // (case or Unicode form: L-48)
   // (A document on a site linking to another document beside it: that one opened, as ?book= would: round 25 review,
   // M-141.)
-  if (idx < 0 && book.doc?.base && docKind(path) && !ed.on) { openLinkedDoc(new URL(path.split('/').map(encodeURIComponent).join('/'), book.doc.base), frag); return; }
+  if (idx < 0 && book.doc?.base && docKind(path) && !ed.on) {
+    // (Only a document of the same site: a path with empty steps (".///host/x.html", resolved to "//host/x.html")
+    // would otherwise be read as an address on another host: round 26 review, H-34.)
+    let u = null;
+    if (!path.split('/').includes('')) try { u = new URL(path.split('/').map(encodeURIComponent).join('/'), book.doc.base); } catch {}
+    if (u && u.origin === new URL(book.doc.base, location.href).origin) { openLinkedDoc(u, frag); return; }
+  }
   if (idx < 0) { showNotice(`That link points to ${path}, which isn't part of the book's reading order.`, 'error'); return; }
   // (Choosing a chapter that failed to show tries it again: loop 5 review.)
   if (idx === cur.i && cur.shown && !cur.failed?.has(idx) && frame.contentDocument) { position(frag, 0); return; }

@@ -882,6 +882,10 @@ def main():
     (books / "linkdoc" / "a.html").write_text('<!DOCTYPE html><html><head><title>Doc A</title></head><body><h1>Doc A</h1><p><a id="tob" href="b.html#sec">to B</a> <a id="tomd" href="c.md">to C</a></p></body></html>')
     (books / "linkdoc" / "b.html").write_text('<!DOCTYPE html><html><head><title>Doc B</title></head><body><h1>Doc B</h1>' + "".join(f"<p>Filler {i}.</p>" for i in range(80)) + '<h2 id="sec">Section</h2><p>Here.</p></body></html>')
     (books / "linkdoc" / "c.md").write_text("# Doc C\n\nMarkdown.\n")
+    # Links that look like the document's own but resolve to "//another.host/…" (round 26 review, H-34).
+    (books / "linkdoc" / "d.html").write_text('<!DOCTYPE html><html><head><title>Doc D</title></head><body><h1>Doc D</h1><p>'
+        '<a id="x1" href=".///evil.example/spoof.html">one</a> <a id="x2" href=".\\\\evil.example/spoof.md">two</a> '
+        '<a id="x3" href="a/..///evil.example/x.txt">three</a> <a id="x4" href=".///evil.example:8443/p.html">four</a></p></body></html>')
     epub(books / "far-link.epub", "Far Link", [("c1.xhtml", "One", "<h1>One</h1>" + paragraphs("Far", 30) + '<p><a id="far" href="c2.xhtml">far link</a></p>'), ("c2.xhtml", "Two", "<h1>Two</h1><p>Two.</p>")], uid="urn:far-link")
     epub_items(books / "lt-bomb.epub", "Lt Bomb", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", "")], ["c1", "c2"],
                {"c1.xhtml": "<html><body><p>x</p><p>" + "< " * 600000, "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Two.</p>")}, "urn:lt-bomb")
@@ -945,6 +949,9 @@ def main():
     raw_epub("rv-drm.epub", {"OEBPS/content.opf": opf3("Locked", [("c1.xhtml", "application/xhtml+xml")]),
              "OEBPS/c1.xhtml": chap('<h1>Chapter 1</h1><p>Pretend this is ciphertext.</p>'),
              "META-INF/encryption.xml": '<?xml version="1.0"?><encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#"><enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><enc:CipherData><enc:CipherReference URI="OEBPS/c1.xhtml"/></enc:CipherData></enc:EncryptedData></encryption>'})
+    # A chapter of 20 MB of markup in a book of a few tens of KB (round 26 review, H-35).
+    epub(books / "huge-chapter.epub", "Huge Chapter", [("c1.xhtml", "One", "<p>Start here.</p>", ""),
+         ("c2.xhtml", "Two", "<p>The same line again and again.</p>" * (20 * 1024 * 1024 // 36), "")], uid="urn:huge-chapter")
     # One long section: dozens of pages to turn, for the page-turn drift check (text width margins in fractions of a pixel).
     words = "the keeper walked along the cliffs and counted the boats below in the quiet evening by the harbour lantern".split()
     (books / "drift.md").write_text("# Drift\n\n" + "\n\n".join(f"Paragraph {i}. " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + "." for i in range(400)) + "\n")
