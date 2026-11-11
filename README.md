@@ -719,11 +719,12 @@ complete nginx setup for the reader at `/reader/`:
   a wrong type is refused) and `.wasm` as `application/wasm`.
 - **Book files sandboxed when opened on their own:** a link straight to a
   chapter, an HTML book or an SVG file would otherwise run its scripts on your
-  site, where the reader's settings and saved data are. HTML, XHTML, XML and
-  SVG files (other than `index.html`) under `/reader/` and `/bookshelf/` are
-  sent with `Content-Security-Policy: sandbox`; the reader reads books with
-  `fetch`, which this doesn't affect. (Other servers: send the same header for
-  book files.)
+  site, where the reader's settings and saved data are. HTML, XHTML, XML, XSL,
+  RSS, Atom and SVG files under `/reader/` and `/bookshelf/` are sent with
+  `Content-Security-Policy: sandbox`, a book's own `index.html` too; the reader's
+  page, `/reader/index.html`, is exempted by an exact location (add one for each
+  folder with its own copy). The reader reads books with `fetch`, which this
+  doesn't affect. (Other servers: send the same header for book files.)
 - **Caching that checks first** (`Cache-Control: no-cache`): browsers keep every
   file but ask whether it changed (an unchanged file is a short 304), so a new
   `index.html`, library or model is used at once. Long caching without checks

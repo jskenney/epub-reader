@@ -256,7 +256,7 @@ test('an EPUB from another site (?get=) keeps its own place and finished mark, a
   await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
   await h.waitFor(() => done.length === 1);
   assert.equal(done[0].body.path, null);
-  const stored = await page.evaluate(() => [JSON.parse(localStorage.getItem('spine:pos:urn:long')), JSON.parse(localStorage.getItem(`spine:pos:get:${location.search.slice(5)}`))]);
+  const stored = await page.evaluate(() => [JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('spine:pos:id:')))), JSON.parse(localStorage.getItem(`spine:pos:get:${location.search.slice(5)}`))]);
   assert.deepEqual([stored[0].i, stored[0].f, stored[0].done], [1, 0.5, undefined], 'this site\'s copy keeps its place, not finished');
   assert.equal(stored[1].done, 1);
   await page.goto(`${reader}?book=books/long.epub`); await h.waitForBook(page);
@@ -365,4 +365,24 @@ test('the progress bar\'s marks fall where its fill and a click count the sectio
   const box = await page.locator('#ribbon').boundingBox();
   await page.mouse.click(box.x + box.width * (at[1] + 3) / 100, box.y + box.height / 2);
   await page.waitForFunction(() => /spine 3\/3/.test(document.querySelector('#spinePos').textContent));
+});
+
+test('a book whose identifier names another book\'s position key doesn\'t take its place or finished mark (round 25 review, L-311)', async () => {
+  const page = await apiPage();
+  const victim = { i: 0, f: 0.5, t: Date.now(), done: 1 };
+  await h.openReader(page, `${h.READER}?book=books/uid-clash.epub`, { 'spine:layout': 'one', 'spine:pos:url:/reader/books/notes.md': victim });
+  assert.match(await page.textContent('#spinePos'), /page 1\/.* spine 1\//, 'not opened at the other book\'s place');
+  await page.click('#nextBtn'); await page.waitForTimeout(400);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:pos:url:/reader/books/notes.md'))), victim);
+});
+
+test('?get= of a site address sent on to another site tells the API the address it came from, not this site\'s path (round 25 review, L-312)', async () => {
+  const page = await h.newPage();
+  const got = [];
+  await page.route('**/api/**', route => { got.push({ url: route.request().url(), body: JSON.parse(route.request().postData() || 'null') }); return route.fulfill({ status: 200, contentType: 'application/json', body: '{"section":null,"section_percentage":null,"book_percentage":null}' }); });
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?get=/redirect/8791/reader/books/notes.md`);
+  await h.waitFor(() => got.length >= 1, 5000);
+  const b = got[0].body;
+  assert.equal(b.path, null);
+  assert.equal(b.url, `${h.SOFT}/reader/books/notes.md`);
 });

@@ -261,3 +261,15 @@ test('text shapes: indented paragraphs keep their chapter headings; unwrapped te
   assert.deepEqual(await shape('unwrapped-indent.txt'), { p: 100, lines: 0 });
   assert.deepEqual(await shape('unwrapped-scenes.txt'), { p: 96, lines: 0 });
 });
+
+test('text shapes, loop 4: short indented paragraphs; hard-wrapped at 100 with blank lines; a few long lines; code; a sentence starting "chapter" mid-paragraph (round 25 review, M-132, M-133, L-313, L-314, L-315)', async () => {
+  const page = await h.newPage();
+  const shape = async name => { await h.openReader(page, `${h.READER}?book=books/${name}`); return h.inFrame(page, doc => ({ p: doc.querySelectorAll('p:not(.txt-lines)').length, lines: doc.querySelectorAll('.txt-lines').length, h: doc.querySelectorAll('h1,h2').length })); };
+  assert.equal((await shape('indent-dialogue.txt')).p, 80);
+  assert.equal((await shape('wrap100-blank.txt')).p, 80);
+  assert.equal((await shape('small-unwrapped.txt')).p, 4);
+  const code = await shape('code.txt');
+  assert.ok(code.lines > 0 && code.p === 0, JSON.stringify(code));
+  assert.match(await h.inFrame(page, doc => doc.querySelector('.txt-lines').innerHTML), /\u2003/, 'indentation kept');
+  assert.equal((await shape('false-heading.txt')).h, 0);
+});

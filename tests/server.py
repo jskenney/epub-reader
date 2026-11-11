@@ -15,6 +15,7 @@ import http.server
 import json
 import math
 import os
+import urllib.parse
 import re
 import struct
 import threading
@@ -36,6 +37,7 @@ ap.add_argument("--csp-variant", choices=["self", "cdn"], default="self",
 ap.add_argument("--no-range", action="store_true", help="ignore Range headers (answer with the whole file)")
 ap.add_argument("--csp-skip", default="", help="comma-separated path prefixes served without it (setups that need CDNs or remote content)")
 args = ap.parse_args()
+READER_PAGE_PATH = os.path.realpath(os.path.join(args.root, "reader", "index.html"))
 
 seen, breeze_log, busy = [], [], threading.Lock()
 stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing)
@@ -94,7 +96,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.validators_sent = True
         if POLICY and not any(p and self.path.startswith(p) for p in args.csp_skip.split(",")):
             # (Book files opened on their own are sandboxed, as nginx.conf.example sends them: round 25 review, M-130.)
-            book_page = re.search(r"(?<!/index)\.(x?html?|xht|xml|svg)$", self.path.split("?")[0], re.I)
+            # (Decoded, as nginx matches it; the reader's own page, a link to index.html, isn't: round 25 review, M-131.)
+            req = urllib.parse.unquote(self.path.split("?")[0])
+            book_page = re.search(r"\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$", req, re.I) and \
+                os.path.realpath(os.path.join(args.root, req.lstrip("/"))) != READER_PAGE_PATH
             self.send_header("Content-Security-Policy", "sandbox" if book_page else POLICY)
             self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")

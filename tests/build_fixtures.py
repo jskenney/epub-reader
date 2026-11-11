@@ -743,7 +743,7 @@ def main():
     (books / "unwrapped-blank.txt").write_text("CHAPTER ONE\nThe Arrival\n\n" + "\n\n".join(longp[:10]) + "\n\nRoses are red\n  violets are blue\nsugar is sweet\n\n" + "\n\n".join(longp[10:]) + "\n")
     ind = []
     for i in range(60):
-        words_ = (f"Para{i} " + " ".join(rnd.choice(words) for _ in range(rnd.randint(40, 70)))).split()
+        words_ = (f"Para{i} " + " ".join(rnd.choice(words) for _ in range(rnd.randint(40, 70))) + ".").split()   # (ending a sentence, as paragraphs do)
         lines, line = [], "    "
         for w in words_:
             if len(line) + len(w) > 108: lines.append(line.rstrip()); line = ""
@@ -800,6 +800,19 @@ def main():
     cd = data.rindex(b"PK\x01\x02b.opf"[:4] + b"")  # (the last central entry: b.opf)
     data[cd + 42:cd + 46] = data[data.rindex(b"PK\x01\x02", 0, cd) + 42:data.rindex(b"PK\x01\x02", 0, cd) + 46]   # (points at a.opf's data)
     (books / "overlap.epub").write_bytes(bytes(data))
+    # Round 25 review, loop 4: the text shapes the reviewer wrote (tests/text-shapes/); an XHTML page typed as SVG
+    # (H-31) and an SVG typed with a parameter (L-317); a book whose identifier names a document's position key
+    # (L-311); files the nginx example sandboxes (M-131).
+    for f in (REPO / "tests" / "text-shapes").glob("*.txt"):
+        shutil.copy(f, books / f.name)
+    fake_svg = '<html xmlns="http://www.w3.org/1999/xhtml"><body><form action="javascript:parent.document.title=\'PWNED\'"><button>Go</button></form></body></html>'
+    real_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="green"/></svg>'
+    epub_items(books / "svg-typed.epub", "SVG Typed", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("fake", "fake.svg", "image/svg+xml", ""), ("real", "real.svg", "image/svg+xml; charset=utf-8", "")], ["c1"],
+               {"c1.xhtml": xhtml("SVG Typed", '<h1>SVG Typed</h1><p><img id="fake" src="fake.svg" alt="fake"/><img id="real" src="real.svg" alt="real"/></p>'), "fake.svg": fake_svg, "real.svg": real_svg}, "urn:svg-typed")
+    epub(books / "uid-clash.epub", "Uid Clash", [("c1.xhtml", "One", "<h1>One</h1>" + paragraphs("Clash", 12)), ("c2.xhtml", "Two", "<h1>Two</h1><p>Two.</p>")], uid="url:/reader/books/notes.md")
+    (books / "sandboxed").mkdir()
+    for name in ("index.html", "page.shtml", "feed.rss", "pic.svgz", "style.xsl"):
+        (books / "sandboxed" / name).write_text("<p>x</p>")
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
     (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
     (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')

@@ -607,7 +607,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0539</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0545</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1063,6 +1063,14 @@ async function lazyZip(read, size, { lenientChecksums = false } = {}){
 // An uploaded file, read in place (it can't be read once it is moved, deleted or replaced on disk).
 // A failure to read in place falls back to reading the whole file, except an archive refused outright (its files
 // overlap), which the whole-file reader wouldn't notice (round 25 review, L-304).
+// The same refusal for an archive read whole by JSZip (one the in-place reader leaves to it, ZIP64 say): its files'
+// compressed data are views on the one buffer, which mustn't overlap (round 25 review, L-316).
+function wholeZipChecked(zip){
+  const views = Object.values(zip.files).map(f => f._data?.compressedContent).filter(c => c instanceof Uint8Array && c.length);
+  const spans = views.filter(c => c.buffer === views[0].buffer).map(c => [c.byteOffset, c.length]).sort((a, b) => a[0] - b[0]);   // (views on one buffer only)
+  for (let i = 1; i < spans.length; i++) if (spans[i - 1][0] + spans[i - 1][1] > spans[i][0]) throw new Error('damaged archive (its files overlap)');
+  return zip;
+}
 const notInPlace = e => { if (/its files overlap/.test(e?.message)) throw e; return null; };
 const zipFromBlob = blob => lazyZip(async (o, l) => {
   try { return new Uint8Array(await blob.slice(o, o + l).arrayBuffer()); }
@@ -1083,7 +1091,7 @@ function zipLib(){
 async function wholeFile(r){
   const buf = await r.arrayBuffer();
   if (!isZipBytes(buf)) return { miss: `not a ZIP archive${looksHtml(r) ? ': a web page came back' : ''}` };
-  const zip = await zipLib().loadAsync(buf);
+  const zip = wholeZipChecked(await zipLib().loadAsync(buf));
   zip.fileSize = buf.byteLength;   // (sent with reading progress: E-22)
   return { zip };
 }
@@ -1092,6 +1100,7 @@ async function zipFromUrl(url, init = {}){
   try { r = await fetch(url, { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
   if (!r.ok) return { miss: String(r.status) };
   init.onHost?.(new URL(r.url).host);   // (where it came from, after any redirect: round 24 review)
+  init.onUrl?.(r.url);
   if (r.redirected && !sameSite(new URL(r.url), new URL(url, location.href)) && !init.anySite) return { miss: `it is sent on to ${new URL(r.url).host}, another site` };
   const first = r.status === 206 && /^bytes 0-\d+\/(\d+)$/.exec(r.headers.get('content-range') || '');
   const total = first ? Number(first[1]) : 0;
@@ -1208,7 +1217,7 @@ const sameSite = (a, b) => a.hostname.replace(/^www\./, '') === b.hostname.repla
 // can't run script when opened on their own ("Open image in new tab" shows a blob in the reader's own origin);
 // anything else, an HTML or SVG file say, is plain bytes (round 25 review, H-30). (SVG pictures are served cleaned,
 // by svgURL; a raster picture shows whatever its type, as browsers look at its bytes.)
-const SAFE_BLOB = /^(image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|audio\/[\w.+-]+|video\/[\w.+-]+|font\/[\w.+-]+|application\/(font-woff2?|x-font-[\w-]+|vnd\.ms-(opentype|fontobject))|text\/css)$/i;
+const SAFE_BLOB = /^(image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|audio\/[\w.+-]+|video\/[\w.+-]+|font\/[\w.+-]+|application\/(font-woff2?|x-font-[\w-]+|vnd\.ms-(opentype|fontobject))|text\/(css|vtt))$/i;   // (captions: L-317)
 const blobType = t => SAFE_BLOB.test(String(t || '').split(';')[0].trim()) ? t : 'application/octet-stream';
 function zipSource(zip){
   const blobs = new Set();
@@ -1471,34 +1480,45 @@ function textToHtml(raw){
   };
   const inline = s => escHtml(s).replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
   // The blocks (paragraphs, verse, headings) as lists of lines. A file is read as one of two kinds (round 25
-  // review, M-122, M-125, L-294, and loop 3's review of them):
-  // - unwrapped: a line per paragraph (lines long, or of every length, rather than packed up to one width). Each
-  //   line is a block, except where blank lines set apart a few short lines together (a stanza, a two-line
-  //   heading).
-  // - hard-wrapped (packed up to a width): blocks are parted by blank lines. With almost none, a heading line
-  //   ("CHAPTER II") is a block of its own, and if the paragraphs are marked by indenting their first line (long
-  //   indented lines, paragraphs of several lines), each starts a block.
-  const clustered = lens.filter(n => n >= wrap * 0.75 && n <= wrap).length / (lens.length || 1);
-  const unwrapped = wrap > 200 || (wrap > 80 && clustered < 0.6);
+  // review, M-122, M-125, L-294, and loops 3 and 4's reviews of them):
+  // - unwrapped: a line per paragraph. Told by the lines that go on to another line in the same block: in a
+  //   hard-wrapped file those are packed up to one width; here they are of every length (or longer than any
+  //   wrapping). A file of only a few lines is unwrapped when its lines are long. Each line is a block, except
+  //   where blank lines set apart a few short lines (a stanza, a two-line heading), or lines that read as code or
+  //   verse (many indented, or few ending a sentence), which stay together as lines.
+  // - hard-wrapped: blocks are parted by blank lines. With almost none, a heading line ("CHAPTER II", after a
+  //   finished sentence) is a block of its own, and if paragraphs are marked by indenting their first line (the
+  //   line before each indented one ends a sentence), each starts a block.
   const rows = t.split('\n').map(l => l.trimEnd());
   const groups = [[]];
   for (const l of rows) { if (l.trim()) groups.at(-1).push(l); else if (groups.at(-1).length) groups.push([]); }
   if (!groups.at(-1).length) groups.pop();
+  const inner = groups.flatMap(g => g.slice(0, -1).map(l => l.trim().length)).sort((a, b) => a - b);
+  const iw = inner[Math.floor(inner.length * 0.9)] || 0;
+  const packed = inner.filter(n => n >= iw * 0.75 && n <= iw).length / (inner.length || 1);
+  const unwrapped = inner.length >= 5 ? iw > 160 || (iw > 80 && packed < 0.6) : wrap > 160;
   const few = lens.length > 20 && groups.length < lens.length * 0.05;
-  const indentedRows = rows.filter(l => /^[ \t\u3000]+\S/.test(l));
-  const paraIndent = !unwrapped && few && indentedRows.length >= lens.length * 0.03 && indentedRows.length <= lens.length * 0.6
-    && indentedRows.reduce((a, l) => a + l.trim().length, 0) / indentedRows.length >= wrap * 0.6 && lens.length / indentedRows.length >= 2.5;
-  const headLine = l => { const s = l.trim(); return s.length <= 60 && (TXT_HEAD.test(s) || TXT_SOLO.test(s)); };
+  const indent = l => /^[ \t\u3000]+\S/.test(l), asciiIndent = l => /^[ \t]+\S/.test(l);
+  const ends = l => /[.!?…。！？]["'”’)\]」』]*$|:$/.test(l.trim());
+  let paraIndent = false;
+  if (!unwrapped && few) {
+    const at = rows.map((l, k) => indent(l) && k > 0 && rows[k - 1].trim() ? k : -1).filter(k => k > 0);
+    paraIndent = at.length >= lens.length * 0.03 && at.length <= lens.length * 0.6 && lens.length / at.length >= 1.5
+      && at.filter(k => ends(rows[k - 1])).length >= at.length * 0.6;
+  }
+  const headLine = (l, prev) => { const s = l.trim(); return s.length <= 60 && /^[A-Z]/.test(s) && (TXT_HEAD.test(s) || TXT_SOLO.test(s)) && (!prev || ends(prev)); };
   const blocks = [];
   for (const g of groups) {
     if (unwrapped) {
+      const indented = g.filter(asciiIndent).length, sentences = g.filter(ends).length;
       if (g.length > 1 && g.every(l => l.trim().length < Math.min(70, wrap * 0.5))) blocks.push(g);
+      else if (g.length > 2 && ((indented >= g.length * 0.3 && indented < g.length) || sentences < g.length * 0.4)) blocks.push(Object.assign(g, { asLines: true }));
       else for (const l of g) blocks.push([l]);
     } else if (few) {
       let cur = [];
       for (const l of g) {
-        if (headLine(l)) { if (cur.length) blocks.push(cur); blocks.push([l]); cur = []; continue; }
-        if (paraIndent && cur.length && /^[ \t\u3000]+\S/.test(l)) { blocks.push(cur); cur = []; }
+        if (headLine(l, cur.at(-1))) { if (cur.length) blocks.push(cur); blocks.push([l]); cur = []; continue; }
+        if (paraIndent && cur.length && indent(l)) { blocks.push(cur); cur = []; }
         cur.push(l);
       }
       if (cur.length) blocks.push(cur);
@@ -1509,7 +1529,7 @@ function textToHtml(raw){
       const level = /^(book|part|volume)\b/i.test(lines[0].trim()) ? 'h1' : 'h2';
       return { heading: true, level, html: lines.map(l => inline(l.trim())).join('<br> ') };
     }
-    const longish = lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;
+    const longish = lines.asLines ? 0 : lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;   // (code or verse: as lines)
     // (A paragraph, or block of lines, too long to be one: in pieces, so the document can be split into sections
     // between them: round 25 review, L-286.)
     if (lines.length === 1 || longish >= (lines.length - 1) * 0.6)
@@ -1935,7 +1955,9 @@ async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey
   const last = await readText(zip, spine.at(-1).path).catch(() => '') || '';
   const titleSpine = JSON.stringify([dc('title')[0] || '', spine.map(s => s.href)]);
   const stableKey = 'spine:pos:opf:' + fingerprint(titleSpine.slice(0, -1) + ',' + JSON.stringify(fingerprint(last)) + ']');
-  next.key = uid ? 'spine:pos:' + uid : stableKey;
+  // (The identifier hashed under a prefix of its own: as written, a book's identifier could name another book's key,
+  // "url:/books/x.epub" say, and take its place and finished mark, or be megabytes long: round 25 review, L-311.)
+  next.key = uid ? 'spine:pos:id:' + fingerprint(uid) : stableKey;
   // A looser record by title, files and the text of the leading chapters (as many as it takes to reach 4,000
   // characters of text, so a cover or title page shared by different books isn't enough; never the last
   // chapter): if the last chapter is edited (a new key), the position is found again. Books without an
@@ -1954,7 +1976,9 @@ async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey
   // Positions under earlier keys are moved over once and the old key removed: the fingerprint of the whole
   // package file and the title (earlier versions). A book since given an identifier copies its fingerprint
   // key's position without removing it (a copy without the identifier may still be read).
-  next.legacyKeys = uid ? [] : ['spine:pos:opf:' + fingerprint(oText), 'spine:pos:' + next.title];
+  // (An old key as the identifier or title was written: only one that can't be one of the reader's own keys.)
+  const oldKey = s => s && s.length < 512 && !/^(id|url|get|opf|loose|new|cbz|text|markdown|html):/i.test(s) ? ['spine:pos:' + s] : [];
+  next.legacyKeys = uid ? oldKey(uid) : ['spine:pos:opf:' + fingerprint(oText), ...oldKey(next.title)];
   next.copyKeys = uid ? [stableKey] : [];
   if (ownKey) Object.assign(next, { key: ownKey, legacyKeys: [], copyKeys: [], looseKey: null, writeLoose: false });
   // (Sent with reading progress: E-22.)
@@ -2076,6 +2100,11 @@ async function svgURL(path, type, b = book){
   const t = await b.src.text(path); if (t == null) return null;
   const d = new DOMParser().parseFromString(t, 'image/svg+xml');
   if (!d.documentElement || d.getElementsByTagName('parsererror').length) return null;
+  // (An SVG, or nothing: a page of XHTML typed as SVG would be a page, forms and all, opened on its own; and
+  // nothing but SVG inside it: round 25 review, H-31.)
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  if (d.documentElement.namespaceURI !== SVG_NS || d.documentElement.localName !== 'svg') return null;
+  for (const el of [...d.getElementsByTagName('*')]) if (el.namespaceURI !== SVG_NS && el.isConnected) el.remove();
   d.querySelectorAll('script, foreignObject, iframe, object, embed, a').forEach(e => e.replaceWith(...(e.localName === 'a' ? e.childNodes : [])));
   // (Processing instructions, <?xml-stylesheet?> say, and animations that set an address: round 25 review, L-292.)
   for (const n of [...d.childNodes]) if (n.nodeType === 7) n.remove();
@@ -2084,7 +2113,7 @@ async function svgURL(path, type, b = book){
   for (const el of d.getElementsByTagName('*')) {
     for (const a of [...el.attributes]) {
       const v = urlText(a.value);
-      if (/^on/i.test(a.localName)) el.removeAttributeNode(a);
+      if (/^on/i.test(a.localName) || /^(form)?action$/i.test(a.localName) || /^\s*javascript:/i.test(v)) el.removeAttributeNode(a);
       else if (/^(href|src)$/i.test(a.localName) && !v.startsWith('#') && !/^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(v)) el.removeAttributeNode(a);
       else if (a.localName === 'style' || (paint.includes(a.localName) && v.includes('('))) jobs.push(rewriteCss(a.value, path, { budget, attr: true, owner: path }).then(c => el.setAttribute(a.name, c)));
     }
@@ -2102,7 +2131,7 @@ function resourceURL(path, owner){
   if (book.urls.has(path)) return book.urls.get(path);
   let type = typeOf(path);
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
-  const job = type === 'image/svg+xml' ? svgURL(path, type) : book.src.url(path, type);
+  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' ? svgURL(path, 'image/svg+xml') : book.src.url(path, type);   // (with a parameter too: L-317)
   book.urls.set(path, job);
   job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
@@ -3720,7 +3749,7 @@ async function openFile(file, { handle = null } = {}){
     if (kind) await openDocument(await file.arrayBuffer(), file.name, kind, { key: `spine:pos:${kind}:${file.name}:${file.size}`, seq, handle: handle?.kind === 'file' ? handle : null });
     else {
       let zip = await zipFromBlob(file).catch(notInPlace);   // in place when possible
-      if (!zip) { zip = await zipLib().loadAsync(await file.arrayBuffer()); zip.lenientChecksums = true; }   // (an upload: as in place)
+      if (!zip) { zip = wholeZipChecked(await zipLib().loadAsync(await file.arrayBuffer())); zip.lenientChecksums = true; }   // (an upload: as in place)
       await openZip(zip, file.name, { key: `spine:pos:cbz:${file.name}:${file.size}`, seq });
       // (What an edited EPUB is saved as, and over: E-23.)
       if (!isStale(seq) && book && !book.doc && !book.comic) Object.assign(book, { fileName: file.name, fileHandle: handle?.kind === 'file' ? handle : null });
@@ -8767,7 +8796,7 @@ async function fetchDocument(u, kind, init = {}){
   if (kind !== 'html' && looksHtml(r)) return { miss: 'a web page came back instead' };
   const buf = await r.arrayBuffer();
   if (await isSoftNotFound(u.href, new TextDecoder().decode(buf))) return { miss: `the site's "not found" page` };
-  return { buf, charset: charsetOf(r), host: new URL(r.url).host };
+  return { buf, charset: charsetOf(r), host: new URL(r.url).host, url: r.url };
 }
 // The folder's default book: the first name in DEFAULT_BOOK that is really there, else the built-in sample.
 async function openDefault(seq = ++openSeq){
@@ -8884,17 +8913,20 @@ async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
         if (anySite && got.host && got.host !== location.host) foreign = got.host;   // (where it came from, after any redirect)
         // Images, stylesheets and links in the document resolve against its folder on the server.
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
-          { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: u.href });
+          // (from: where it really came from, after a redirect to another site, so the site's API isn't told this
+          // site's path for another site's file: round 25 review, L-312.)
+          { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: foreign && got.url ? got.url : u.href });
         if (isStale(seq)) return;
         if (foreign) showFrom(foreign);
         return;
       }
       if (/\.(epub|cbz)$/i.test(u.pathname)) {
-        const found = await zipFromUrl(u.href, anySite ? { credentials: 'omit', anySite, onHost: h2 => { if (h2 !== location.host) foreign = h2; } } : {});
+        let finalUrl = '';
+        const found = await zipFromUrl(u.href, anySite ? { credentials: 'omit', anySite, onHost: h2 => { if (h2 !== location.host) foreign = h2; }, onUrl: v => { finalUrl = v; } } : {});
         if (found.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(found.miss)})`); continue; }
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
-        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, from: u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '', forEdit });
+        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, from: foreign && finalUrl ? finalUrl : u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '', forEdit });   // (L-312)
         if (!isStale(seq) && book && !book.comic) book.fileName = safeDecode(u.pathname.split('/').pop());
         if (foreign && !isStale(seq)) showFrom(foreign);
         return;

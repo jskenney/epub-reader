@@ -160,7 +160,7 @@ test("a book without an identifier keeps its position after a metadata edit, or 
   // Given an identifier: the position is copied to it, and kept for a copy without one.
   await page.goto(`${h.READER}?book=books/twin-a-uid.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
-  assert.ok((await posKeys(page)).includes('spine:pos:urn:twin-a-given'));
+  assert.ok((await posKeys(page)).some(k => k.startsWith('spine:pos:id:')));   // (the identifier, hashed: round 25 review, L-311)
   await page.goto(`${h.READER}?book=books/twin-a.epub`); await h.waitForBook(page);
   assert.match(await page.textContent('#spinePos'), /spine 3\/3/);
 });
@@ -213,7 +213,7 @@ test('books with an identifier still use it, so they resume wherever they are op
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
   await page.click('#tocList a >> nth=1');
-  assert.equal(await savedAt(page, 1), 'spine:pos:urn:long');
+  assert.match(await savedAt(page, 1), /^spine:pos:id:/);
   await page.goto(`${h.READER}?book=books/shelf-only.epub`); await h.waitForBook(page);   // a copy of the same book
   assert.match(await page.textContent('#spinePos'), /spine 2\/3/);
 });

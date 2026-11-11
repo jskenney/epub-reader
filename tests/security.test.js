@@ -258,3 +258,29 @@ test('book files opened on their own are sent sandboxed; the reader page isn\'t 
   assert.equal((conf.match(/^\s*location ~\*[^\n]*\.\(x\?html\?\|xht\|xml\|svg\)\$[^\n]*$/gm) || []).length, 2, 'both locations in the nginx example');
   assert.match(conf, /add_header Content-Security-Policy "sandbox" always;/);
 });
+
+// Round 25 review, loop 4.
+test('a page of XHTML typed as SVG isn\'t served at all; an SVG typed with a parameter still shows (round 25 review, H-31, L-317)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/svg-typed.epub`);
+  const r = await h.inFrame(page, async doc => {
+    const fake = doc.getElementById('fake'), real = doc.getElementById('real');
+    await real.decode().catch(() => {});
+    const src = fake.getAttribute('src');
+    return { fake: src && src.startsWith('blob:') ? await (await fetch(src)).text() : src, real: real.naturalWidth };
+  });
+  assert.ok(!r.fake || !/javascript|<form/i.test(r.fake), `the fake picture: ${r.fake}`);
+  assert.ok(r.real > 0, 'the real SVG shows');
+});
+
+test('book files the nginx example sandboxes, a book\'s own index.html and encoded names too; not the reader page (round 25 review, M-131, T-48)', async () => {
+  for (const name of ['index.html', 'page.shtml', 'feed.rss', 'pic.svgz', 'style.xsl']) {
+    const r = await fetch(`${h.SITE}/reader/books/sandboxed/${name}`);
+    assert.equal(r.headers.get('content-security-policy'), 'sandbox', name);
+  }
+  assert.equal((await fetch(`${h.SITE}/reader/books/after.ht%6Dl`)).headers.get('content-security-policy'), 'sandbox');
+  assert.notEqual((await fetch(`${h.SITE}/reader/index.html`)).headers.get('content-security-policy'), 'sandbox');
+  assert.notEqual((await fetch(`${h.SITE}/reader/`)).headers.get('content-security-policy'), 'sandbox');
+  const conf = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'nginx.conf.example'), 'utf8');
+  assert.match(conf, /location = \/reader\/index\.html \{ \}/);
+});

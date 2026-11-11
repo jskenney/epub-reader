@@ -1,0 +1,119 @@
+def handler_0(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_1(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_2(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_3(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_4(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_5(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_6(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_7(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_8(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_9(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_10(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_11(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_12(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_13(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_14(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_15(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_16(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_17(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_18(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
+
+def handler_19(request):
+    data = request.get_json()
+    if not data:
+        raise ValueError("the request body must be a JSON object with the fields name, kind and value")
+    return process(data)
