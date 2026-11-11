@@ -334,3 +334,48 @@ test('a link running onto the next page, clicked there, is followed (the page do
   await page.mouse.click(box.x + at.x, box.y + at.y);
   assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('target').getBoundingClientRect(); return r.left >= 0 && r.right <= doc.defaultView.innerWidth; }), 5000), 'the link was followed');
 });
+
+test('right-to-left text in a book that doesn\'t say its pages go right to left: the left arrow goes on, as the pages come in (round 25 review, L-342)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/rtl-text.epub`, { 'spine:layout': 'one' });
+  await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(150);
+  assert.match(await page.textContent('#spinePos'), /page 2\//);
+  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(150);
+  assert.match(await page.textContent('#spinePos'), /page 1\//);
+  // A left-to-right book: as before.
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:layout': 'one' });
+  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(150);
+  assert.match(await page.textContent('#spinePos'), /page 2\//);
+});
+
+test('in a horizontal book, a vertical table header and SVG text stay vertical; a vertical paragraph is still set across (round 25 review, L-341)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/vertical-bits.epub`);
+  const wm = id => h.inFrame(page, (doc, id) => getComputedStyle(doc.getElementById(id)).writingMode, id);
+  assert.equal(await wm('vth'), 'vertical-rl');
+  assert.notEqual(await wm('vsvg'), 'horizontal-tb');
+  assert.equal(await wm('vp'), 'horizontal-tb');
+});
+
+test('a book\'s CSS can\'t hide or move the end of the chapter, which the page count goes by (round 26 review, L-354)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:layout': 'one' });
+  for (const name of ['end-hidden.epub', 'end-far.epub']) {
+    await h.openReader(page, `${h.READER}?book=books/${name}`, { 'spine:layout': 'one' });
+    const n = Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+    assert.ok(n > 2 && n < 40, `${name}: ${n} pages`);
+    for (let k = 1; k < n; k++) await page.click('#nextBtn');
+    assert.equal(await h.inFrame(page, doc => { const r = doc.getElementById('last').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth; }), true, `${name}: the last words on the last page`);
+  }
+});
+
+test('the place saved is exact enough to come back to the same page in a section of thousands of pages (round 26 review, L-358)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/pages-long.epub`, { 'spine:layout': 'one', 'spine:width': 3 });
+  for (let k = 0; k < 7; k++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(400);
+  const [p, n] = (await page.textContent('#spinePos')).match(/page (\d+)\/(\d+)/).slice(1).map(Number);
+  const f = await page.evaluate(() => Object.entries(localStorage).filter(([k]) => k.startsWith('spine:pos:')).map(([, v]) => JSON.parse(v).f)[0]);
+  // (Exact to well under half a page of a 5000-page section.)
+  assert.ok(Math.abs(f - (p - 1) / (n - 1)) < 1e-4, `f ${f}, page ${p} of ${n}`);
+});

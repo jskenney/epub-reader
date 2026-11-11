@@ -875,6 +875,15 @@ def main():
     # Right-to-left documents: dir on html, and a Markdown file wrapped in a dir="rtl" block (round 25 review, M-148).
     (books / "rtl-doc.html").write_text('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>RTL Doc</title></head><body><h1>عنوان</h1>' + "".join(f"<p>{i}. {ar}</p>" for i in range(30)) + "</body></html>", encoding="utf-8")
     (books / "rtl-doc.md").write_text('<div dir="rtl">\n\n# عنوان\n\n' + "\n\n".join(f"{i}. {ar}" for i in range(30)) + "\n\n</div>\n", encoding="utf-8")
+    # A book's CSS reaching the end-of-chapter marker (round 26 review, L-354).
+    filler = "".join(f"<p>Filler paragraph {i} with enough words to fill a good part of a line or two here.</p>" for i in range(120))
+    epub(books / "end-hidden.epub", "End Hidden", [("c1.xhtml", "One", filler + "<p id='last'>The last words.</p>", "<style>span:last-child{display:none !important}</style>")], uid="urn:end-hidden")
+    epub(books / "end-far.epub", "End Far", [("c1.xhtml", "One", filler + "<p id='last'>The last words.</p>", "<style>span{position:absolute !important;left:3000000px !important}</style>")], uid="urn:end-far")
+    # Small vertical elements in a horizontal book (round 25 review, L-341).
+    epub(books / "vertical-bits.epub", "Vertical Bits", [("c1.xhtml", "One",
+         '<table><tr><th id="vth" style="writing-mode:vertical-rl">Head</th><td>Cell</td></tr></table>'
+         '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text id="vsvg" x="50" y="10" style="writing-mode:tb">AB</text></svg>'
+         '<p id="vp" style="writing-mode:vertical-rl">A paragraph.</p>', "")], uid="urn:vertical-bits")
     # Right to left with headings through the chapter, for the editor's place (round 25 review, M-147).
     chap = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ar" dir="rtl"><head><title>t</title></head><body>' + "".join(
         f"<h2 id='h{k}'>قسم {k}</h2>" + "".join(f"<p>{k}.{i}. {ar}</p>" for i in range(8)) for k in range(10)) + "</body></html>"
