@@ -143,6 +143,8 @@ document**, **New Markdown document** and **New HTML document**.
   picker) or dropped onto the page. Otherwise Save, and **Save as**, ask
   where to save a copy (Chrome and Edge) or download it. HTML is saved as
   UTF-8, and a `<meta charset>` naming another encoding is changed to say so.
+  A file whose lines end in CRLF keeps CRLF. If the file has changed on disk
+  since it was opened, Save asks before writing over it.
 - What you write is kept in the browser as a draft a moment after each
   change, and as you leave the page. Opening the document again offers it
   back (Edit restores it) as long as the file is as it was when you began, and
@@ -166,7 +168,9 @@ its own encoding and written as UTF-8 only then). A book opened with the Open
 button in Chrome or Edge (or dropped onto the page there) is saved over its file, and read on from it; otherwise
 Save asks where, or downloads it. A book read from a folder on the server is
 saved as a packed `.epub` of its container, package and listed files (and the
-usual `META-INF` files). **Chapter** downloads just the chapter's file. Every
+usual `META-INF` files); if one of them can't be fetched (no connection, an
+error from the server) it isn't saved, while files the book lists but doesn't
+have, or lists on other sites, are left out. **Chapter** downloads just the chapter's file. Every
 edited XHTML chapter has to be well-formed XML: if one isn't, saving and
 switching to WYSIWYG stop with the error and its line, and the cursor goes
 there. Fixed-layout and SVG pages are edited raw. A chapter encrypted with DRM
@@ -315,6 +319,12 @@ mean there's no API there: the reader stops sending to that address until
 the page is reloaded. So a site without one sees at most one request per
 address per page load. (A `/api/position` answer that isn't JSON stops
 progress too, but not `/api/complete`.)
+
+Updates can arrive out of order (one sent on leaving the page may overtake
+one still waiting for its answer), and the finished mark is kept per browser,
+not per user: a site should accept `/api/complete` more than once (another
+browser, cleared storage, or a book already finished) and not count on
+getting it.
 
 Key what you store by `path` or `url` as well as `identifier`: a book from
 another site can carry any identifier, including one of your books'. (The
@@ -831,7 +841,9 @@ before committing a change to `index.html` to bring it up to date
 every commit that includes `index.html`; turn it on once per clone with
 `git config core.hooksPath .githooks` (skip it for one commit with
 `git commit --no-verify`). If `index.html` also has unstaged changes it stamps
-nothing and says so, rather than commit them too.
+nothing and says so, rather than commit them too; nor does it stamp a commit
+of named paths (`git commit -- index.html`, or `-o`), where git gives it a
+temporary index.
 
 ## Tests
 

@@ -735,6 +735,29 @@ def main():
     epub_items(books / "clobber.epub", "Clobber", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", ""), ("p", "pic.png", "image/png", "")], ["c1", "c2"],
                {"c1.xhtml": xhtml("Clobber", '<h1>Clobber</h1><img name="getElementById" src="pic.png" alt="g"/><img name="createRange" src="pic.png" alt="g"/><form name="fonts"></form><p id="addEventListener">Some text here for reading.</p><p id="content">Kept id.</p>'),
                 "c2.xhtml": xhtml("Two", "<h1>Two</h1><p>Second.</p>"), "pic.png": pic}, "urn:clobber")
+    # Round 25 review, loop 2: unwrapped text with blank lines, a stanza and a two-line heading (M-125); hard-wrapped
+    # text whose paragraphs are marked by indentation (L-294); a huge paragraph without spaces (L-293); SVG files in
+    # Latin-1 and with a stylesheet instruction and href animations (L-291, L-292); a folder book listing a remote
+    # file and a missing one (M-124).
+    longp = [f"Paragraph {i}. " + " ".join(rnd.choice(words) for _ in range(40)) + "." for i in range(30)]
+    (books / "unwrapped-blank.txt").write_text("CHAPTER ONE\nThe Arrival\n\n" + "\n\n".join(longp[:10]) + "\n\nRoses are red\n  violets are blue\nsugar is sweet\n\n" + "\n\n".join(longp[10:]) + "\n")
+    ind = []
+    for i in range(60):
+        words_ = (f"Para{i} " + " ".join(rnd.choice(words) for _ in range(rnd.randint(40, 70)))).split()
+        lines, line = [], "    "
+        for w in words_:
+            if len(line) + len(w) > 108: lines.append(line.rstrip()); line = ""
+            line += w + " "
+        lines.append(line.rstrip())
+        ind.append("\n".join(lines))
+    (books / "indented.txt").write_text("\n".join(ind) + "\n")
+    (books / "cjk.txt").write_text("".join("これは長い段落の文です" + str(i % 10) + "。" for i in range(9000)))
+    svg_l1 = '<?xml version="1.0" encoding="ISO-8859-1"?>\n<?xml-stylesheet href="' + REMOTE + '/svgpi.css" type="text/css"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g id="a"><text y="20">Caf\u00e9</text><a href="#x"><set attributeName="href" to="' + REMOTE + '/svgset.png"/><animate attributeName="xlink:href" values="' + REMOTE + '/svganim.png"/></a></g></svg>'
+    epub_items(books / "svgenc.epub", "SVG enc", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("ext", "ext.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("SVG enc", '<h1>SVG enc</h1><svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><use href="ext.svg#a"/></svg>'), "ext.svg": svg_l1.encode("latin-1")}, "urn:svgenc")
+    shutil.copytree(books / "abc", books / "abc-extra")
+    opf_p = books / "abc-extra" / "OEBPS" / "content.opf"
+    opf_p.write_text(opf_p.read_text().replace("</manifest>", '<item id="remote" href="https://example.com/clip.mp4" media-type="video/mp4"/><item id="gone" href="gone.png" media-type="image/png"/></manifest>'))
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
     (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
     (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')

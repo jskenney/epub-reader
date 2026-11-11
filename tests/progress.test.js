@@ -300,3 +300,44 @@ test('leaving while an earlier place waits for its answer still sends the newest
   const got = await h.waitFor(async () => { const l = await log(); return l.some(r => Math.abs(r.body.section_percentage - want) < 0.2) ? l : null; }, 8000);
   assert.ok(got, `the newest place (${newest}) among ${JSON.stringify((await log()).map(r => r.body.section_percentage))}`);
 });
+
+// Round 25 review, loop 2.
+test('?edit= of an EPUB at its last page isn\'t reported finished, and opens the editor where this browser left it whatever the site answers (round 25 review, L-295, L-296)', async () => {
+  const page = await apiPage();
+  const done = await api(page, '**/api/complete');
+  await h.openReader(page, `${h.READER}?edit=books/long.epub`, { 'spine:pos:urn:long': { i: 2, f: 1, t: Date.now() } });
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'), null, { timeout: 15000 });
+  await page.waitForTimeout(800);
+  assert.equal(done.length, 0);
+  await api(page, '**/api/position', { status: 200, type: 'application/json', body: '{"section":2,"section_percentage":0,"book_percentage":90}' });
+  await h.openReader(page, `${h.READER}?edit=books/long.epub`, { 'spine:pos:urn:long': { i: 1, f: 0, t: Date.now() } });
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'), null, { timeout: 15000 });
+  await page.waitForTimeout(500);
+  assert.match(await page.textContent('#editName'), /c2\.xhtml/);
+});
+
+test('reaching the end in two pages, where the last section fits on one spread, sends 100%, as the bar shows (round 25 review, L-298)', async () => {
+  const page = await apiPage();
+  const got = await api(page);
+  await h.openReader(page, LONG, { 'spine:layout': 'two' });
+  await page.focus('#ribbon'); await page.keyboard.press('End');
+  await h.waitFor(() => got.length >= 1);
+  assert.equal(got.at(-1).body.book_percentage, 100);
+  assert.equal(got.at(-1).body.section_percentage, 100);
+  assert.equal(await page.textContent('#pct'), '100%');
+});
+
+test('a book whose last chapter was edited keeps its finished mark through the looser record (round 25 review, L-282)', async () => {
+  const page = await apiPage();
+  const done = await api(page, '**/api/complete');
+  await h.openReader(page, `${h.READER}?book=books/twin-a.epub`, { 'spine:layout': 'scroll' });
+  await page.focus('#ribbon'); await page.keyboard.press('End'); await page.waitForTimeout(300);
+  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
+  await h.waitFor(() => done.length === 1);
+  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = 0; }); await page.waitForTimeout(500);   // (saved again, with the mark)
+  await page.goto(`${h.READER}?book=books/twin-a-last.epub`); await h.waitForBook(page);
+  await page.focus('#ribbon'); await page.keyboard.press('End'); await page.waitForTimeout(300);
+  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = doc.scrollingElement.scrollHeight; });
+  await page.waitForTimeout(1000);
+  assert.equal(done.length, 1);
+});

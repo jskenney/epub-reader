@@ -198,3 +198,15 @@ test('names and ids that would hide the page\'s own methods are dropped, and the
   await page.waitForFunction(() => /spine 2\/2/.test(document.querySelector('#spinePos').textContent));
   assert.equal(await h.notice(page), '');
 });
+
+test('a cleaned SVG keeps its text in its own encoding, and loses its stylesheet instruction and href animations (round 25 review, L-291, L-292)', async () => {
+  const page = await h.newPage();
+  await h.clearRemoteLog();
+  await h.openReader(page, `${h.READER}?book=books/svgenc.epub`);
+  const svg = await h.inFrame(page, async doc => { const u = doc.querySelector('use').getAttribute('href').split('#')[0]; return (await fetch(u)).text(); });
+  assert.match(svg, /Café/);
+  assert.doesNotMatch(svg, /<\?xml/);
+  assert.doesNotMatch(svg, /svgset|svganim|svgpi/);
+  await page.waitForTimeout(500);
+  assert.deepEqual(await h.remoteLog(), []);
+});

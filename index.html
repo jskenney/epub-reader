@@ -163,6 +163,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .app.no-bar .bar,.app.no-foot .foot{display:none}
 /* (A strip of its own above the page, so it covers none of it: round 25 review, L-289.) */
 .app.with-corner{padding-top:28px}
+.app.fs.with-corner{padding-top:0}   /* (full screen hides the corner: round 25 review, L-290) */
 .bar-corner{position:fixed;top:0;right:0;z-index:40;width:96px;height:40px;padding:0;border:0;background:transparent;cursor:pointer;opacity:0}
 .bar-corner:focus-visible{opacity:1;outline:2px solid var(--ribbon);outline-offset:-4px}
 .app.fs ~ .bar-corner,.app.fs .bar-corner{display:none}
@@ -1232,16 +1233,20 @@ function dirSource(base){
     },
     async exists(p){ return !!abs(p); },
     // (A file's bytes, for packing an edited book: E-23.)
+    // null: not there (404, 410, or the site's "not found" page); an error: it couldn't be fetched (no connection,
+    // another status, sent on to another site), so a book packed from it would be missing a file it has (round 25
+    // review, M-124).
     async bytes(p){
       const u = abs(p); if (!u) return null;
-      try {
-        const r = await fetch(u);
-        if (!r.ok || (r.redirected && !sameSite(new URL(r.url), new URL(root)))) return null;
-        const data = new Uint8Array(await r.arrayBuffer());
-        // (A site's "not found" page sent with status 200 isn't the file, as for text(): round 24 review.)
-        if (looksHtml(r) && !/\.x?html?$/i.test(p) && await isSoftNotFound(u, new TextDecoder().decode(data.subarray(0, 65536)))) return null;
-        return data;
-      } catch { return null; }
+      let r;
+      try { r = await fetch(u); } catch { throw new Error('no connection'); }
+      if (r.status === 404 || r.status === 410) return null;
+      if (!r.ok) throw new Error(`the site answered ${r.status}`);
+      if (r.redirected && !sameSite(new URL(r.url), new URL(root))) throw new Error(`it is sent on to ${new URL(r.url).host}`);
+      const data = new Uint8Array(await r.arrayBuffer());
+      // (A site's "not found" page sent with status 200 isn't the file, as for text(): round 24 review.)
+      if (looksHtml(r) && !/\.x?html?$/i.test(p) && await isSoftNotFound(u, new TextDecoder().decode(data.subarray(0, 65536)))) return null;
+      return data;
     },
     obf: null, blobs: new Set(),
     async url(p, type){
@@ -1444,16 +1449,23 @@ function textToHtml(raw){
     return lines.length === 1 && /[A-Z]/.test(first) && !/[a-z]/.test(first) && first.length <= 50 && first.split(/\s+/).length <= 8 && !/[,;!?]$/.test(first);
   };
   const inline = s => escHtml(s).replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
-  // A file of one long line per paragraph (not wrapped, and so seldom with blank lines between): each line is a
-  // block, rather than the whole file one paragraph (round 25 review, M-122).
-  const blank = (t.match(/\n[ \t]*\n/g) || []).length, unwrapped = wrap > 160 || (lens.length > 20 && wrap > 100 && blank < lens.length * 0.05);
-  const blocks = t.split(unwrapped ? /\n+/ : /\n[ \t]*\n+/).map(b => b.trimEnd()).filter(b => b.trim());   // (trimEnd: a regex here is quadratic on long runs of spaces)
+  // Blocks are parted by blank lines. A file with almost none (round 25 review, M-122, M-125, L-294): parted
+  // where a line starts indented, when that is how its paragraphs are marked (some lines indented, most not);
+  // otherwise, if its lines are long (one line per paragraph, unwrapped), at each line; else (a hard-wrapped
+  // file with no blank lines at all) as one block, as before.
+  const blank = (t.match(/\n[ \t]*\n/g) || []).length, few = lens.length > 20 && blank < lens.length * 0.05;
+  const indented = (t.match(/\n[ \t]+\S/g) || []).length;
+  const parting = !few ? /\n[ \t]*\n+/ : indented >= lens.length * 0.03 && indented <= lens.length * 0.6 ? /\n(?:[ \t]*\n)*(?=[ \t]+\S)/ : wrap > 100 ? /\n+/ : /\n[ \t]*\n+/;
+  const blocks = t.split(parting).map(b => b.trimEnd()).filter(b => b.trim());   // (trimEnd: a regex here is quadratic on long runs of spaces)
+  // (Unwrapped text with blank lines: a block of several long lines is one paragraph per line, M-125.)
+  const longLines = wrap > 160;
   const items = blocks.map(b => {
     const lines = b.split('\n').filter(l => l.trim());
     if (isHeading(lines)) {
       const level = /^(book|part|volume)\b/i.test(lines[0].trim()) ? 'h1' : 'h2';
       return { heading: true, level, html: lines.map(l => inline(l.trim())).join('<br> ') };
     }
+    if (longLines && lines.length > 1 && lines.every(l => l.trim().length > 80)) return { html: lines.flatMap(l => txtPieces(l.trim())).map(s => `<p>${inline(s)}</p>`).join('\n') };
     const longish = lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;
     // (A paragraph, or block of lines, too long to be one: in pieces, so the document can be split into sections
     // between them: round 25 review, L-286.)
@@ -1481,12 +1493,15 @@ function textToHtml(raw){
 const TXT_CSS = '<style>.txt-lines{text-indent:0;margin:0 0 1em}</style>';
 // A paragraph over TXT_PARA_MAX characters in pieces, at the end of a sentence (or a space) past that length.
 const TXT_PARA_MAX = 20000, TXT_LINES_MAX = 2000;
+// (A sentence ends in "." and the like before a space, or in "。" and the like (Chinese, Japanese) without one; with
+// neither, at a space, else at the limit itself: round 25 review, L-293.)
 function txtPieces(s){
-  const out = [];
+  const out = [], end = /[.!?…]["'”’)\]]*\s|[。！？…][」』”’）〕】]*/g;
   while (s.length > TXT_PARA_MAX * 1.5) {
-    let k = s.slice(TXT_PARA_MAX).search(/[.!?…]["'”’)]*\s/);
-    k = k >= 0 && k < TXT_PARA_MAX ? TXT_PARA_MAX + k + 1 : s.indexOf(' ', TXT_PARA_MAX);
-    if (k <= 0) break;
+    end.lastIndex = TXT_PARA_MAX;
+    const m = end.exec(s);
+    let k = m && m.index < TXT_PARA_MAX * 2 ? m.index + m[0].length : s.indexOf(' ', TXT_PARA_MAX);
+    if (k <= 0 || k > TXT_PARA_MAX * 2) { k = TXT_PARA_MAX; if (/[\uDC00-\uDFFF]/.test(s[k])) k++; }
     out.push(s.slice(0, k).trim()); s = s.slice(k).trim();
   }
   out.push(s);
@@ -1716,7 +1731,7 @@ async function openComic(zip, name, { key, seq, from = '' } = {}){
 // A ZIP is opened as a comic when it is named .cbz, or has page images and no EPUB container.
 async function openZip(zip, name, opts = {}){
   if (/\.cbz$/i.test(name) || (!getFile(zip, 'META-INF/container.xml') && comicPages(zip).length)) return openComic(zip, name.replace(/\.(cbz|zip)$/i, ''), opts);
-  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, ''), seq: opts.seq, from: opts.from, ownKey: opts.ownKey });
+  return openBook(zipSource(zip), { name: name.replace(/\.epub$/i, ''), seq: opts.seq, from: opts.from, ownKey: opts.ownKey, forEdit: opts.forEdit });
 }
 
 /* ---------- descriptive metadata ---------- */
@@ -1815,7 +1830,7 @@ function descriptionParagraphs(raw){
 /* ---------- opening a book ---------- */
 // ownKey: the position key for a book from another site (?get=), which mustn't share a place with this site's
 // copy of a book with the same identifier, or mark it finished (round 25 review, H-29).
-async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey = '' } = {}){
+async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey = '', forEdit = false } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   const cText = await readText(zip, 'META-INF/container.xml');
   if (!cText) throw new Error(zip.kind === 'dir'
@@ -1900,7 +1915,7 @@ async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey
   next.copyKeys = uid ? [stableKey] : [];
   if (ownKey) Object.assign(next, { key: ownKey, legacyKeys: [], copyKeys: [], looseKey: null, writeLoose: false });
   // (Sent with reading progress: E-22.)
-  Object.assign(next, { from, size: zip.raw?.fileSize ?? null, fingerprint: stableKey.slice('spine:pos:opf:'.length) });
+  Object.assign(next, { from, forEdit, size: zip.raw?.fileSize ?? null, fingerprint: stableKey.slice('spine:pos:opf:'.length) });
   next.seq = seq;
   await startBook(next);
 }
@@ -2019,6 +2034,9 @@ async function svgURL(path, type){
   const d = new DOMParser().parseFromString(t, 'image/svg+xml');
   if (!d.documentElement || d.getElementsByTagName('parsererror').length) return null;
   d.querySelectorAll('script, foreignObject, iframe, object, embed, a').forEach(e => e.replaceWith(...(e.localName === 'a' ? e.childNodes : [])));
+  // (Processing instructions, <?xml-stylesheet?> say, and animations that set an address: round 25 review, L-292.)
+  for (const n of [...d.childNodes]) if (n.nodeType === 7) n.remove();
+  d.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
   const jobs = [], budget = cssBudget(), paint = ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end', 'cursor'];
   for (const el of d.getElementsByTagName('*')) {
     for (const a of [...el.attributes]) {
@@ -2031,7 +2049,8 @@ async function svgURL(path, type){
   }
   await Promise.all(jobs);
   if (book !== b) return null;
-  const u = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(d)], { type }));
+  // (As UTF-8, which it now is, whatever its declaration said: round 25 review, L-291.)
+  const u = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(d).replace(/^<\?xml[^>]*\?>\s*/, '')], { type: `${type};charset=utf-8` }));
   (b.svgBlobs ||= []).push(u);
   return u;
 }
@@ -3009,7 +3028,9 @@ const scrolling = () => layout === 'scroll';
 const scroller = () => frame.contentDocument?.scrollingElement || null;
 // How much of the section is read: a fixed-layout page counts as read once shown (in any layout), so progress
 // reaches 100% on the last one; otherwise the place in it.
-const readFraction = () => cur.doc && cur.doc === frame.contentDocument && fxlOf(cur.doc) ? 1 : fraction();
+// (A section shown whole, on one page or in one screen, is read too: round 25 review, L-298.)
+const readFraction = () => cur.doc && cur.doc === frame.contentDocument && (fxlOf(cur.doc) || shownWhole()) ? 1 : fraction();
+const shownWhole = () => { if (!scrolling()) return cur.pages <= 1; const se = scroller(); return !!se && se.scrollHeight - se.clientHeight <= 1; };
 function fraction(){
   if (scrolling()) { const se = scroller(); if (!se) return 0; const max = se.scrollHeight - se.clientHeight; return max > 0 ? Math.min(1, se.scrollTop / max) : 0; }
   return cur.pages > 1 ? cur.page / (cur.pages - 1) : 0;
@@ -7207,7 +7228,9 @@ async function editMakeApi(host){
     await loadCodeMirror();
     if (!ed.on) return null;   // (left while it loaded: nothing left behind: round 24 review)
     const cm = CodeMirror(host, {
-      value: edEol(ed.text), lineSeparator: ed.eol === '\r\n' ? '\r\n' : null,
+      // (Lines kept by CodeMirror as it likes, and given the file's ending as they are read: with lineSeparator set,
+      // text inserted with a lone LF (a list continued with Enter) stayed inside one line: round 25 review, M-123.)
+      value: ed.text,
       mode: { markdown: 'gfm', html: 'htmlmixed' }[ed.kind] || null, lineNumbers: true, lineWrapping: true,
       indentUnit: 2, tabSize: 2, screenReaderLabel: 'Document text',
       extraKeys: {
@@ -7219,7 +7242,7 @@ async function editMakeApi(host){
     });
     const at = l => cm.heightAtLine(l, 'local');
     return {
-      get: () => cm.getValue(), focus: () => cm.focus(), refresh: () => cm.refresh(), scrollTop: () => cm.getScrollInfo().top,
+      get: () => edEol(cm.getValue()), focus: () => cm.focus(), refresh: () => cm.refresh(), scrollTop: () => cm.getScrollInfo().top,
       onChange: f => cm.on('changes', f), onScroll: f => cm.on('scroll', f), lines: () => cm.lineCount(),
       topLine(){ const top = cm.getScrollInfo().top, l = cm.lineAtHeight(top, 'local'), h = at(l + 1) - at(l); return l + (h > 0 ? Math.max(0, Math.min(1, (top - at(l)) / h)) : 0); },
       scrollToLine(x){ const l = Math.floor(x); cm.scrollTo(null, at(l) + (at(l + 1) - at(l)) * (x - l)); },
@@ -7650,12 +7673,18 @@ async function epubPack(b, changes){
       catch (e) { throw new Error(`${name} in the book can't be read (${e.message}), so the book can't be saved whole; Chapter downloads this chapter on its own.`); }
     }
   } else {
+    // (Not a manifest item on another site, which EPUB 3 allows: it isn't one of the book's files: round 25 review, M-124.)
     const names = ['META-INF/container.xml', 'META-INF/encryption.xml', 'META-INF/com.apple.ibooks.display-options.xml', 'META-INF/metadata.xml',
-      'META-INF/manifest.xml', 'META-INF/rights.xml', 'META-INF/signatures.xml', b.opfPath, ...[...b.manifest.values()].map(it => it.path)];
+      'META-INF/manifest.xml', 'META-INF/rights.xml', 'META-INF/signatures.xml', b.opfPath, ...[...b.manifest.values()].filter(it => !isRemote(it.href)).map(it => it.path)];
+    const must = new Set(['META-INF/container.xml', b.opfPath]);
     for (const name of new Set(names)) {
-      if (optional.has(name)) { const t = await b.src.text(name); if (!t || !parseDoc(t, 'application/xml')) continue; }
-      // (A file that couldn't be fetched: not saved without it (round 25 review, M-119).)
-      if (!await add(name, changes.get(name))) throw new Error(`${name} couldn't be fetched from the site, so the book can't be saved whole; Chapter downloads this chapter on its own.`);
+      if (optional.has(name)) { const t = await b.src.text(name).catch(() => null); if (!t || !parseDoc(t, 'application/xml')) continue; }
+      // A file that couldn't be fetched: not saved without it (round 25 review, M-119). One that isn't there (the
+      // book lists a file it doesn't have) is left out, as reading leaves it out; the container and package must be.
+      let added;
+      try { added = await add(name, changes.get(name)); }
+      catch (e) { throw new Error(`${name} couldn't be fetched from the site (${e.message}), so the book can't be saved whole; Chapter downloads this chapter on its own.`); }
+      if (!added && must.has(name)) throw new Error(`${name} isn't on the site, so the book can't be saved.`);
     }
   }
   return out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
@@ -8716,7 +8745,13 @@ async function openForEdit(ref){
   const note = msg => { if ($('#notice').hidden || noticeKind !== 'error') showNotice(msg, 'info', { label: 'OK', run(){} }); };
   if (!EDITING) { await openFromUrl(ref); note('Editing is turned off on this site: the document is open to read.'); return; }
   // (The chapter it opens at, if the book asked for opened; not the default book shown after an error: round 24 review.)
-  if (/\.epub$/i.test(ref)) { await openFromUrl(ref); if (book && !book.doc && edChapter() && !(noticeKind === 'error' && !$('#notice').hidden)) await editStart(); return; }
+  // (Opened for editing: not finished as it opens, and not moved by the site's place: round 25 review, L-295, L-296.)
+  if (/\.epub$/i.test(ref)) {
+    await openFromUrl(ref, { forEdit: true });
+    if (book && !book.doc && edChapter() && !(noticeKind === 'error' && !$('#notice').hidden)) await editStart();
+    if (book) book.forEdit = false;
+    return;
+  }
   const kind = docKind(ref.replace(/[?#].*$/, ''));
   if (!EDIT_EXT.test(ref.replace(/[?#].*$/, '')) || !kind) { const seq = ++openSeq; await openDefault(seq); if (!isStale(seq)) showNotice(`${ref} can't be edited: ?edit= takes .md, .markdown, .html, .htm and .txt files.`, 'error'); return; }
   const seq = ++openSeq;
@@ -8748,7 +8783,7 @@ async function openByAddress(ref){
   await openFromUrl(ref, { anySite: true });
 }
 // anySite: ?get= (E-24), which takes addresses on other sites too.
-async function openFromUrl(ref, { anySite = false } = {}){
+async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
   const seq = ++openSeq;
   showStatus(`Loading ${ref}…`);
   // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
@@ -8783,7 +8818,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
         if (found.miss) { misses.push(`${foreign ? u.href : u.pathname} (${why(found.miss)})`); continue; }
         const zip = found.zip;
         if (/\.epub$/i.test(u.pathname) && !getFile(zip, 'META-INF/container.xml')) { misses.push(`${u.pathname} (no META-INF/container.xml)`); continue; }
-        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, from: u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '' });
+        await openZip(zip, safeDecode(u.pathname.split('/').pop()), { key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, from: u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '', forEdit });
         if (!isStale(seq) && book && !book.comic) book.fileName = safeDecode(u.pathname.split('/').pop());
         if (foreign && !isStale(seq)) showFrom(foreign);
         return;
@@ -8794,7 +8829,7 @@ async function openFromUrl(ref, { anySite = false } = {}){
       if (!container || !parseDoc(container, 'application/xml')?.getElementsByTagNameNS('*', 'rootfile')[0]) {
         misses.push(foreign ? `${u.href} (${foreign} didn't give its META-INF/container.xml: not an EPUB folder, or not readable from here)` : `${u.pathname} (no META-INF/container.xml${anySite ? ', or it is sent on to another site: ?get= opens folder books on that site by their own address' : ''})`); continue;
       }
-      await openBook(src, { name, seq, from: u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '' });
+      await openBook(src, { name, seq, from: u.href, ownKey: foreign ? `spine:pos:get:${u.href}` : '', forEdit });
       if (!isStale(seq) && book) book.fileName = `${name || 'book'}.epub`;
       if (foreign && !isStale(seq)) showFrom(foreign);
       return;

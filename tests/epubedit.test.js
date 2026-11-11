@@ -295,7 +295,7 @@ test('a folder book with a file that can\'t be fetched isn\'t saved without it (
   await h.openReader(page, `${h.READER}?book=books/abc/`, RAW);
   await startEditing(page);
   await replace(page, '</p>', ' Folder edit.</p>');
-  await page.route('**/books/abc/OEBPS/c3.xhtml', r => r.fulfill({ status: 404, body: 'gone' }));
+  await page.route('**/books/abc/OEBPS/c3.xhtml', r => r.fulfill({ status: 500, body: 'broken' }));   // (couldn't be fetched, not missing: M-124)
   let downloaded = false;
   page.on('download', () => { downloaded = true; });
   await page.keyboard.press('Control+s');
@@ -303,4 +303,16 @@ test('a folder book with a file that can\'t be fetched isn\'t saved without it (
   await page.waitForTimeout(500);
   assert.equal(downloaded, false);
   assert.match(await page.textContent('#editName'), /unsaved/);
+});
+
+test('a folder book listing a file on another site, or one it doesn\'t have, is still saved, without them (round 25 review, M-124)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, `${h.READER}?book=books/abc-extra/`, RAW);
+  await startEditing(page);
+  await replace(page, '</p>', ' Folder edit.</p>');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  const got = unzip(await dl.path(), []);
+  assert.ok(got.order.includes('OEBPS/c3.xhtml'), JSON.stringify(got.order));
+  assert.ok(!got.order.some(n => /clip\.mp4|gone\.png/.test(n)), JSON.stringify(got.order));
 });

@@ -237,3 +237,18 @@ test('one huge paragraph, or a huge block of short lines, is split into sections
     assert.ok(n >= 3, `${name}: ${n} sections`);
   }
 });
+
+// Round 25 review, loop 2.
+test('unwrapped text with blank lines keeps its two-line heading and its verse; hard-wrapped text marked by indentation keeps its paragraphs; a paragraph without spaces is split (round 25 review, M-125, L-294, L-293)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/unwrapped-blank.txt`);
+  const u = await h.inFrame(page, doc => ({ h: doc.querySelector('h1,h2')?.innerHTML, lines: doc.querySelectorAll('.txt-lines').length, p: doc.querySelectorAll('p:not(.txt-lines)').length }));
+  assert.match(u.h, /CHAPTER ONE<br>\s*The Arrival/);
+  assert.equal(u.lines, 1);
+  assert.equal(u.p, 30);
+  await h.openReader(page, `${h.READER}?book=books/indented.txt`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('p').length), 60);
+  await h.openReader(page, `${h.READER}?book=books/cjk.txt`, { 'spine:layout': 'scroll' });
+  const n = Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('p').length) > 1 || n > 1);
+});

@@ -788,7 +788,9 @@ test('a CRLF file keeps its line endings: an edit undone leaves it unchanged, an
   await inPage(page).locator('p', { hasText: 'Start.' }).first().click();
   await page.keyboard.press('End'); await page.keyboard.type(' Typed.');
   await flush(page);
-  const t = await text(page);
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction(() => window.__writes === 2);
+  const t = await page.evaluate(() => window.__files['crlf.md']);
   assert.match(t, /Start\. Typed\.\r\n/);
   assert.doesNotMatch(t.replace(/\r\n/g, ''), /\n/, JSON.stringify(t));
 });
@@ -840,4 +842,18 @@ test('Save asks before writing over a file that changed on disk since it was ope
   await typeAtEnd(page, 'Again.\n');
   await page.keyboard.press('Control+s');
   await page.waitForFunction(() => window.__writes === 2);
+});
+
+// Round 25 review, loop 2.
+test('Enter in a Markdown list in a CRLF file starts a new line with CRLF (round 25 review, M-123)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, doc('crlf.md'), RAW);
+  await startEditing(page);
+  await typeAtEnd(page, '- item'); await page.keyboard.press('Enter'); await page.keyboard.type('next');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  const t = fs.readFileSync(await dl.path(), 'latin1');
+  assert.match(t, /- item\r\n- next$/, JSON.stringify(t));
+  assert.doesNotMatch(t.replace(/\r\n/g, ''), /\n/, JSON.stringify(t));
+  assert.equal(await page.evaluate(() => document.querySelector('.CodeMirror').CodeMirror.getLine(document.querySelector('.CodeMirror').CodeMirror.lineCount() - 1)), '- next');
 });

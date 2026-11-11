@@ -85,3 +85,12 @@ test('with the top bar hidden, its corner button sits in a strip of its own abov
     assert.equal(await page.isVisible('#tocBtn'), true);
   }
 });
+
+test('in full screen with the top bar hidden, no empty strip is left above the page (round 25 review, L-290)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.keyboard.press('n'); await page.waitForTimeout(200);
+  await page.keyboard.press('f'); await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(() => document.querySelector('.app').classList.contains('fs')), true);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.app')).paddingTop), '0px');
+});
