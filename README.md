@@ -722,8 +722,10 @@ complete nginx setup for the reader at `/reader/`:
   site, where the reader's settings and saved data are. HTML, XHTML, XML, XSL,
   RSS, Atom and SVG files under `/reader/` and `/bookshelf/` are sent with
   `Content-Security-Policy: sandbox`, a book's own `index.html` too; the reader's
-  page, `/reader/index.html`, is exempted by an exact location (add one for each
-  folder with its own copy). The reader reads books with `fetch`, which this
+  page, `/reader/index.html`, is exempted by an exact location. A folder under
+  `/reader/` with its own copy of `index.html` needs an exact location of its own
+  (`location = /reader/folder/index.html { }`), or that copy is sandboxed and blank:
+  add one when you update from an earlier version of the example. The reader reads books with `fetch`, which this
   doesn't affect. (Other servers: send the same header for book files.)
 - **Caching that checks first** (`Cache-Control: no-cache`): browsers keep every
   file but ask whether it changed (an unchanged file is a short 304), so a new
@@ -746,12 +748,27 @@ handle /reader/* {
 	header Referrer-Policy same-origin
 	# Revalidate every file (cheap with ETags): a cached old library would fail a new index.html's hash.
 	header Cache-Control "no-cache"
+	# Book files opened on their own run nothing (not the reader's own page).
+	@bookfiles {
+		path_regexp \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
+		not path /reader/index.html
+	}
+	header @bookfiles Content-Security-Policy "sandbox"
+	root * /srv/www
+	file_server
+}
+handle /bookshelf/* {
+	@bookfiles path_regexp \.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$
+	header @bookfiles Content-Security-Policy "sandbox"
+	header X-Content-Type-Options nosniff
 	root * /srv/www
 	file_server
 }
 ```
 
-Caddy already serves `.mjs` and `.wasm` with the right types.
+Caddy already serves `.mjs` and `.wasm` with the right types. (The reader doesn't
+rely on the sandbox header: a book's pictures and files are served so they can't run
+as pages of your site anyway. It is a second line for links straight to book files.)
 
 ## Settings
 

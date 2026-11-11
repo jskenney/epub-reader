@@ -857,3 +857,28 @@ test('Enter in a Markdown list in a CRLF file starts a new line with CRLF (round
   assert.doesNotMatch(t.replace(/\r\n/g, ''), /\n/, JSON.stringify(t));
   assert.equal(await page.evaluate(() => document.querySelector('.CodeMirror').CodeMirror.getLine(document.querySelector('.CodeMirror').CodeMirror.lineCount() - 1)), '- next');
 });
+
+// Round 25 review, loop 5: patterns that took time growing with the input.
+test('a long front-matter line, many comments before a fragment, a long code span and many unclosed <meta don\'t freeze opening, editing or saving (round 25 review, M-136, L-321, L-322, L-323)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  let t0 = Date.now();
+  await h.openReader(page, doc('frontmatter-long.md'));
+  assert.ok(Date.now() - t0 < 6000, `front matter: ${Date.now() - t0} ms`);
+  for (const name of ['many-comments.html', 'long-code.md']) {
+    await wysiwyg(page, doc(name));
+    t0 = Date.now();
+    await inPage(page).locator('p', { hasText: 'Start.' }).first().click();
+    await page.keyboard.press('End'); await page.keyboard.type(' T');
+    await flush(page);
+    assert.match(await text(page), /Start\. T/);
+    assert.ok(Date.now() - t0 < 4000, `${name}: ${Date.now() - t0} ms`);
+  }
+  await h.openReader(page, doc('many-meta.html'), RAW);
+  await startEditing(page);
+  t0 = Date.now();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  assert.ok(Date.now() - t0 < 4000, `saving: ${Date.now() - t0} ms`);
+  // The download is plain bytes, not a page of the reader's origin (L-325).
+  assert.equal(await page.evaluate(async u => (await fetch(u)).headers.get('content-type'), dl.url()), 'application/octet-stream');
+});

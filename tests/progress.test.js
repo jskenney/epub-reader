@@ -386,3 +386,13 @@ test('?get= of a site address sent on to another site tells the API the address 
   assert.equal(b.path, null);
   assert.equal(b.url, `${h.SOFT}/reader/books/notes.md`);
 });
+
+test('?get= of a site archive sent on to another site tells the API the address it came from (round 25 review, T-49 for L-312)', async () => {
+  const page = await h.newPage();
+  const got = [];
+  await page.route('**/api/**', route => { got.push(JSON.parse(route.request().postData() || 'null')); return route.fulfill({ status: 200, contentType: 'application/json', body: '{"section":null,"section_percentage":null,"book_percentage":null}' }); });
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?get=/redirect/8791/reader/books/long.epub`);
+  await h.waitFor(() => got.length >= 1, 5000);
+  assert.equal(got[0].path, null);
+  assert.equal(got[0].url, `${h.SOFT}/reader/books/long.epub`);
+});

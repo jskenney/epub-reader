@@ -607,7 +607,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0545</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0628</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1279,11 +1279,16 @@ function dirSource(base){
     },
     obf: null, blobs: new Set(),
     async url(p, type){
-      const u = abs(p), key = lookObf(this.obf, p, pathKey); if (!u || !key) return u;   // (a folder on a server: names compared folded)
+      const u = abs(p), key = lookObf(this.obf, p, pathKey); if (!u) return null;
+      // The site's own address only for a file whose name says it is a picture, sound, video, font, stylesheet or
+      // captions, which the server sends as that; anything else (an HTML or SVG file named as a picture's file,
+      // say), as a blob of a type that runs nothing, as for archives: a server without the example's sandbox
+      // header would show it as a page of this site (round 25 review, M-135).
+      if (!key && /\.(png|jpe?g|gif|webp|avif|bmp|ico|mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4|m4v|webm|ogv|mov|woff2?|ttf|otf|eot|css|vtt)$/i.test(p)) return u;
       try {
         const r = await fetch(u); if (!r.ok) return null;
         if (r.redirected && !sameSite(new URL(r.url), new URL(root))) return null;   // (sent on to another site: round 24 review)
-        const data = unobfuscate(new Uint8Array(await r.arrayBuffer()), key);
+        const raw = new Uint8Array(await r.arrayBuffer()), data = key ? unobfuscate(raw, key) : raw;
         if (this.disposed) return null;   // (the book was closed meanwhile)
         const b = URL.createObjectURL(new Blob([data], { type: blobType(type) }));
         this.blobs.add(b); return b;
@@ -1475,8 +1480,8 @@ function textToHtml(raw){
     if (lines.length > 2) return false;
     const first = lines[0].trim();
     if (first.length > 60) return false;
-    if (TXT_HEAD.test(first) || TXT_SOLO.test(first) || (lines.length === 1 && /^[IVXLCDM]+\.?$/.test(first))) return true;
-    return lines.length === 1 && /[A-Z]/.test(first) && !/[a-z]/.test(first) && first.length <= 50 && first.split(/\s+/).length <= 8 && !/[,;!?]$/.test(first);
+    if (TXT_HEAD.test(first) || TXT_SOLO.test(first) || /^第[0-9０-９一二三四五六七八九十百千零〇两]+[章回节節卷部篇話话]/.test(first) || (lines.length === 1 && /^[IVXLCDM]+\.?$/.test(first))) return true;
+    return lines.length === 1 && /\p{Lu}/u.test(first) && !/\p{Ll}/u.test(first) && !/^["'“‘]/.test(first) && first.length <= 50 && first.split(/\s+/).length <= 8 && !/[,;!?]$/.test(first);
   };
   const inline = s => escHtml(s).replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
   // The blocks (paragraphs, verse, headings) as lists of lines. A file is read as one of two kinds (round 25
@@ -1496,7 +1501,8 @@ function textToHtml(raw){
   const inner = groups.flatMap(g => g.slice(0, -1).map(l => l.trim().length)).sort((a, b) => a - b);
   const iw = inner[Math.floor(inner.length * 0.9)] || 0;
   const packed = inner.filter(n => n >= iw * 0.75 && n <= iw).length / (inner.length || 1);
-  const unwrapped = inner.length >= 5 ? iw > 160 || (iw > 80 && packed < 0.6) : wrap > 160;
+  const innerEnds = groups.flatMap(g => g.slice(0, -1)).filter(l => /[.!?…。！？]["'”’)\]」』]*$/.test(l)).length;   // (each line a sentence or more)
+  const unwrapped = inner.length >= 5 ? iw > 160 || (iw > 80 && packed < 0.6) || innerEnds >= inner.length * 0.8 : wrap > 160;
   const few = lens.length > 20 && groups.length < lens.length * 0.05;
   const indent = l => /^[ \t\u3000]+\S/.test(l), asciiIndent = l => /^[ \t]+\S/.test(l);
   const ends = l => /[.!?…。！？]["'”’)\]」』]*$|:$/.test(l.trim());
@@ -1507,18 +1513,19 @@ function textToHtml(raw){
       && at.filter(k => ends(rows[k - 1])).length >= at.length * 0.6;
   }
   const headLine = (l, prev) => { const s = l.trim(); return s.length <= 60 && /^[A-Z]/.test(s) && (TXT_HEAD.test(s) || TXT_SOLO.test(s)) && (!prev || ends(prev)); };
+  const shortEnd = l => ends(l) && l.trim().length < wrap * 0.7;   // (a paragraph's last line, in a file with neither blank lines nor indents)
   const blocks = [];
   for (const g of groups) {
     if (unwrapped) {
       const indented = g.filter(asciiIndent).length, sentences = g.filter(ends).length;
       if (g.length > 1 && g.every(l => l.trim().length < Math.min(70, wrap * 0.5))) blocks.push(g);
-      else if (g.length > 2 && ((indented >= g.length * 0.3 && indented < g.length) || sentences < g.length * 0.4)) blocks.push(Object.assign(g, { asLines: true }));
+      else if (g.length > 2 && ((indented >= g.length * 0.3 && indented < g.length && sentences < g.length * 0.6) || sentences < g.length * 0.4)) blocks.push(Object.assign(g, { asLines: true }));
       else for (const l of g) blocks.push([l]);
     } else if (few) {
       let cur = [];
       for (const l of g) {
         if (headLine(l, cur.at(-1))) { if (cur.length) blocks.push(cur); blocks.push([l]); cur = []; continue; }
-        if (paraIndent && cur.length && indent(l)) { blocks.push(cur); cur = []; }
+        if (cur.length && (paraIndent ? indent(l) : shortEnd(cur.at(-1)) && /^["'“‘(]*\p{Lu}/u.test(l.trim()))) { blocks.push(cur); cur = []; }
         cur.push(l);
       }
       if (cur.length) blocks.push(cur);
@@ -1529,16 +1536,23 @@ function textToHtml(raw){
       const level = /^(book|part|volume)\b/i.test(lines[0].trim()) ? 'h1' : 'h2';
       return { heading: true, level, html: lines.map(l => inline(l.trim())).join('<br> ') };
     }
-    const longish = lines.asLines ? 0 : lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;   // (code or verse: as lines)
+    // (Verse, lists, subtitles: nearly every line starts with a capitalised word, a digit or a bullet.)
+    const capStart = lines.slice(1).filter(l => /^\s*(?:[-*•+]\s|["'“‘(\[_]*(?:\p{Lu}\p{Ll}|\d))/u.test(l)).length;
+    const longish = lines.asLines || (lines.length >= 4 && capStart >= (lines.length - 1) * 0.8) ? 0 : lines.slice(0, -1).filter(l => l.trim().length >= wrap * 0.7).length;   // (code or verse: as lines)
     // (A paragraph, or block of lines, too long to be one: in pieces, so the document can be split into sections
     // between them: round 25 review, L-286.)
     if (lines.length === 1 || longish >= (lines.length - 1) * 0.6)
       return { html: txtPieces(lines.map(l => l.trim()).join(' ').replace(/(\w)- (?=[a-z])/g, '$1-')).map(s => `<p>${inline(s)}</p>`).join('\n') };
     // Short lines: verse, letters, addresses. Keep the line breaks and indentation.
     const out = [];
-    for (let k = 0; k < lines.length; k += TXT_LINES_MAX) out.push(`<p class="txt-lines">${lines.slice(k, k + TXT_LINES_MAX).map(l => '&emsp;'.repeat(Math.floor((l.match(/^ */)[0].length) / 2)) + inline(l.trim())).join('<br>')}</p>`);
+    for (let k = 0; k < lines.length; k += TXT_LINES_MAX) out.push(`<p class="txt-lines">${lines.slice(k, k + TXT_LINES_MAX).map(l => '&emsp;'.repeat(Math.floor((l.match(/^[ \t]*/)[0].replace(/\t/g, '    ').length) / 2)) + inline(l.trim())).join('<br>')}</p>`);
     return { html: out.join('\n') };
   });
+  // "CHAPTER I." then its title in capitals as a block of its own: one heading.
+  for (let i = items.length - 2; i >= 0; i--) {
+    const a = items[i], b = items[i + 1], tb = b.html.replace(/<[^>]+>/g, '');
+    if (a.heading && b.heading && TXT_HEAD.test(a.html) && !a.html.includes('<br>') && !TXT_HEAD.test(tb) && !TXT_SOLO.test(tb)) items.splice(i, 2, { ...a, html: a.html + '<br> ' + b.html });
+  }
   // Three or more headings in a row are a contents list, not chapters. When the list runs straight into
   // the first real chapter, that heading repeats an entry of the list: keep it.
   const first = it => it.html.split('<br>')[0].replace(/<[^>]+>/g, '').trim().toLowerCase();
@@ -1559,16 +1573,17 @@ const TXT_PARA_MAX = 20000, TXT_LINES_MAX = 2000;
 // (A sentence ends in "." and the like before a space, or in "。" and the like (Chinese, Japanese) without one; with
 // neither, at a space, else at the limit itself: round 25 review, L-293.)
 function txtPieces(s){
-  const out = [], end = /[.!?…]["'”’)\]]*\s|[。！？…][」』”’）〕】]*/g;
-  while (s.length > TXT_PARA_MAX * 1.5) {
-    end.lastIndex = TXT_PARA_MAX;
-    const m = end.exec(s);
-    let k = m && m.index < TXT_PARA_MAX * 2 ? m.index + m[0].length : s.indexOf(' ', TXT_PARA_MAX);
-    if (k <= 0 || k > TXT_PARA_MAX * 2) { k = TXT_PARA_MAX; if (/[\uDC00-\uDFFF]/.test(s[k])) k++; }
-    out.push(s.slice(0, k).trim()); s = s.slice(k).trim();
+  // (Looked for in the next stretch only, not to the end of the text each time: a 30 MB line took seconds: L-324.)
+  const out = [], end = /[.!?…]["'”’)\]]*\s|[。！？…][」』”’）〕】]*/;
+  let at = 0;
+  while (s.length - at > TXT_PARA_MAX * 1.5) {
+    const win = s.slice(at + TXT_PARA_MAX, at + TXT_PARA_MAX * 2), m = end.exec(win);
+    let k = m ? TXT_PARA_MAX + m.index + m[0].length : win.indexOf(' ') >= 0 ? TXT_PARA_MAX + win.indexOf(' ') : -1;
+    if (k < 0) { k = TXT_PARA_MAX; if (/[\uDC00-\uDFFF]/.test(s[at + k])) k++; }
+    out.push(s.slice(at, at + k).trim()); at += k;
   }
-  out.push(s);
-  return out;
+  out.push(s.slice(at).trim());
+  return out.filter((x, i) => x || i === out.length - 1);
 }
 
 async function markdownToHtml(md){
@@ -1577,8 +1592,9 @@ async function markdownToHtml(md){
   const fm = md.match(/^---\n([\s\S]*?)\n(?:---|\.\.\.)\n/);   // YAML front matter
   if (fm) {
     for (const l of fm[1].split('\n')) {
-      const m = l.match(/^(title|author|lang|language):\s*["']?(.*?)["']?\s*$/i);
-      if (m) meta[/^lang/i.test(m[1]) ? 'language' : m[1].toLowerCase()] = m[2];
+      // (The value taken and trimmed in code: a pattern trimming it backtracked on a long line: round 25 review, M-136.)
+      const m = l.match(/^(title|author|lang|language):(.*)$/i);
+      if (m) meta[/^lang/i.test(m[1]) ? 'language' : m[1].toLowerCase()] = m[2].trim().replace(/^["']|["']$/g, '').trim();
     }
     md = md.slice(fm[0].length);
   }
@@ -1977,7 +1993,8 @@ async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey
   // package file and the title (earlier versions). A book since given an identifier copies its fingerprint
   // key's position without removing it (a copy without the identifier may still be read).
   // (An old key as the identifier or title was written: only one that can't be one of the reader's own keys.)
-  const oldKey = s => s && s.length < 512 && !/^(id|url|get|opf|loose|new|cbz|text|markdown|html):/i.test(s) ? ['spine:pos:' + s] : [];
+  // (The reader's own key forms, as it writes them, not a title like "HTML: The Definitive Guide": L-319.)
+  const oldKey = s => s && s.length < 512 && !/^(id:|url:\/|get:https?:|opf:|loose:|new:|cbz:|(text|markdown|html):)/.test(s) ? ['spine:pos:' + s] : [];
   next.legacyKeys = uid ? oldKey(uid) : ['spine:pos:opf:' + fingerprint(oText), ...oldKey(next.title)];
   next.copyKeys = uid ? [stableKey] : [];
   if (ownKey) Object.assign(next, { key: ownKey, legacyKeys: [], copyKeys: [], looseKey: null, writeLoose: false });
@@ -2131,7 +2148,8 @@ function resourceURL(path, owner){
   if (book.urls.has(path)) return book.urls.get(path);
   let type = typeOf(path);
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
-  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' ? svgURL(path, 'image/svg+xml') : book.src.url(path, type);   // (with a parameter too: L-317)
+  // (An SVG by its type, with a parameter too (L-317), or by its name, whatever its type says: M-135.)
+  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' || /\.svgz?$/i.test(path) ? svgURL(path, 'image/svg+xml') : book.src.url(path, type);
   book.urls.set(path, job);
   job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
@@ -6298,7 +6316,9 @@ async function abPassage(ne, text, keyBase, snap){
 // --- Saving: names, downloads, and a ZIP of finished files (stored, not compressed) as a fallback.
 const abName = t => (t || 'Audiobook').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'Audiobook';
 function abDownload(blob, name){
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  // (As plain bytes: a download is a blob of the reader's origin, which as a page of its own type, opened from the
+  // downloads list meanwhile, would run as the reader: round 25 review, L-325.)
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([blob], { type: 'application/octet-stream' })); a.download = name;
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
@@ -7463,7 +7483,12 @@ async function editStart({ mode } = {}){
     }
     const last = ed.epub ? (b.savedText?.get(ed.epub.path) ?? d.source) : (d.saved ?? d.text);   // (a document left with changes by Done: as last saved)
     Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: last, blocks: null, blocksFor: null });
-    const draft = await draftGet(draftKey());
+    let draft = await draftGet(draftKey());
+    // (A chapter's draft kept under the book's key before L-311 changed it: moved over: round 25 review, L-318.)
+    if (!draft && ed.epub) for (const k of b.legacyKeys || []) {
+      const old = `epub:${k}:${ed.epub.path}`, o = await draftGet(old);
+      if (o) { draft = { ...o, key: draftKey() }; await draftPut(draft); draftDel(old); break; }
+    }
     if (book !== b) return;
     if (draftFits(draft, docSource(d)) && draft.text !== d.text) {
       if (confirm(`${d.fresh || d.created ? 'A new document' : ed.epub ? 'This chapter' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
@@ -7660,7 +7685,7 @@ function utf8Declared(text){
   let out = text.replace(/^(\uFEFF?\s*<\?xml\b[^>]*?\sencoding\s*=\s*["'])([\w.:-]+)/i, (m, a, v) => utf(v) ? m : a + 'UTF-8');
   // (Not in comments, nor in a script's, style's or textarea's text: round 24 review.)
   const comments = [...out.matchAll(/<!--[\s\S]*?(?:-->|$)|<(script|style|textarea)\b[^>]*>[\s\S]*?(?:<\/\1(?=[\s>/])|$)/gi)].map(m => [m.index + (m[1] ? m[0].indexOf('>') + 1 : 0), m.index + m[0].length]);
-  return out.replace(/<meta\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi, (tag, at) => {
+  return out.replace(/<meta\b(?:"[^"]*"|'[^']*'|[^'"<>])*>/gi, (tag, at) => {   // (not across another "<": slow on many unclosed tags, L-323)
     if (comments.some(([a, z]) => at >= a && at < z)) return tag;
     const attrs = [...tag.matchAll(/\s([^\s"'=\/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g)];
     const get = n => attrs.find(m => m[1].toLowerCase() === n && m[2] != null);
@@ -8016,6 +8041,27 @@ const edKeepMark = k => `${ED_TOK}:keep:${k}`;
 const edKeepOf = s => { const m = String(s ?? '').match(/^([a-z0-9]+):keep:(\d+)$/); return m && m[1] === ED_TOK ? +m[2] : null; };
 // A document's text as a DOM: XHTML as XML (so <br/> and <div/> are read as written), a fragment of HTML (no
 // <html>, <head> or <body>) inside a body of its own, so what it starts with stays in it (round 24 review).
+// The comments (and white space) at the start of a text, then its doctype: that part, or '' if there's no doctype.
+function docHead(s){
+  let i = s.charCodeAt(0) === 0xFEFF ? 1 : 0;
+  for (;;) {
+    while (i < s.length && /\s/.test(s[i])) i++;
+    if (s.startsWith('<!--', i)) { const e = s.indexOf('-->', i + 4); if (e < 0) return ''; i = e + 3; continue; }
+    if (/^<!DOCTYPE/i.test(s.slice(i, i + 9))) { const e = s.indexOf('>', i); return e < 0 ? '' : s.slice(0, e + 1); }
+    return '';
+  }
+}
+// The text after its first n comments (with the white space before each).
+function skipComments(s, n){
+  let i = 0;
+  for (let k = 0; k < n; k++) {
+    let j = i; while (j < s.length && /\s/.test(s[j])) j++;
+    if (!s.startsWith('<!--', j)) break;
+    const e = s.indexOf('-->', j + 4); if (e < 0) break;
+    i = e + 3;
+  }
+  return s.slice(i);
+}
 function editParse(t){
   if (/^\s*<\?xml/i.test(t) || /\.xhtml$/i.test(ed.name) || ed.epub?.doc.xhtml) {   // (a chapter by its media type too)
     const d = new DOMParser().parseFromString(t, 'application/xhtml+xml');
@@ -8157,8 +8203,9 @@ function editSerialize(){
   else inner = model.body.innerHTML;
   if (frag) {
     // (Its doctype too, with any comments before it, which the body then doesn't repeat: round 24 review.)
-    const head = t.match(/^\uFEFF?(?:\s*<!--[\s\S]*?-->)*\s*<!DOCTYPE[^>]*>/i)?.[0] || '', notes = (head.match(/<!--/g) || []).length;
-    if (notes) inner = inner.replace(new RegExp(`^(?:\\s*<!--[\\s\\S]*?-->){${notes}}`), '');
+    // (Found by walking the text, not by a pattern, which took time doubling with each comment: L-321.)
+    const head = docHead(t), notes = (head.match(/<!--/g) || []).length;
+    if (notes) inner = skipComments(inner, notes);
     if (head) inner = t.slice(head.length).match(/^\s*/)[0] + inner.replace(/^\s+/, '');   // (the white space after the doctype as written)
     return head + inner.replace(/\s+$/, '') + t.match(/\s*$/)[0];
   }
@@ -8293,7 +8340,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     else if ((t === 'del' || t === 's' || t === 'strike') && mdPlain(nd)) parts.push({ wrap: '~~', tag: 'del', inner: inner() });
     else if (t === 'code' && mdPlain(nd) && !nd.children.length) {
       const s = nd.textContent, fence = '`'.repeat(Math.max(1, ...[...s.matchAll(/`+/g)].map(m => m[0].length + 1)));
-      parts.push({ s: fence + (/^`|`$|^\s.*\S|\S.*\s$/.test(s) && s.trim() ? ' ' + s + ' ' : s) + fence });
+      parts.push({ s: fence + ((s[0] === '`' || s.at(-1) === '`' || /^\s|\s$/.test(s)) && s.trim() ? ' ' + s + ' ' : s)   /* (no pattern that backtracks on a long span: L-322) */ + fence });
     }
     else if (t === 'a' && nd.hasAttribute('href') && mdPlain(nd, ['href', 'title'])) parts.push({ s: `[${inner()}](${mdUrl(nd.getAttribute('href'))}${mdTitle(nd)})` });
     else if (t === 'img' && mdPlain(nd, ['src', 'alt', 'title'])) parts.push({ s: `![${mdEsc(nd.getAttribute('alt') || '')}](${mdUrl(nd.getAttribute('src') || '')}${mdTitle(nd)})` });
@@ -8915,7 +8962,7 @@ async function openFromUrl(ref, { anySite = false, forEdit = false } = {}){
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
           // (from: where it really came from, after a redirect to another site, so the site's API isn't told this
           // site's path for another site's file: round 25 review, L-312.)
-          { base: new URL('.', u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: foreign && got.url ? got.url : u.href });
+          { base: new URL('.', foreign && got.url ? got.url : u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: foreign && got.url ? got.url : u.href });   // (its pictures from where it came from: L-320)
         if (isStale(seq)) return;
         if (foreign) showFrom(foreign);
         return;

@@ -273,3 +273,21 @@ test('text shapes, loop 4: short indented paragraphs; hard-wrapped at 100 with b
   assert.match(await h.inFrame(page, doc => doc.querySelector('.txt-lines').innerHTML), /\u2003/, 'indentation kept');
   assert.equal((await shape('false-heading.txt')).h, 0);
 });
+
+test('text shapes, loop 5: verse, Word text with tabs, short unwrapped lines, no blank lines nor indents, chapter titles, non-Latin headings, tabs in code (round 25 review, M-137, M-138, M-139, L-326 to L-330)', async () => {
+  const page = await h.newPage();
+  const shape = async name => { await h.openReader(page, `${h.READER}?book=books/${name}`); return h.inFrame(page, doc => ({ p: doc.querySelectorAll('p:not(.txt-lines)').length, lines: doc.querySelectorAll('.txt-lines').length, h: doc.querySelectorAll('h1,h2').length })); };
+  const poetry = await shape('pg-poetry.txt');
+  assert.ok(poetry.lines >= 20 && poetry.p === 0, `verse kept as lines: ${JSON.stringify(poetry)}`);
+  assert.deepEqual(await shape('word-tabs.txt'), { p: 75, lines: 1, h: 3 });
+  assert.equal((await shape('fanfic-shortlines.txt')).p, 120);
+  assert.equal((await shape('unwrapped-uniform.txt')).p, 150);
+  assert.equal((await shape('wrapped-noblank-noindent.txt')).p, 40);
+  const toc = async () => page.$$eval('#tocList a', as => as.map(a => a.textContent));
+  await shape('pg-novel.txt');
+  assert.ok((await toc()).length <= 10, `one contents entry per chapter, not a title or a signature as well: ${(await toc()).join(' | ')}`);
+  assert.equal((await shape('cjk-novel-plain.txt')).h, 4);
+  assert.equal((await shape('greek-wrapped.txt')).h, 2);
+  await shape('code-tabs.txt');
+  assert.match(await h.inFrame(page, doc => doc.querySelector('.txt-lines').innerHTML), / /, 'tab indentation kept');
+});

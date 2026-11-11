@@ -284,3 +284,24 @@ test('book files the nginx example sandboxes, a book\'s own index.html and encod
   const conf = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'nginx.conf.example'), 'utf8');
   assert.match(conf, /location = \/reader\/index\.html \{ \}/);
 });
+
+// Round 25 review, loop 5.
+test('a folder book\'s SVG or HTML file typed as a picture isn\'t served as a page of the site, even with no sandbox header (round 25 review, M-135)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.PLAIN}/reader/index.html?book=books/pic-typed/`);
+  const r = await h.inFrame(page, async doc => {
+    const out = {};
+    for (const id of ['s', 'h']) { const src = doc.getElementById(id).getAttribute('src') || ''; out[id] = { src, body: src.startsWith('blob:') ? await (await fetch(src)).text() : '', type: src.startsWith('blob:') ? (await fetch(src)).headers.get('content-type') : '' }; }
+    return out;
+  });
+  assert.ok(!r.s.src || r.s.src.startsWith('blob:'), `the SVG: ${r.s.src}`);
+  assert.doesNotMatch(r.s.body, /<script/i);
+  // (A blob of a picture's type, or plain bytes: either way not a page, whatever is inside.)
+  assert.ok(!r.h.src || (r.h.src.startsWith('blob:') && /^(image\/(png|jpeg|gif|webp)|application\/octet-stream)$/.test(r.h.type)), `the HTML file: ${JSON.stringify(r.h)}`);
+});
+
+test('an archive read whole whose files overlap isn\'t read (round 25 review, T-49 for L-316)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.NORANGE}/reader/index.html?book=books/nested.zip.epub`);
+  assert.match(await h.notice(page), /its files overlap/);
+});

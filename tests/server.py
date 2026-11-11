@@ -99,7 +99,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # (Decoded, as nginx matches it; the reader's own page, a link to index.html, isn't: round 25 review, M-131.)
             req = urllib.parse.unquote(self.path.split("?")[0])
             book_page = re.search(r"\.(x?html?|xht|shtml|xml|xsl|xslt|svgz?|rss|atom)$", req, re.I) and \
-                os.path.realpath(os.path.join(args.root, req.lstrip("/"))) != READER_PAGE_PATH
+                not (os.path.realpath(os.path.join(args.root, req.lstrip("/"))) == READER_PAGE_PATH and
+                     (req in ("/reader/index.html", "/reader/") or not req.startswith("/reader/")))
+            # (Under /reader/, only the reader's own page is exempt, as the example's exact location does; a copy in
+            # another folder is that folder's own block's business: round 25 review, D-24.)
             self.send_header("Content-Security-Policy", "sandbox" if book_page else POLICY)
             self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")

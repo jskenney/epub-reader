@@ -813,6 +813,27 @@ def main():
     (books / "sandboxed").mkdir()
     for name in ("index.html", "page.shtml", "feed.rss", "pic.svgz", "style.xsl"):
         (books / "sandboxed" / name).write_text("<p>x</p>")
+    # Round 25 review, loop 5: a folder book with an SVG and an HTML file typed as pictures (M-135); a long front-matter
+    # line (M-136); an HTML fragment opening with many comments (L-321); a long code span (L-322); many unclosed
+    # <meta (L-323); an archive where one file's data holds another file (T-49, for the whole-file reader).
+    epub_items(books / "pic-typed.epub", "Pic Typed", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("s", "pic.svg", "image/png", ""), ("h", "pic.html", "image/png", "")], ["c1"],
+               {"c1.xhtml": xhtml("Pic Typed", '<h1>Pic Typed</h1><p><img id="s" src="pic.svg" alt="s"/><img id="h" src="pic.html" alt="h"/></p>'),
+                "pic.svg": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><script>parent.document.title="PWNED"</script><rect width="20" height="20" fill="blue"/></svg>',
+                "pic.html": "<script>document.title=\'PWNED\'</script>"}, "urn:pic-typed")
+    with zipfile.ZipFile(books / "pic-typed.epub") as z:
+        z.extractall(books / "pic-typed")
+    (books / "frontmatter-long.md").write_text("---\ntitle: x" + " " * 300000 + "y\n---\n\nStart.\n")
+    (books / "many-comments.html").write_text("<!---->" * 30 + "<p>Start.</p>")
+    (books / "long-code.md").write_text("Start.\n\n`" + "a " * 60000 + "b`\n")
+    (books / "many-meta.html").write_text("<p>Start.</p>" + "<meta " * 30000)
+    def local(name, data):
+        return struct.pack("<IHHHHHIIIHH", 0x04034b50, 20, 0, 0, 0, 0, zlib.crc32(data), len(data), len(data), len(name), 0) + name + data
+    def central(name, data, off):
+        return struct.pack("<IHHHHHHIIIHHHHHII", 0x02014b50, 20, 20, 0, 0, 0, 0, zlib.crc32(data), len(data), len(data), len(name), 0, 0, 0, 0, 0, off) + name
+    inner = local(b"b.txt", b"hello")
+    outer = local(b"a.txt", inner)
+    cd = central(b"a.txt", inner, 0) + central(b"b.txt", b"hello", 30 + 5)
+    (books / "nested.zip.epub").write_bytes(outer + cd + struct.pack("<IHHHHIIH", 0x06054b50, 0, 0, 2, 2, len(cd), len(outer), 0))
     # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
     (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
     (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')
