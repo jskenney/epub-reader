@@ -702,6 +702,10 @@ def main():
     (books / 'hr.md').write_text('***\n\nIntro text\n\n***\n\nBody\n')
     (books / 'wrap.md').write_text('<div align="center">\n\n# Centered\n\nStart.\n\n</div>\n')
     (books / 'comments.html').write_text('<!DOCTYPE html>\n<html>\n<head><title>C</title></head>\n<body>\n<!-- keep me -->\n<p>Start.</p>\n<div class="w"><!-- section A --><p>In.</p></div>\n</body>\n</html>\n')
+    # Round 25 review: link text with "]" (M-117); a CRLF file (M-118); a fragment whose script names <body> (L-283).
+    (books / 'bracket.md').write_text('Start.\n\nSee [a\\]b](http://x.com) now and ![c\\]d](p.png).\n')
+    (books / 'crlf.md').write_bytes(b'# CRLF\r\n\r\nStart.\r\n\r\nSecond line.\r\n')
+    (books / 'frag-script.html').write_text('<h1>T</h1><p>Start.</p><script>var s="<body>";</script><p>y</p>')
     (books / 'comments.md').write_text('<!-- comment -->\n\nStart.\n\npara <!-- inline --> more\n\n- a\n- b\n\n<!-- end list -->\n\n- c\n')
     (books / 'after.html').write_text('<!DOCTYPE html>\n<html>\n<head><title>A</title></head>\n<body>\n<p>Start.</p>\n</body>\n<script>track()</script>\n</html>\n')
     (books / 'frag.html').write_text('<!-- note -->\n<style>p{color:red}</style>\n<p>Start.</p>\n')

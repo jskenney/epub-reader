@@ -246,3 +246,41 @@ test('the version in Settings is one above the latest release tag, and tools/sta
   assert.equal(shown[1], `v${maj}.${min}.${pat + 1}`);
   assert.equal(r.stdout.split(' ')[0], `v${maj}.${min}.${pat + 1}`);
 });
+
+// Round 25 review (M-120, M-121): the stamp keeps line endings; the hook doesn't stamp a temporary index; the hook
+// and the scripts are checked out with LF everywhere.
+test('stamp-version.py keeps the page\'s line endings; the pre-commit hook leaves a commit of named paths unstamped, so the index isn\'t left behind (round 25 review)', () => {
+  const d = tempDir('stamp-');
+  const git = (...a) => spawnSync('git', ['-C', d, ...a], { encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' } });
+  fs.mkdirSync(path.join(d, 'tools')); fs.mkdirSync(path.join(d, '.githooks'));
+  fs.copyFileSync(path.join(REPO, 'tools', 'stamp-version.py'), path.join(d, 'tools', 'stamp-version.py'));
+  fs.copyFileSync(path.join(REPO, '.githooks', 'pre-commit'), path.join(d, '.githooks', 'pre-commit'));
+  fs.chmodSync(path.join(d, '.githooks', 'pre-commit'), 0o755);
+  const page = '<p>\r\n<span id="setVer">v0.0.1 - 20000101.0000</span>\r\n</p>\r\n';
+  fs.writeFileSync(path.join(d, 'index.html'), page);
+  git('init', '-q'); git('config', 'core.hooksPath', '.githooks'); git('config', 'core.autocrlf', 'false');
+  git('add', '.'); assert.equal(git('commit', '-q', '--no-verify', '-m', 'one').status, 0); git('tag', 'v1.2.3');
+  const r = spawnSync('python3', [path.join(d, 'tools', 'stamp-version.py')], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const stamped = fs.readFileSync(path.join(d, 'index.html'), 'utf8');
+  assert.match(stamped, /^<p>\r\n<span id="setVer">v1\.2\.4 - \d{8}\.\d{4}<\/span>\r\n<\/p>\r\n$/);
+  // A commit of named paths: not stamped (git gives the hook a temporary index), and nothing left half-staged.
+  fs.writeFileSync(path.join(d, 'index.html'), page.replace('<p>', '<p class="x">'));
+  const c = git('commit', '-q', '-m', 'two', '--', 'index.html');
+  assert.equal(c.status, 0, c.stderr);
+  assert.match(c.stderr, /committing named paths, so the version line wasn't stamped/);
+  assert.equal(git('status', '--porcelain').stdout.trim(), '');
+  // A plain commit of the staged page: stamped.
+  fs.writeFileSync(path.join(d, 'index.html'), page.replace('<p>', '<p class="y">'));
+  git('add', 'index.html');
+  assert.equal(git('commit', '-q', '-m', 'three').status, 0);
+  assert.match(git('show', 'HEAD:index.html').stdout, /v1\.2\.4 - \d{8}\.\d{4}/);
+  assert.equal(git('status', '--porcelain').stdout.trim(), '');
+});
+
+test('the hook, scripts and page are checked out with LF line endings, whatever core.autocrlf says (round 25 review, M-121)', () => {
+  for (const f of ['.githooks/pre-commit', 'tools/stamp-version.py', 'fetch-libs.sh', 'index.html']) {
+    const r = spawnSync('git', ['-C', REPO, 'check-attr', 'eol', '--', f], { encoding: 'utf8' });
+    assert.match(r.stdout, /eol: lf$/m, f);
+  }
+});

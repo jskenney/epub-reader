@@ -29,9 +29,10 @@ const pageText = page => page.evaluate(() => document.querySelector('#page').con
 function fakeFiles() {
   window.__files = {}; window.__writes = 0;
   const handle = name => ({ kind: 'file', name,
-    async getFile() { return new File([window.__files[name] ?? window.__open?.[name] ?? ''], name, { type: '' }); },
+    // (A file's time as a disk keeps it: the same until it is written, or changed by the test in __mtime.)
+    async getFile() { return new File([window.__files[name] ?? window.__open?.[name] ?? ''], name, { type: '', lastModified: window.__mtime?.[name] ?? 1 }); },
     async queryPermission() { return 'granted'; }, async requestPermission() { return 'granted'; },
-    async createWritable() { let out = ''; return { async write(b) { out += typeof b === 'string' ? b : await b.text(); }, async close() { await new Promise(r => setTimeout(r, window.__slow || 0)); window.__files[name] = out; window.__writes++; }, async abort() {} }; } });
+    async createWritable() { let out = ''; return { async write(b) { out += typeof b === 'string' ? b : await b.text(); }, async close() { await new Promise(r => setTimeout(r, window.__slow || 0)); window.__files[name] = out; window.__writes++; (window.__mtime ||= {})[name] = Date.now(); }, async abort() {} }; } });
   window.showOpenFilePicker = async () => [handle(Object.keys(window.__open || {})[0])];
   window.showSaveFilePicker = async o => { window.__saveAs = o; return handle(window.__saveName || o.suggestedName); };
 }
@@ -753,4 +754,90 @@ test('saving a site document to a file leaves another file\'s draft of the same 
   await page.waitForTimeout(300);
   const left = await page.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-drafts', 1); rq.onsuccess = () => { const g = rq.result.transaction('drafts').objectStore('drafts').getAll(); g.onsuccess = () => res(g.result.map(d => d.text)); }; }));
   assert.ok(left.includes('Other work'), JSON.stringify(left));
+});
+
+// Round 25 review.
+test('Markdown written back keeps links and pictures whose text has "]" (round 25 review, M-117)', async () => {
+  const page = await h.newPage();
+  const [original, back] = await typedRoundTrip(page, 'bracket.md');
+  const [want, got] = await sameHtml(page, original.replace('Start.', 'Start. Typed.'), back);
+  assert.equal(got, want, back);
+  assert.match(back, /\[a\\\]b\]\(http:\/\/x\.com\)/);
+});
+
+test('a CRLF file keeps its line endings: an edit undone leaves it unchanged, and it is saved with CRLF, from the text and from the page (round 25 review, M-118)', async () => {
+  const page = await h.newPage();
+  const crlf = fs.readFileSync(`${__dirname}/site/reader/books/crlf.md`, 'latin1');
+  await page.addInitScript(fakeFiles);
+  await page.addInitScript(t => { window.__open = { 'crlf.md': t }; }, crlf);
+  await h.openReader(page, doc('notes.md'), RAW);
+  await page.click('#openBtn');
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'CRLF');
+  await startEditing(page);
+  await typeAtEnd(page, 'x'); await page.keyboard.press('Backspace'); await page.waitForTimeout(300);
+  assert.doesNotMatch(await page.textContent('#editName'), /unsaved/);
+  await typeAtEnd(page, 'More.\r\n');
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction(() => window.__writes === 1);
+  const saved = await page.evaluate(() => window.__files['crlf.md']);
+  assert.ok(saved.startsWith(crlf), JSON.stringify(saved));
+  assert.doesNotMatch(saved.replace(/\r\n/g, ''), /\n/, JSON.stringify(saved));
+  // From the page (WYSIWYG): still CRLF.
+  await page.click('[data-mode="wysiwyg"]');
+  await page.waitForFunction(() => document.querySelector('#page').contentDocument?.querySelector('[contenteditable="true"]'));
+  await inPage(page).locator('p', { hasText: 'Start.' }).first().click();
+  await page.keyboard.press('End'); await page.keyboard.type(' Typed.');
+  await flush(page);
+  const t = await text(page);
+  assert.match(t, /Start\. Typed\.\r\n/);
+  assert.doesNotMatch(t.replace(/\r\n/g, ''), /\n/, JSON.stringify(t));
+});
+
+test('an HTML fragment whose script names <body> is written back as a fragment (round 25 review, L-283)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('frag-script.html'));
+  await inPage(page).locator('p', { hasText: 'Start.' }).first().click();
+  await page.keyboard.press('End'); await page.keyboard.type(' Typed.');
+  await flush(page);
+  assert.equal(await text(page), '<h1>T</h1><p>Start. Typed.</p><script>var s="<body>";</script><p>y</p>');
+});
+
+test('a link of the document\'s own changed to another relative address isn\'t live in the page, and is written back (round 25 review, L-284)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('notes.md'));
+  const link = inPage(page).locator('a').first();
+  await link.click();
+  page.once('dialog', d => d.accept('other.md'));
+  await page.click('[data-cmd="link"]');
+  await flush(page);
+  assert.equal(await inPage(page).locator('a').first().getAttribute('href'), null);
+  assert.equal(await inPage(page).locator('a').first().getAttribute('data-ed-href'), 'other.md');
+  assert.match(await text(page), /\]\(other\.md\)/);
+});
+
+test('Save asks before writing over a file that changed on disk since it was opened (round 25 review, L-285)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(fakeFiles);
+  await page.addInitScript(t => { window.__open = { 'mine.md': t }; }, NOTES);
+  await h.openReader(page, doc('notes.md'), RAW);
+  await page.click('#openBtn');
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Notes');
+  await startEditing(page);
+  await typeAtEnd(page, 'Mine.\n');
+  await page.evaluate(() => { window.__files['mine.md'] = 'Changed elsewhere, and longer than before: ' + 'x'.repeat(200); (window.__mtime ||= {})['mine.md'] = 5; });
+  let asked = '';
+  page.once('dialog', d => { asked = d.message(); d.dismiss(); });
+  await page.keyboard.press('Control+s');
+  await h.waitFor(() => asked, 5000);
+  assert.match(asked, /changed on disk since it was opened/);
+  await page.waitForTimeout(300);
+  assert.match(await page.evaluate(() => window.__files['mine.md']), /^Changed elsewhere/);
+  assert.match(await page.textContent('#noticeText'), /wasn't written over/);
+  // Saved here, the next Save doesn't ask.
+  page.once('dialog', d => d.accept());
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction(() => window.__writes === 1);
+  await typeAtEnd(page, 'Again.\n');
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction(() => window.__writes === 2);
 });

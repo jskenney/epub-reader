@@ -604,7 +604,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0250</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261111.0302</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -3569,6 +3569,7 @@ async function openFile(file, { handle = null } = {}){
   if (ab.running && !confirm('An audiobook of this book is being made. Stop it and open the other book?')) return;
   if (!editLeaveOk()) return;   // (unsaved edits: asked too: E-21)
   const seq = ++openSeq;
+  if (handle?.kind === 'file') fileStamps.set(handle, stampOf(file));
   try {
     const kind = docKind(file.name, file.type);
     // (handle: the file it came from, which Save can write back to: E-21.)
@@ -7140,14 +7141,20 @@ async function editOffered(){
 }
 
 // The text editor: CodeMirror, or a plain text box with the same few operations.
+// A file whose lines end in CRLF keeps them: the editor writes its lines with CRLF, and text set from the page is
+// given them (round 25 review, M-118). (Mostly CRLF counts; a file of mixed endings gets CRLF throughout.)
+const crlfText = t => { const c = (t.match(/\r\n/g) || []).length; return c > 0 && c >= (t.match(/(^|[^\r])\n/g) || []).length; };
+const edEol = t => ed.eol === '\r\n' ? t.replace(/\r?\n/g, '\r\n') : t;
 async function editMakeApi(host){
   host.replaceChildren();
   ed.plainWhy = '';
+  ed.eol = crlfText(ed.text) ? '\r\n' : '\n';
   try {
     await loadCodeMirror();
     if (!ed.on) return null;   // (left while it loaded: nothing left behind: round 24 review)
     const cm = CodeMirror(host, {
-      value: ed.text, mode: { markdown: 'gfm', html: 'htmlmixed' }[ed.kind] || null, lineNumbers: true, lineWrapping: true,
+      value: edEol(ed.text), lineSeparator: ed.eol === '\r\n' ? '\r\n' : null,
+      mode: { markdown: 'gfm', html: 'htmlmixed' }[ed.kind] || null, lineNumbers: true, lineWrapping: true,
       indentUnit: 2, tabSize: 2, screenReaderLabel: 'Document text',
       extraKeys: {
         Tab: c => c.somethingSelected() ? c.indentSelection('add') : c.replaceSelection('  '),
@@ -7176,7 +7183,7 @@ async function editMakeApi(host){
     host.append(ta);
     const max = () => Math.max(1, ta.scrollHeight - ta.clientHeight), n = () => ta.value.split('\n').length;
     return {
-      get: () => ta.value, focus: () => ta.focus(), refresh(){}, scrollTop: () => ta.scrollTop,
+      get: () => edEol(ta.value), focus: () => ta.focus(), refresh(){}, scrollTop: () => ta.scrollTop,
       onChange: f => ta.addEventListener('input', f), onScroll: f => ta.addEventListener('scroll', f), lines: n,
       topLine: () => ta.scrollTop / max() * (n() - 1),   // (wrapped lines aren't known: in proportion)
       scrollToLine: x => { ta.scrollTop = x / Math.max(1, n() - 1) * max(); },
@@ -7491,11 +7498,21 @@ function utf8Declared(text){
     return t2;
   });
 }
+// The size and time of each file opened (or written) through a handle, so Save can tell when it has changed on disk
+// since (round 25 review, L-285).
+const fileStamps = new WeakMap();
+const stampOf = f => ({ m: f.lastModified, s: f.size });
 async function editWrite(handle, blob){
+  const was = fileStamps.get(handle);
+  if (was) {
+    const f = await handle.getFile().catch(() => null), now = f && stampOf(f);
+    if (now && (now.m !== was.m || now.s !== was.s) && !confirm(`${handle.name || 'The file'} has changed on disk since it was opened here. Save over it anyway?`)) throw new Error('it changed on disk since it was opened, so it wasn\'t written over (Save as saves a copy)');
+  }
   if (handle.queryPermission && await handle.queryPermission({ mode: 'readwrite' }) !== 'granted'
       && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') throw new Error('permission to write the file was refused');
   const w = await handle.createWritable();
   try { await w.write(blob); await w.close(); } catch (e) { await w.abort?.().catch(() => {}); throw e; }
+  const f = await handle.getFile().catch(() => null); if (f) fileStamps.set(handle, stampOf(f));
 }
 // Save: back to the file where possible; Save as (or no file to write to): the save picker, or a download.
 async function editSave(as = false){
@@ -7561,9 +7578,10 @@ async function epubPack(b, changes){
   // when its date changes: round 24 review.)
   const add = async (name, edited) => {
     let data = edited != null ? enc.encode(utf8Declared(edited)) : await b.src.bytes(name);
-    if (data == null) return;
+    if (data == null) return false;
     if (name === opfName) { const t = decodeText(data, { fallback: 'utf-8' }), u = opfFix(t); if (u !== t) data = enc.encode(utf8Declared(u.replace(/^\uFEFF/, ''))); }
     out.file(name, data, { compression: 'DEFLATE', createFolders: false });   // (no folder entries the book didn't have)
+    return true;
   };
   // (The optional META-INF files of a folder book only when there really, as XML.)
   const optional = new Set(['META-INF/encryption.xml', 'META-INF/com.apple.ibooks.display-options.xml', 'META-INF/metadata.xml', 'META-INF/manifest.xml', 'META-INF/rights.xml', 'META-INF/signatures.xml']);
@@ -7582,7 +7600,8 @@ async function epubPack(b, changes){
       'META-INF/manifest.xml', 'META-INF/rights.xml', 'META-INF/signatures.xml', b.opfPath, ...[...b.manifest.values()].map(it => it.path)];
     for (const name of new Set(names)) {
       if (optional.has(name)) { const t = await b.src.text(name); if (!t || !parseDoc(t, 'application/xml')) continue; }
-      await add(name, changes.get(name));
+      // (A file that couldn't be fetched: not saved without it (round 25 review, M-119).)
+      if (!await add(name, changes.get(name))) throw new Error(`${name} couldn't be fetched from the site, so the book can't be saved whole; Chapter downloads this chapter on its own.`);
     }
   }
   return out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
@@ -7817,7 +7836,8 @@ function editParse(t){
     const d = new DOMParser().parseFromString(t, 'application/xhtml+xml');
     if (!d.getElementsByTagName('parsererror').length && d.body) return { d, xml: true, frag: false };
   }
-  const frag = !/<(html|head|body)(?=[\s>/])/i.test(t.replace(/<!--[\s\S]*?(-->|$)/g, ''));
+  // (Not counting a tag's name inside a script, style or the like: round 25 review, L-283.)
+  const frag = !/<(html|head|body)(?=[\s>/])/i.test(t.replace(/<!--[\s\S]*?(-->|$)/g, '').replace(/<(script|style|title|textarea|xmp|iframe|noembed|noframes)\b[\s\S]*?(<\/\1\s*>|$)/gi, ''));
   return { d: new DOMParser().parseFromString(frag ? `<!DOCTYPE html><html><head></head><body>${t}</body></html>` : t, 'text/html'), xml: false, frag };
 }
 // What the write-back puts aside (an SVG animation only when it sets an address).
@@ -8067,7 +8087,7 @@ function mdTable(el){
 // space stays one: round 24 review.)
 // (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
-const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
+const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
   .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;');
 // Whether Markdown reads delimiters around core, between the characters before and after (CommonMark's flanking
 // rules, which let * and ~~ work inside a word); a delimiter right beside another isn't risked.
@@ -8126,6 +8146,7 @@ const mdLines = s => s.split('\n').map(l => l.replace(/^ +| +$/g, '')
 
 // The text editor's text set from the page (WYSIWYG), without that counting as typing in it.
 function editSetText(t){
+  t = edEol(t);
   ed.text = t;
   if (!ed.api) return;
   ed.setting = true;
@@ -8305,7 +8326,10 @@ function editCommand(cmd){
       const o = a.getAttribute('data-ed') != null ? ed.orig[a.getAttribute('data-ed')] : null;
       if (o) { o.attrs = o.attrs.filter(x => x[0] !== 'href'); if (url) o.attrs.push(['href', url]); }
       a.removeAttribute('data-ed-href');
-      url ? a.setAttribute('href', url) : a.replaceWith(...a.childNodes);
+      // (An address of the document's own isn't live in the page, for a link it had too: round 25 review, L-284.)
+      if (!url) a.replaceWith(...a.childNodes);
+      else if (o && !/^(https?|mailto):/i.test(urlText(url))) { a.removeAttribute('href'); a.setAttribute('data-ed-href', url); }
+      else a.setAttribute('href', url);
       if (!o) editNewLinks(d);
       editWysiwygInput();
     } else if (url) {

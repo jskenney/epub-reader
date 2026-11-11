@@ -1,0 +1,10 @@
+# Line endings stay LF in every checkout (Windows with core.autocrlf too): a hook with CRLF can't run, and the
+# reader and its scripts are written with LF (round 25 review, M-121).
+.githooks/* text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+nginx.conf.example text eol=lf

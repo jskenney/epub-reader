@@ -28,7 +28,9 @@ def latest_tag():
 
 
 def main():
-    text = PAGE.read_text(encoding="utf-8")
+    # (Line endings kept as they are: round 25 review, M-121.)
+    with open(PAGE, encoding="utf-8", newline="") as f:
+        text = f.read()
     m = LINE.search(text)
     if not m:
         sys.exit('index.html has no version line (<span id="setVer">vX.Y.Z - YYYYMMDD.HHMM</span>)')
@@ -42,7 +44,8 @@ def main():
     if "--check" in sys.argv:
         print(f"{version} - {stamp}")
         return
-    PAGE.write_text(LINE.sub(lambda x: x.group(1) + version + x.group(3) + stamp + x.group(4), text, count=1), encoding="utf-8")
+    with open(PAGE, "w", encoding="utf-8", newline="") as f:
+        f.write(LINE.sub(lambda x: x.group(1) + version + x.group(3) + stamp + x.group(4), text, count=1))
     print(f"index.html: Version {version} - {stamp}")
 
 

@@ -104,7 +104,7 @@ test('an EPUB opened through the file picker is saved over its file, and reads o
   await page.addInitScript(b64 => {
     window.__files = {}; window.__writes = 0;
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    const handle = { kind: 'file', name: 'long.epub', async getFile() { return new File([bytes], 'long.epub', { type: 'application/epub+zip' }); },
+    const handle = { kind: 'file', name: 'long.epub', async getFile() { return new File([bytes], 'long.epub', { type: 'application/epub+zip', lastModified: 1 }); },
       async queryPermission() { return 'granted'; }, async requestPermission() { return 'granted'; },
       async createWritable() { const parts = []; return { async write(b) { parts.push(b); }, async close() { window.__files['long.epub'] = new Blob(parts).size; window.__writes++; }, async abort() {} }; } };
     window.showOpenFilePicker = async () => [handle];
@@ -287,4 +287,20 @@ test('Discard on a chapter returns it to how it was last saved; other chapters s
   assert.ok(await h.waitFor(async () => !/Thrown away/.test(await pageText(page)), 5000));
   await startEditing(page);
   assert.equal(await text(page), original);
+});
+
+test('a folder book with a file that can\'t be fetched isn\'t saved without it (round 25 review, M-119)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+  await h.openReader(page, `${h.READER}?book=books/abc/`, RAW);
+  await startEditing(page);
+  await replace(page, '</p>', ' Folder edit.</p>');
+  await page.route('**/books/abc/OEBPS/c3.xhtml', r => r.fulfill({ status: 404, body: 'gone' }));
+  let downloaded = false;
+  page.on('download', () => { downloaded = true; });
+  await page.keyboard.press('Control+s');
+  await page.waitForFunction(() => !document.querySelector('#notice').hidden && /c3\.xhtml couldn't be fetched/.test(document.querySelector('#noticeText').textContent), null, { timeout: 10000 });
+  await page.waitForTimeout(500);
+  assert.equal(downloaded, false);
+  assert.match(await page.textContent('#editName'), /unsaved/);
 });
