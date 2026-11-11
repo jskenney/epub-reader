@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-11, round 26): `index.html` (about 9,200 lines), the fetch scripts,
+Review of the repository (2026-11-11, round 27): `index.html` (about 9,400 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -434,10 +434,45 @@ code before it. The paging fix was checked over 300 page turns in one and two co
 four text widths, and with nine kinds of book CSS on the column flow: no text past an edge, and a search hit 1,200
 paragraphs in shown on the page reached (the code before it was up to 688 px off).
 
+### Round 27
+
+After round 26, every open item that wasn't an enhancement was fixed (`4ea6db9` to `8f1df5b`), each with a test that
+fails on the code before it, except L-347 (checked by reading) and T-47's `NCACHE_SEC` half (no practical test).
+
+Round 27 is a full review at `8f1df5b` by three independent reviewers, each on a copy of its own:
+1. A regression review of those fixes.
+2. An adversarial pass on everything a book, document, link or address controls, aimed at the code changed.
+3. The whole reader used as different kinds of reader would, plus operations, the README and the tests.
+
+Each was given the code and the areas to cover, not the author's conclusions. All three found that Back or Forward to
+an `?edit=` entry opens the default book (M-153). Two found the same gaps in the paging pins and the same compressed
+folder files. Each finding is listed once.
+
+None found a way for a book or document to run script in the reader's page, or to reach another site or the reader's
+config. The full suite passed on all three copies (421 passed).
+
+**Paging pins that don't hold (H-36, H-37).** Round 26's M-149 pins can still be undone by any book. A book can set
+`--spine-x` with `!important`, which beats the reader's inline value. A book's `@layer` rules beat every important
+declaration outside a layer, so the reader's pins lose to them.
+
+**What held up.**
+- **Links:** H-34's same-origin check (including backslash, tab and encoded tricks); `?get=` documents' links.
+- **Page geometry:** M-150 at device pixel ratios 1 to 1.5 and several widths, right to left included; M-146,
+  M-147's page logic, L-341, L-342.
+- **Fonts and the top bar:** the font fixes, the top-bar fixes, L-343 to L-345, L-357.
+- **Settings and README:** the `SHOW_*` switches; the settings table against the code.
+- **Operations:** the nginx example, the fetch scripts' option parsing, the version tools.
+
+Findings:
+- **High:** H-36, H-37.
+- **Medium:** M-153 to M-160.
+- **Low:** L-359 to L-372.
+- **Tests:** T-53, T-54. **Documentation:** D-32. **Enhancement:** E-30 (right-to-left text in the raw editor).
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 401 tests pass (at `6808bfe`). Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 421 tests pass (at `8f1df5b`). Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -466,16 +501,46 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 26's findings are open (below) except H-34, H-35 and M-149 to M-152 (fixed), with what was left open after round 25 (M-144 to M-148, L-340 to L-347,
-T-50, D-27), T-47 and E-29, and the enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110
-and T-43 are left as they are, by your decision (see Resolved).
+Round 27's findings are open (below), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30 and the
+enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
+your decision (see Resolved).
 
 ## Open items
 
+Most important first.
+
 | ID | Title | Kind |
 |---|---|---|
-| [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
+| H-36 | A book's CSS `div{--spine-x:0px !important}` stops page turns: the counter moves, the screen stays on page 1, and the rest of each chapter can't be reached (an author `!important` custom property beats the reader's inline value). Reproduced. | Security |
+| H-37 | A book's `@layer` rules beat every `!important` pin of the reader (paging, writing mode, line height, end marker, dark-theme colours): `@layer x{div{transform:none !important}}` freezes the pages; other rules collapse a chapter to one page. Reproduced. | Security |
+| M-153 | Back or Forward to an `?edit=` entry opens the default book, not the document (`popstate` reads only `book` and `get`). Reproduced. | Bug |
+| M-154 | Following a document's link with unsaved edits: accepting the loss clears them and deletes the draft before the open is tried; when the target is missing, the document stays with the edits shown but no longer kept, and the next link leaves them without asking. Reproduced. | Data loss |
+| M-155 | Book CSS that still moves or clips the pages: the flow's `height` (`div{height:auto !important}`: one page), `html` padding, `body` position, `columns` and `display:grid`, the `translate`/`scale`/`rotate` properties, `content-visibility` (the page count shifts while reading). Reproduced. | Bug |
+| M-158 | Edit opens the editor at the last heading of the page shown, past where the page starts (M-147 takes every heading on the page); a one-page document scrolls to its end. Reproduced. | Bug |
+| M-156 | Documents opened directly (HTML, Markdown, text) have no size limit, and one huge block (a list of 70,000 items) isn't split: a 4 MB list took 15 s and paged wrongly until a resize; 29 MB hung the tab. EPUB chapters within `MAX_MARKUP` are slower than its note says (8 MB: 54 s on a loaded machine). Reproduced. | Hardening |
+| M-157 | SVG pictures are limited per file (16 MB) but not per page: 40 of them, from a 620 KB EPUB, decompress to 600 MB and take 40 s. Reproduced. | Hardening |
+| M-160 | On phones 360 px wide and less, the top bar's last buttons (Open; under 345 px also Settings and Edit) are cut off. Reproduced. | Layout |
+| M-159 | Notices with no action get an "Open a book" button and can't be dismissed (Read aloud in a comic, "waits while the audiobook is being made"), and while one shows the top bar's corner is hidden; Read aloud isn't disabled for comics. Reproduced. | Bug |
+| L-359 | A book folder's file sent compressed (as the nginx example does for HTML and CSS) or without a length is read whole before the 16 MB check. Reproduced. | Hardening |
+| L-360 | A same-site link whose path starts with `//` (`/..//host/x.html`) is passed on as a path and refused as another site's (nothing reaches it). Reproduced. | Bug |
+| L-361 | A document's link can open the reader's own `index.html` as a document (cleaned, so only odd). Reproduced. | Hardening |
+| L-362 | A book's own `data-spine-path`/`data-spine-href` on an `<a>` without `href` is followed (same-origin still applies). Reproduced. | Hardening |
+| L-363 | A link from a document to itself isn't recognised when the name has `,` `[` `]` `@` `;` `=` `&` `+` `$` `:`: it is fetched again and asks about leaving. Reproduced. | Bug |
+| L-364 | M-148 carries only `dir`: a document made right to left by CSS on body or a wrapper reads left to right. Reproduced. | Bug |
+| L-365 | A Back or Forward that is called off pushes the old address again, so the next Back asks a second time. Reproduced. | Bug |
+| L-366 | Clicking a document's link in the editor's page shows a false "isn't part of the book's reading order" error. Reproduced. | Bug |
+| L-367 | Right-to-left books: the footer's Next keeps its tooltip "(Right arrow)", and the progress fill grows left to right. Reproduced. | Bug |
+| L-368 | Accessibility: the Aa button is named "Aa"; "✓" is read in the font menu's names; Escape in the contents on a narrow screen with the top bar hidden drops focus to the body; the logo link is named by its path, with no alt text setting. Reproduced. | Accessibility |
+| L-369 | The top bar's corner covers the top right of the page in the scroll layout (links and the scrollbar there can't be clicked), and hides while any notice shows. Reproduced. | Bug |
+| L-370 | The `!important` removed from a paged page's body style misses escaped forms (`!\69mportant`, `! /**/ important`); paging still held. Reproduced. | Hardening |
+| L-371 | `fetch-fonts.sh --strict` reports a newly added family as "Google serves a different file now"; a link's query string is dropped silently. Read. | Bug |
+| L-372 | Sandboxing by extension follows nginx's types: servers reading `/etc/mime.types` (Caddy, Python) serve over a hundred more XML types unsandboxed (Chromium downloads them); Caddy's example doesn't sandbox a book folder's `index.html` asked for as the folder. Reproduced (tests/server.py), read (Caddy). | Hardening |
+| T-53 | Flaky tests: "reading aloud reads the page beside the text (E-21)" clicks Play after Read aloud has already started (a toggle); several audiobook and fixed-layout tests press Space a fixed time after R. Reproduced (CPU throttled). | Tests |
+| T-54 | No tests of: Back to an `?edit=` entry; Back/Forward asking about unsaved edits or an export (the M-145 test passes without `leaveOk`); unsaved edits and a missing link target; a self-link with `,` in its name; a book folder's file over 16 MB; the 512 MB message; the body style's `!important` removal; Edit opening where the page starts; the top bar at 360 px. M-147's test passes when Done lands on any earlier page. | Tests |
+| D-32 | README: following a document's link (opened as `?book=`, in the history; not while editing); the `font` preference's `g-<name>` ids. | Docs |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
+| E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
+| [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
 
@@ -518,8 +583,11 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. M-144 to M-148 (links between documents, right-to-left documents).
-2. The open lows, tests and docs from rounds 25 and 26.
+1. H-36, H-37 and M-155 together: the reader's pins in a CSS layer of their own, ahead of the book's, and the page
+   turn set inline with priority.
+2. M-153, M-154 (Back to `?edit=`, unsaved edits and a missing link), then M-158.
+3. M-156, M-157 (sizes of documents and SVG), M-160, M-159.
+4. The lows, tests and docs.
 3. E-25, E-22, as laid out in TODO.md.
 4. The other enhancements, as wanted.
 
