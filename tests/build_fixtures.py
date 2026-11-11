@@ -200,6 +200,15 @@ def main():
     (SITE / "folder-fonts-local").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-fonts-local" / "index.html")
     (SITE / "folder-fonts-local" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/fontlib/", "ADDITIONAL_FONTS": "Test Face"}))
+    # The site's own top bar: the contents button's word, and a logo with or without a link (a wide picture, and a
+    # tall one; a link that isn't a web address is refused).
+    for folder, cfg in (("folder-brand", {"LIB_FILES": "/reader/", "CONTENTS_TITLE": "", "NAVBAR_ICON": "logo.png", "NAVBAR_LINK": "/reader/books/notes.md"}),
+                        ("folder-brand2", {"LIB_FILES": "/reader/", "CONTENTS_TITLE": "Chapters ✦", "NAVBAR_ICON": "tall.svg", "NAVBAR_LINK": "javascript:alert(1)"})):
+        (SITE / folder).mkdir()
+        os.symlink(REPO / "index.html", SITE / folder / "index.html")
+        (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
+    (SITE / "folder-brand" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
+    (SITE / "folder-brand2" / "tall.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="80"><rect width="20" height="80" fill="purple"/></svg>')
     # Self-hosted Pocket TTS with every library and runtime file but only the 8-bit model files (REVIEW.md
     # M-27): the full-precision model must come from the CDN. The stand-in worker answers "init" with an error
     # that names the addresses it was given.

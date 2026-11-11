@@ -145,3 +145,35 @@ test('an error stays in sight in full screen (round 25 review, L-333)', async ()
   assert.equal(await page.evaluate(() => document.querySelector('.app').classList.contains('fs')), true);
   assert.equal(await page.isVisible('#notice'), true);
 });
+
+// The site's own top bar (reader-config.json).
+test('CONTENTS_TITLE sets the contents button\'s word ("" for the icon alone, still named); NAVBAR_ICON shows a logo before it, as tall as the button and at most twice as wide, going to NAVBAR_LINK', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.SITE}/folder-brand/index.html?book=/reader/books/long.epub`);
+  const r = await page.evaluate(() => {
+    const btn = document.querySelector('#tocBtn'), logo = document.querySelector('#navLogo img'), a = document.querySelector('#navLogo a');
+    const b = btn.getBoundingClientRect(), l = logo.getBoundingClientRect();
+    return { text: btn.textContent.trim(), name: btn.getAttribute('aria-label'), h: l.height, w: l.width, bh: b.height, before: l.right <= b.left, href: a?.getAttribute('href'), label: a?.getAttribute('aria-label') };
+  });
+  assert.equal(r.text, '');
+  assert.equal(r.name, 'Contents');
+  assert.ok(r.h <= r.bh + 0.5 && r.w <= 2 * r.bh + 0.5 && r.w > 0, JSON.stringify(r));
+  assert.ok(r.before, 'just left of the contents button');
+  assert.equal(r.label, 'Go to /reader/books/notes.md');
+  await Promise.all([page.waitForURL(/\/reader\/books\/notes\.md$/), page.click('#navLogo a')]);
+});
+
+test('CONTENTS_TITLE takes any text; a tall logo keeps within the bar; a link that isn\'t a web address is refused (the logo shows, without a link); by default, the word Contents and no logo', async () => {
+  const page = await h.newPage();
+  const warned = []; page.on('console', m => { if (/NAVBAR_LINK/.test(m.text())) warned.push(m.text()); });
+  await h.openReader(page, `${h.SITE}/folder-brand2/index.html?book=/reader/books/long.epub`);
+  assert.equal((await page.textContent('#tocBtn')).trim(), 'Chapters ✦');
+  assert.equal(await page.getAttribute('#tocBtn', 'aria-label'), null);
+  const r = await page.evaluate(() => { const l = document.querySelector('#navLogo img').getBoundingClientRect(); return { h: l.height, w: l.width, link: !!document.querySelector('#navLogo a') }; });
+  assert.ok(r.h <= 34.5 && r.h > 30 && r.w <= 69, JSON.stringify(r));
+  assert.equal(r.link, false);
+  assert.ok(warned.some(w => /NAVBAR_LINK ignored/.test(w)), warned.join(' | '));
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  assert.equal((await page.textContent('#tocBtn')).trim(), 'Contents');
+  assert.equal(await page.isHidden('#navLogo'), true);
+});
