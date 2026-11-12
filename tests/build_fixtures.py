@@ -1037,6 +1037,9 @@ def main():
                "colheight": "body>div>div{column-height:300px}", "htmlmt": "html{margin-top:-90vh}", "htmlml": "html{margin-left:-60vw}",
                "htmlw": "html{width:300vw}", "clipvert": "body>div{writing-mode:vertical-rl}",
                "snap": "body>div{scroll-snap-type:x mandatory} #hp120{scroll-snap-align:start}"}
+    # A book's own two-column box whose heading spans it (round 30 review, L-400).
+    epub(books / "own-span.epub", "Own Span", [("c1.xhtml", "One", '<div class="inner"><h3 id="sp">Glossary</h3>' + "".join(f"<p>Term {i}: a short entry.</p>" for i in range(20)) + "</div>" + hp,
+         "<style>.inner{columns:2;column-gap:10px} .inner h3{column-span:all}</style>")], uid="urn:own-span")
     epub(books / "own-colours.epub", "Own Colours", [("c1.xhtml", "One", '<p class="red" id="red">Red words.</p>' + hp, "<style>.red{color:#c00 !important}</style>")], uid="urn:own-colours")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
@@ -1110,6 +1113,7 @@ def main():
     (books / "tilde.md").write_text("# Tilde\n\nStart.\n\n~~~js `title`\nconst a = 1;\n~~~\n\nAfter.\n")
     (books / "huge-code.md").write_text("# Huge code\n\n```js\n" + "const value = compute(alpha, beta); // a line of filler code\n" * 45000 + "```\n")
     (books / "big-details-long.html").write_text("<!DOCTYPE html><html><head><title>Long summary</title></head><body><details open><summary>" + "Long summary words. " * 200 + "</summary>" + "".join(f"<p>Paragraph {i} of a very long details block, with words.</p>" for i in range(8000)) + "</details></body></html>")
+    (books / "brackets.md").write_text("# B\n\n" + "[a " * 40000 + "\n")   # (round 30 review, H-46)
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

@@ -576,3 +576,13 @@ test('phones 320 px wide: the bar wraps rather than run past the edge, with Sett
   await h.openReader(page, `${h.READER}?book=books/manga.cbz`);
   assert.match(await page.textContent('#txtReadNote'), /Not available: a comic/);
 });
+
+test('a heading spanning a book\'s own two-column box still spans it; text full of "[" opens in good time (round 30 review, L-400, H-46)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/own-span.epub`, { 'spine:layout': 'one' });
+  const [hw, pw] = await h.inFrame(page, doc => [doc.getElementById('sp').getBoundingClientRect().width, doc.querySelector('.inner p').getBoundingClientRect().width]);
+  assert.ok(hw > pw * 1.6, `heading ${hw}px, a column ${pw}px`);
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/brackets.md`);
+  assert.ok(Date.now() - t0 < 8000, `${Date.now() - t0} ms`);
+});
