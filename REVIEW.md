@@ -515,28 +515,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| M-158 | Edit opens the editor at the last heading of the page shown, past where the page starts (M-147 takes every heading on the page); a one-page document scrolls to its end. Reproduced. | Bug |
-| M-156 | Documents opened directly (HTML, Markdown, text) have no size limit, and one huge block (a list of 70,000 items) isn't split: a 4 MB list took 15 s and paged wrongly until a resize; 29 MB hung the tab. EPUB chapters within `MAX_MARKUP` are slower than its note says (8 MB: 54 s on a loaded machine). Reproduced. | Hardening |
-| M-157 | SVG pictures are limited per file (16 MB) but not per page: 40 of them, from a 620 KB EPUB, decompress to 600 MB and take 40 s. Reproduced. | Hardening |
-| M-160 | On phones 360 px wide and less, the top bar's last buttons (Open; under 345 px also Settings and Edit) are cut off. Reproduced. | Layout |
-| M-159 | Notices with no action get an "Open a book" button and can't be dismissed (Read aloud in a comic, "waits while the audiobook is being made"), and while one shows the top bar's corner is hidden; Read aloud isn't disabled for comics. Reproduced. | Bug |
-| L-359 | A book folder's file sent compressed (as the nginx example does for HTML and CSS) or without a length is read whole before the 16 MB check. Reproduced. | Hardening |
-| L-360 | A same-site link whose path starts with `//` (`/..//host/x.html`) is passed on as a path and refused as another site's (nothing reaches it). Reproduced. | Bug |
-| L-361 | A document's link can open the reader's own `index.html` as a document (cleaned, so only odd). Reproduced. | Hardening |
-| L-362 | A book's own `data-spine-path`/`data-spine-href` on an `<a>` without `href` is followed (same-origin still applies). Reproduced. | Hardening |
-| L-363 | A link from a document to itself isn't recognised when the name has `,` `[` `]` `@` `;` `=` `&` `+` `$` `:`: it is fetched again and asks about leaving. Reproduced. | Bug |
-| L-364 | M-148 carries only `dir`: a document made right to left by CSS on body or a wrapper reads left to right. Reproduced. | Bug |
-| L-365 | A Back or Forward that is called off pushes the old address again, so the next Back asks a second time. Reproduced. | Bug |
-| L-366 | Clicking a document's link in the editor's page shows a false "isn't part of the book's reading order" error. Reproduced. | Bug |
-| L-367 | Right-to-left books: the footer's Next keeps its tooltip "(Right arrow)", and the progress fill grows left to right. Reproduced. | Bug |
-| L-368 | Accessibility: the Aa button is named "Aa"; "✓" is read in the font menu's names; Escape in the contents on a narrow screen with the top bar hidden drops focus to the body; the logo link is named by its path, with no alt text setting. Reproduced. | Accessibility |
-| L-369 | The top bar's corner covers the top right of the page in the scroll layout (links and the scrollbar there can't be clicked), and hides while any notice shows. Reproduced. | Bug |
-| L-370 | The `!important` removed from a paged page's body style misses escaped forms (`!\69mportant`, `! /**/ important`); paging still held. Reproduced. | Hardening |
-| L-371 | `fetch-fonts.sh --strict` reports a newly added family as "Google serves a different file now"; a link's query string is dropped silently. Read. | Bug |
-| L-372 | Sandboxing by extension follows nginx's types: servers reading `/etc/mime.types` (Caddy, Python) serve over a hundred more XML types unsandboxed (Chromium downloads them); Caddy's example doesn't sandbox a book folder's `index.html` asked for as the folder. Reproduced (tests/server.py), read (Caddy). | Hardening |
-| T-53 | Flaky tests: "reading aloud reads the page beside the text (E-21)" clicks Play after Read aloud has already started (a toggle); several audiobook and fixed-layout tests press Space a fixed time after R. Reproduced (CPU throttled). | Tests |
-| T-54 | No tests of: Back to an `?edit=` entry; Back/Forward asking about unsaved edits or an export (the M-145 test passes without `leaveOk`); unsaved edits and a missing link target; a self-link with `,` in its name; a book folder's file over 16 MB; the 512 MB message; the body style's `!important` removal; Edit opening where the page starts; the top bar at 360 px. M-147's test passes when Done lands on any earlier page. | Tests |
-| D-32 | README: following a document's link (opened as `?book=`, in the history; not while editing); the `font` preference's `g-<name>` ids. | Docs |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -594,6 +572,28 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| M-158 | Edit opened at the last heading of the page shown. It opens at the heading the page falls under, or at the top. | `726d31c` |
+| M-159 | Notices with no action couldn't be put away; Read aloud wasn't off for comics. They have OK; it is off. | `f507fc8` |
+| M-160 | On phones 360 px wide and less the top bar's last buttons were cut off. Line spacing leaves the bar below 400 px. | `f507fc8` |
+| M-156 | Documents opened directly had no size limit, and one huge block wasn't split. 32 MB limit; long blocks split into copies of them. | `13c796b` |
+| M-157 | SVG pictures weren't limited per page. 4 MB a picture, 24 MB a page. | `13c796b` |
+| L-359 | A folder book's file sent compressed or without a length was read whole before the check. Read as it arrives, given up past the limit. | `13c796b` |
+| L-360 | A same-site link whose path starts with // was refused as another site's. Passed on whole. | `e109718` |
+| L-361 | A document's link could open the reader's own page as a document. Refused, by link and by ?book=. | `e109718` |
+| L-362 | A book's own data-spine-* marks on a link were followed. Taken off before marking. | `e109718` |
+| L-363 | A link to the document itself by a name holding "," wasn't recognised. Compared as names. | `e109718` |
+| L-365 | A Back or Forward called off pushed the old address again. It goes back by as many steps. | `e109718` |
+| L-366 | A document's link clicked in the editor's page gave a false error. It says links work after Done. | `e109718` |
+| L-364 | A document right to left by CSS on body or a wrapper read left to right. Direction in their own style is carried too. | `9ea472d` |
+| L-367 | Right-to-left books: Next's tooltip named the right arrow, the ribbon filled from the left. Both follow the pages. | `9ea472d` |
+| L-368 | Accessibility: the Aa button's name, the menu's check mark read, focus lost by Escape in the contents, no name for the logo. All fixed; NAVBAR_ALT added. | `9ea472d` |
+| L-369 | The top bar's corner covered the scroll layout's page and hid with any notice. Kept off the page scrolled down and its scrollbar; hidden only for a notice reaching it. | `9ea472d` |
+| L-370 | The !important removal from a body style missed escaped forms. Read and written again by the browser's CSS parser. | `9ea472d` |
+| L-371 | fetch-fonts.sh --strict's message for a new family; a link's query dropped silently. A message of its own; the README says links leave the query out. | `8f39ba2` |
+| L-372 | Sandboxing by extension follows nginx's types; Caddy didn't sandbox a folder's index.html. The README says so and gives a matcher for folder addresses. | `8f39ba2` |
+| T-53 | Flaky tests pressing Space a fixed time after R, and clicking Play after Read aloud. They wait for reading to start. | `8f39ba2` |
+| T-54 | Test gaps of round 27. Added with the fixes (Back to ?edit=, unsaved edits and a missing link, a self-link with ",", folder files over 16 MB, the body style, Edit at the page's start, 360 px). | `8f39ba2` |
+| D-32 | README: following a document's links; the font preference's g- ids. | `8f39ba2` |
 | E-31 | LaTeX math in Markdown (`$…$`, `` $`…`$ ``, `$$…$$`, ` ```math `) as MathML by Temml, the TeX kept in each formula; written back as it was. | `a53b5b3` |
 | E-32 | Footnotes in Markdown (`[^1]`), numbered as referred to, gathered at the end with links both ways; written back as they were. | `a53b5b3` |
 | E-33 | Alerts in Markdown (`> [!NOTE]` and the rest), set apart in their colours, the dark themes too; written back as they were. | `a53b5b3` |
