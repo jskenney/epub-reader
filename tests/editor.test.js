@@ -1231,3 +1231,14 @@ test('a document\'s own private-use characters and zero-width spaces inside text
   assert.ok(back.includes('x  y'), JSON.stringify(back));
   assert.ok(back.includes(':smile:ab​cd​ef end.'), JSON.stringify(back));
 });
+
+test('Enter twice in a note: what is typed then stays in the note when written back (round 30 review, M-184)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('notes-rule.md'));
+  await inPage(page).locator('.md-footnotes li', { hasText: 'Note one.' }).click();
+  await page.keyboard.press('End'); await page.keyboard.press('Enter'); await page.keyboard.press('Enter'); await page.keyboard.type('Kept text.');
+  await flush(page);
+  const back = await text(page);
+  assert.match(back, /Kept text\./, back);
+  assert.match(back, /\[\^1\]: Note one\.[\s\S]*?\n {4}Kept text\./, back);
+});
