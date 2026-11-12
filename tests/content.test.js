@@ -509,3 +509,33 @@ test('a folder book\'s chapter over 16 MB is refused with a notice, by its lengt
   const log = await (await fetch(`${h.SITE}/__big`)).json();
   assert.ok(log.length && log.every(e => !e.complete), JSON.stringify(log));
 });
+
+test('document links: a site path starting with // stays this site\'s; the reader\'s own page isn\'t opened as a document; a book\'s own link marks are ignored; a link to itself by a name holding "," stays in the document (round 27 review, L-360, L-361, L-362, L-363)', async () => {
+  const page = await h.newPage();
+  const G = `${h.READER}?book=books/linkdoc/g.html`;
+  const click = id => page.frameLocator('#page').locator('#' + id).click();
+  await h.openReader(page, G, { 'spine:layout': 'scroll' });
+  await click('slashes');
+  const n1 = await h.waitFor(() => h.notice(page), 8000) || '';
+  assert.doesNotMatch(n1, /Only books hosted on this same site/);
+  assert.match(n1, /x\.html/);
+  await page.click('#noticeAction');
+  await click('reader');
+  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /this reader's own page/);
+  assert.equal(await page.textContent('#bookTitle'), 'Doc G');
+  await page.click('#noticeAction');
+  await click('forged');
+  await page.waitForTimeout(600);
+  assert.equal(await page.textContent('#bookTitle'), 'Doc G', 'a mark the book wrote isn\'t followed');
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/x%2Cy.md`, { 'spine:layout': 'scroll' });
+  const len = await page.evaluate(() => history.length);
+  const asked = []; page.on('request', r => { if (/x(,|%2C)y\.md/i.test(r.url())) asked.push(r.url()); });
+  await page.frameLocator('#page').locator('a', { hasText: 'to the bottom' }).click();
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('bottom')?.getBoundingClientRect(); return r && r.top >= 0 && r.top < doc.defaultView.innerHeight; }), 5000), 'at the bottom');
+  assert.equal(await page.evaluate(() => history.length), len, 'no history entry');
+  assert.deepEqual(asked, [], 'not fetched again');
+  // ?book= naming the reader's own page.
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.goto(`${h.READER}?book=index.html`);
+  assert.match(await h.waitFor(() => h.notice(page), 8000) || '', /this reader's own page/);
+});

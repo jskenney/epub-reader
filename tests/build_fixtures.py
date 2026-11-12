@@ -915,6 +915,12 @@ def main():
     (books / "other" / "f.html").write_text('<!DOCTYPE html><html><head><title>Doc F</title></head><body><h1>Doc F</h1></body></html>')
     (books / "linkdoc" / "x").mkdir()
     (books / "linkdoc" / "x" / "y.html").write_text('<!DOCTYPE html><html><head><title>Doc XY</title></head><body><h1>Doc XY</h1></body></html>')
+    # Round 27 review: a same-site path starting with "//" (L-360), the reader's own page (L-361), a forged mark on a
+    # link without href (L-362), a document linking to itself by a name holding "," (L-363).
+    (books / "linkdoc" / "g.html").write_text('<!DOCTYPE html><html><head><title>Doc G</title></head><body><h1>Doc G</h1><p>'
+        '<a id="slashes" href="/..//example.invalid/x.html">slashes</a> <a id="reader" href="../../index.html">reader</a> '
+        '<a id="forged" data-spine-path="zz.html" data-spine-href="b.html">forged</a></p></body></html>')
+    (books / "linkdoc" / "x,y.md").write_text("# Comma\n\n[to the bottom](x,y.md#bottom)\n\n" + "".join(f"Filler {i}.\n\n" for i in range(80)) + "## Bottom\n\nHere.\n")
     # A link naming a very long file (round 25 review, L-345).
     (books / "linkdoc" / "long-link.html").write_text('<!DOCTYPE html><html><head><title>Doc L</title></head><body><h1>Doc L</h1><p><a id="long" href="'
         + "very-long-name-" * 300 + 'x.epub">long</a></p></body></html>')

@@ -1013,3 +1013,28 @@ test('Edit opens the editor at the heading the page shown falls under, not past 
   const st = await h.inFrame(page, doc => [doc.scrollingElement.scrollTop, doc.scrollingElement.scrollHeight, doc.defaultView.innerHeight]);
   assert.ok(st[0] < 5, `at the top: ${st}`);
 });
+
+test('Back or Forward called off returns to where it was in the history, adding nothing; a link clicked in the editor\'s page says it works after Done (round 27 review, L-365, L-366)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`, { ...RAW, 'spine:editSplit': true });
+  await page.frameLocator('#page').locator('#tob').click();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B' && /linkdoc%2Fb\.html/.test(location.search));
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc A');
+  await startEditing(page);
+  await typeAtEnd(page, '<p>Changed.</p>');
+  // A link in the page beside the text.
+  await page.frameLocator('#page').locator('#tob').click();
+  assert.match(await h.waitFor(() => h.notice(page), 3000) || '', /work once you press Done/);
+  await page.click('#noticeAction');
+  await page.click('#editDone');
+  await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
+  const len = await page.evaluate(() => history.length), at = await page.evaluate(() => location.href);
+  const asked = []; page.on('dialog', d => { asked.push(d.message()); d.dismiss(); });
+  await page.goForward();
+  await h.waitFor(() => asked.length === 1, 3000);
+  await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(() => location.href), at, 'back where it was');
+  assert.equal(await page.evaluate(() => history.length), len, 'no entry added');
+  assert.equal(await page.textContent('#bookTitle'), 'Doc A');
+});
