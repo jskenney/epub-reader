@@ -210,7 +210,7 @@ def main():
     # tall one; a link that isn't a web address is refused).
     for folder, cfg in (("folder-brand", {"LIB_FILES": "/reader/", "CONTENTS_TITLE": "", "NAVBAR_ICON": "logo.png", "NAVBAR_LINK": "/reader/books/notes.md"}),
                         ("folder-brand2", {"LIB_FILES": "/reader/", "CONTENTS_TITLE": "Chapters ✦", "NAVBAR_ICON": "tall.svg", "NAVBAR_LINK": "javascript:alert(1)"}),
-                        ("folder-brand3", {"LIB_FILES": "/reader/", "NAVBAR_ICON": "logo.png", "NAVBAR_LINK": "www.example.com/home"})):
+                        ("folder-brand3", {"LIB_FILES": "/reader/", "NAVBAR_ICON": "logo.png", "NAVBAR_LINK": "www.example.com/home", "NAVBAR_ALT": "Example Press"})):
         (SITE / folder).mkdir()
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps(cfg))
@@ -892,6 +892,11 @@ def main():
          '<table><tr><th id="vth" style="writing-mode:vertical-rl">Head</th><td>Cell</td></tr></table>'
          '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text id="vsvg" x="50" y="10" style="writing-mode:tb">AB</text></svg>'
          '<p id="vp" style="writing-mode:vertical-rl">A paragraph.</p>', "")], uid="urn:vertical-bits")
+    # A document made right to left by its body's style (round 27 review, L-364); a book whose body style writes
+    # "!important" in escaped forms (L-370).
+    (books / "rtl-style.html").write_text('<!DOCTYPE html><html lang="ar"><head><meta charset="utf-8"><title>RTL Style</title></head><body style="direction:rtl"><h1>عنوان</h1>' + "".join(f"<p>{i}. {ar}</p>" for i in range(30)) + "</body></html>", encoding="utf-8")
+    esc = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body style="padding:0 !\\69mportant;height:auto ! /**/ important;overflow:visible !IMPORTANT">' + "".join(f"<p id='e{i}'>Paragraph {i} with enough words to wrap across a line or two of the page, and then some more words.</p>" for i in range(200)) + "</body></html>"
+    epub_items(books / "body-escaped.epub", "body-escaped", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"], {"c1.xhtml": esc}, "urn:body-escaped")
     # Right to left with headings through the chapter, for the editor's place (round 25 review, M-147).
     chap = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ar" dir="rtl"><head><title>t</title></head><body>' + "".join(
         f"<h2 id='h{k}'>قسم {k}</h2>" + "".join(f"<p>{k}.{i}. {ar}</p>" for i in range(8)) for k in range(10)) + "</body></html>"

@@ -158,6 +158,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
   background:var(--marks,repeating-linear-gradient(90deg,transparent 0,transparent calc(100% / var(--n) - 2px),var(--paper) calc(100% / var(--n) - 2px),var(--paper) calc(100% / var(--n))))}
 .ribbon.dense::after{display:none}
 #ribbonFill{height:100%;width:0;background:var(--ribbon);transition:width .2s ease-out}
+.ribbon.rtl{transform:scaleX(-1)}
 
 .drop{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:color-mix(in srgb,var(--paper) 88%,transparent)}
 .drop div{pointer-events:none;border:2px dashed var(--ribbon);border-radius:10px;padding:40px 48px;font:italic 1.4rem var(--font-read);color:var(--ribbon);text-align:center}
@@ -182,7 +183,10 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .bar-corner:focus-visible{opacity:1;outline:2px solid var(--ribbon);outline-offset:-4px}
 .app.fs ~ .bar-corner,.app.fs .bar-corner{display:none}
 /* (Not over the editor's buttons (Save as…) or a notice's: round 26 review, M-152.) */
-.app.editing .bar-corner,.app:has(#notice:not([hidden])) .bar-corner{display:none}
+/* (Nor over a notice that reaches the corner, nor over the page once it is scrolled down in the scroll layout, nor its
+   scrollbar there: round 27 review, L-369.) */
+.app.editing .bar-corner,.app.corner-notice .bar-corner,.app.corner-scrolled .bar-corner{display:none}
+.app.corner-scroll .bar-corner{right:18px}
 .app.fs .main{padding-block:0;gap:0}
 .app.fs #page,.app.fs #page2,.app.fs .stage.fxl{border:0;border-radius:0;box-shadow:none}
 .fs-pill{position:fixed;z-index:15;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));
@@ -300,7 +304,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .opt:hover,.opt:focus-visible{background:var(--paper);outline:none}
 .opt small{font:400 11px/1.2 var(--font-mono);color:var(--muted);white-space:nowrap}
 .opt[aria-checked="true"]{color:var(--ribbon)}
-.opt[aria-checked="true"] small::before{content:"✓ ";color:var(--ribbon)}
+.opt[aria-checked="true"] small::before{content:"✓ " / "";color:var(--ribbon)}
 
 /* The editor (E-21): the text (CodeMirror, or a plain text box) beside, or instead of, the page. */
 .edit-pick{position:relative}
@@ -653,7 +657,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0210</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0214</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1967,7 +1971,8 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
   // The document's direction, on html or body or a wrapper around all of it, carried to every part (the parts are
   // made of what is inside them: round 25 review, M-148).
   const kids = [...doc.body.children], wrap = kids.length === 1 && ![...doc.body.childNodes].some(n => n.nodeType === 3 && n.data.trim()) ? kids[0] : null;
-  const dirOf = el => (el?.getAttribute('dir') || '').trim().toLowerCase();
+  // (By the dir attribute, or by direction in its own style: round 27 review, L-364.)
+  const dirOf = el => (el?.getAttribute('dir') || (/(?:^|;)\s*direction\s*:\s*(rtl|ltr)\b/i.exec(el?.getAttribute('style') || '') || [])[1] || '').trim().toLowerCase();
   const dir = [doc.documentElement, doc.body, wrap].map(dirOf).find(d => ['rtl', 'ltr', 'auto'].includes(d)) || '';
 
   const parts = splitDocument(doc, whole ? { maxLen: Infinity } : {});
@@ -3225,7 +3230,7 @@ async function buildPage(src, path, item){
   const ov = out.createElement('style'); ov.id = RID.override; ov.textContent = overrideCss(fx); head.append(ov);
   if (sBody) {
     // (Without "!important" in a paged page's body style, which would outdo the reader's own layout rules: M-149.)
-    for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.name === 'style' && !fx ? a.value.replace(/!\s*important/gi, '') : a.value);
+    for (const a of [...sBody.attributes]) if (!/^on/i.test(a.name) && !a.name.includes(':')) out.body.setAttribute(a.name, a.name === 'style' && !fx ? noImportant(a.value) : a.value);
   }
   // (A fixed-layout page keeps the book's structure, with no wrappers in its body, so selectors such as
   // "body > p" still match: search and reading aloud read its body then: textBlocks.)
@@ -3272,6 +3277,12 @@ async function buildPage(src, path, item){
 // An address as a policy source: ";", ",", quotes and spaces would end or split it (REVIEW.md L-81). The
 // browser compares paths decoded, so the encoded form matches the same files.
 const policyUrl = u => u.replace(/[;,'"\s]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+// A style attribute without any "!important": read by the browser's own CSS parser (so "!\69mportant" and
+// "! /**/ important" are read as it reads them) and written out again without priorities (round 27 review, L-370).
+function noImportant(v){
+  const d = document.createElement('div'); d.setAttribute('style', v);
+  return [...d.style].map(prop => `${prop}:${d.style.getPropertyValue(prop)}`).join(';');
+}
 function bookPolicy(){
   const folder = policyUrl(book?.src?.base || '');
   // (A font of ADDITIONAL_FONTS that isn't self-hosted comes from Google Fonts, with the self-hosted ones.)
@@ -3864,6 +3875,8 @@ function wireFrame(){
 // The reader's keys, wheel, swipes, dropping a book, waking the full-screen controls, and closing the menus: on
 // the page, and on the facing page of a spread too (round 23 review). Clicks and links are the page's own.
 function wirePageInput(doc){
+  doc.addEventListener('scroll', () => { if (doc === frame.contentDocument) cornerSync(); }, { passive: true });
+  if (doc === frame.contentDocument) cornerSync();
   // (Tab to a link on another page: that page is shown, so what has the focus is in sight: round 25 review, M-142.)
   doc.addEventListener('focusin', e => {
     if (scrolling() || doc !== frame.contentDocument || !e.target?.getBoundingClientRect) return;
@@ -4050,7 +4063,7 @@ function onKey(e){
   if ($('#abDialog').open || $('#setDialog').open || $('#cfgDialog').open || $('#txtDialog').open) return;   // (the dialogs are modal: the reader's keys wait)
   // (Typing in the page being edited: only saving and leaving are the reader's: E-21.)
   if (e.target.isContentEditable && !((e.ctrlKey || e.metaKey) && /^[sfSF]$/.test(e.key)) && e.key !== 'Escape') return;
-  if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs() && !e.defaultPrevented && e.target.id !== 'searchBox') { e.preventDefault(); setToc(false); $('#tocBtn').focus(); return; }
+  if (e.key === 'Escape' && narrow.matches && tocIsOpen() && !isFs() && !e.defaultPrevented && e.target.id !== 'searchBox') { e.preventDefault(); setToc(false); focusContentsButton(); return; }
   const tag = (e.target.tagName || '').toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F') && book && e.target.id !== 'searchBox' && !e.target.closest?.('.edit-src')) { e.preventDefault(); searchOpen(); return; }
   if (ed.on && (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); editSave(e.shiftKey); return; }
@@ -4194,6 +4207,11 @@ function updateProgress(){
   const overall = bookFraction();
   const pct = Math.round(overall * 100);
   $('#ribbonFill').style.width = (overall * 100).toFixed(2) + '%';
+  // (Pages coming in from the left: the ribbon fills from the right, and the buttons name the arrows that go their
+  // way: round 27 review, L-367.)
+  const rtl = turnRtl();
+  $('#ribbon').classList.toggle('rtl', rtl);
+  $('#prevBtn').title = `Previous page (${rtl ? 'Right' : 'Left'} arrow)`; $('#nextBtn').title = `Next page (${rtl ? 'Left' : 'Right'} arrow)`;
   $('#ribbon').setAttribute('aria-valuenow', pct);
   $('#pct').textContent = pct + '%';
   const n = book.spine.length;
@@ -4224,8 +4242,19 @@ function showNotice(msg, kind, action = null){
   // (A notice without an action of its own can always be put away: round 27 review, M-159.)
   $('#noticeAction').textContent = action?.label || (kind === 'error' ? 'Dismiss' : 'OK');
   $('#notice').hidden = false;
+  cornerSync();
 }
-function hideNotice(){ $('#notice').hidden = true; }
+function hideNotice(){ $('#notice').hidden = true; cornerSync(); }
+// The top bar's corner (shown while the bar is hidden) kept off what it would cover: a notice reaching the top right, and
+// the page scrolled down in the scroll layout (L-369).
+function cornerSync(){
+  const app = $('.app'), n = $('#notice');
+  const r = n.hidden ? null : n.getBoundingClientRect();
+  app.classList.toggle('corner-notice', !!r && r.top < 36 && r.right > innerWidth - 96);
+  const se = scrolling() ? frame.contentDocument?.scrollingElement : null;
+  app.classList.toggle('corner-scroll', scrolling());
+  app.classList.toggle('corner-scrolled', !!se && se.scrollTop > 8);
+}
 function friendly(err, name){
   const m = String(err?.message || err);
   if (/central directory|zip/i.test(m) && !/EPUB|^Nothing was found/.test(m)) return `${name} couldn't be read as a ZIP archive. EPUB files are ZIP archives, so this probably isn't an EPUB.`;
@@ -4269,15 +4298,16 @@ let relayoutFrame = 0;
 { const ro = new ResizeObserver(() => { cancelAnimationFrame(relayoutFrame); relayoutFrame = requestAnimationFrame(relayout); }); ro.observe(frame); ro.observe(stage); }
 $('#ribbon').addEventListener('click', e => {
   if (!book) return;
-  const r = e.currentTarget.getBoundingClientRect();
-  renderChapter(sectionAt((e.clientX - r.left) / r.width));
+  const r = e.currentTarget.getBoundingClientRect(), rtl = e.currentTarget.classList.contains('rtl');
+  renderChapter(sectionAt((rtl ? r.right - e.clientX : e.clientX - r.left) / r.width));
 });
 // The ribbon as a slider over the sections: arrows step a section, Home and End go to the first and last
 // (REVIEW.md L-78). (Kept from the page-turning keys.)
 $('#ribbon').addEventListener('keydown', e => {
   if (!book) return;
   const last = book.spine.length - 1;
-  const to = { ArrowRight: nextChapter(), ArrowUp: nextChapter(), Enter: nextChapter(), ArrowLeft: prevChapter(), ArrowDown: prevChapter(), Home: 0, End: last }[e.key];
+  const fwd = $('#ribbon').classList.contains('rtl') ? 'ArrowLeft' : 'ArrowRight', back = fwd === 'ArrowLeft' ? 'ArrowRight' : 'ArrowLeft';
+  const to = { [fwd]: nextChapter(), ArrowUp: nextChapter(), Enter: nextChapter(), [back]: prevChapter(), ArrowDown: prevChapter(), Home: 0, End: last }[e.key];
   if (to == null) return;
   e.preventDefault(); e.stopPropagation();
   if (to >= 0 && to <= last && to !== cur.i) renderChapter(to);
@@ -4299,7 +4329,7 @@ function setToc(open){
       const a = document.activeElement;   // (unless something else took the focus meanwhile, the search box say: round 13 review)
       if (!a || a === document.body || a === $('#tocBtn') || a === frame || a === frame2) ($('#tocList a[aria-current]') || $('#tocList a'))?.focus();
     });
-    if (!open && was && t.contains(document.activeElement)) $('#tocBtn').focus();
+    if (!open && was && t.contains(document.activeElement)) focusContentsButton();
   }
   else { t.classList.toggle('collapsed', !open); t.classList.remove('open'); }
   $('#tocBtn').setAttribute('aria-expanded', String(open));
@@ -4330,12 +4360,12 @@ function applyBranding(){
   slot.replaceChildren(); slot.hidden = !NAVBAR_ICON;
   if (!NAVBAR_ICON) return;
   const img = document.createElement('img');
-  img.src = new URL(NAVBAR_ICON, location.href).href; img.alt = '';
+  img.src = new URL(NAVBAR_ICON, location.href).href; img.alt = NAVBAR_LINK ? '' : NAVBAR_ALT;
   img.addEventListener('error', () => { slot.hidden = true; });
   if (NAVBAR_LINK) {
     const a = document.createElement('a'), to = new URL(NAVBAR_LINK, location.href);
     a.href = to.href; a.title = to.origin === location.origin ? to.pathname : to.host;
-    a.setAttribute('aria-label', `Go to ${a.title}`);
+    a.setAttribute('aria-label', NAVBAR_ALT || `Go to ${a.title}`);   // (the site's name for it, when it gives one: L-368)
     a.append(img); slot.append(a);
   } else slot.append(img);
 }
@@ -4354,6 +4384,8 @@ function barToggle(name){
   if ($('#setDialog').open) setSync();
 }
 $('#barCorner').addEventListener('click', () => { barToggle('SHOW_TOPBAR'); $('#tocBtn').focus(); });
+// (The contents button, or the page when the top bar, and the button with it, is hidden: L-368.)
+function focusContentsButton(){ const b = $('#tocBtn'); if (b.offsetParent) b.focus(); else frame.focus(); }
 
 // Cycle the layout, keeping the reader's place (as a fraction of the section) across the change.
 function setLayout(next, save = true){
@@ -4369,6 +4401,7 @@ function setLayout(next, save = true){
   b.title = `Layout: ${LAYOUTS[layout]} (L switches to ${LAYOUTS[following].toLowerCase()})`;
   b.setAttribute('aria-label', `Layout: ${LAYOUTS[layout]}`);
   restyleFrame();
+  cornerSync();
   updateProgress();
 }
 $('#layoutBtn').addEventListener('click', () => setLayout({ two: 'one', one: 'scroll', scroll: 'two' }[layout]));
@@ -4521,6 +4554,7 @@ function syncFontMenu(){
   if (ko) { const lock = LOCKED.has('shortcuts'); ko.setAttribute('aria-checked', String(singleKeys)); ko.setAttribute('aria-disabled', String(lock)); ko.title = lock ? 'Set by this site' : 'Turn off if they clash with a screen reader. Arrows, Space and Ctrl+F still work.'; }
   $('#fontBtn .aa').style.fontFamily = face().stack || face().preview;
   $('#fontBtn').title = `Reading font: ${face().name}`;
+  $('#fontBtn').setAttribute('aria-label', $('#fontBtn').title);   // (not "Aa": round 27 review, L-368)
 }
 function setFace(id){
   fontFace = id;
@@ -7730,6 +7764,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   // (Web addresses only, or ones on this site: not javascript:, data: or the like.)
   NAVBAR_ICON: ['string', v => { NAVBAR_ICON = siteOrWeb(v, true); }],
   NAVBAR_LINK: ['string', v => { NAVBAR_LINK = siteOrWeb(v); }],
+  NAVBAR_ALT: ['string', v => { NAVBAR_ALT = v.trim().slice(0, 200); }],   // (what the logo is called: L-368)
   GET_URLS: ['boolean', v => { GET_URLS = v; }],
   FORCE_LTR: ['boolean', v => { FORCE_LTR = v; }],
   API_PROGRESS: ['string', v => { API_PROGRESS = apiAddress(v); }],   // (E-22)
@@ -7807,7 +7842,7 @@ async function loadConfig(){
 let EDITING = true;   // reader-config.json: false hides the Edit button and new documents
 // reader-config.json: the contents button's word ('' for the icon alone), and a site's logo before it (a picture's
 // address, relative to the page or a full one) with where it goes when clicked ('' for nowhere).
-let CONTENTS_TITLE = 'Contents', NAVBAR_ICON = '', NAVBAR_LINK = '';
+let CONTENTS_TITLE = 'Contents', NAVBAR_ICON = '', NAVBAR_LINK = '', NAVBAR_ALT = '';
 let GET_URLS = true;  // reader-config.json: false refuses ?get= (a file by its address, on this site or another: E-24)
 const CM_VERSION = '5.65.21';   // must match CODEMIRROR in fetch-libs.sh
 // In loading order (each mode after what it uses), with the hashes fetch-libs.sh checks too.
@@ -9390,7 +9425,7 @@ $('#setDialog').addEventListener('close', () => $('#setBtn').focus());
 function configNow(){
   const v = name => SET_VARS[name] ? setShown(name) : null, here = h => { const u = new URL(h, location.href); return u.origin === location.origin ? u.pathname : u.href; };
   const c = {
-    DEFAULT_BOOK, BOOKSHELF, LIB_FILES, VOICE_FILES, ALLOW_CDN, CONTENTS_TITLE, NAVBAR_ICON, NAVBAR_LINK, ...toolbarShown,
+    DEFAULT_BOOK, BOOKSHELF, LIB_FILES, VOICE_FILES, ALLOW_CDN, CONTENTS_TITLE, NAVBAR_ICON, NAVBAR_LINK, NAVBAR_ALT, ...toolbarShown,
     ALLOW_REMOTE_CONTENT: v('ALLOW_REMOTE_CONTENT'), ALLOW_EXTERNAL_LINKS: v('ALLOW_EXTERNAL_LINKS'), EDITING, GET_URLS,
     SHOW_CONTENTS: v('SHOW_CONTENTS'), SHOW_PROGRESS: v('SHOW_PROGRESS'), SHOW_TOPBAR: v('SHOW_TOPBAR'),
     TIME_LEFT: v('TIME_LEFT'), SLEEP_TIMER: v('SLEEP_TIMER'), FORCE_LTR: v('FORCE_LTR'),

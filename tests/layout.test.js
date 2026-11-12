@@ -445,3 +445,49 @@ test('on phones 360 and 320 px wide every top-bar button is in sight, Settings, 
     await page.close();
   }
 });
+
+test('a document right to left by its body\'s style reads right to left; in right-to-left books the ribbon fills from the right, its arrows and the buttons\' names go the pages\' way (round 27 review, L-364, L-367)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/rtl-style.html`);
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.querySelector('[id^="spine-flow"]')).direction), 'rtl');
+  await h.openReader(page, `${h.READER}?book=books/rtl-text.epub`, { 'spine:layout': 'one' });
+  assert.equal(await page.evaluate(() => document.querySelector('#ribbon').classList.contains('rtl')), true);
+  assert.match(await page.getAttribute('#nextBtn', 'title'), /Left arrow/);
+  assert.match(await page.getAttribute('#prevBtn', 'title'), /Right arrow/);
+  await page.focus('#ribbon'); await page.keyboard.press('ArrowLeft');
+  await page.waitForFunction(() => /spine 2\//.test(document.querySelector('#spinePos').textContent));
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  assert.equal(await page.evaluate(() => document.querySelector('#ribbon').classList.contains('rtl')), false);
+  assert.match(await page.getAttribute('#nextBtn', 'title'), /Right arrow/);
+});
+
+test('names and focus: the Aa button says what it is, the menu\'s check mark isn\'t read, NAVBAR_ALT names the logo, Escape in the contents with the top bar hidden leaves the focus on the page (round 27 review, L-368)', async () => {
+  const page = await h.newPage({ viewport: { width: 400, height: 800 } });
+  await h.openReader(page, `${h.SITE}/folder-brand3/index.html?book=/reader/books/long.epub`);
+  assert.match(await page.getAttribute('#fontBtn', 'aria-label'), /^Reading font: /);
+  assert.equal(await page.getAttribute('#navLogo a', 'aria-label'), 'Example Press');
+  assert.match(await page.evaluate(() => getComputedStyle(document.querySelector('#fontMenu .opt[aria-checked="true"] small'), '::before').content), /\/ ""/);
+  await page.keyboard.press('n'); await page.waitForTimeout(200);
+  await page.keyboard.press('c'); await page.waitForTimeout(300);
+  await page.focus('#searchBox'); await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'page');
+});
+
+test('the top bar\'s corner stays off the page scrolled down in the scroll layout, and off its scrollbar; a book\'s body style can\'t hold "!important" in escaped forms (round 27 review, L-369, L-370)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:layout': 'scroll', 'spine:set:SHOW_TOPBAR': false });
+  const corner = () => page.evaluate(() => { const c = document.querySelector('#barCorner'); return getComputedStyle(c).display !== 'none' && c.getBoundingClientRect().right; });
+  const at = await corner();
+  assert.ok(at && at <= 1280 - 16, `at the top, beside the scrollbar: ${at}`);
+  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = 600; });
+  await page.waitForTimeout(200);
+  assert.equal(await corner(), false, 'scrolled down: out of the way');
+  await h.inFrame(page, doc => { doc.scrollingElement.scrollTop = 0; });
+  await page.waitForTimeout(200);
+  assert.ok(await corner());
+  await h.openReader(page, `${h.READER}?book=books/body-escaped.epub`, { 'spine:layout': 'one' });
+  const n = Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+  assert.ok(n > 3, `${n} pages`);
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.body).overflow), 'hidden');
+});
