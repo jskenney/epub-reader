@@ -537,7 +537,7 @@ test('document links: a site path starting with // stays this site\'s; the reade
   // ?book= naming the reader's own page.
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
   await page.goto(`${h.READER}?book=index.html`);
-  assert.match(await h.waitFor(() => h.notice(page), 8000) || '', /this reader's own page/);
+  assert.ok(await h.waitFor(async () => /this reader's own page/.test(await h.notice(page) || ''), 8000), await h.notice(page));
 });
 
 test('a long Markdown novel opens in good time (no search of the rest of the document for every paragraph), and TeX repeating a macro is shown as written, quickly (round 28 review, H-40, H-41)', async () => {
@@ -587,4 +587,18 @@ test('a code block over the highlighting limit is shown plain, in good time; a s
   assert.ok(Date.now() - t0 < 20000);
   const spans = await h.inFrame(page, doc => [...doc.querySelectorAll('pre code')].map(c => c.querySelectorAll('span').length));
   assert.ok(spans.length >= 2 && spans.slice(0, -1).every(n => n === 0) && spans.at(-1) > 0, JSON.stringify(spans));
+});
+
+test('the reader\'s own page isn\'t opened by an address spelled another way; two footnote labels never share an id; a body style\'s var() shorthand is kept (round 28 review, L-373, L-374, L-375)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  for (const b of ['%2569ndex.html', './/index.html', '..//reader//index.html']) {
+    await page.goto(`${h.READER}?book=${b}`);
+    assert.ok(await h.waitFor(async () => /reader's own page/.test(await h.notice(page) || ''), 8000), `${b}: ${await h.notice(page)}`);
+  }
+  await h.openReader(page, `${h.READER}?book=books/fn-ids.md`);
+  const ids = await h.inFrame(page, doc => [...doc.querySelectorAll('.md-footnotes li')].map(li => li.id));
+  assert.equal(new Set(ids).size, 2, JSON.stringify(ids));
+  await h.openReader(page, `${h.READER}?book=books/body-var.epub`);
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.body).textDecoration), 'underline wavy rgb(1, 2, 3)');
 });

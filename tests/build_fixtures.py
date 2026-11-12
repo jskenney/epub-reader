@@ -897,6 +897,8 @@ def main():
     (books / "rtl-style.html").write_text('<!DOCTYPE html><html lang="ar"><head><meta charset="utf-8"><title>RTL Style</title></head><body style="direction:rtl"><h1>عنوان</h1>' + "".join(f"<p>{i}. {ar}</p>" for i in range(30)) + "</body></html>", encoding="utf-8")
     esc = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body style="padding:0 !\\69mportant;height:auto ! /**/ important;overflow:visible !IMPORTANT">' + "".join(f"<p id='e{i}'>Paragraph {i} with enough words to wrap across a line or two of the page, and then some more words.</p>" for i in range(200)) + "</body></html>"
     epub_items(books / "body-escaped.epub", "body-escaped", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"], {"c1.xhtml": esc}, "urn:body-escaped")
+    bv = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title><style>:root{--td:underline wavy rgb(1, 2, 3)}</style></head><body style="text-decoration: var(--td) !important"><p>Text.</p></body></html>'
+    epub_items(books / "body-var.epub", "body-var", [("c1", "c1.xhtml", "application/xhtml+xml", "")], ["c1"], {"c1.xhtml": bv}, "urn:body-var")
     # Right to left with headings through the chapter, for the editor's place (round 25 review, M-147).
     chap = '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ar" dir="rtl"><head><title>t</title></head><body>' + "".join(
         f"<h2 id='h{k}'>قسم {k}</h2>" + "".join(f"<p>{k}.{i}. {ar}</p>" for i in range(8)) for k in range(10)) + "</body></html>"
@@ -1064,6 +1066,9 @@ def main():
     (books / "notes-back.md").write_text("# Notes\n\nStart.\n\nA claim.[^Src] And [^nope] stays.\n\n[^src]: The source.\n\n[^src]: A second, not shown.\n\nMore text.\n\n```python title=\"x.py\"\nprint(1)\n```\n\n```\nplain\n```\n")
     # A code block over the highlighting limit (M-166).
     (books / "big-code.md").write_text("# Big code\n\n```js\n" + "const a = 1; // filler line\n" * 6000 + "```\n\n```js\nconst small = 2;\n```\n")
+    # Two footnote labels that made the same id (L-374).
+    (books / "fn-ids.md").write_text("# Ids\n\nOne.[^a.] Two.[^a_2e]\n\n[^a.]: Dot.\n\n[^a_2e]: Underscore.\n")
+    # A body style whose shorthand uses var() (L-375).
     (books / "times.md").write_text("# Times\n\nThe train leaves at 10:30:45 and again at 11:00:00.\n")   # (L-381)
     (books / "typing.md").write_text("# Typing\n\nI am happy :smile:\n\nA claim.[^1]\n\nEnergy $E=mc^2$\n\n[^1]: The note.\n")   # (H-43)
     # An ordinary long Markdown novel, and TeX that repeats a macro (round 28 review, H-40, H-41).

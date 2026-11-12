@@ -658,7 +658,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0408</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0413</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1777,8 +1777,9 @@ function mdShortcodeAt(s){
   }
   return -1;
 }
-// A footnote's label as an id (letters, digits, - and _ as they are; anything else by its code).
-const fnSlug = id => id.replace(/[^\w-]/g, c => '_' + c.codePointAt(0).toString(16));
+// A footnote's label as an id (letters, digits and - as they are; anything else, _ too, by its code between two _s, so
+// no two labels make the same id: "a." and "a_2e" did: round 28 review, L-374).
+const fnSlug = id => id.replace(/[^A-Za-z0-9-]/gu, c => '_' + c.codePointAt(0).toString(16) + '_');
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
 let mdParser = null, mdEmoji = null;
 const HLJS_MAX = 100000;
@@ -3353,9 +3354,11 @@ async function buildPage(src, path, item){
 const policyUrl = u => u.replace(/[;,'"\s]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 // A style attribute without any "!important": read by the browser's own CSS parser (so "!\69mportant" and
 // "! /**/ important" are read as it reads them) and written out again without priorities (round 27 review, L-370).
+// (From the style as the browser writes it back, which keeps a shorthand using var() as written; its longhands read
+// one by one are empty: round 28 review, L-375.)
 function noImportant(v){
   const d = document.createElement('div'); d.setAttribute('style', v);
-  return [...d.style].map(prop => `${prop}:${d.style.getPropertyValue(prop)}`).join(';');
+  return d.style.cssText.replace(/\s*!\s*important\s*(?=;|$)/gi, '');
 }
 function bookPolicy(){
   const folder = policyUrl(book?.src?.base || '');
@@ -4055,7 +4058,10 @@ window.addEventListener('popstate', async e => {
   await (editRef ? openForEdit(editRef) : getRef ? openByAddress(getRef) : ref ? openFromUrl(ref) : openDefault());
 });
 // Whether an address is the reader's own page (its folder, or index.html in it).
-const readerPage = u => u.origin === location.origin && [location.pathname, location.pathname.replace(/\/(index\.html?)?$/i, '/'), location.pathname.replace(/\/$/, '/index.html')].includes(u.pathname);
+// (Paths compared decoded, with doubled slashes as one: "%2569ndex.html", ".//index.html" and "/reader//index.html" name the
+// reader too: round 28 review, L-373.)
+const pathPlain = s => { for (let k = 0; k < 3 && /%[0-9a-f]{2}/i.test(s); k++) { try { s = decodeURIComponent(s); } catch { break; } } return s.replace(/\/{2,}/g, '/').replace(/\/(\.\/)+/g, '/'); };
+const readerPage = u => u.origin === location.origin && [location.pathname, location.pathname.replace(/\/(index\.html?)?$/i, '/'), location.pathname.replace(/\/$/, '/index.html')].map(pathPlain).includes(pathPlain(u.pathname));
 function goTo(path, frag = '', href = ''){
   let idx = book.spine.findIndex(s => s.path === path);
   if (idx < 0) idx = book.spine.findIndex(s => pathKey(s.path) === pathKey(path));   // (case or Unicode form: L-48)
