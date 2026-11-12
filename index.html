@@ -669,7 +669,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0727</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0737</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1747,12 +1747,12 @@ function mdMath(tex, display, raw = ''){
     if (window.temml && tex.length <= MATH_TEX_MAX && mdMathBudget.left > 0) {
       const out = window.temml.renderToString(tex, { displayMode: display, annotate: true, throwOnError: true, trust: false, maxExpand: 1000, maxSize: [40, 40] });
       mdMathBudget.left -= out.length;
-      if (out.length <= MATH_OUT_MAX) return out.replace(/<math\b/, '<math data-md-tex=""');   // (ours: M-173)
+      if (out.length <= MATH_OUT_MAX) return out.replace(/<math\b/, `<math data-md-tex="" data-md-own="${MD_OWN}"`);   // (ours: M-173)
     }
   } catch {}
   // (Written back as it was written: round 28 review, M-162.)
   const src = raw || (display ? `$$${tex}$$` : `$${tex}$`);
-  return `<code class="md-math-error" data-md="${escHtml(src)}">${escHtml(src)}</code>`;
+  return `<code class="md-math-error" data-md-own="${MD_OWN}" data-md="${escHtml(src)}">${escHtml(src)}</code>`;
 }
 // Inline math as GitHub reads it: $…$ whose opening $ isn't followed by a space and whose closing $ (the next one not
 // escaped, on the same line) has no space before it and no digit after it, so "$5 and $10" stays text; $`…`$; and
@@ -1800,7 +1800,12 @@ const fnSlug = id => id.replace(/[^A-Za-z0-9-]/gu, c => '_' + c.codePointAt(0).t
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
 let mdParser = null, mdEmoji = null;
 const HLJS_MAX = 100000;
-const mdNoMarks = s => s.replace(/\s(?:data-(?:fn|md|emoji|alert|footnotes)[\w.:-]*)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>=`]+))?/gi, '');
+// The reader's own marks (a note, a formula's source, a code block's info, an emoji, an alert) carry a token drawn at
+// random for the session, which a document can't know: the editor writes back from a mark only where it is, and a
+// document's own HTML, marks or not, is left as it is written (round 30 review, M-182, M-183: stripping the marks'
+// names from its HTML cut its words, and was passed with "/").
+const MD_OWN = [...crypto.getRandomValues(new Uint8Array(8))].map(b => (b % 36).toString(36)).join('');
+const mdOwn = el => el?.getAttribute?.('data-md-own') === MD_OWN;
 function mdMarked(){
   if (mdParser) return mdParser;
   const fn = { defs: new Map(), used: [], seen: new Map() };
@@ -1818,20 +1823,17 @@ function mdMarked(){
           const back = Array.from({ length: n }, (_, j) => `<a href="#fnref-${s}${j ? '-' + (j + 1) : ''}" class="md-fnback" data-fn-back="" role="doc-backlink" aria-label="Back to reference ${k + 1}${n > 1 ? '-' + (j + 1) : ''}">↩</a>`).join(' ');
           let body = fn.defs.get(id).html || '';
           body = back && body.trimEnd().endsWith('</p>') ? body.trimEnd().slice(0, -4) + ' ' + back + '</p>' : body + back;
-          return `<li id="fn-${s}" data-fn="${escHtml(fn.defs.get(id).tok.id)}" data-fn-key="${escHtml(id)}">${body}</li>`;
+          return `<li id="fn-${s}" data-md-own="${MD_OWN}" data-fn="${escHtml(fn.defs.get(id).tok.id)}" data-fn-key="${escHtml(id)}">${body}</li>`;
         });
-        return `${html}<section class="md-footnotes" data-footnotes="" role="doc-endnotes"><hr><ol>${items.join('')}</ol></section>\n`;
+        return `${html}<section class="md-footnotes" data-md-own="${MD_OWN}" data-footnotes="" role="doc-endnotes"><hr><ol>${items.join('')}</ol></section>\n`;
       }
     },
     renderer: {
-      // (A document's own HTML can't carry the marks the editor writes back from (a note, a formula's source, a code
-      // block's info): they would put text it doesn't show into the file at the next edit: round 29 review, M-173.)
-      html(tok){ return mdNoMarks(tok.text); },
       code(tok){
         const info = (tok.lang || '').trim(), lang = info.split(/\s/)[0];
         if (/^math$/i.test(lang)) return mdMath(tok.text, true, tok.raw.replace(/\n+$/, '')) + '\n';
         // (The words after the language, title="x" say, kept for the editor to write back: round 28 review, M-164.)
-        const more = info !== lang ? ` data-md-info="${escHtml(info)}"` : '';
+        const more = info !== lang ? ` data-md-info="${escHtml(info)}" data-md-own="${MD_OWN}"` : '';
         // (A code block naming a language highlight.js knows, coloured: E-35. Its text is escaped by highlight.js. Not
         // past HLJS_MAX: a block of megabytes took minutes and made millions of spans: round 28 review, M-166.)
         if (lang && window.hljs?.getLanguage(lang) && tok.text.length <= HLJS_MAX) {
@@ -1861,7 +1863,7 @@ function mdMarked(){
         // (A name of digits only, beside a digit, is a time ("10:30:45"), not an emoji: L-381; others are emoji, digit
         // after or not: round 29 review, L-384.)
         tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):/.exec(src); if (r && mdEmoji?.has(r[1]) && !(/^\d+$/.test(r[1]) && /\d/.test(src[r[0].length] || ''))) return { type: 'emoji', raw: r[0], name: r[1] }; },
-        renderer: t => `<span class="md-emoji" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
+        renderer: t => `<span class="md-emoji" data-md-own="${MD_OWN}" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
       { name: 'math', level: 'inline', start: s => { const i = s.indexOf('$'); return i < 0 ? undefined : i; },
         tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; },
         renderer: t => mdMath(t.text, t.display, t.raw) },
@@ -1896,9 +1898,9 @@ function mdMarked(){
         // which GitHub doesn't show, kept as it was written: round 28 review, M-164.)
         renderer(t){
           const d = fn.defs.get(t.key);
-          if (d?.tok !== t) return `<div hidden="" data-fn-raw="${escHtml(t.raw.replace(/\n+$/, ''))}"></div>\n`;
+          if (d?.tok !== t) return `<div hidden="" data-md-own="${MD_OWN}" data-fn-raw="${escHtml(t.raw.replace(/\n+$/, ''))}"></div>\n`;
           d.html = this.parser.parse(t.tokens);
-          return `<div hidden="" data-fn-at="${escHtml(t.key)}"></div>\n`;
+          return `<div hidden="" data-md-own="${MD_OWN}" data-fn-at="${escHtml(t.key)}"></div>\n`;
         } },
       // (Looked for only so far ahead, as emoji are: text full of "[" made it scan the rest at each stop: round 30, H-46.)
       { name: 'footnoteRef', level: 'inline', start: s => { const i = s.slice(0, 4096).indexOf('[^'); return i >= 0 ? i : s.length > 4096 ? 4000 : undefined; },
@@ -1907,7 +1909,7 @@ function mdMarked(){
           if (!fn.used.includes(t.key)) fn.used.push(t.key);
           const n = fn.used.indexOf(t.key) + 1, k = (fn.seen.get(t.key) || 0) + 1, s = fnSlug(t.key);
           fn.seen.set(t.key, k);
-          return `<sup class="md-fnref" data-fn-ref="${escHtml(t.id)}"><a id="fnref-${s}${k > 1 ? '-' + k : ''}" href="#fn-${s}" role="doc-noteref">${n}</a></sup>`;
+          return `<sup class="md-fnref" data-md-own="${MD_OWN}" data-fn-ref="${escHtml(t.id)}"><a id="fnref-${s}${k > 1 ? '-' + k : ''}" href="#fn-${s}" role="doc-noteref">${n}</a></sup>`;
         } }
     ]
   });
@@ -1927,8 +1929,8 @@ function mdAlerts(html){
     t.data = t.data.slice(m[0].length);
     if (!p.textContent.trim() && !p.querySelector('img, math')) p.remove();
     const box = doc.createElement('div');
-    box.className = `md-alert md-alert-${type.toLowerCase()}`; box.setAttribute('data-alert', type); box.setAttribute('role', 'note');
-    const title = doc.createElement('p'); title.className = 'md-alert-title'; title.setAttribute('data-alert-title', ''); title.textContent = MD_ALERTS[type];
+    box.className = `md-alert md-alert-${type.toLowerCase()}`; box.setAttribute('data-alert', type); box.setAttribute('data-md-own', MD_OWN); box.setAttribute('role', 'note');
+    const title = doc.createElement('p'); title.className = 'md-alert-title'; title.setAttribute('data-alert-title', ''); title.setAttribute('data-md-own', MD_OWN); title.textContent = MD_ALERTS[type];
     box.append(title, ...q.childNodes);
     q.replaceWith(box); changed = true;
   }
@@ -8955,6 +8957,7 @@ function editRestore(nodes, model, html){
   // (Parsed in its place, so an SVG's style or a table's script comes back as what it was.)
   const keptNodes = (k, parent) => { const r = model.createRange(); r.selectNodeContents(parent); try { return r.createContextualFragment(ed.kept[k] ?? ''); } catch { return model.createTextNode(''); } };
   const fix = node => {
+    for (const w of node.querySelectorAll(':scope > [data-ed-unwrap]')) w.replaceWith(...w.childNodes);   // (a formula's holder: H-48)
     for (const c of [...node.childNodes]) {
       if (c.nodeType === 8) { const k = edKeepOf(c.data); if (k != null && html) c.replaceWith(keptNodes(k, node)); continue; }
       if (c.nodeType !== 1) continue;
@@ -9068,11 +9071,11 @@ const mdKept = k => ed.kept[k] ?? '';
 const mdComment = c => { const k = edKeepOf(c.data); return k != null ? mdKept(k) : `<!--${c.data}-->`; };
 let mdFn = { known: new Set(), done: new Set(), root: null, byKey: new Map() };   // (the notes of the document being written back)
 function htmlToMarkdown(root){
-  const lis = [...root.querySelectorAll('section[data-footnotes] > ol > li[data-fn]')];
+  const lis = [...root.querySelectorAll('section[data-footnotes] > ol > li[data-fn]')].filter(li => mdOwn(li) && mdOwn(li.parentElement.parentElement));
   // (The notes by label, found once: each note's mark searched them all, slow with thousands: round 29 review, M-175.)
   // (Two items of one label, as Enter in a note makes, are one note of two paragraphs: L-389.)
   const byKey = new Map(); for (const li of lis) { const k = li.getAttribute('data-fn-key') ?? li.getAttribute('data-fn').toLowerCase(); byKey.set(k, [...(byKey.get(k) || []), li]); }
-  mdFn = { known: new Set([...root.querySelectorAll('li[data-fn]')].map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root, byKey };
+  mdFn = { known: new Set(lis.map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root, byKey };
   const md = mdBlocks(root).replaceAll(MD_TEXT_DOLLAR, '\\$').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
   return md ? md + '\n' : '';
 }
@@ -9110,20 +9113,20 @@ function mdBlock(el){
   if (kk != null) return mdKept(kk);
   if (t === 'math') return mdInline([el]);   // (display math, a block of its own: E-31)
   // (An alert and the footnotes written back as they were written: E-32, E-33.)
-  if (t === 'div' && MD_ALERTS[el.getAttribute('data-alert')]) {
-    const c = el.cloneNode(true); c.querySelector(':scope > [data-alert-title]')?.remove();
+  if (t === 'div' && mdOwn(el) && MD_ALERTS[el.getAttribute('data-alert')]) {
+    const c = el.cloneNode(true); const tl = c.querySelector(':scope > [data-alert-title]'); if (mdOwn(tl)) tl.remove();
     const inner = mdBlocks(c);
     return [`[!${el.getAttribute('data-alert')}]`, ...(inner ? inner.split('\n') : [])].map(l => l ? '> ' + l : '>').join('\n');
   }
   // (A note written back where it was written, from the mark left there; any left over, at the end: M-164.)
-  if (t === 'div' && el.hasAttribute('data-fn-raw')) return el.getAttribute('data-fn-raw');
-  if (t === 'div' && el.hasAttribute('data-fn-at')) {
+  if (t === 'div' && mdOwn(el) && el.hasAttribute('data-fn-raw')) return el.getAttribute('data-fn-raw');
+  if (t === 'div' && mdOwn(el) && el.hasAttribute('data-fn-at')) {
     const key = el.getAttribute('data-fn-at');
     const group = mdFn.byKey?.get(key);
     if (!group || mdFn.done.has(group[0])) return '';
     group.forEach(li => mdFn.done.add(li)); return mdNote(group);
   }
-  if (t === 'section' && el.hasAttribute('data-footnotes')) return [...el.querySelectorAll(':scope > ol > li[data-fn]')].flatMap(li => {
+  if (t === 'section' && mdOwn(el) && el.hasAttribute('data-footnotes')) return [...el.querySelectorAll(':scope > ol > li[data-fn]')].filter(mdOwn).flatMap(li => {
     if (mdFn.done.has(li)) return [];
     const group = mdFn.byKey?.get(li.getAttribute('data-fn-key') ?? li.getAttribute('data-fn').toLowerCase()) || [li];
     group.forEach(l => mdFn.done.add(l)); return [mdNote(group)];
@@ -9135,9 +9138,9 @@ function mdBlock(el){
   if (t === 'p' && mdPlain(el)) return mdLines(mdInline([...el.childNodes], { top: true }));
   if (t === 'hr' && mdPlain(el)) return '***';   // (not ---, which at the top would read as front matter: round 24 review)
   if (t === 'pre' && mdPlain(el)) {
-    const code = el.children.length === 1 && el.firstElementChild.localName === 'code' && mdPlain(el.firstElementChild, ['class', 'data-md-info']) ? el.firstElementChild : null;
+    const code = el.children.length === 1 && el.firstElementChild.localName === 'code' && mdPlain(el.firstElementChild, mdOwn(el.firstElementChild) ? ['class', 'data-md-info', 'data-md-own'] : ['class']) ? el.firstElementChild : null;
     if (code || [...el.children].every(c => c.localName === 'br')) {
-      const text = mdPreText(code || el).replace(/\n$/, ''), lang = code?.getAttribute('data-md-info') || (code?.className.match(/(?:^|\s)language-(\S+)/) || [])[1] || '';
+      const text = mdPreText(code || el).replace(/\n$/, ''), lang = (mdOwn(code) && code.getAttribute('data-md-info')) || (code?.className.match(/(?:^|\s)language-(\S+)/) || [])[1] || '';
       // (Tildes when the info string holds a backtick, which a backtick fence can't: round 29 review, L-386.)
       const ch = lang.includes('`') ? '~' : '`', fence = ch.repeat(Math.max(3, ...[...text.matchAll(ch === '~' ? /~+/g : /`+/g)].map(m => m[0].length + 1)));
       return `${fence}${lang}\n${text}\n${fence}`;
@@ -9245,10 +9248,10 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     const t = nd.localName, inner = () => mdInline([...nd.childNodes], { br }), kk = edKeepOf(nd.getAttribute('data-ed-keep'));
     if (kk != null) parts.push({ s: mdKept(kk) });
     // (Math as its TeX, a footnote mark as its label, TeX that couldn't be read as it was written: E-31, E-32.)
-    else if (t === 'math' && nd.hasAttribute('data-md-tex') && nd.querySelector('annotation[encoding="application/x-tex"]')) parts.push(mdMathSource(nd));
-    else if (t === 'sup' && nd.hasAttribute('data-fn-ref')) parts.push({ s: `[^${nd.getAttribute('data-fn-ref')}]` });
-    else if (t === 'span' && nd.hasAttribute('data-emoji')) parts.push({ s: `:${nd.getAttribute('data-emoji')}:` });   // (E-34)
-    else if (t === 'code' && nd.classList.contains('md-math-error') && nd.hasAttribute('data-md')) parts.push({ s: nd.getAttribute('data-md') });
+    else if (t === 'math' && mdOwn(nd) && nd.querySelector('annotation[encoding="application/x-tex"]')) parts.push(mdMathSource(nd));
+    else if (t === 'sup' && mdOwn(nd) && nd.hasAttribute('data-fn-ref')) parts.push({ s: `[^${nd.getAttribute('data-fn-ref')}]` });
+    else if (t === 'span' && mdOwn(nd) && nd.hasAttribute('data-emoji')) parts.push({ s: `:${nd.getAttribute('data-emoji')}:` });   // (E-34)
+    else if (t === 'code' && mdOwn(nd) && nd.hasAttribute('data-md')) parts.push({ s: nd.getAttribute('data-md') });
     else if (t === 'br' && mdPlain(nd)) parts.push({ s: br, br: true });
     else if ((t === 'strong' || t === 'b') && mdPlain(nd)) parts.push({ wrap: '**', tag: 'strong', inner: inner() });
     else if ((t === 'em' || t === 'i') && mdPlain(nd)) parts.push({ wrap: '*', tag: 'em', inner: inner() });
@@ -9328,7 +9331,10 @@ function editWysiwygReady(){
   // (Markdown's emoji, footnote marks, math and alert titles are made from the source, not typed into: kept out of
   // the caret's way, so text typed after one goes beside it, into the source, not inside it, lost: round 28 review,
   // H-43.)
-  if (ed.kind === 'markdown') for (const el of flow.querySelectorAll('math, [data-emoji], sup[data-fn-ref], [data-alert-title], .md-math-error')) {
+  if (ed.kind === 'markdown') for (let el of flow.querySelectorAll('math, [data-emoji], sup[data-fn-ref], [data-alert-title], .md-math-error')) {
+    // (A formula held in a span that isn't editable: Chromium ignores contenteditable on MathML, and text typed into one
+    // was lost: round 30 review, H-48. The holder is taken away again when the page is written back.)
+    if (el.localName === 'math') { const w = d.createElement('span'); w.setAttribute('data-ed-unwrap', ''); if (el.getAttribute('display') === 'block') w.style.display = 'block'; el.replaceWith(w); w.append(el); el = w; }
     el.setAttribute('contenteditable', 'false');
     // (At the end of its block, a zero-width space after it, so the caret has somewhere to go there; taken out
     // again when the text is written back.)
@@ -9341,6 +9347,15 @@ function editWysiwygReady(){
   if (d.__edWired) return;
   d.__edWired = true;
   d.addEventListener('input', editWysiwygInput);
+  // (A click on a mark that isn't typed into (a formula, an emoji, a note mark) puts the caret just after it, so what
+  // is typed then goes beside it: round 30 review, H-48.)
+  d.addEventListener('click', e => {
+    if (!ed.on || ed.kind !== 'markdown') return;
+    const m = e.target.closest?.('[contenteditable="false"]');
+    if (!m || m.hasAttribute('data-ed-keep') || !m.closest('[contenteditable="true"]')) return;
+    const r = d.createRange(); r.setStartAfter(m); r.collapse(true);
+    const s = d.getSelection(); s.removeAllRanges(); s.addRange(r);
+  });
   d.addEventListener('paste', editPaste);
   d.addEventListener('drop', editDrop);
   d.addEventListener('dragstart', () => { ed.dragInside = true; });

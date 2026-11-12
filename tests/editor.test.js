@@ -1141,8 +1141,10 @@ test('a document\'s own HTML can\'t carry the editor\'s marks: an edit writes ba
   const page = await h.newPage();
   const [, back] = await typedRoundTrip(page, 'fake-marks.md');
   assert.ok(back.includes('Start. Typed.'), back);
-  for (const bad of [/^## Approved/m, /\*\*4000\*\*/, /^# Injected heading/m, /\\text\{other\}\$/]) assert.doesNotMatch(back, bad, back);
-  assert.match(back, /40 units/);
+  // (Read back, it shows what it showed: nothing hidden comes out as text.)
+  const shown = await page.evaluate(md => { const d = document.createElement('div'); d.innerHTML = window.marked.parse(md); d.querySelectorAll('[hidden], annotation').forEach(e => e.remove()); return d.textContent; }, back);
+  for (const bad of [/Approved/, /4000/, /Injected heading/, /\\text\{other\}/]) assert.doesNotMatch(shown, bad, back);
+  assert.match(shown, /40 units/);
 });
 
 test('a note ends at a rule or a heading\'s underline; Enter in a note keeps the new paragraph in it; thousands of notes are written back in good time (round 29 review, M-178, L-389, M-175)', async () => {
@@ -1197,4 +1199,27 @@ test('a ~~~ fence whose info string has a backtick is written back with tildes (
   const page = await h.newPage();
   const [, back] = await typedRoundTrip(page, 'tilde.md');
   assert.ok(back.includes('~~~js `title`\nconst a = 1;\n~~~'), back);
+});
+
+test('WYSIWYG: typing with a formula clicked doesn\'t go into it, and isn\'t lost (round 30 review, H-48)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('typing.md'));
+  await inPage(page).locator('math').first().click();
+  await page.keyboard.type('W');
+  await flush(page);
+  assert.equal(await h.inFrame(page, d => d.querySelector('math').textContent.includes('W')), false, 'not inside the formula');
+  const src = await text(page);
+  assert.match(src, /\$E=mc\^2\$/, src);
+  assert.match(src, /W/, src);
+});
+
+test('a document\'s own HTML naming the editor\'s marks is shown and written back as it is; its own marks, however spelled, write back nothing it didn\'t show (round 30 review, M-182, M-183)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'own-marks.md');
+  assert.ok(back.includes('The data-footnotes attribute and data-emoji="smile" are the reader\'s.'), back);
+  assert.ok(back.includes('data-fname="x"'), back);
+  const shown = await page.evaluate(md => { const d = document.createElement('div'); d.innerHTML = window.marked.parse(md); d.querySelectorAll('[hidden], annotation').forEach(e => e.remove()); return d.textContent; }, back);
+  assert.doesNotMatch(shown, /Approved|4000/, back);
+  assert.match(shown, /40 units/);
+  assert.equal(await h.inFrame(page, d => d.body.textContent.includes('The data-footnotes attribute')), true);
 });

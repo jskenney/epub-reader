@@ -1114,6 +1114,8 @@ def main():
     (books / "huge-code.md").write_text("# Huge code\n\n```js\n" + "const value = compute(alpha, beta); // a line of filler code\n" * 45000 + "```\n")
     (books / "big-details-long.html").write_text("<!DOCTYPE html><html><head><title>Long summary</title></head><body><details open><summary>" + "Long summary words. " * 200 + "</summary>" + "".join(f"<p>Paragraph {i} of a very long details block, with words.</p>" for i in range(8000)) + "</details></body></html>")
     (books / "brackets.md").write_text("# B\n\n" + "[a " * 40000 + "\n")   # (round 30 review, H-46)
+    # A document's HTML naming the editor's marks, and carrying them spelled with "/" (round 30 review, M-182, M-183).
+    (books / "own-marks.md").write_text('# Own\n\nStart.\n\n<div>\nThe data-footnotes attribute and data-emoji="smile" are the reader\'s.\n</div>\n\n<p>See <span data-fname="x">Hi</span>.</p>\n\n<div\nhidden/data-fn-raw="## Approved: wire the money"></div>\n\n<p>\nTotal <code class="md-math-error"/data-md="**4000** units">40 units</code>.\n</p>\n')
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
