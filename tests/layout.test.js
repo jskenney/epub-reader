@@ -556,3 +556,23 @@ test('right to left, a click near the ribbon\'s right end goes to the start, nea
   await page.mouse.click(box.x + box.width - 3, box.y + box.height / 2);
   await page.waitForFunction(() => /spine 1\//.test(document.querySelector('#spinePos').textContent));
 });
+
+test('phones 320 px wide: the bar wraps rather than run past the edge, with Settings hidden too; a 400-character notice is shown whole; a notice closed from the keyboard gives focus back; Text settings says why Read aloud is off (round 29 review, L-392, L-393, L-395, L-397)', async () => {
+  for (const url of [`${h.READER}?book=books/long.epub`, `${h.SITE}/folder-noset/index.html?book=/reader/books/long.epub`]) {
+    const page = await h.newPage({ viewport: { width: 320, height: 700 } });
+    await h.openReader(page, url);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320, `${url}: no sideways scrolling`);
+    const out = await page.evaluate(() => ['openBtn', 'editBtn', 'setBtn', 'ttsBtn'].filter(id => { const e = document.getElementById(id); if (!e?.offsetParent) return false; const r = e.getBoundingClientRect(); return r.right > innerWidth + 0.5 || r.left < 0; }));
+    assert.deepEqual(out, [], url);
+    await page.close();
+  }
+  const page = await h.newPage({ viewport: { width: 360, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.goto(`${h.READER}?book=${'a-very-long-missing-file-name-'.repeat(14)}.epub`);
+  assert.ok(await h.waitFor(async () => (await h.notice(page) || '').length > 300, 10000), await h.notice(page));
+  assert.equal(await page.evaluate(() => { const t = document.querySelector('#noticeText'); return t.scrollHeight <= t.clientHeight + 1; }), true, 'the whole notice in sight');
+  await page.focus('#noticeAction'); await page.keyboard.press('Enter');
+  assert.notEqual(await page.evaluate(() => document.activeElement?.localName), 'body');
+  await h.openReader(page, `${h.READER}?book=books/manga.cbz`);
+  assert.match(await page.textContent('#txtReadNote'), /Not available: a comic/);
+});

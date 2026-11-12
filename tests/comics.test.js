@@ -122,7 +122,10 @@ test('Read aloud, off for a comic, says why; an information notice is a status, 
   assert.match(await page.getAttribute('#ttsBtn', 'title'), /^Read aloud \(R starts/);
   await h.openReader(page);
   assert.ok(await h.waitFor(async () => /sample book/.test(await h.notice(page) || ''), 8000));
-  assert.equal(await page.getAttribute('#notice', 'role'), 'status');
+  // (An information notice is read through a status region always there: round 29 review, L-396.)
+  assert.equal(await page.getAttribute('#notice', 'role'), null);
+  assert.match(await page.textContent('#noticeLive'), /sample book/);
+  assert.equal(await page.getAttribute('#noticeLive', 'role'), 'status');
   await page.goto(`${h.READER}?book=index.html`);
   await h.waitFor(async () => /own page/.test(await h.notice(page) || ''), 8000);
   assert.equal(await page.getAttribute('#notice', 'role'), 'alert');

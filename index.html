@@ -141,7 +141,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 #noticeText{max-height:7.5em;overflow:auto;overflow-wrap:anywhere;min-width:0}
 /* (On a phone a notice's longest text, 400 characters, shown whole rather than in a small scroll box: round 28 review,
    L-380.) */
-@media (max-width:640px){#noticeText{max-height:16em}}
+@media (max-width:640px){#noticeText{max-height:none;flex-basis:100%}}   /* (the text the notice's whole width, its buttons below: round 29 review, L-393) */
 .notice{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:9px 10px 9px 14px;border-radius:6px;background:var(--ribbon-soft);font-size:13px}
 .notice.error{background:var(--warn-soft)}
 .notice p{margin:0;flex:1;min-width:14em}
@@ -355,6 +355,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   /* (Room for a site's logo too, so the title stays on the first row: round 26 review, L-351.) */
   .bar:has(#navLogo:not([hidden])) .book-id{flex-basis:calc(100% - 140px)}
   .tools{width:100%;justify-content:space-between}
+  /* (Wrapping onto a second row rather than past the screen's edge, on the narrowest phones: round 29 review, L-392.) */
+  .tools{flex-wrap:wrap;row-gap:6px}
   .tools .btn.ghost{padding:0 4px}
   .tools .btn.primary{padding:0 10px}
 }
@@ -480,6 +482,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     </aside>
 
     <section class="reader">
+      <span id="noticeLive" class="sr-only" role="status"></span>
       <div class="notice" id="notice" role="alert" hidden>
         <p id="noticeText"></p>
         <button class="btn" id="noticeAction"></button>
@@ -642,7 +645,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <div class="set-row"><span id="txtSizeL">Text size</span><span class="txt-step" role="group" aria-labelledby="txtSizeL"><button type="button" class="btn" id="txtSmaller" aria-label="Smaller text">A−</button><output id="txtSize" aria-live="polite"></output><button type="button" class="btn" id="txtLarger" aria-label="Larger text">A+</button></span></div>
       <div class="set-row"><span id="txtLineL">Line spacing</span><span class="txt-step" role="group" aria-labelledby="txtLineL"><button type="button" class="btn" id="txtTighter" aria-label="Less space between lines">−</button><output id="txtLine" aria-live="polite"></output><button type="button" class="btn" id="txtLooser" aria-label="More space between lines">+</button></span></div>
       <div class="set-row"><span id="txtWidthL">Text width</span><span class="txt-step" role="group" aria-labelledby="txtWidthL"><button type="button" class="btn" id="txtNarrower" aria-label="Narrower text">−</button><output id="txtWidth" aria-live="polite"></output><button type="button" class="btn" id="txtWider" aria-label="Wider text">+</button></span></div>
-      <div class="set-row"><span>Read aloud<small>R too, from your selection or the top of the page.</small></span><button type="button" class="btn" id="txtRead">Read aloud</button></div>
+      <div class="set-row"><span>Read aloud<small id="txtReadNote">R too, from your selection or the top of the page.</small></span><button type="button" class="btn" id="txtRead">Read aloud</button></div>
       <div class="set-row"><span>Full screen<small>F too; Esc leaves it.</small></span><button type="button" class="btn" id="txtFs">Full screen</button></div>
       <div class="set-row"><span>Open a book<small>Or drop one on the page.</small></span><button type="button" class="btn" id="txtOpen">Open…</button></div>
     </div>
@@ -666,7 +669,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0626</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0629</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -4385,19 +4388,25 @@ function updateProgress(){
 }
 function showStatus(msg){ const s = $('#status'); s.textContent = msg; s.hidden = false; }
 function hideStatus(){ $('#status').hidden = true; }
-let noticeKind = '', noticeRun = null;
+let noticeKind = '', noticeRun = null, noticeFrom = null;
 // action: { label, run } for a button of its own (else Dismiss for an error, Open a book otherwise).
 // Read aloud on or off, saying why when off (a disabled button gives no other reason: round 28 review, L-380).
 const TTS_TITLE = 'Read aloud (R starts at your selection or the top of the page)';
 function ttsAvail(ok, why){
   for (const b of [$('#ttsBtn'), $('#txtRead')]) { b.disabled = !ok; b.title = ok ? (b.id === 'ttsBtn' ? b.dataset.okTitle || TTS_TITLE : '') : `Read aloud isn't available: ${why}`; }
   $('#ttsBtn').setAttribute('aria-label', ok ? 'Read aloud' : `Read aloud, not available: ${why}`);
+  // (Shown, too, in Text settings, where a touch can't hover for a title: round 29 review, L-397.)
+  $('#txtReadNote').textContent = ok ? 'R too, from your selection or the top of the page.' : `Not available: ${why}.`;
 }
 function showNotice(msg, kind, action = null){
   noticeKind = kind; noticeRun = action?.run || null;
   $('#notice').className = 'notice' + (kind === 'error' ? ' error' : '');
-  // (Only a problem interrupts a screen reader; other notices are read when it is free: round 28 review, L-380.)
-  $('#notice').setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  // (Only a problem interrupts a screen reader; other notices are read when it is free: round 28 review, L-380. Those
+  // through a status region always there, as one given its role as it appears may not be read: round 29, L-396.)
+  if (kind === 'error') $('#notice').setAttribute('role', 'alert'); else $('#notice').removeAttribute('role');
+  $('#noticeLive').textContent = kind === 'error' ? '' : String(msg).slice(0, 400);
+  // (Where the keyboard was, to go back to once the notice is closed: L-395.)
+  if (!$('#notice').contains(document.activeElement) && document.activeElement !== document.body) noticeFrom = document.activeElement;
   // (A book's link can put text of its choosing in a notice: kept short, so it can't cover the page and the notice's
   // own button: round 25 review, L-345.)
   msg = String(msg); if (msg.length > 400) msg = msg.slice(0, 399) + '…';
@@ -4405,11 +4414,17 @@ function showNotice(msg, kind, action = null){
   // (A notice without an action of its own can always be put away: round 27 review, M-159.)
   $('#noticeAction').textContent = action?.label || (kind === 'error' ? 'Dismiss' : 'OK');
   // (A notice whose button does something can be closed without doing it: round 28 review, M-167.)
-  $('#noticeClose').hidden = !action;
+  $('#noticeClose').hidden = !action || action.label === 'OK';   // (not beside an OK that does the same: L-395)
   $('#notice').hidden = false;
   cornerSync();
 }
-function hideNotice(){ $('#notice').hidden = true; cornerSync(); }
+function hideNotice(){
+  // (Closed from the keyboard: focus back where it was, or the page, not lost to the body: round 29 review, L-395.)
+  const had = $('#notice').contains(document.activeElement);
+  $('#notice').hidden = true; cornerSync();
+  if (had) { (noticeFrom?.isConnected && !noticeFrom.closest('[hidden]') ? noticeFrom : $('#page')).focus?.(); }
+  noticeFrom = null;
+}
 // The top bar's corner (shown while the bar is hidden) kept off what it would cover: a notice reaching the top right, and
 // the page as it is read down in the scroll layout (L-369). Scrolling back up brings it back, as a phone's browser
 // bar comes back, so it is in reach without scrolling to the top (round 28 review, L-383).
