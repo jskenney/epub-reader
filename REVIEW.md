@@ -578,7 +578,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 30's findings are fixed (see Resolved, iteration 4). Open (below): enhancements only, E-29, E-30, E-36, E-37
+Round 30's findings are fixed (see Resolved, iteration 4). Open (below): enhancements only, E-29, E-30, E-36
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -588,7 +588,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| [E-37](#e-37-math-and-code-highlighting-in-html-and-epub) | TeX math and code highlighting in HTML pages and EPUB chapters, as in Markdown | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -632,20 +631,6 @@ across, so they can be read (H-33).
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
 
-### E-37. Math and code highlighting in HTML and EPUB
-TeX in an HTML page or EPUB chapter drawn as math, and `<pre><code class="language-…">` coloured, as Markdown is
-(E-31, E-35). Math as MathML made by Temml in the reader's page, the same as for Markdown: the browser draws it
-natively, it needs no script in the book's sandboxed frame (where none runs), no extra fonts, and it keeps the TeX in an
-annotation, for search, reading aloud and writing back. Not MathJax: its output needs its own script or web fonts in the
-page, it is several times larger, and it would be a second math engine beside Temml. To decide:
-- **Delimiters:** `\(…\)` and `\[…\]` always; `$…$` and `$$…$$` only when a setting asks for it, since in HTML a `$` is
-  far more often money than math. Never inside `code`, `pre`, `script`, `style`, `textarea` or existing `math`.
-- **Highlighting:** only blocks naming their language (`language-x` or `lang-x` on `code` or `pre`), not those already
-  highlighted (with element children), with the same size limit (`HLJS_MAX`).
-- **Editor:** the TeX and the plain code written back when an HTML document or chapter is saved, not the MathML or the
-  spans; the editor's marks carrying the session's token, as in Markdown (M-182).
-- **Libraries:** loaded only for a page that holds a delimiter or a `language-` block; a per-book budget as in H-41.
-
 ## Suggested order
 
 1. E-25, E-22, as laid out in TODO.md.
@@ -657,6 +642,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| E-37 | Math and code highlighting in HTML pages and EPUB chapters: TeX between `\(` `\)` and `\[` `\]` as MathML by Temml (not MathJax: no script runs in the book's frame, the browser draws MathML, one engine with Markdown's), code blocks naming their language coloured by highlight.js, each library loaded only for a page that needs it; not while editing (the source is saved as written), in fixed-layout pages or comics; a book's own highlighting keeps its colours. `$` isn't read as math in HTML. | `1004c3c` |
 | T-47 | `NCACHE_SEC` had no test. Left as it is, by your decision: it acts only after minutes of audio played, which streamed audio can't be sped through in a test, and the cache never goes below about a minute of audio; a test would need a hook in the reader for tests alone. The setting only decides how much finished audio is kept in memory for replay (more memory, or audio made again sooner, if wrong); its eviction is one line, and `LOOKAHEAD_SEC` has a test (`3d1deb1`). | Left as it is, by your decision |
 | H-47 | marked 15.0.12 took time with the square of emphasis delimiters. marked 18.1.3, which doesn't (`'a _'` × 20,000: under a second). | `56f3a4e` |
 | H-48 | Typing into a formula was lost (Chromium ignores contenteditable on MathML). In the editor a formula is held in a span the caret can't enter, and a click on a mark puts the caret after it. | `3420e89` |

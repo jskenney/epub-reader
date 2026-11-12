@@ -59,8 +59,12 @@ saved position) works as for EPUBs.
   alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. HTML written in the
   document is written back as it is. A code block over 100,000 characters isn't coloured.
 
-  Math and highlighting are for Markdown. In HTML pages and EPUBs, MathML of their own is drawn by the browser;
-  TeX in them, and their code blocks, are shown as written (planned: E-37 in REVIEW.md).
+  HTML pages and EPUB chapters get math and highlighting too: TeX between `\(` and `\)` (in a line) or `\[` and
+  `\]` (display) is drawn as math, and a code block naming its language (`<pre><code class="language-js">`, or
+  `lang-js`, on the `code` or the `pre`) is coloured. `$` isn't read as math there, being money far more often, and
+  TeX inside `code` or `pre` is left alone. A page's own MathML is drawn by the browser as it is, and code already
+  coloured (holding elements, or marked `hljs`) keeps the book's own colours. While a page is being edited it shows
+  its TeX and code as written, and that is what is saved.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
   stylesheets and relative links load from its folder on the server; an
