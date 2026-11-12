@@ -46,13 +46,18 @@ saved position) works as for EPUBs.
   - **Footnotes:** `[^1]` and `[^1]: …`, numbered as they are referred to, gathered at the end, with links both ways.
   - **Alerts:** `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]`, set apart in their colours.
   - **Emoji shortcodes:** `:smile:`, `:+1:` and the rest of [GitHub's names](https://github.com/github/gemoji), as
-    the emoji; the list (`libs/emoji.json`) is read only for a document with a `:name:` in it. Unknown names, code and
-    times (10:30:45) stay as written.
+    the emoji. The list (`libs/emoji.json`, or from jsDelivr when not self-hosted: gemoji isn't on cdnjs) is read
+    only for a document with a `:name:` outside code; a time like 10:30:45 doesn't count. Unknown names, code and
+    times stay as written.
   - **Syntax highlighting:** a code block naming its language (` ```js `) is coloured by
     [highlight.js](https://highlightjs.org/) (its common languages), loaded only for a document with such a block;
     other code blocks are shown as they were.
 
-  The editor writes all of these back as they were written.
+  The editor writes these back with their meaning kept, and mostly as they were written: a formula as its TeX
+  (`$…$`, or `` $`…`$ `` where `$…$` can't hold it, so `` $`x`$ `` may come back as `$x$` and a ` ```math ` block
+  as `$$…$$`), TeX that couldn't be read as it was, a note's definition where it was, emoji as their `:name:`,
+  alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. A code block over 100 KB
+  isn't coloured.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
   stylesheets and relative links load from its folder on the server; an
@@ -526,7 +531,8 @@ site as the reader.
   footer (and uses the browser's full screen where allowed). Esc, F, or the
   Exit button that appears when you move the mouse brings them back.
 - Text size (A− / A+) and line spacing (the tighter / looser line buttons,
-  1.00–2.60) can be adjusted from the top bar
+  1.00–2.60) can be adjusted from the top bar (on a phone narrower than 400 px,
+  line spacing is in Settings → Text settings instead, unless Settings is hidden)
 - Reading font picker (the Aa button): keep the book's own font, or override
   it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Gentium Book Plus,
   Alegreya, Atkinson Hyperlegible, Lexend, Georgia or your system sans-serif. Code keeps its monospace.
@@ -538,7 +544,8 @@ site as the reader.
 - The contents beside the page, the bottom bar (progress, Previous and Next)
   and the top bar are shown unless turned off in Settings or by their keys:
   C, P and N, which are remembered. With the top bar hidden, a tap or click
-  at the top right corner brings it back. On a narrow screen the contents
+  at the top right corner brings it back (in the scroll layout the corner
+  steps aside while you read down, and comes back as you scroll up). On a narrow screen the contents
   start closed and C only opens or closes them.
 - Single-key shortcuts (C contents, P bottom bar, N top bar, I information,
   F full screen, T theme, L layout, R read aloud, / search, [ and ] speed) can
@@ -577,7 +584,7 @@ site as the reader.
 
 ```bash
 ./fetch-libs.sh     # JSZip, marked, Temml, highlight.js, the emoji list, lamejs and CodeMirror into ./libs/ (about 1.5 MB)
-./fetch-fonts.sh    # the interface and reading fonts into ./fonts/ (about 2 MB)
+./fetch-fonts.sh    # the interface and reading fonts into ./fonts/ (about 3 MB)
 ```
 
 With these (and the voice scripts below), the reader loads nothing from other
@@ -863,7 +870,7 @@ default books and the memory and request sizes stay the site's to set.
 | `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
 | `SHOW_CONTENTS` ✓ ⚙ | `true` | `false` starts with the contents closed (on a narrow screen they always start closed). C shows or hides them, and is remembered. |
 | `SHOW_PROGRESS` ✓ ⚙ | `true` | `false` hides the bottom bar (progress, position, Previous and Next). P shows or hides it, and is remembered. |
-| `SHOW_TOPBAR` ✓ ⚙ | `true` | `false` hides the top bar. N shows or hides it, and is remembered; while it's hidden, a tap or click at the top right corner brings it back (unless the site locks it). |
+| `SHOW_TOPBAR` ✓ ⚙ | `true` | `false` hides the top bar. N shows or hides it, and is remembered; while it's hidden, a tap or click at the top right corner brings it back (unless the site locks it; in the scroll layout once you scroll up). |
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site (except in a folder that locks it). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
