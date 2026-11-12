@@ -1008,6 +1008,9 @@ def main():
     # One long section: dozens of pages to turn, for the page-turn drift check (text width margins in fractions of a pixel).
     (books / "drift.md").write_text("# Drift\n\n" + "\n\n".join(f"Paragraph {i}. " + " ".join(words[(i * 7 + k) % len(words)] for k in range(60)) + "." for i in range(400)) + "\n")
     (books / "sample.mjs").write_text("export const x = 1;\n")   # (for the nginx types test: T-52)
+    # A Markdown table, and the same table in an HTML document (drawn as a table in Markdown only).
+    (books / "table.md").write_text("# Table\n\n| Affinity/Art | E | D |\n| --- | :---: | ---: |\n| Light Magic | 40 | 80 |\n| Water Magic | 600 | \\- |\n")
+    (books / "table.html").write_text("<!DOCTYPE html><html><head><title>Table</title></head><body><table><tr><th>A</th><td>1</td></tr></table></body></html>")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

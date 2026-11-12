@@ -398,3 +398,21 @@ test('a link to a very long name gives a short notice that leaves its button in 
   await page.click('#noticeAction');
   assert.equal(await page.isHidden('#notice'), true);
 });
+
+test('a Markdown table is drawn as a table (lines between cells, the header row set apart, columns aligned as written); an HTML document\'s keeps its own look', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/table.md`);
+  const look = () => h.inFrame(page, doc => {
+    const s = el => getComputedStyle(el), td = doc.querySelector('td'), th = doc.querySelector('th');
+    return { tds: doc.querySelectorAll('td').length, border: parseFloat(s(td).borderTopWidth), collapse: s(doc.querySelector('table')).borderCollapse,
+      head: s(th).backgroundColor, aligns: [...doc.querySelectorAll('tbody tr:first-child td')].map(c => s(c).textAlign) };
+  });
+  const md = await look();
+  assert.equal(md.tds, 6);
+  assert.ok(md.border >= 1, JSON.stringify(md));
+  assert.equal(md.collapse, 'collapse');
+  assert.notEqual(md.head, 'rgba(0, 0, 0, 0)');
+  assert.deepEqual(md.aligns.map(a => a.replace('-webkit-', '')), ['start', 'center', 'right']);
+  await h.openReader(page, `${h.READER}?book=books/table.html`);
+  assert.equal((await look()).border, 0, 'an HTML document\'s table as it was');
+});
