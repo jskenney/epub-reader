@@ -1112,3 +1112,16 @@ test('math in a heading shows once in the title and the contents; an emoji\'s he
   const ids = await h.inFrame(page, doc => [...doc.querySelectorAll('h1, h2')].map(e => e.id));
   assert.ok(ids.includes('second-tada-part'), JSON.stringify(ids));
 });
+
+test('Markdown written back: a note stays where it was written, a second of the same label is kept, labels match in any case, an unknown [^label] stays as written, a fence keeps its full info string, Enter in a code block is kept (round 28 review, M-164)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'notes-back.md');
+  assert.ok(back.includes('A claim.[^Src] And [^nope] stays.\n\n[^src]: The source.\n\n[^src]: A second, not shown.\n\nMore text.'), back);
+  assert.ok(back.includes('```python title="x.py"\nprint(1)\n```'), back);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('sup[data-fn-ref]').length), 1, 'the note in another case is referred to');
+  // Enter in a code block.
+  await inPage(page).locator('pre', { hasText: 'plain' }).click();
+  await page.keyboard.press('End'); await page.keyboard.press('Enter'); await page.keyboard.type('next line');
+  await flush(page);
+  assert.ok((await text(page)).includes('```\nplain\nnext line\n```'), await text(page));
+});

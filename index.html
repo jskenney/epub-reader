@@ -658,7 +658,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0404</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0408</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1781,6 +1781,7 @@ function mdShortcodeAt(s){
 const fnSlug = id => id.replace(/[^\w-]/g, c => '_' + c.codePointAt(0).toString(16));
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
 let mdParser = null, mdEmoji = null;
+const HLJS_MAX = 100000;
 function mdMarked(){
   if (mdParser) return mdParser;
   const fn = { defs: new Map(), used: [], seen: new Map() };
@@ -1798,19 +1799,23 @@ function mdMarked(){
           const back = Array.from({ length: n }, (_, j) => `<a href="#fnref-${s}${j ? '-' + (j + 1) : ''}" class="md-fnback" data-fn-back="" role="doc-backlink" aria-label="Back to reference ${k + 1}${n > 1 ? '-' + (j + 1) : ''}">↩</a>`).join(' ');
           let body = fn.defs.get(id).html || '';
           body = back && body.trimEnd().endsWith('</p>') ? body.trimEnd().slice(0, -4) + ' ' + back + '</p>' : body + back;
-          return `<li id="fn-${s}" data-fn="${escHtml(id)}">${body}</li>`;
+          return `<li id="fn-${s}" data-fn="${escHtml(fn.defs.get(id).tok.id)}" data-fn-key="${escHtml(id)}">${body}</li>`;
         });
         return `${html}<section class="md-footnotes" data-footnotes="" role="doc-endnotes"><hr><ol>${items.join('')}</ol></section>\n`;
       }
     },
     renderer: {
       code(tok){
-        const lang = (tok.lang || '').trim().split(/\s/)[0];
+        const info = (tok.lang || '').trim(), lang = info.split(/\s/)[0];
         if (/^math$/i.test(lang)) return mdMath(tok.text, true, tok.raw.replace(/\n+$/, '')) + '\n';
-        // (A code block naming a language highlight.js knows, coloured: E-35. Its text is escaped by highlight.js.)
-        if (lang && window.hljs?.getLanguage(lang)) {
-          try { return `<pre><code class="hljs language-${escHtml(lang)}">${window.hljs.highlight(tok.text, { language: lang, ignoreIllegals: true }).value}</code></pre>\n`; } catch {}
+        // (The words after the language, title="x" say, kept for the editor to write back: round 28 review, M-164.)
+        const more = info !== lang ? ` data-md-info="${escHtml(info)}"` : '';
+        // (A code block naming a language highlight.js knows, coloured: E-35. Its text is escaped by highlight.js. Not
+        // past HLJS_MAX: a block of megabytes took minutes and made millions of spans: round 28 review, M-166.)
+        if (lang && window.hljs?.getLanguage(lang) && tok.text.length <= HLJS_MAX) {
+          try { return `<pre><code class="hljs language-${escHtml(lang)}"${more}>${window.hljs.highlight(tok.text, { language: lang, ignoreIllegals: true }).value}</code></pre>\n`; } catch {}
         }
+        if (more) return `<pre><code${lang ? ` class="language-${escHtml(lang)}"` : ''}${more}>${escHtml(tok.text)}</code></pre>\n`;
         return false;
       }
     },
@@ -1854,18 +1859,25 @@ function mdMarked(){
             break;
           }
           const raw = src.slice(0, Math.min(src.length, at + 1));
-          const tok = { type: 'footnoteDef', raw, id: head[1], tokens: [] };
+          const tok = { type: 'footnoteDef', raw, id: head[1], key: head[1].toLowerCase(), tokens: [] };
           this.lexer.blockTokens(body.join('\n'), tok.tokens);
-          if (!fn.defs.has(head[1])) fn.defs.set(head[1], { tok });
+          if (!fn.defs.has(tok.key)) fn.defs.set(tok.key, { tok });
           return tok;
         },
-        renderer(t){ const d = fn.defs.get(t.id); if (d?.tok === t) d.html = this.parser.parse(t.tokens); return ''; } },
-      { name: 'footnoteRef', level: 'inline', start: s => { const i = s.indexOf('[^'); return i < 0 ? undefined : i; },
-        tokenizer(src){ const r = /^\[\^([^\]\s]{1,100})\]/.exec(src); if (r && fn.defs.has(r[1])) return { type: 'footnoteRef', raw: r[0], id: r[1] }; },
+        // (Where the note was written, a hidden mark the editor writes it back at; a second note of the same label,
+        // which GitHub doesn't show, kept as it was written: round 28 review, M-164.)
         renderer(t){
-          if (!fn.used.includes(t.id)) fn.used.push(t.id);
-          const n = fn.used.indexOf(t.id) + 1, k = (fn.seen.get(t.id) || 0) + 1, s = fnSlug(t.id);
-          fn.seen.set(t.id, k);
+          const d = fn.defs.get(t.key);
+          if (d?.tok !== t) return `<div hidden="" data-fn-raw="${escHtml(t.raw.replace(/\n+$/, ''))}"></div>\n`;
+          d.html = this.parser.parse(t.tokens);
+          return `<div hidden="" data-fn-at="${escHtml(t.key)}"></div>\n`;
+        } },
+      { name: 'footnoteRef', level: 'inline', start: s => { const i = s.indexOf('[^'); return i < 0 ? undefined : i; },
+        tokenizer(src){ const r = /^\[\^([^\]\s]{1,100})\]/.exec(src); if (r && fn.defs.has(r[1].toLowerCase())) return { type: 'footnoteRef', raw: r[0], id: r[1], key: r[1].toLowerCase() }; },
+        renderer(t){
+          if (!fn.used.includes(t.key)) fn.used.push(t.key);
+          const n = fn.used.indexOf(t.key) + 1, k = (fn.seen.get(t.key) || 0) + 1, s = fnSlug(t.key);
+          fn.seen.set(t.key, k);
           return `<sup class="md-fnref" data-fn-ref="${escHtml(t.id)}"><a id="fnref-${s}${k > 1 ? '-' + k : ''}" href="#fn-${s}" role="doc-noteref">${n}</a></sup>`;
         } }
     ]
@@ -8930,7 +8942,9 @@ const MD_VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'inp
 const mdPlain = (el, ok = []) => [...el.attributes].every(a => ok.includes(a.name));
 const mdKept = k => ed.kept[k] ?? '';
 const mdComment = c => { const k = edKeepOf(c.data); return k != null ? mdKept(k) : `<!--${c.data}-->`; };
+let mdFn = { known: new Set(), done: new Set(), root: null };   // (the notes of the document being written back)
 function htmlToMarkdown(root){
+  mdFn = { known: new Set([...root.querySelectorAll('li[data-fn]')].map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root };
   const md = mdBlocks(root).replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
   return md ? md + '\n' : '';
 }
@@ -8952,6 +8966,18 @@ function mdBlocks(node, sep = '\n\n'){
   flush();
   return parts.join(sep);
 }
+function mdNote(li){
+  const c = li.cloneNode(true); c.querySelectorAll('[data-fn-back]').forEach(a => a.remove());
+  const lines = mdBlocks(c).split('\n');
+  return `[^${li.getAttribute('data-fn')}]: ` + lines.map((l, i) => i && l ? '    ' + l : l).join('\n');
+}
+// A code block's text with the line breaks typed into it (Enter makes a <br>, not a "\n": round 28 review, M-164).
+function mdPreText(el){
+  let s = '';
+  const walk = n => { for (const c of n.childNodes) { if (c.nodeType === 3) s += c.data; else if (c.nodeType === 1) { if (c.localName === 'br') s += '\n'; else if (/^(div|p)$/.test(c.localName)) { if (s && !s.endsWith('\n')) s += '\n'; walk(c); } else walk(c); } } };
+  walk(el);
+  return s;
+}
 function mdBlock(el){
   const t = el.localName, kk = edKeepOf(el.getAttribute('data-ed-keep'));
   if (kk != null) return mdKept(kk);
@@ -8962,13 +8988,15 @@ function mdBlock(el){
     const inner = mdBlocks(c);
     return [`[!${el.getAttribute('data-alert')}]`, ...(inner ? inner.split('\n') : [])].map(l => l ? '> ' + l : '>').join('\n');
   }
-  if (t === 'section' && el.hasAttribute('data-footnotes')) {
-    return [...el.querySelectorAll(':scope > ol > li[data-fn]')].map(li => {
-      const c = li.cloneNode(true); c.querySelectorAll('[data-fn-back]').forEach(a => a.remove());
-      const lines = mdBlocks(c).split('\n');
-      return `[^${li.getAttribute('data-fn')}]: ` + lines.map((l, i) => i && l ? '    ' + l : l).join('\n');
-    }).join('\n');
+  // (A note written back where it was written, from the mark left there; any left over, at the end: M-164.)
+  if (t === 'div' && el.hasAttribute('data-fn-raw')) return el.getAttribute('data-fn-raw');
+  if (t === 'div' && el.hasAttribute('data-fn-at')) {
+    const key = el.getAttribute('data-fn-at');
+    const li = [...(mdFn.root || el.ownerDocument).querySelectorAll('section[data-footnotes] > ol > li[data-fn]')].find(l => (l.getAttribute('data-fn-key') ?? l.getAttribute('data-fn').toLowerCase()) === key);
+    if (!li || mdFn.done.has(li)) return '';
+    mdFn.done.add(li); return mdNote(li);
   }
+  if (t === 'section' && el.hasAttribute('data-footnotes')) return [...el.querySelectorAll(':scope > ol > li[data-fn]')].filter(li => !mdFn.done.has(li)).map(mdNote).join('\n');
   if (/^h[1-6]$/.test(t) && mdPlain(el)) {
     const s = mdInline([...el.childNodes], { top: true, br: '<br>' }).replace(/[ \t]*\n[ \t]*/g, ' ').trim().replace(/(^|\s)(#+)$/, '$1\\$2');
     return s ? '#'.repeat(+t[1]) + ' ' + s : '';
@@ -8976,9 +9004,9 @@ function mdBlock(el){
   if (t === 'p' && mdPlain(el)) return mdLines(mdInline([...el.childNodes], { top: true }));
   if (t === 'hr' && mdPlain(el)) return '***';   // (not ---, which at the top would read as front matter: round 24 review)
   if (t === 'pre' && mdPlain(el)) {
-    const code = el.children.length === 1 && el.firstElementChild.localName === 'code' && mdPlain(el.firstElementChild, ['class']) ? el.firstElementChild : null;
-    if (code || !el.children.length) {
-      const text = (code || el).textContent.replace(/\n$/, ''), lang = (code?.className.match(/(?:^|\s)language-(\S+)/) || [])[1] || '';
+    const code = el.children.length === 1 && el.firstElementChild.localName === 'code' && mdPlain(el.firstElementChild, ['class', 'data-md-info']) ? el.firstElementChild : null;
+    if (code || [...el.children].every(c => c.localName === 'br')) {
+      const text = mdPreText(code || el).replace(/\n$/, ''), lang = code?.getAttribute('data-md-info') || (code?.className.match(/(?:^|\s)language-(\S+)/) || [])[1] || '';
       const fence = '`'.repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map(m => m[0].length + 1)));
       return `${fence}${lang}\n${text}\n${fence}`;
     }
@@ -9031,7 +9059,9 @@ function mdTable(el){
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
 const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
   .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/[\s\S]*/, mdDollars)
-  .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name) => mdEmoji?.has(name) ? '\\:' : c);   // (a name written out, not an emoji: E-34)
+  .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name) => mdEmoji?.has(name) ? '\\:' : c)   // (a name written out, not an emoji: E-34)
+  // (A [^label] with no note of that label stays as written: round 28 review, M-164.)
+  .replace(/\\\[\^([^\]\s\\]{1,100})\\\](?![(\[:])/g, (m, l) => mdFn.known.has(l.toLowerCase()) ? m : `[^${l}]`);
 // The $s of a text escaped where Markdown would read math (E-31): read as the parser reads it, the $ that would close
 // the first formula is escaped, and the text read again (an escape can let a $ pair with a later one), until no formula
 // is left; "$5 and $10" stays as it is (round 28 review, M-162). Past a few hundred $s, every one is escaped.

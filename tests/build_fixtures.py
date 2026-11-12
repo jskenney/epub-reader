@@ -1060,6 +1060,10 @@ def main():
     (books / "autolink.md").write_text("# Links\n\nSmile :smile: and visit https://example.com/page today.\n")   # (M-165)
     # Math and dollars whose write-back must keep their meaning (M-162); math and an emoji in a heading (M-168, L-377).
     (books / "math-back.md").write_text("# Area $x^2$ :rocket:\n\nStart.\n\nSpaced $` x `$ then $`b`$2 and $`a\\\\`$ and $`p\\$q`$.\n\nPrices \\$5 on \\$SKU\\$ here, and $5 and $10.\n\n## Second :tada: part\n\nBad $$\\frac{$$ math.\n\n```math\n\\frac{\n```\n")
+    # Notes written in the middle, twice, in another case, and a [^label] with none; a fence with more after its language (M-164).
+    (books / "notes-back.md").write_text("# Notes\n\nStart.\n\nA claim.[^Src] And [^nope] stays.\n\n[^src]: The source.\n\n[^src]: A second, not shown.\n\nMore text.\n\n```python title=\"x.py\"\nprint(1)\n```\n\n```\nplain\n```\n")
+    # A code block over the highlighting limit (M-166).
+    (books / "big-code.md").write_text("# Big code\n\n```js\n" + "const a = 1; // filler line\n" * 6000 + "```\n\n```js\nconst small = 2;\n```\n")
     (books / "times.md").write_text("# Times\n\nThe train leaves at 10:30:45 and again at 11:00:00.\n")   # (L-381)
     (books / "typing.md").write_text("# Typing\n\nI am happy :smile:\n\nA claim.[^1]\n\nEnergy $E=mc^2$\n\n[^1]: The note.\n")   # (H-43)
     # An ordinary long Markdown novel, and TeX that repeats a macro (round 28 review, H-40, H-41).

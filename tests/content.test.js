@@ -579,3 +579,12 @@ test('bare web addresses are linked in a document with emoji too; a time like 10
   await h.openReader(page, `${h.READER}?book=books/times.md`);
   assert.deepEqual(asked, []);
 });
+
+test('a code block over the highlighting limit is shown plain, in good time; a small one is still coloured (round 28 review, M-166)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/big-code.md`);
+  assert.ok(Date.now() - t0 < 20000);
+  const spans = await h.inFrame(page, doc => [...doc.querySelectorAll('pre code')].map(c => c.querySelectorAll('span').length));
+  assert.ok(spans.length >= 2 && spans.slice(0, -1).every(n => n === 0) && spans.at(-1) > 0, JSON.stringify(spans));
+});
