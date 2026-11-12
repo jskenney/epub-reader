@@ -1223,3 +1223,11 @@ test('a document\'s own HTML naming the editor\'s marks is shown and written bac
   assert.match(shown, /40 units/);
   assert.equal(await h.inFrame(page, d => d.body.textContent.includes('The data-footnotes attribute')), true);
 });
+
+test('a document\'s own private-use characters and zero-width spaces inside text after a mark are written back as they are (round 30 review, M-185, L-399)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'own-chars.md');
+  assert.ok(back.includes('Icon  here and `code `.'), JSON.stringify(back));
+  assert.ok(back.includes('x  y'), JSON.stringify(back));
+  assert.ok(back.includes(':smile:ab​cd​ef end.'), JSON.stringify(back));
+});
