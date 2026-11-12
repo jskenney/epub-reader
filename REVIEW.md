@@ -597,8 +597,8 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | E-31 | LaTeX math in Markdown (`$…$`, `` $`…`$ ``, `$$…$$`, ` ```math `) as MathML by Temml, the TeX kept in each formula; written back as it was. | `a53b5b3` |
 | E-32 | Footnotes in Markdown (`[^1]`), numbered as referred to, gathered at the end with links both ways; written back as they were. | `a53b5b3` |
 | E-33 | Alerts in Markdown (`> [!NOTE]` and the rest), set apart in their colours, the dark themes too; written back as they were. | `a53b5b3` |
-| E-34 | Emoji shortcodes in Markdown (`:smile:`), from gemoji's list, read only for a document with a `:name:`; written back as their names. | this commit |
-| E-35 | Syntax highlighting in Markdown's code blocks naming a language (highlight.js), in each theme; written back as plain fenced code. | this commit |
+| E-34 | Emoji shortcodes in Markdown (`:smile:`), from gemoji's list, read only for a document with a `:name:`; written back as their names. | `0d9a2d2` |
+| E-35 | Syntax highlighting in Markdown's code blocks naming a language (highlight.js), in each theme; written back as plain fenced code. | `0d9a2d2` |
 | H-36 | A book's `--spine-x: … !important` stopped page turns. The offset is set inline with priority. | `9c9c624` |
 | H-37 | A book's `@layer` rules beat every `!important` pin of the reader. The reader's rules are also given in a layer of their own, named before any of the book's. | `9c9c624` |
 | M-153 | Back or Forward to an `?edit=` entry opened the default book. It opens that document for editing. | `9c9c624` |
