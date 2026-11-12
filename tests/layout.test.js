@@ -586,3 +586,24 @@ test('a heading spanning a book\'s own two-column box still spans it; text full 
   await h.openReader(page, `${h.READER}?book=books/brackets.md`);
   assert.ok(Date.now() - t0 < 8000, `${Date.now() - t0} ms`);
 });
+
+test('at 320 px Open, wrapped alone, stays at the bar\'s right end; a long notice keeps its reason; closing a notice clears the status region and gives focus to the page when where it came from is gone (round 30 review, L-407, L-408, L-405, L-404)', async () => {
+  const page = await h.newPage({ viewport: { width: 320, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  const r = await page.evaluate(() => document.querySelector('#openBtn').getBoundingClientRect().right);
+  assert.ok(r > 320 - 40, `Open's right edge at ${r}`);
+  await page.goto(`${h.READER}?book=${'a-very-long-missing-file-name-'.repeat(14)}.epub`);
+  assert.ok(await h.waitFor(async () => (await h.notice(page) || '').length > 300, 10000));
+  assert.match(await h.notice(page), /…[\s\S]*\.epub \(404\)\.$/, 'the end of the message after the cut');
+  await page.focus('#noticeAction'); await page.keyboard.press('Enter');
+  assert.equal(await page.textContent('#noticeLive'), '');
+  assert.notEqual(await page.evaluate(() => document.activeElement?.localName), 'body');
+});
+
+test('a code block of one huge line opens in parts; with every book turned left to right, text right to left by itself is still said to be (round 30 review, L-402, L-406)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/one-line-code.md`);
+  assert.ok(Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]) >= 5, 'in parts');
+  await h.openReader(page, `${h.READER}?book=books/rtl-doc.md`, { 'spine:layout': 'one', 'spine:set:FORCE_LTR': true });
+  assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /DirectionRight to left/);
+});

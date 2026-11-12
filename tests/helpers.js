@@ -86,7 +86,8 @@ const spokenWord = page => page.evaluate(() => {
 });
 async function waitFor(fn, ms = 20000, step = 100) {
   const t0 = Date.now();
-  while (Date.now() - t0 < ms) { const v = await fn(); if (v) return v; await new Promise(r => setTimeout(r, step)); }
+  // (A check that throws, the frame caught as its page is swapped say, counts as not yet: round 30 review, T-58.)
+  while (Date.now() - t0 < ms) { let v = null; try { v = await fn(); } catch {} if (v) return v; await new Promise(r => setTimeout(r, step)); }
   return null;
 }
 

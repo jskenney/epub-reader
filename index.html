@@ -357,6 +357,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   .tools{width:100%;justify-content:space-between}
   /* (Wrapping onto a second row rather than past the screen's edge, on the narrowest phones: round 29 review, L-392.) */
   .tools{flex-wrap:wrap;row-gap:6px}
+  .tools #openBtn{margin-left:auto}   /* (Open wrapped alone stays at the end, where it is on wider phones: L-407) */
   .tools .btn.ghost{padding:0 4px}
   .tools .btn.primary{padding:0 10px}
 }
@@ -669,7 +670,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0741</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0744</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1967,7 +1968,8 @@ function piecesOf(nd, maxLen, depth = 0){
         if (code) { const c = code.cloneNode(false); c.textContent = chunk; p.append(c); } else p.textContent = chunk;
         out.push(p); chunk = '';
       };
-      for (const line of holder.textContent.split(/(?<=\n)/)) { if (chunk.length + line.length > maxLen) flush(); chunk += line; }
+      // (A line longer than a part, in pieces of its own: round 30 review, L-402.)
+      for (const whole of holder.textContent.split(/(?<=\n)/)) for (let k = 0; k < whole.length; k += maxLen) { const line = whole.slice(k, k + maxLen); if (chunk.length + line.length > maxLen) flush(); chunk += line; }
       flush();
       return out.length ? out : [nd];
     }
@@ -4322,7 +4324,8 @@ function sectionLink(){
   if (!doc?.getElementById(RID.flow)) return null;
   // (The section's headings in document order, found once for the page as built, not sorted by comparing them two by
   // two on every page turn, which took seconds with thousands: round 29 review, M-174.)
-  if (sectionLinks?.doc !== doc || sectionLinks.path !== path) {
+  // (Found afresh too when a heading has gone, as in the editor: round 30 review, L-401.)
+  if (sectionLinks?.doc !== doc || sectionLinks.path !== path || ed.on || sectionLinks.found.some(x => !x.el.isConnected)) {
     const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
     const order = new Map(); let k = 0;
     if (hits.length >= 2) for (const e of doc.querySelectorAll('[id]')) order.set(e, k++);
@@ -4386,7 +4389,9 @@ function updateProgress(){
   // (Text right to left in a book that doesn't say so: the information panel says what the pages do: L-379.)
   // (In every layout, from the text's own direction, a document's dir="rtl" included: round 29 review, L-394.)
   const flowEl = frame.contentDocument?.getElementById(RID.flow);
-  if ($('#curDir') && book.info.direction === 'Left to right' && !book.comic && flowEl && !FORCE_LTR) $('#curDir').textContent = frame.contentWindow.getComputedStyle(flowEl).direction === 'rtl' ? 'Right to left' : 'Left to right';
+  // (With FORCE_LTR too: it turns books whose package says right to left; text right to left by itself still turns so:
+  // round 30 review, L-406.)
+  if ($('#curDir') && book.info.direction === 'Left to right' && !book.comic && flowEl) $('#curDir').textContent = frame.contentWindow.getComputedStyle(flowEl).direction === 'rtl' ? 'Right to left' : 'Left to right';
   $('#prevBtn').title = `Previous page (${rtl ? 'Right' : 'Left'} arrow)`; $('#nextBtn').title = `Next page (${rtl ? 'Left' : 'Right'} arrow)`;
   $('#ribbon').setAttribute('aria-valuenow', pct);
   $('#pct').textContent = pct + '%';
@@ -4427,7 +4432,8 @@ function showNotice(msg, kind, action = null){
   if (!$('#notice').contains(document.activeElement) && document.activeElement !== document.body) noticeFrom = document.activeElement;
   // (A book's link can put text of its choosing in a notice: kept short, so it can't cover the page and the notice's
   // own button: round 25 review, L-345.)
-  msg = String(msg); if (msg.length > 400) msg = msg.slice(0, 399) + '…';
+  // (Cut in the middle, so a long name doesn't push the reason out: round 30 review, L-408.)
+  msg = String(msg); if (msg.length > 400) msg = msg.slice(0, 199) + '…' + msg.slice(-200);
   $('#noticeText').textContent = msg;
   // (A notice without an action of its own can always be put away: round 27 review, M-159.)
   $('#noticeAction').textContent = action?.label || (kind === 'error' ? 'Dismiss' : 'OK');
@@ -4439,8 +4445,9 @@ function showNotice(msg, kind, action = null){
 function hideNotice(){
   // (Closed from the keyboard: focus back where it was, or the page, not lost to the body: round 29 review, L-395.)
   const had = $('#notice').contains(document.activeElement);
-  $('#notice').hidden = true; cornerSync();
-  if (had) { (noticeFrom?.isConnected && !noticeFrom.closest('[hidden]') ? noticeFrom : $('#page')).focus?.(); }
+  $('#notice').hidden = true; $('#noticeLive').textContent = ''; cornerSync();   // (its text gone from the status region: L-405)
+  // (And the page when where it came from can't take focus now, a closed drawer say: round 30 review, L-404.)
+  if (had) { noticeFrom?.isConnected && noticeFrom.focus?.(); if (document.activeElement !== noticeFrom) $('#page').focus(); }
   noticeFrom = null;
 }
 // The top bar's corner (shown while the bar is hidden) kept off what it would cover: a notice reaching the top right, and
@@ -9222,7 +9229,8 @@ const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]
 let MD_TEXT_DOLLAR = '\uFDD0';
 function mdDollars(s){
   if (!s.includes(MD_TEXT_DOLLAR)) return s;
-  if (s.split(MD_TEXT_DOLLAR).length > 300) return s.replaceAll(MD_TEXT_DOLLAR, '\\$');
+  // (Past 60, every one escaped: each round reads the block again, slow in a long one: round 30 review, L-403.)
+  if (s.split(MD_TEXT_DOLLAR).length > 60) return s.replaceAll(MD_TEXT_DOLLAR, '\\$');
   for (;;) {
     const view = s.replaceAll(MD_TEXT_DOLLAR, '$');
     let hit = -1;

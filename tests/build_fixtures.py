@@ -1118,6 +1118,7 @@ def main():
     (books / "own-marks.md").write_text('# Own\n\nStart.\n\n<div>\nThe data-footnotes attribute and data-emoji="smile" are the reader\'s.\n</div>\n\n<p>See <span data-fname="x">Hi</span>.</p>\n\n<div\nhidden/data-fn-raw="## Approved: wire the money"></div>\n\n<p>\nTotal <code class="md-math-error"/data-md="**4000** units">40 units</code>.\n</p>\n')
     # A document's own private-use characters and zero-width spaces after marks (round 30 review, M-185, L-399).
     (books / "own-chars.md").write_text("# Chars\n\nStart.\n\nIcon \ue000 here and `code \ue000`.\n\n```\nx \ue000 y\n```\n\nRef :smile:ab\u200bcd\u200bef end.\n")
+    (books / "one-line-code.md").write_text("# One line\n\n```\n" + "x = 1; " * 400000 + "\n```\n")   # (round 30 review, L-402)
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
