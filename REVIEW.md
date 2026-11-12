@@ -560,7 +560,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 29's findings are open (below), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
+Round 29's findings are fixed (see Resolved, iteration 3). Open (below): T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
 enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
 your decision (see Resolved).
 
@@ -570,34 +570,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-44 | A book can still stop paging: `offset-path` on html, body, the clip or the flow (page 1/1, 4 paragraphs), and `html{columns:3 !important}` (3,474 empty pages) aren't pinned. Reproduced. | Security |
-| M-169 | `column-span:all` on a block after the first breaks paging (1,177 pages, 148 of 150 empty; `p:nth-child(3n)` page 1/1), as books written for two-column readers do. Reproduced. | Bug |
-| M-170 | The emoji extension's `start` (`mdShortcodeAt`) scans the rest of the paragraph each time marked stops in it: one paragraph of "1:2:3 \\*" takes time with the square of its length (180 KB: 25 s, was 0.5 s). Reproduced. | Hardening |
-| M-171 | H-40 bypassed: with no blank lines `mdParaStart` scans the rest of the document for each paragraph ("a, a fence" repeated: 480 KB 15 s). Reproduced. | Hardening |
-| M-172 | An unclosed `` $` `` is looked for to the end of the document each time (240 KB of them: 38 s). Reproduced. | Hardening |
-| M-173 | A document's raw HTML can carry the editor's marks (`data-fn-raw`, `data-md` on `.md-math-error`, `data-md-info`): one innocent edit writes hidden text, an `<img onerror>` or other numbers into the saved file. Reproduced. | Security |
-| M-174 | Each page turn sorts the section's headings with `compareDocumentPosition` (`sectionLink`): 20k headings, 4 s a turn, 12 s to open. Reproduced. | Hardening |
-| M-175 | Writing back a document with many notes is quadratic (each note's mark searches every note): 4,000 notes 5 s after each pause in typing. Reproduced. | Bug |
-| M-176 | `maxExpand: 200` counts Temml's own macros: 27 `\implies`, 67 `\,` or `\operatorname`, 102 `\dots` in one formula fail and show as TeX. Reproduced. | Bug |
-| M-177 | Right to left, the footer's chevrons are turned but the buttons aren't swapped: both point inward, and Next sits at the ribbon's start. Reproduced. | Bug |
-| M-178 | A note's unindented next line takes `---` (the note becomes a heading, in the contents) or `***` (a rule, and the paragraph after, inside the note). GitHub ends the note. Reproduced. | Bug |
-| M-179 | Written back, a `$` pair split by inline elements becomes math: `\$a *b* c\$`, `\$5 [link](x) 6\$`. Reproduced. | Data loss |
-| L-384 | Text typed after a mark can change it: `:tada:` then "2026" (`:tada:2026` is text since the `(?!\d)`), `$x$` then "$5"; `:+1:2` no longer an emoji; untouched `:tada:2026` written back as `\:tada:2026`. Reproduced. | Bug |
-| L-385 | H-43's zero-width space leaks into the source when typing just before it (End, Left); Backspace takes two presses; a document's own ZWSP after a mark is removed. Reproduced. | Bug |
-| L-386 | A `~~~` fence whose info string has a backtick comes back as a backtick fence, which isn't one (the rest of the document becomes code). Reproduced. | Data loss |
-| L-387 | `pathPlain` decodes but doesn't resolve `..` (`x%252F..%252Findex.html`). Read. | Hardening |
-| L-388 | A huge code block is still one `<pre>` (2.5 MB: 35 s to lay out); `pre` isn't split. Reproduced. | Hardening |
-| L-389 | Enter in a note (in the notes at the end) makes a second definition of the same label, hidden when reopened: the typed text disappears. Reproduced. | Data loss |
-| L-390 | `piecesOf` copies a split `<details>`'s summary or a table's head into every piece however large (14 MB summary, 81 copies, 3 GB). Reproduced. | Hardening |
-| L-391 | The reader's body variables (`--v`, `--vb`, `--m`, `--g`) aren't important: a book's `html body{--m:50vw !important}` shows nothing. Reproduced. | Hardening |
-| L-392 | With Settings hidden, below about 345 px line spacing pushes Open off the bar (320 px); the default bar overflows its row by 12 px at 320 px. Reproduced. | Bug |
-| L-393 | A 400-character notice still scrolls on phones: the button beside it narrows the text. Reproduced. | Accessibility |
-| L-394 | The information panel's direction: right-to-left documents say "Left to right" in the scroll layout, and a document declaring `dir="rtl"` says "from the text". Reproduced. | Bug |
-| L-395 | Closing a notice by keyboard leaves focus on the body; notices whose action is an empty OK show OK and × doing the same. Reproduced. | Accessibility |
-| L-396 | A status notice is given its role as it is shown, and may not be announced (a polite region is read on change). Read. | Accessibility |
-| L-397 | Read aloud's reason is only in a disabled button's title and label: not seen on touch, not reached by Tab; Text settings shows none. Read. | Accessibility |
-| T-57 | The L-378 and L-379 tests pass with L-392 and M-177 present. | Tests |
-| D-34 | README: the emoji list is fetched for a `:name:` in code too; "100 KB" is 100,000 characters. | Docs |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
@@ -644,9 +616,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-44, M-169 (paging), M-173 (write-back), M-170 to M-172, M-174, M-175 (time), then the other mediums.
-2. The lows, tests and docs.
-3. E-25, E-22, as laid out in TODO.md; then the other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -654,6 +625,34 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-44 | A book could stop paging with `offset-path` or `columns` on html. Both pinned. | `c0e4fa1` |
+| M-169 | `column-span:all` broke paging. Pinned to none in the pages. | `c0e4fa1` |
+| M-170 | The emoji `start` made one paragraph quadratic. It returns the first `:name:`-shaped place, within 4 KB. | `89a2506` |
+| M-171 | Without blank lines, `mdParaStart` scanned the rest of the document. It looks 16 KB ahead at most. | `89a2506` |
+| M-172 | An unclosed `` $` `` was looked for to the end. Within the line and 4,000 characters. | `89a2506` |
+| M-173 | A document's raw HTML could carry the editor's marks. They're stripped from its HTML as it is read, and only the reader's formulas (`data-md-tex`) come back as TeX. | `1009c49` |
+| M-174 | Each page turn sorted the section's headings pairwise. They're ordered once per page build. | `d314209` |
+| M-175 | Writing back many notes was quadratic. Notes are found by label from one map. | `0cfc433` |
+| M-176 | `maxExpand: 200` turned away ordinary formulas. 1000, as KaTeX; the size caps still bound it. | `89a2506` |
+| M-177 | Right to left, both footer buttons pointed inward. The row is reversed. | `5fcac22` |
+| M-178 | A note's lazy line took `---` and `***`. A rule or an underline ends the note. | `0cfc433` |
+| M-179 | `$`s split by emphasis or a link became math when written back. A block's `$`s are settled once it is whole. | `00e1419` |
+| L-384 | Text typed after a mark could change it. A formula before `$` takes its tick form; emoji before a digit stay emoji (only digit names are times). | `00e1419` |
+| L-385 | The zero-width space leaked when typing before it. It is taken out wherever it is in the text after a mark (a document's own one there goes too: the editor's write-back sees only the original attributes). | `ecb88f9` |
+| L-386 | A `~~~` fence with a backtick in its info came back as a broken backtick fence. Tildes then. | `da0b32f` |
+| L-387 | `pathPlain` didn't resolve `..`. Resolved after decoding. | `da0b32f` |
+| L-388 | A huge code block was one `<pre>`. Plain code is split by lines into parts. | `da0b32f` |
+| L-389 | Enter in a note made a hidden second definition. Items of one label are one note. | `0cfc433` |
+| L-390 | A huge summary or head was copied into each piece. Only one under 2,000 characters. | `da0b32f` |
+| L-391 | The body's geometry variables could be overridden. Important (comics' values in the same rule). | `c0e4fa1` |
+| L-392 | The phone bar ran past the edge at 320 px. It wraps. | `72a4776` |
+| L-393 | Long notices scrolled on phones. Full width, no height limit. | `72a4776` |
+| L-394 | Right-to-left documents said "Left to right" in the scroll layout. From the text in every layout. | `5fcac22` |
+| L-395 | Focus was lost when a notice closed; OK and × did the same. Focus goes back; no × beside OK. | `72a4776` |
+| L-396 | A status notice might not be announced. Information notices go through a status region always there. | `72a4776` |
+| L-397 | Read aloud's reason was only in a title. Text settings shows it (R also says it in a notice). | `72a4776` |
+| T-57 | The L-378 and L-379 tests let L-392 and M-177 through. They check 320 px and the buttons' sides. | `5fcac22` |
+| D-34 | README on the emoji list's trigger and the highlighting limit. | `3545a82` |
 | H-38 | The reader's CSS layer had a fixed name a book could join and undo the pins with. It is named at random per page. | `5f32611` |
 | H-39 | A book could stop page turns with `@property` on the offset variable or slow transitions. The variable is named at random and set inline, transitions and animations pinned to none. | `5f32611` |
 | H-40 | Opening Markdown took time growing with the square of its length. Block starts are looked for only to the paragraph's end; a note is read line by line. | `453acac` |
