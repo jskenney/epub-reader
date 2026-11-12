@@ -1164,3 +1164,20 @@ test('a note ends at a rule or a heading\'s underline; Enter in a note keeps the
   assert.ok(many.includes('[^n3999]: Note 3999'), 'all the notes');
   assert.ok(Date.now() - t0 < 20000, `${Date.now() - t0} ms`);
 });
+
+test('Markdown written back: $s on either side of emphasis or a link stay text; text typed after a formula or an emoji leaves it one (round 29 review, M-179, L-384)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('dollars-split.md'));
+  const shown = () => h.inFrame(page, d => [d.querySelectorAll('math').length, d.querySelectorAll('[data-emoji]').length]);
+  assert.deepEqual(await shown(), [1, 2], 'one formula, two emoji (:+1: before a digit too)');
+  await inPage(page).locator('p', { hasText: 'Formula' }).click();
+  await page.keyboard.press('End'); await page.keyboard.type('$5 off');
+  await inPage(page).locator('p', { hasText: 'Party' }).click();
+  await page.keyboard.press('End'); await page.keyboard.type(' 2026');
+  await flush(page);
+  const back = await text(page);
+  assert.doesNotMatch(back, /(^|[^\\])\$a \*b\* c\$/m, back);
+  assert.doesNotMatch(back, /(^|[^\\])\$5 \[link\]\(http:\/\/x\) and 6\$/m, back);
+  assert.match(back, /\$`x`\$\\?\$5 off|\$x\$\\\$5 off/, back);
+  assert.match(back, /:tada: and :\+1:2 too\. 2026/, back);
+});

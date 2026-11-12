@@ -666,7 +666,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0614</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0619</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1855,7 +1855,9 @@ function mdMarked(){
       // M-170; and only so far ahead: a stop where there is nothing just leaves the text in two. Not at every ":",
       // which cut bare addresses short: M-165.)
       { name: 'emoji', level: 'inline', start: s => { if (!mdEmoji) return; const i = s.slice(0, 4096).search(/:[a-z0-9_+-]{1,50}:/); return i >= 0 ? i : s.length > 4096 ? 4000 : undefined; },
-        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):(?!\d)/.exec(src); if (r && mdEmoji?.has(r[1])) return { type: 'emoji', raw: r[0], name: r[1] }; },
+        // (A name of digits only, beside a digit, is a time ("10:30:45"), not an emoji: L-381; others are emoji, digit
+        // after or not: round 29 review, L-384.)
+        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):/.exec(src); if (r && mdEmoji?.has(r[1]) && !(/^\d+$/.test(r[1]) && /\d/.test(src[r[0].length] || ''))) return { type: 'emoji', raw: r[0], name: r[1] }; },
         renderer: t => `<span class="md-emoji" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
       { name: 'math', level: 'inline', start: s => { const i = s.indexOf('$'); return i < 0 ? undefined : i; },
         tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; },
@@ -9016,7 +9018,7 @@ function htmlToMarkdown(root){
   // (Two items of one label, as Enter in a note makes, are one note of two paragraphs: L-389.)
   const byKey = new Map(); for (const li of lis) { const k = li.getAttribute('data-fn-key') ?? li.getAttribute('data-fn').toLowerCase(); byKey.set(k, [...(byKey.get(k) || []), li]); }
   mdFn = { known: new Set([...root.querySelectorAll('li[data-fn]')].map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root, byKey };
-  const md = mdBlocks(root).replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
+  const md = mdBlocks(root).replaceAll(MD_TEXT_DOLLAR, '\\$').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
   return md ? md + '\n' : '';
 }
 const mdIsBlock = c => c.nodeType === 1 && (MD_BLOCKS.has(c.localName) || (c.localName === 'math' && c.getAttribute('display') === 'block') || (edKeepOf(c.getAttribute('data-ed-keep')) != null && /^<(script|style|iframe|object|embed|template|noscript|frameset|frame)\b/i.test(mdKept(edKeepOf(c.getAttribute('data-ed-keep')))) && !c.parentElement?.closest('p, li, td, th, h1, h2, h3, h4, h5, h6')));
@@ -9132,25 +9134,34 @@ function mdTable(el){
 // (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
 const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
-  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/[\s\S]*/, mdDollars)
-  .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name) => mdEmoji?.has(name) ? '\\:' : c)   // (a name written out, not an emoji: E-34)
+  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/\\[\s\S]|\$/g, m => m === '$' ? MD_TEXT_DOLLAR : m)
+  .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name, at, s) => mdEmoji?.has(name) && !(/^\d+$/.test(name) && /\d/.test(s[at + name.length + 2] || '')) ? '\\:' : c)   // (a name written out, not an emoji: E-34)
   // (A [^label] with no note of that label stays as written: round 28 review, M-164.)
   .replace(/\\\[\^([^\]\s\\]{1,100})\\\](?![(\[:])/g, (m, l) => mdFn.known.has(l.toLowerCase()) ? m : `[^${l}]`);
-// The $s of a text escaped where Markdown would read math (E-31): read as the parser reads it, the $ that would close
-// the first formula is escaped, and the text read again (an escape can let a $ pair with a later one), until no formula
-// is left; "$5 and $10" stays as it is (round 28 review, M-162). Past a few hundred $s, every one is escaped.
+// A text's $s are marked while a block is put together, and settled once it is whole: read as the parser reads it,
+// the $ that would close the first formula made of the text's $s is escaped (or, failing that, the one opening it), and
+// the line read again, until only the formulas meant are left (E-31); "$5 and $10" stays as it is (round 28 review,
+// M-162). Whole, as $s on either side of a link or emphasis pair too (round 29 review, M-179). Past a few hundred $s,
+// every one is escaped.
+const MD_TEXT_DOLLAR = '';
 function mdDollars(s){
-  if (!s.includes('$')) return s;
-  if (s.split('$').length > 300) return s.replace(/\\[\s\S]|\$/g, m => m === '$' ? '\\$' : m);
+  if (!s.includes(MD_TEXT_DOLLAR)) return s;
+  if (s.split(MD_TEXT_DOLLAR).length > 300) return s.replaceAll(MD_TEXT_DOLLAR, '\\$');
   for (;;) {
+    const view = s.replaceAll(MD_TEXT_DOLLAR, '$');
     let hit = -1;
-    for (let i = 0; i < s.length; i++) {
-      if (s[i] === '\\') { i++; continue; }
-      const m = s[i] === '$' && mdInlineMath(s.slice(i));
-      if (m?.text) { hit = i + m.raw.length - (m.display ? 2 : 1); break; }
+    for (let i = 0; i < view.length; i++) {
+      if (view[i] === '\\') { i++; continue; }
+      if (view[i] !== '$') continue;
+      const m = mdInlineMath(view.slice(i));
+      if (!m?.text) continue;
+      const close = i + m.raw.length - (m.display ? 2 : 1);
+      if (s[close] === MD_TEXT_DOLLAR) { hit = close; break; }
+      if (s[i] === MD_TEXT_DOLLAR) { hit = i; break; }
+      i += m.raw.length - 1;   // (a formula meant: past it)
     }
-    if (hit < 0) return s;
-    s = s.slice(0, hit) + '\\' + s.slice(hit);
+    if (hit < 0) return s.replaceAll(MD_TEXT_DOLLAR, '$');
+    s = s.slice(0, hit) + '\\$' + s.slice(hit + 1);
   }
 }
 // Whether Markdown reads delimiters around core, between the characters before and after (CommonMark's flanking
@@ -9207,7 +9218,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
   const first = j => { const p = parts[j]; return !p ? '' : p.wrap != null ? (p.inner.trim() ? '*' : p.inner[0] || '') : p.s[0] || ''; };
   let out = '';
   parts.forEach((p, i) => {
-    if (p.wrap == null) { let s = p.alt && /\d/.test(first(i + 1)) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
+    if (p.wrap == null) { let s = p.alt && /[\d$\uE000]/.test(first(i + 1)) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
     const core = p.inner.trim();
     if (!core) { out += p.inner; return; }
     const lead = p.inner.match(/^\s*/)[0], tail = trailingWs(p.inner);
@@ -9215,7 +9226,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     // (The delimiters only where Markdown reads them as such; otherwise the HTML tags: round 24 review.)
     out += lead + (mdFlanks(core, before, after) ? p.wrap + core + p.wrap : `<${p.tag}>${core}</${p.tag}>`) + tail;
   });
-  return out;
+  return top ? mdDollars(out) : out;
 }
 const mdUrl = u => /[\s()<>]/.test(u) ? `<${u.replace(/[<>]/g, c => encodeURIComponent(c))}>` : u;
 const mdTitle = el => el.hasAttribute('title') ? ` "${el.getAttribute('title').replace(/["\\]/g, '\\$&')}"` : '';

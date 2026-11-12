@@ -1099,6 +1099,8 @@ def main():
     # A note before a rule and a setext underline (round 29 review, M-178); many notes to write back (M-175).
     (books / "notes-rule.md").write_text("# Rules\n\nStart.[^1] And.[^2]\n\n[^1]: Note one.\n***\nAfter rule.\n\n[^2]: Note two.\n---\n\nEnd.\n")
     (books / "many-notes.md").write_text("# T\n\nStart.\n\n" + "".join(f"Para {i} note[^n{i}].\n\n[^n{i}]: Note {i}\n\n" for i in range(4000)))
+    # $s on either side of emphasis and a link, written back (round 29 review, M-179).
+    (books / "dollars-split.md").write_text("# Dollars\n\nStart.\n\nA \\$a *b* c\\$ here. Pay \\$5 [link](http://x) and 6\\$ more.\n\nParty :tada: and :+1:2 too.\n\nFormula $x$\n")
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
