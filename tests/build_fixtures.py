@@ -1093,6 +1093,7 @@ def main():
     (books / "slow-tick.md").write_text("$` " * 40000 + "\n")
     (books / "tick-x.md").write_text("x` " * 40000 + "\n")   # (the same code spans without the $s)
     (books / "long-math.md").write_text("# Math\n\n$$" + " \\implies ".join(f"a_{{{i}}}" for i in range(40)) + "$$\n\n$$" + " \\, ".join("x" for i in range(120)) + " \\dots" * 150 + "$$\n")
+    (books / "many-heads.md").write_text("# b\n\n" * 20000)   # (round 29 review, M-174)
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

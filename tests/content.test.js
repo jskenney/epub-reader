@@ -634,3 +634,12 @@ test('Markdown made to be slow opens in good time: :name:-like times in one para
   await h.openReader(page, `${h.READER}?book=books/long-math.md`);
   assert.deepEqual(await h.inFrame(page, doc => [doc.querySelectorAll('math').length, doc.querySelectorAll('.md-math-error').length]), [2, 0]);
 });
+
+test('a document of twenty thousand headings turns its pages in good time (round 29 review, M-174)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/many-heads.md`, { 'spine:layout': 'one' });
+  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
+  const t0 = Date.now();
+  for (let k = 0; k < 3; k++) { const before = await page.textContent('#spinePos'); await page.keyboard.press('ArrowRight'); await page.waitForFunction(b => document.querySelector('#spinePos').textContent !== b, before, { timeout: 20000 }); }
+  assert.ok(Date.now() - t0 < 3000, `${Date.now() - t0} ms for three turns`);
+});

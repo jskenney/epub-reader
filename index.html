@@ -663,7 +663,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0559</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0607</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -2948,8 +2948,7 @@ const mdTableCss = t => `
 /* Comic pages: one image per column, as large as fits, with narrow margins; two pages side by side in the
    two-column layout, one in the single-column layout, and a continuous strip in the scroll layout. */
 function comicCss(){
-  return `body{--v:12px;--vb:${12 + tts.barH}px;--m:12px;--g:12px}
-#${RID.flow}{column-rule:none !important}
+  return `#${RID.flow}{column-rule:none !important}
 .cbz-page{margin:0;display:flex;align-items:center;justify-content:center;break-inside:avoid;break-after:column;height:calc(100vh - var(--v) - var(--vb))}
 .cbz-page:last-of-type{break-after:auto}
 .cbz-page img{max-width:100% !important;max-height:100% !important;width:auto;height:auto;object-fit:contain}
@@ -2970,7 +2969,9 @@ function overrideCss(fx = null, layoutOnly = false){
   const cap = WIDTHS[widthStep][layout === 'two' ? 2 : 1];
   const m = cap ? `max(20px,3.5vw,calc((100vw - ${cap}) / 2))` : 'max(20px,2vw)';
   // (The page's geometry is the reader's alone, beyond a book's important rules: round 29 review, L-391.)
-  const common = `body{--v:40px !important;--vb:${40 + tts.barH}px !important;--m:${m} !important;--g:max(32px,4vw) !important;
+  // (A comic's pages have narrow margins.)
+  const v = book?.comic ? 12 : 40;
+  const common = `body{--v:${v}px !important;--vb:${v + tts.barH}px !important;--m:${book?.comic ? '12px' : m} !important;--g:${book?.comic ? '12px' : 'max(32px,4vw)'} !important;
   margin:0 !important;width:auto !important;max-width:none !important;min-height:0 !important;box-sizing:border-box !important;
   background:transparent !important;${dark ? `color:${t.ink} !important;` : ''}}`;
   const frameCss = layout === 'scroll'
@@ -4235,6 +4236,7 @@ function renderMeta(){
     r.style.setProperty('--marks', `linear-gradient(90deg,${stops.join(',')})`);
   } else r.style.removeProperty('--marks');
 }
+let sectionLinks = null;   // (the section's headings in order, for the page as built: M-174)
 function renderToc(){
   const build = list => {
     const ol = document.createElement('ol');
@@ -4249,7 +4251,7 @@ function renderToc(){
     }
     return ol;
   };
-  $('#tocList').replaceChildren(build(book.toc));
+  $('#tocList').replaceChildren(build(book.toc)); sectionLinks = null;
 }
 function tocLinkFor(path){
   const list = $('#tocList');
@@ -4264,14 +4266,22 @@ function tocLinkFor(path){
 function sectionLink(){
   const doc = frame.contentDocument, path = book.spine[cur.i].path;
   if (!doc?.getElementById(RID.flow)) return null;
-  const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
-  if (hits.length < 2) return null;
+  // (The section's headings in document order, found once for the page as built, not sorted by comparing them two by
+  // two on every page turn, which took seconds with thousands: round 29 review, M-174.)
+  if (sectionLinks?.doc !== doc || sectionLinks.path !== path) {
+    const hits = [...$('#tocList').querySelectorAll('a[data-path]')].filter(a => a.dataset.path === path && a.dataset.frag);
+    const order = new Map(); let k = 0;
+    if (hits.length >= 2) for (const e of doc.querySelectorAll('[id]')) order.set(e, k++);
+    const found = hits.map(a => ({ a, el: doc.getElementById(a.dataset.frag) })).filter(x => x.el && order.has(x.el))
+      .sort((x, y) => order.get(x.el) - order.get(y.el));
+    sectionLinks = { doc, path, found };
+  }
+  const found = sectionLinks.found;
+  if (found.length < 2) return null;
   let best = null;
-  // (The layout measured once, and the headings, put in document order, only up to the first one past the
-  // page: with thousands of headings, measuring each one on every page turn took seconds.)
+  // (The layout measured once, and the headings only up to the first one past the page: with thousands of headings,
+  // measuring each one on every page turn took seconds.)
   const g = scrolling() ? null : geom(), third = frame.contentWindow.innerHeight / 3;
-  const found = hits.map(a => ({ a, el: doc.getElementById(a.dataset.frag) })).filter(x => x.el)
-    .sort((x, y) => x.el === y.el ? 0 : x.el.compareDocumentPosition(y.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
   for (const { a, el } of found) {
     let seen;
     if (!g) seen = el.getBoundingClientRect().top <= third;
