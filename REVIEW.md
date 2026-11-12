@@ -578,7 +578,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 30's findings are open (below), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
+Round 30's findings are fixed (see Resolved, iteration 4). Open (below): T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
 enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
 your decision (see Resolved).
 
@@ -588,22 +588,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-47 | marked 15.0.12 is itself quadratic on emphasis delimiters (`'a _'` repeated: 24 KB 9.6 s; 60 KB not open after 300 s), with no limit around it. Reproduced. | Hardening |
-| H-48 | WYSIWYG: typing into a formula (or End leaving the caret in one) is lost: Chromium ignores `contenteditable=false` on MathML. Reproduced. | Data loss |
-| M-182 | `mdNoMarks` strips text that merely names the marks (in a block's words, attribute values, code) and authors' attributes like `data-fname`, on the page and, at the next edit, in the file. Reproduced. | Data loss |
-| M-183 | M-173 passed in HTML blocks with `/` or a quote before the attribute (`<div hidden/data-fn-raw=…>`). Reproduced. | Security |
-| M-184 | Enter twice in a note loses the next text (a `<p>` outside the notes' list isn't written back); one Enter shows a duplicate note, misnumbered, until rebuilt. Reproduced. | Data loss |
-| M-185 | The write-back's marker U+E000 turns a document's own U+E000 (icon fonts) into `$`, or `\$` in code. Reproduced. | Data loss |
-| L-399 | A document's own zero-width spaces after a mark (Thai, Khmer) are removed, one per text node per write-back. Reproduced. | Bug |
-| L-401 | The section's headings cached for a page go stale when an EPUB chapter is edited (deleted headings stay current). Reproduced. | Bug |
-| L-402 | L-388's split misses a code block of one line, or with any element in it, and a huge paragraph (11–35 s). Reproduced. | Hardening |
-| L-403 | `mdDollars` costs length × `$`s per pause in typing (3 MB paragraph: 3.5 s). Reproduced. | Hardening |
-| L-404 | Focus still lost when a notice closes if where it came from is no longer visible (a closed drawer on a phone). Reproduced. | Accessibility |
-| L-405 | `#noticeLive` keeps a closed notice's text. Reproduced. | Accessibility |
-| L-406 | With "every book left to right" (FORCE_LTR), text right to left by its own direction still turns right to left, while the information panel says left to right. Reproduced. | Bug |
-| L-407 | At 320 px only Open wraps to the bar's second row, at the far left. Reproduced. | Bug |
-| L-408 | The 400-character notice cap cuts off the reason after a long name, not the name. Reproduced. | Bug |
-| T-58 | `waitFor` doesn't catch exceptions: the L-388 test fails when the frame is caught mid-swap. Reproduced. | Tests |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
@@ -650,8 +634,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-47, H-48, M-182 to M-185, then the lows and tests.
-2. E-25, E-22, as laid out in TODO.md; then the other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -659,6 +643,22 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-47 | marked 15.0.12 took time with the square of emphasis delimiters. marked 18.1.3, which doesn't (`'a _'` × 20,000: under a second). | `56f3a4e` |
+| H-48 | Typing into a formula was lost (Chromium ignores contenteditable on MathML). In the editor a formula is held in a span the caret can't enter, and a click on a mark puts the caret after it. | `3420e89` |
+| M-182 | `mdNoMarks` cut a document's words naming the marks. Gone: a document's HTML is left as written; the reader's marks carry a token drawn per session, and only marks with it are written back from. | `3420e89` |
+| M-183 | M-173 was passed with `/`. With the token, a document's marks however spelled are written back as the HTML they are. | `3420e89` |
+| M-184 | Enter twice in a note lost the next text. What lies outside the notes' list is written back in the note before it. (One Enter still shows a second item until the page is rebuilt; it is written back as one note.) | `f050f54` |
+| M-185 | The marker U+E000 turned a document's own into `$`. A noncharacter the document holds nowhere, chosen at each write-back. | `2b11dc3` |
+| L-399 | A document's own zero-width spaces after a mark were removed. Only one at the text's start or end is taken out. | `2b11dc3` |
+| L-401 | The headings cached for a page went stale in the editor. Found afresh while editing or when one has gone. | `21617cf` |
+| L-402 | L-388 missed a code block of one huge line. Split into parts too. (A block with elements in it, and a huge paragraph, are still one.) | `21617cf` |
+| L-403 | `mdDollars` cost length × `$`s. Past 60 in a block, every one is escaped. | `21617cf` |
+| L-404 | Focus was lost when the notice's origin was hidden. The page takes it then. | `21617cf` |
+| L-405 | `#noticeLive` kept a closed notice's text. Cleared. | `21617cf` |
+| L-406 | With FORCE_LTR the Direction row said left to right for text that turns right to left. It says what the text does. | `21617cf` |
+| L-407 | At 320 px Open wrapped alone to the left. It stays at the right end. | `21617cf` |
+| L-408 | A long notice lost its reason. Cut in the middle. | `21617cf` |
+| T-58 | `waitFor` didn't survive a throwing check. It counts as not yet. | `21617cf` |
 | H-45 | `column-height` (rows of columns) stopped paging. Pinned with `column-wrap`. | `b3636b6` |
 | H-46 | The footnote mark's search scanned the rest of the paragraph at each stop. Within 4 KB. | `164f990` |
 | M-180 | The html box's margin and width, and the clip's writing mode, weren't pinned (no text seen). Pinned. | `b3636b6` |
