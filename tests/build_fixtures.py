@@ -1036,6 +1036,13 @@ def main():
     (fb / "OEBPS" / "c1.xhtml").write_text(xhtml("One", "<h1>One</h1><p>Start here.</p>"))
     (books / "big-list.md").write_text("# Big list\n\n" + "".join(f"{i}. Item number {i} of a very long numbered list.\n" for i in range(1, 30001)))
     svg = lambda n: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><desc>' + "x" * n + '</desc><rect width="40" height="40" fill="teal"/></svg>'
+    # SVGs naming further SVGs (round 28 review, H-42); a chapter of SVGs visited again and again (M-161).
+    chain = lambda i: f'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><desc>{"y" * (1024 * 1024)}</desc><rect id="a" width="40" height="40" style="fill:url(s{i + 1}.svg#a)"/></svg>'
+    epub(books / "svg-chain.epub", "SVG Chain", [("c1.xhtml", "One", '<p>Chain:</p><img id="c0" src="s0.svg" alt=""/>', "")], uid="urn:svg-chain",
+         extra={f"OEBPS/s{i}.svg": chain(i).encode() for i in range(12)})
+    epub(books / "svg-revisit.epub", "SVG Revisit", [("c1.xhtml", "One", "<p>Pictures:</p>" + "".join(f'<img src="r{i}.svg" alt=""/>' for i in range(3)), "")]
+         + [(f"c{k}.xhtml", f"Chapter {k}", f"<p>Chapter {k}.</p>", "") for k in range(2, 7)], uid="urn:svg-revisit",
+         extra={f"OEBPS/r{i}.svg": svg(3 * 1024 * 1024 + 500 * 1024).encode() for i in range(3)})
     epub(books / "svg-heavy.epub", "SVG Heavy", [("c1.xhtml", "One", "<p>Pictures:</p>" + "".join(f'<img id="s{i}" src="s{i}.svg" alt=""/>' for i in range(10)) + '<img id="huge" src="huge.svg" alt=""/>', "")],
          uid="urn:svg-heavy", extra={**{f"OEBPS/s{i}.svg": svg(3 * 1024 * 1024).encode() for i in range(10)}, "OEBPS/huge.svg": svg(5 * 1024 * 1024).encode()})
     # A chapter of 20 MB of markup in a book of a few tens of KB (round 26 review, H-35).
@@ -1050,6 +1057,9 @@ def main():
     # GitHub's math, footnotes and alerts in Markdown (E-31 to E-33).
     (books / "gh.md").write_text(GH_MD)
     (books / "gh2.md").write_text(GH2_MD)   # emoji shortcodes and highlighted code (E-34, E-35)
+    # An ordinary long Markdown novel, and TeX that repeats a macro (round 28 review, H-40, H-41).
+    (books / "long-novel.md").write_text("# A long novel\n\n" + "".join(f"Paragraph {i}: the keeper walked along the cliffs and counted the boats below in the quiet evening.\n\n" for i in range(20000)))
+    (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

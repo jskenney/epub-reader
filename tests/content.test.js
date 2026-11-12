@@ -539,3 +539,33 @@ test('document links: a site path starting with // stays this site\'s; the reade
   await page.goto(`${h.READER}?book=index.html`);
   assert.match(await h.waitFor(() => h.notice(page), 8000) || '', /this reader's own page/);
 });
+
+test('a long Markdown novel opens in good time (no search of the rest of the document for every paragraph), and TeX repeating a macro is shown as written, quickly (round 28 review, H-40, H-41)', async () => {
+  const page = await h.newPage();
+  let t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/long-novel.md`);
+  assert.ok(Date.now() - t0 < 12000, `the novel took ${Date.now() - t0} ms`);
+  t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/texbomb.md`);
+  assert.ok(Date.now() - t0 < 12000, `the TeX took ${Date.now() - t0} ms`);
+  assert.equal(await h.inFrame(page, doc => !!doc.querySelector('.md-math-error') && /After\./.test(doc.body.textContent)), true);
+});
+
+test('an SVG naming further SVGs doesn\'t lead past the page\'s limit (they aren\'t followed); a chapter\'s SVGs still show on its third visit (round 28 review, H-42, M-161)', async () => {
+  const page = await h.newPage();
+  const warned = []; page.on('console', m => { if (/SVG inside an SVG/.test(m.text())) warned.push(m.text()); });
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/svg-chain.epub`);
+  assert.ok(Date.now() - t0 < 10000);
+  assert.equal(await h.inFrame(page, doc => !!doc.getElementById('c0').getAttribute('src')), true, 'the first is shown');
+  assert.ok(await h.waitFor(() => warned.length > 0, 3000), 'the next isn\'t followed');
+  await h.openReader(page, `${h.READER}?book=books/svg-revisit.epub`);
+  const shown = () => h.inFrame(page, doc => [...doc.querySelectorAll('img')].filter(i => i.getAttribute('src')).length);
+  assert.equal(await shown(), 3);
+  for (let k = 0; k < 3; k++) {
+    await page.click('#tocList a >> nth=5'); await page.waitForFunction(() => /spine 6\//.test(document.querySelector('#spinePos').textContent));
+    await page.click('#tocList a >> nth=0'); await page.waitForFunction(() => /spine 1\//.test(document.querySelector('#spinePos').textContent));
+    await page.waitForTimeout(300);
+  }
+  assert.equal(await shown(), 3, 'all three on the third return');
+});
