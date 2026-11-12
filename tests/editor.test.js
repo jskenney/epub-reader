@@ -263,8 +263,7 @@ test('reading aloud reads the page beside the text (E-21)', async () => {
   await h.openReader(page, doc('notes.md'), { ...RAW, 'spine:ttsEngine': 'server' });
   await startEditing(page);
   await h.clearBreezeLog();
-  await page.click('#ttsBtn');
-  await page.click('#ttsPlay');
+  await page.click('#ttsBtn');   // (which starts reading: Play after it would stop it again: round 27 review, T-53)
   assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => /Notes|Intro/.test(e.text)), 15000), 'reading the page');
 });
 
@@ -926,7 +925,7 @@ test('a right-to-left chapter: Edit, then Done, comes back to the heading of the
   await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
   await page.waitForTimeout(500);
   const after = await pos();
-  assert.ok(after > 1 && after <= before, `page ${after}, was ${before}`);
+  assert.ok(after >= before - 2 && after <= before, `page ${after}, was ${before}`);   // (at the heading the page falls under: T-54)
 });
 
 test('a file mostly LF with some CRLF lines: an edit undone leaves it unchanged (round 26 review, L-357)', async () => {

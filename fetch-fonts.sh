@@ -50,7 +50,8 @@ reading_fonts() {
   [ ${#CONFIGS[@]} -gt 0 ] || return 0
   command -v python3 >/dev/null || { echo "python3 is needed to read ADDITIONAL_FONTS from ${CONFIGS[*]} (skipped)" >&2; return 0; }
   # (The menu's own families, which the reader leaves out of ADDITIONAL_FONTS, are left out here too: L-356.)
-  MENU=$(menu_fonts | cut -d' ' -f2 | sed 's/:.*//; s/+/ /g') python3 - "${CONFIGS[@]}" <<'PY'
+  # (Every family in the menu, those from the device too, such as Georgia: round 27 review, L-371.)
+  MENU=$(sed -n '/^const FONTS = \[/,/^\];/p' index.html | grep -o "name: '[^']*'" | sed "s/name: '//; s/'\$//") python3 - "${CONFIGS[@]}" <<'PY'
 import json, os, re, sys
 menu = {n.strip().lower() for n in os.environ.get("MENU", "").splitlines() if n.strip()}
 found = {}   # slug -> (name, styles, where)
@@ -136,6 +137,8 @@ fetch() {
     case "/$file/" in */../*|*/./*) echo "  $font: a path that leaves fonts/files/ (refused)" >&2; exit 1 ;; esac
     out=$DEST/$file
     if [ -n "$KNOWN" ] && ! printf '%s\n' "$KNOWN" | grep -qxF "$file"; then
+      # (A family not fetched before has no files in the list yet: said so, not taken for a changed file: L-371.)
+      if [ ! -f "$DEST/$name.css" ]; then echo "  $name is a font not fetched before: run ./fetch-fonts.sh once without --strict (--strict: stopping)" >&2; exit 1; fi
       echo "  $file isn't in fonts/SHA256SUMS: Google serves a different file now (--strict: stopping)" >&2; exit 1
     fi
     if [ ! -s "$out" ]; then

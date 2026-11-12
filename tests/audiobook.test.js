@@ -58,9 +58,7 @@ const decodes = file => execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-f',
 const ABC = `${h.READER}?book=books/abc.epub`;
 async function openExport(page, url = ABC, settings = { 'spine:ttsEngine': 'server' }) {
   await h.openReader(page, url, settings);
-  await page.keyboard.press('r');
-  await page.waitForTimeout(500);
-  await page.keyboard.press(' ');   // (pause: export is started from the bar)
+  await h.readThenPause(page);   // (pause: export is started from the bar)
   await page.click('#ttsExport');
   // (Measuring every chapter, and the format check, can take a while when the whole suite runs at once.)
   await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats, null, { timeout: 60000 });
@@ -141,7 +139,7 @@ test('a file per chapter: numbered files with track numbers; a ZIP of them is of
 test('the device voice explains why export is not possible; without AAC, .m4b is greyed out and another format chosen (E-10, E-17)', async () => {
   const page = await h.newPage();
   await h.openReader(page, ABC, { 'spine:ttsEngine': 'server' });
-  await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
+  await h.readThenPause(page);
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
   // (The test browser has no AAC encoder, as Chrome on Linux: Opus, which it has, is chosen.)
@@ -314,7 +312,7 @@ test('a voice not yet downloaded: the dialog offers the download, and Export wai
   const page = await h.newPage();
   await page.addInitScript(() => { window.AudioEncoder = class { static async isConfigSupported() { return { supported: true }; } }; });
   await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:ttsEngine': 'server' });
-  await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
+  await h.readThenPause(page);
   await page.selectOption('#ttsEngine', 'pocket');
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abDialog').dataset.formats);
@@ -377,7 +375,7 @@ test('a chapter that can\'t be read says so, stays ticked, and is reported; open
   await page.route('**/tts/v1/audio/speech', () => {});
   await page.click('#abCancel');
   await page.goto(`${h.READER}?book=books/short-lines.epub`); await h.waitForBook(page);
-  await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
+  await h.readThenPause(page);
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
   await page.click('#abStart');
@@ -517,7 +515,7 @@ test('.mp3: chapters, title, author in ID3 tags; a file per chapter with track n
   assert.equal(probe(each[1]).format.tags.track, '2/3');
   // The choice is remembered.
   await page.reload(); await h.waitForBook(page);
-  await page.keyboard.press('r'); await page.waitForTimeout(300); await page.keyboard.press(' ');
+  await h.readThenPause(page);
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats);
   assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
@@ -529,7 +527,7 @@ test('while the chosen format is still being checked it stays chosen and Export 
   const held = new Promise(r => { release = r; });
   await page.route('**/libs/lame.min.js', async r => { await held; await r.continue(); });
   await h.openReader(page, ABC, { 'spine:ttsEngine': 'server', 'spine:abFormat': 'mp3' });
-  await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
+  await h.readThenPause(page);
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abList').dataset.measured && /Checking whether this browser can make \.mp3/.test(document.querySelector('#abNoteText').textContent));
   assert.equal(await page.isChecked('input[name="abFormat"][value="mp3"]'), true);
@@ -706,7 +704,7 @@ test('the export list\'s first shift-click in another book doesn\'t use the prev
   await page.setInputFiles('#fileInput', `${__dirname}/site/reader/books/long.epub`);
   await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'The Long Book' && document.querySelector('#status').hidden);
   await page.evaluate(() => document.activeElement?.blur());
-  await page.keyboard.press('r'); await page.waitForTimeout(500); await page.keyboard.press(' ');
+  await h.readThenPause(page);
   await page.click('#ttsExport');
   await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured);
   const before = await page.$$eval('#abList input', els => els.map(e => e.checked));

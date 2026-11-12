@@ -85,5 +85,14 @@ async function waitFor(fn, ms = 20000, step = 100) {
   return null;
 }
 
-module.exports = { SITE, SOFT, REMOTE, NORANGE, CDN, PLAIN, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, inFrame,
+// Start reading aloud (R), wait until it really plays, then pause it (Space): a fixed wait before Space could pause
+// before reading had started, under load, leaving it playing (round 27 review, T-53).
+const playingNow = page => page.evaluate(() => document.querySelector('#ttsPlay')?.classList.contains('playing'));
+async function readThenPause(page) {
+  await page.keyboard.press('r');
+  await waitFor(() => playingNow(page), 15000);
+  await page.keyboard.press(' ');
+  await waitFor(async () => !(await playingNow(page)), 5000);
+}
+module.exports = { readThenPause, SITE, SOFT, REMOTE, NORANGE, CDN, PLAIN, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, inFrame,
   remoteLog, clearRemoteLog, breezeLog, clearBreezeLog, spokenWord, waitFor };

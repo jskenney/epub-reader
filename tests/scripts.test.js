@@ -310,7 +310,7 @@ test('fetch-fonts.sh: --config as typed from another folder; a family starting w
   fs.mkdirSync(path.join(d, 'site')); fs.mkdirSync(path.join(d, 'cfg'));
   fs.copyFileSync(path.join(REPO, 'fetch-fonts.sh'), path.join(d, 'site', 'fetch-fonts.sh'));
   fs.copyFileSync(path.join(REPO, 'index.html'), path.join(d, 'site', 'index.html'));
-  fs.writeFileSync(path.join(d, 'cfg', 'a.json'), JSON.stringify({ ADDITIONAL_FONTS: ['Noto Serif:wght@400;700', '42dot Sans', 'Merriweather', 'Lexend:wght@400;700'] }));
+  fs.writeFileSync(path.join(d, 'cfg', 'a.json'), JSON.stringify({ ADDITIONAL_FONTS: ['Noto Serif:wght@400;700', '42dot Sans', 'Merriweather', 'Lexend:wght@400;700', 'Georgia'] }));   // (Georgia: the device's, in the menu: L-371)
   fs.writeFileSync(path.join(d, 'cfg', 'b.json'), JSON.stringify({ ADDITIONAL_FONTS: 'Merriweather:ital,wght@0,400;1,400' }));
   const r = spawnSync('bash', ['site/fetch-fonts.sh', '--list', '--config', 'cfg/a.json', '--config', 'cfg/b.json'], { cwd: d, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);

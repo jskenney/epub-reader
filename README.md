@@ -58,6 +58,13 @@ saved position) works as for EPUBs.
   stylesheets and relative links load from its folder on the server; an
   uploaded single file can't bring those along.
 
+**Links between documents.** A document opened from your site (HTML, Markdown or text) can link to other documents and
+books on the same site, beside it or in other folders (`b.html`, `../other/c.md`, `book.epub`). Following one opens it as a
+`?book=` link would, once it is found: a link to a missing file leaves the document open, with a notice. It is added to
+the browser's history, so Back returns. A link to a place in the document itself stays in it. A link's query string
+(`?x=1`) is left out. While editing, such links wait until you press Done, and unsaved changes are asked about before
+leaving.
+
 **Fixed-layout EPUBs** (pre-paginated: picture books, comics and magazines
 made as EPUB, including EPUB 2 books marked fixed-layout) are shown a page at a
 time, each at the size the book gives it (its `viewport`, an SVG page's
@@ -803,6 +810,23 @@ straight to a book file on your server is protected only by what the server send
 its type, `nosniff`, and this sandbox header for the extensions listed. Keep book
 folders free of other files, and send `nosniff`.)
 
+The extension list follows the types nginx knows. Caddy and other servers that read the system's `/etc/mime.types` give
+many more extensions an XML type (`.tei`, `.ttml` and a hundred others); Chromium downloads those rather than showing them,
+but keep such files out of book folders. Caddy also serves a folder's `index.html` when the folder itself is asked for
+(`/books/x/`), which the extension list doesn't see: sandbox folder addresses too, except the reader's own folder (and any
+folder with its own copy of `index.html`):
+
+```
+	@bookdirs {
+		path */
+		not path /reader/
+	}
+	header @bookdirs {
+		Content-Security-Policy "sandbox"
+		defer
+	}
+```
+
 ## Settings
 
 These constants near the top of the script in `index.html` are meant to be
@@ -829,6 +853,7 @@ default books and the memory and request sizes stay the site's to set.
 | `NAVBAR_LINK` ✓ | `''` | Where clicking that picture goes: an address on this site or a full web address (`'https://example.com/'`). `''`: the picture links nowhere. Only web addresses are taken (not `javascript:` and the like). |
 | `SHOW_READ_ALOUD`, `SHOW_FONT_MENU`, `SHOW_THEME_BUTTON`, `SHOW_LAYOUT_BUTTON`, `SHOW_FULLSCREEN_BUTTON`, `SHOW_TEXT_SIZE`, `SHOW_LINE_SPACING`, `SHOW_TEXT_WIDTH`, `SHOW_OPEN_BUTTON` ✓ | `true` | `false` hides that control in the top bar: Read aloud, the reading-font (Aa) menu, the theme switcher, Layout, Full screen, text size, line spacing, text width, Open. Each one is still in Settings → **Text settings** (next to Generate config), and the single-key shortcuts still work for those that have one (R read aloud, T theme, L layout, F full screen). The Aa menu's single-key shortcuts switch is in Settings too. |
 | `SHOW_SETTINGS_BUTTON` ✓ | `true` | `false` hides the Settings (gear) button, so readers can't open Settings or Text settings. Fix what they would have chosen with the folder's other settings (and `LOCKED`). |
+| `NAVBAR_ALT` ✓ | `''` | What the logo is called, for screen readers: the link's name when `NAVBAR_LINK` is set, the picture's description otherwise (`'Example Press'`). `''`: the link is named by where it goes. |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lora", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
@@ -882,7 +907,8 @@ each with its own `default.epub`:
   (`"light"`, `"sepia"`, `"dark"` or `"black"`; without one the page follows
   the system), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
-  such as `"literata"`), `fontSize` (percent, 70–200), `lineSpacing`
+  such as `"literata"`, or `g-` and the name of a font of `ADDITIONAL_FONTS` in lower case with hyphens, such as
+  `"g-merriweather"`), `fontSize` (percent, 70–200), `lineSpacing`
   (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`) and
   `shortcuts` (`false` starts with single-key shortcuts off).
 - `LOCKED`: a list of options readers can't change in this folder's
