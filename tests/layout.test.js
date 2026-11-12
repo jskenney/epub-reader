@@ -538,3 +538,13 @@ test('in the scroll layout the top bar\'s corner, out of the way while reading d
   await to(1400);
   assert.equal(await corner(), false, 'down again');
 });
+
+test('right to left, a click near the ribbon\'s right end goes to the start, near its left end to the end (round 28 review, T-56)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/rtl-text.epub`, { 'spine:layout': 'one' });
+  const box = await page.locator('#ribbon').boundingBox();
+  await page.mouse.click(box.x + 3, box.y + box.height / 2);
+  await page.waitForFunction(() => /spine 2\//.test(document.querySelector('#spinePos').textContent));
+  await page.mouse.click(box.x + box.width - 3, box.y + box.height / 2);
+  await page.waitForFunction(() => /spine 1\//.test(document.querySelector('#spinePos').textContent));
+});
