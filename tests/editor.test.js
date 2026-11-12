@@ -1037,3 +1037,15 @@ test('Back or Forward called off returns to where it was in the history, adding 
   assert.equal(await page.evaluate(() => history.length), len, 'no entry added');
   assert.equal(await page.textContent('#bookTitle'), 'Doc A');
 });
+
+test('WYSIWYG: text typed after an emoji, a footnote mark or a formula at the end of a paragraph reaches the source (round 28 review, H-43)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('typing.md'));
+  for (const [para, typed] of [['I am happy', ' and more'], ['A claim.', ' Then more.'], ['Energy', ' is it']]) {
+    await inPage(page).locator('p', { hasText: para }).first().click();
+    await page.keyboard.press('End'); await page.keyboard.type(typed);
+    await flush(page);
+  }
+  const src = await text(page);
+  for (const s of ['I am happy :smile: and more', 'A claim.[^1] Then more.', 'Energy $E=mc^2$ is it']) assert.ok(src.includes(s), `${JSON.stringify(s)} in:\n${src}`);
+});

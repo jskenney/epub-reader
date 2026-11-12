@@ -1057,6 +1057,7 @@ def main():
     # GitHub's math, footnotes and alerts in Markdown (E-31 to E-33).
     (books / "gh.md").write_text(GH_MD)
     (books / "gh2.md").write_text(GH2_MD)   # emoji shortcodes and highlighted code (E-34, E-35)
+    (books / "typing.md").write_text("# Typing\n\nI am happy :smile:\n\nA claim.[^1]\n\nEnergy $E=mc^2$\n\n[^1]: The note.\n")   # (H-43)
     # An ordinary long Markdown novel, and TeX that repeats a macro (round 28 review, H-40, H-41).
     (books / "long-novel.md").write_text("# A long novel\n\n" + "".join(f"Paragraph {i}: the keeper walked along the cliffs and counted the boats below in the quiet evening.\n\n" for i in range(20000)))
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
