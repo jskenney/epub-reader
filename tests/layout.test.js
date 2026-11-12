@@ -524,3 +524,17 @@ test('right-to-left text without the book saying so: the information panel says 
   assert.equal(await flipped(), false);
   assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /Left to right/);
 });
+
+test('in the scroll layout the top bar\'s corner, out of the way while reading down, comes back on scrolling up (round 28 review, L-383)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:layout': 'scroll', 'spine:set:SHOW_TOPBAR': false });
+  const corner = () => page.evaluate(() => getComputedStyle(document.querySelector('#barCorner')).display !== 'none');
+  const to = async y => { await h.inFrame(page, (doc, y) => { doc.scrollingElement.scrollTop = y; }, y); await page.waitForTimeout(200); };
+  assert.equal(await corner(), true, 'at the top');
+  await to(400); await to(900);
+  assert.equal(await corner(), false, 'reading down');
+  await to(600);
+  assert.equal(await corner(), true, 'scrolled up a little');
+  await to(1400);
+  assert.equal(await corner(), false, 'down again');
+});
