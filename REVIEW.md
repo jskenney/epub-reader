@@ -585,8 +585,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 1. M-158 (Edit opening at the page's start).
 2. M-156, M-157 (sizes of documents and SVG), M-160, M-159.
 3. The lows, tests and docs.
-3. E-25, E-22, as laid out in TODO.md.
-4. The other enhancements, as wanted.
+4. E-25, E-22, as laid out in TODO.md.
+5. The other enhancements, as wanted.
 
 ## Resolved
 
