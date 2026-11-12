@@ -670,7 +670,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0756</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.2335</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1742,6 +1742,14 @@ async function markdownToHtml(md){
 const MATH_TEX_MAX = 20000, MATH_OUT_MAX = 200000, MATH_DOC_MAX = 8 << 20;
 const mdMathBudget = { left: MATH_DOC_MAX };   // (MathML made for the document being read, reset for each)
 function mdMath(tex, display, raw = ''){
+  const ml = texToMathml(tex, display);
+  if (ml) return ml;
+  // (Written back as it was written: round 28 review, M-162.)
+  const src = raw || (display ? `$$${tex}$$` : `$${tex}$`);
+  return `<code class="md-math-error" data-md-own="${MD_OWN}" data-md="${escHtml(src)}">${escHtml(src)}</code>`;
+}
+// TeX as MathML (Temml), the TeX kept in it, within the limits; null for TeX it can't read or past them.
+function texToMathml(tex, display){
   try {
     // (Limits: a few KB of TeX repeating macros made tens of MB of MathML from one formula: round 28 review, H-41.
     // Expansions at KaTeX's 1000, which counts Temml's own macros too: at 200, 27 \implies failed: round 29, M-176.)
@@ -1751,9 +1759,56 @@ function mdMath(tex, display, raw = ''){
       if (out.length <= MATH_OUT_MAX) return out.replace(/<math\b/, `<math data-md-tex="" data-md-own="${MD_OWN}"`);   // (ours: M-173)
     }
   } catch {}
-  // (Written back as it was written: round 28 review, M-162.)
-  const src = raw || (display ? `$$${tex}$$` : `$${tex}$`);
-  return `<code class="md-math-error" data-md-own="${MD_OWN}" data-md="${escHtml(src)}">${escHtml(src)}</code>`;
+  return null;
+}
+// E-37: TeX and code in an HTML page or a book's chapter, as in Markdown. TeX between \( and \) (in a line) or \[ and
+// \] (display) is drawn as MathML, by Temml, as Markdown's is: the browser draws it, no script runs in the book's
+// frame, and the TeX stays in it for search; $ isn't read as math here, being money far more often in HTML. A code
+// block naming its language (language-x or lang-x, on its <code> or <pre>) and not coloured already is coloured by
+// highlight.js. Not in Markdown (done as it is read), fixed-layout pages, or a page being edited (the source is what
+// is edited, and saved). TeX that can't be read, or past the limits, stays as it was written.
+const TEX_HTML = /\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]/g;
+const TEX_SKIP = 'code, pre, kbd, samp, tt, var, script, style, textarea, math, svg, title, [contenteditable]';
+async function enhancePage(root){
+  if (book?.doc?.kind === 'markdown' || book?.comic) return;
+  const doc = root.ownerDocument;
+  // Code blocks naming their language.
+  const blocks = [];
+  for (const pre of root.querySelectorAll('pre')) {
+    const code = pre.children.length === 1 && pre.firstElementChild.localName === 'code' ? pre.firstElementChild : !pre.children.length ? pre : null;
+    if (!code || code.children.length || code.textContent.length > HLJS_MAX) continue;
+    const lang = (`${code.className} ${pre.className}`.match(/(?:^|\s)(?:language|lang)-([\w+#.-]+)/i) || [])[1];
+    if (lang && !/(^|\s)hljs(\s|$)/.test(code.className)) blocks.push({ code, lang: lang.toLowerCase() });
+  }
+  if (blocks.length && !window.hljs) await loadLib('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
+  for (const { code, lang } of blocks) {
+    if (!window.hljs?.getLanguage(lang)) continue;
+    try { code.innerHTML = window.hljs.highlight(code.textContent, { language: lang, ignoreIllegals: true }).value; code.classList.add('hljs'); code.setAttribute('data-md-own', MD_OWN); } catch {}
+  }
+  // TeX in the text.
+  if (!/\\[(\[]/.test(root.textContent)) return;
+  const nodes = [], walk = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n; (n = walk.nextNode());) if (/\\[(\[]/.test(n.data) && !n.parentElement?.closest(TEX_SKIP)) nodes.push(n);
+  if (!nodes.length) return;
+  if (!window.temml) await loadLib('temml').catch(err => console.warn(`Math: ${err.message}`));
+  if (!window.temml) return;
+  mdMathBudget.left = MATH_DOC_MAX;   // (for each page)
+  for (const n of nodes) {
+    const s = n.data, frag = doc.createDocumentFragment();
+    let at = 0, changed = false;
+    for (const m of s.matchAll(TEX_HTML)) {
+      const display = m[2] != null, tex = (m[1] ?? m[2]).trim();
+      const ml = tex && texToMathml(tex, display);
+      if (!ml) continue;
+      frag.append(s.slice(at, m.index));
+      const box = doc.createElement('div'); box.innerHTML = ml;
+      frag.append(...box.childNodes);
+      at = m.index + m[0].length; changed = true;
+    }
+    if (!changed) continue;
+    frag.append(s.slice(at));
+    n.replaceWith(frag);
+  }
 }
 // Inline math as GitHub reads it: $…$ whose opening $ isn't followed by a space and whose closing $ (the next one not
 // escaped, on the same line) has no space before it and no digit after it, so "$5 and $10" stays text; $`…`$; and
@@ -2965,8 +3020,11 @@ const MD_CODE_COLOURS = [
   [['type', 'built_in', 'variable', 'params', 'property', 'title.class_.inherited__'], '#953800', '#ffa657'],
   [['tag', 'name', 'selector-tag', 'addition', 'bullet'], '#116329', '#7ee787'],
   [['deletion'], '#82071e', '#ffa198']];
-const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + MD_CODE_COLOURS.map(([names, l, d]) => names.map(n => `body pre .hljs-${n.replace(/\./g, '.')}`).join(',') + `{color:${dark ? d : l} !important}`).join('\n')
-  + '\nbody pre .hljs-comment,body pre .hljs-quote{font-style:italic}body pre .hljs-strong{font-weight:600}body pre .hljs-emphasis{font-style:italic}';
+// The colours of highlighted code, within scope: any code block in Markdown; in an HTML page or a book's chapter only
+// those the reader coloured (E-37), so a book's own highlighting keeps its own colours.
+const hlCss = (dark, scope) => MD_CODE_COLOURS.map(([names, l, d]) => names.map(n => `${scope} .hljs-${n.replace(/\./g, '.')}`).join(',') + `{color:${dark ? d : l} !important}`).join('\n')
+  + `\n${scope} .hljs-comment,${scope} .hljs-quote{font-style:italic}${scope} .hljs-strong{font-weight:600}${scope} .hljs-emphasis{font-style:italic}`;
+const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + hlCss(dark, 'body pre');
 const MD_ALERT_COLOURS = { note: ['#0969da', '#4493f8'], tip: ['#1a7f37', '#3fb950'], important: ['#8250df', '#ab7df8'], warning: ['#9a6700', '#d29922'], caution: ['#d1242f', '#f85149'] };
 const mdAlertCss = dark => Object.entries(MD_ALERT_COLOURS).map(([k, c]) => `body .md-alert-${k}{border-left-color:${c[+dark]} !important}body .md-alert-${k} > .md-alert-title{color:${c[+dark]} !important}`).join('\n');
 const mdTableCss = t => `
@@ -3061,7 +3119,7 @@ pre{white-space:pre-wrap !important}
 ::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
 ::highlight(search-current){background-color:${dark ? '#E0B040' : '#F2B630'};color:#1a1408}
 ${book?.comic ? comicCss() : ''}
-${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) + '\n' + mdCodeCss(dark, t) : ''}
+${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) + '\n' + mdCodeCss(dark, t) : hlCss(dark, `body pre code[data-md-own="${MD_OWN}"]`)}
 ${faceStack() ? `#${RID.flow},#${RID.flow} :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
@@ -3374,6 +3432,7 @@ async function buildPage(src, path, item){
   const flow = out.createElement('div'); flow.id = RID.flow;
   const into = fx ? out.body : flow;
   if (sBody) for (const c of [...sBody.childNodes]) into.append(out.importNode(c, true));
+  if (!fx && !ed.on) await enhancePage(flow);   // (TeX and code, before the page is cleaned: E-37)
   const end = out.createElement('span'); end.id = RID.end; into.append(end);
   if (!fx) { clip.append(flow); out.body.append(clip); }
   // Chapters parsed as XHTML keep the case of names (<IMG SRC>, <IFRAME>), which the checks below wouldn't

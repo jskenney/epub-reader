@@ -1120,6 +1120,10 @@ def main():
     (books / "own-chars.md").write_text("# Chars\n\nStart.\n\nIcon \ue000 here and `code \ue000`.\n\n```\nx \ue000 y\n```\n\nRef :smile:ab\u200bcd\u200bef end.\n")
     (books / "one-line-code.md").write_text("# One line\n\n```\n" + "x = 1; " * 400000 + "\n```\n")   # (round 30 review, L-402)
     (books / "emphasis.md").write_text("# E\n\n" + "a _" * 20000 + "\n")   # (round 30 review, H-47: marked before 18.1.3)
+    # TeX and code blocks in an HTML page and an EPUB chapter (E-37).
+    MATH_HTML_BODY = '<h1>Math page</h1><p>Start.</p><p id="inl">Energy \\(E = mc^2\\) and money $5 and $10.</p><p id="disp">\\[\\int_0^1 x^2\\,dx = \\frac{1}{3}\\]</p><p id="lit">Written as code: <code>\\(x\\)</code>.</p><p id="bad">Broken \\(\\frac{1}{\\) stays.</p><pre><code class="language-js" id="js">const a = 1; // note</code></pre><pre class="lang-python"><code id="py">def f(): return "s"</code></pre><pre><code class="language-nosuchlang" id="none">plain</code></pre><pre><code class="language-js hljs" id="own"><span class="hljs-keyword">let</span> b</code></pre>'
+    (books / "math-page.html").write_text("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Math page</title></head><body>" + MATH_HTML_BODY + "</body></html>")
+    epub(books / "math-epub.epub", "Math EPUB", [("c1.xhtml", "One", MATH_HTML_BODY.replace("<h1>Math page</h1>", "<h1>One</h1>"), "")], uid="urn:math-epub")
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

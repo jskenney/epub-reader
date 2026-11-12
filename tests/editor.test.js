@@ -1242,3 +1242,12 @@ test('Enter twice in a note: what is typed then stays in the note when written b
   assert.match(back, /Kept text\./, back);
   assert.match(back, /\[\^1\]: Note one\.[\s\S]*?\n {4}Kept text\./, back);
 });
+
+test('an HTML page with TeX and coloured code is edited and saved as written: no MathML or highlighting spans in it (E-37)', async () => {
+  const page = await h.newPage();
+  const [orig, back] = await typedRoundTrip(page, 'math-page.html');
+  assert.ok(back.includes('Energy \\(E = mc^2\\) and money'), back);
+  assert.doesNotMatch(back, /<math|hljs-keyword">const/, back);
+  assert.ok(back.includes('<code class="language-js" id="js">const a = 1; // note</code>'), back);
+  void orig;
+});
