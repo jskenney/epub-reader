@@ -475,6 +475,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <div class="notice" id="notice" role="alert" hidden>
         <p id="noticeText"></p>
         <button class="btn" id="noticeAction"></button>
+        <button class="btn ghost" id="noticeClose" aria-label="Close this notice" title="Close" hidden>×</button>
       </div>
       <div class="edit-bar" id="editBar" role="toolbar" aria-label="Editor" hidden>
         <div class="seg" role="group" aria-label="Edit as">
@@ -657,7 +658,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0353</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0404</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1728,7 +1729,7 @@ async function markdownToHtml(md){
 // aloud); TeX it can't read is shown as it was written, marked.
 const MATH_TEX_MAX = 20000, MATH_OUT_MAX = 200000, MATH_DOC_MAX = 8 << 20;
 const mdMathBudget = { left: MATH_DOC_MAX };   // (MathML made for the document being read, reset for each)
-function mdMath(tex, display){
+function mdMath(tex, display, raw = ''){
   try {
     // (Limits: a few KB of TeX repeating macros made tens of MB of MathML from one formula: round 28 review, H-41.)
     if (window.temml && tex.length <= MATH_TEX_MAX && mdMathBudget.left > 0) {
@@ -1737,7 +1738,9 @@ function mdMath(tex, display){
       if (out.length <= MATH_OUT_MAX) return out;
     }
   } catch {}
-  return `<code class="md-math-error">${escHtml(display ? `$$${tex}$$` : `$${tex}$`)}</code>`;
+  // (Written back as it was written: round 28 review, M-162.)
+  const src = raw || (display ? `$$${tex}$$` : `$${tex}$`);
+  return `<code class="md-math-error" data-md="${escHtml(src)}">${escHtml(src)}</code>`;
 }
 // Inline math as GitHub reads it: $…$ whose opening $ isn't followed by a space and whose closing $ (the next one not
 // escaped, on the same line) has no space before it and no digit after it, so "$5 and $10" stays text; $`…`$; and
@@ -1803,7 +1806,7 @@ function mdMarked(){
     renderer: {
       code(tok){
         const lang = (tok.lang || '').trim().split(/\s/)[0];
-        if (/^math$/i.test(lang)) return mdMath(tok.text, true) + '\n';
+        if (/^math$/i.test(lang)) return mdMath(tok.text, true, tok.raw.replace(/\n+$/, '')) + '\n';
         // (A code block naming a language highlight.js knows, coloured: E-35. Its text is escaped by highlight.js.)
         if (lang && window.hljs?.getLanguage(lang)) {
           try { return `<pre><code class="hljs language-${escHtml(lang)}">${window.hljs.highlight(tok.text, { language: lang, ignoreIllegals: true }).value}</code></pre>\n`; } catch {}
@@ -1819,7 +1822,7 @@ function mdMarked(){
           const after = /^[ \t]*(?:\n+|$)/.exec(src.slice(e + 2)); if (!after) return;
           return { type: 'mathBlock', raw: src.slice(0, e + 2 + after[0].length), text: src.slice(open[0].length, e).trim() };
         },
-        renderer: t => mdMath(t.text, true) + '\n' },
+        renderer: t => mdMath(t.text, true, t.raw.replace(/\n+$/, '')) + '\n' },
       // :name: as its emoji, for the names GitHub knows (E-34); outside code, which is read before.
       // (Stopping only where a :name: could be, not at every colon: at "https:" it kept bare addresses from being
       // linked: round 28 review, M-165.)
@@ -1828,7 +1831,7 @@ function mdMarked(){
         renderer: t => `<span class="md-emoji" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
       { name: 'math', level: 'inline', start: s => { const i = s.indexOf('$'); return i < 0 ? undefined : i; },
         tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; },
-        renderer: t => mdMath(t.text, t.display) },
+        renderer: t => mdMath(t.text, t.display, t.raw) },
       // [^label]: the note, with following lines indented (or a blank line and an indented one) as more of it.
       { name: 'footnoteDef', level: 'block', start: s => mdParaStart(s, /^\[\^[^\]\s]{1,100}\]:/m),
         tokenizer(src){
@@ -1991,6 +1994,15 @@ async function openDocument(buffer, name, kind, { base = null, key, seq, charset
 }
 // A document as the reader's sections, files and contents. whole: one section however long, as the editor
 // shows it (E-21).
+// A heading's words: without the TeX that formulas keep (shown once, not "x2x^2": round 28 review, M-168); for its
+// anchor, an emoji by its name, as GitHub makes it ("heading-with-rocket-emoji": L-377).
+function headingText(h, forId = false){
+  if (!h.querySelector('annotation, [data-emoji]')) return h.textContent;
+  const c = h.cloneNode(true);
+  c.querySelectorAll('annotation').forEach(a => a.remove());
+  if (forId) c.querySelectorAll('[data-emoji]').forEach(e => e.replaceWith(e.getAttribute('data-emoji')));
+  return c.textContent;
+}
 async function buildDocument(text, name, kind, { whole = false } = {}){
   let doc, meta = {}, headExtra = '';
   if (kind === 'html') {
@@ -2003,7 +2015,7 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
     if (kind === 'text') headExtra = TXT_CSS;
   }
   const language = langCode(meta.language);
-  const title = meta.title || doc.querySelector('h1, h2')?.textContent.replace(/\s+/g, ' ').trim() || name.replace(DOC_EXT, '') || 'Untitled';
+  const title = meta.title || (doc.querySelector('h1, h2') && headingText(doc.querySelector('h1, h2')).replace(/\s+/g, ' ').trim()) || name.replace(DOC_EXT, '') || 'Untitled';
   // The document's direction, on html or body or a wrapper around all of it, carried to every part (the parts are
   // made of what is inside them: round 25 review, M-148).
   const kids = [...doc.body.children], wrap = kids.length === 1 && ![...doc.body.childNodes].some(n => n.nodeType === 3 && n.data.trim()) ? kids[0] : null;
@@ -2027,7 +2039,7 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
   parts.forEach((part, i) => part.forEach(nd => {
     if (nd.nodeType !== 1) return;
     for (const h of [nd, ...nd.querySelectorAll('*')]) {
-      if (/^h[1-6]$/i.test(h.localName) && !h.id) h.id = slug(h.textContent);
+      if (/^h[1-6]$/i.test(h.localName) && !h.id) h.id = slug(headingText(h, true));
       if (h.id) where.set(h.id, i);
     }
   }));
@@ -2047,7 +2059,7 @@ async function buildDocument(text, name, kind, { whole = false } = {}){
     for (const nd of part) {
       if (nd.nodeType !== 1) continue;
       for (const h of [nd, ...nd.querySelectorAll('h1, h2, h3')].filter(h => /^h[1-3]$/i.test(h.localName))) {
-        const level = +h.localName[1], label = h.textContent.replace(/\s+/g, ' ').trim();
+        const level = +h.localName[1], label = headingText(h).replace(/\s+/g, ' ').trim();
         if (!label) continue;
         const entry = { label, path: path(i), frag: h.id, children: [], level };
         while (stack.length && stack.at(-1).level >= level) stack.pop();
@@ -4293,6 +4305,8 @@ function showNotice(msg, kind, action = null){
   $('#noticeText').textContent = msg;
   // (A notice without an action of its own can always be put away: round 27 review, M-159.)
   $('#noticeAction').textContent = action?.label || (kind === 'error' ? 'Dismiss' : 'OK');
+  // (A notice whose button does something can be closed without doing it: round 28 review, M-167.)
+  $('#noticeClose').hidden = !action;
   $('#notice').hidden = false;
   cornerSync();
 }
@@ -4340,6 +4354,7 @@ $('#fileInput').addEventListener('change', e => { openFile(e.target.files[0]); e
 $('#openBtn').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.showOpenFilePicker ? openPicked() : $('#fileInput').click(); } });
 $('#openBtn').addEventListener('click', e => { if (window.showOpenFilePicker) { e.preventDefault(); openPicked(); } });
 $('#noticeAction').addEventListener('click', () => { const run = noticeRun; hideNotice(); run?.(); });
+$('#noticeClose').addEventListener('click', hideNotice);
 const openAction = { label: 'Open a book', run: () => window.showOpenFilePicker ? openPicked() : $('#fileInput').click() };
 $('#fsBtn').addEventListener('click', () => setFs(!isFs()));
 $('#fsExit').addEventListener('click', () => setFs(false));
@@ -8165,7 +8180,7 @@ async function editStart({ mode } = {}){
     }
     if (book !== b) return;
     if (draftFits(draft, docSource(d)) && draft.text !== d.text) {
-      if (confirm(`${d.fresh || d.created ? 'A new document' : ed.epub ? 'This chapter' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser. Restore them?`)) ed.text = draft.text;
+      if (confirm(`${d.fresh || d.created ? 'A new document' : ed.epub ? 'This chapter' : 'This document'} has unsaved changes from ${new Date(draft.t).toLocaleString()}, kept in this browser.\n\nRestore them? (OK restores them; Cancel throws them away.)`)) ed.text = draft.text;
       else draftDel(draftKey());
     }
     hideNotice();
@@ -9015,23 +9030,41 @@ function mdTable(el){
 // (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
 const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
-  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/\$/g, mdDollar)
+  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/[\s\S]*/, mdDollars)
   .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name) => mdEmoji?.has(name) ? '\\:' : c);   // (a name written out, not an emoji: E-34)
-// A $ in the text that Markdown would read as math (E-31) escaped: one before $ or `, or a pair GitHub's rules take;
-// "$5 and $10" stays as it is.
-function mdDollar(d, i, s){
-  const nx = s[i + 1] || '';
-  if (s[i - 1] === '\\') return d;
-  if (nx === '$' || nx === '`') return '\\$';
-  if (!nx || /\s/.test(nx)) return d;
-  const j = s.indexOf('$', i + 1);
-  return j > 0 && !/\s/.test(s[j - 1]) && !/[0-9]/.test(s[j + 1] || '') ? '\\$' : d;
+// The $s of a text escaped where Markdown would read math (E-31): read as the parser reads it, the $ that would close
+// the first formula is escaped, and the text read again (an escape can let a $ pair with a later one), until no formula
+// is left; "$5 and $10" stays as it is (round 28 review, M-162). Past a few hundred $s, every one is escaped.
+function mdDollars(s){
+  if (!s.includes('$')) return s;
+  if (s.split('$').length > 300) return s.replace(/\\[\s\S]|\$/g, m => m === '$' ? '\\$' : m);
+  for (;;) {
+    let hit = -1;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '\\') { i++; continue; }
+      const m = s[i] === '$' && mdInlineMath(s.slice(i));
+      if (m?.text) { hit = i + m.raw.length - (m.display ? 2 : 1); break; }
+    }
+    if (hit < 0) return s;
+    s = s.slice(0, hit) + '\\' + s.slice(hit);
+  }
 }
 // Whether Markdown reads delimiters around core, between the characters before and after (CommonMark's flanking
 // rules, which let * and ~~ work inside a word); a delimiter right beside another isn't risked.
 const mdPunct = c => /[\p{P}\p{S}]/u.test(c), mdSpace = c => c === '' || /\s/.test(c);
 const mdFlanks = (core, before, after) => !'*_~\\'.includes(before || ' ') && !'*_~'.includes(after || ' ')
   && (!mdPunct(core[0]) || mdSpace(before) || mdPunct(before)) && (!mdPunct(core.at(-1)) || mdSpace(after) || mdPunct(after));
+// A formula as Markdown that reads back as the same formula (round 28 review, M-162): $…$ where that holds; $`…`$
+// where the TeX has spaces at its ends, a $ or a final \, or a digit follows (alt, chosen as the text is joined);
+// display math as $$…$$, or a math block when the TeX holds $$; HTML when no form can hold it.
+function mdMathSource(nd){
+  const tex = nd.querySelector('annotation[encoding="application/x-tex"]').textContent;
+  if (nd.getAttribute('display') === 'block') return { s: !tex.includes('$$') ? `$$${tex}$$` : !tex.includes('```') ? `\n\`\`\`math\n${tex}\n\`\`\`\n` : nd.outerHTML };
+  const tick = !tex.includes('`$') && !tex.includes('\n') && tex.trim() ? `$\`${tex}\`$` : null;
+  const plain = tex.trim() === tex && tex && !tex.includes('$') && !tex.endsWith('\\') && !tex.includes('\n') ? `$${tex}$` : null;
+  const s = plain || tick || nd.outerHTML;
+  return { s, alt: plain && tick ? tick : null };
+}
 function mdInline(nodes, { top = false, br = '\\\n' } = {}){
   const parts = [];
   for (const nd of nodes) {
@@ -9041,13 +9074,10 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     const t = nd.localName, inner = () => mdInline([...nd.childNodes], { br }), kk = edKeepOf(nd.getAttribute('data-ed-keep'));
     if (kk != null) parts.push({ s: mdKept(kk) });
     // (Math as its TeX, a footnote mark as its label, TeX that couldn't be read as it was written: E-31, E-32.)
-    else if (t === 'math' && nd.querySelector('annotation[encoding="application/x-tex"]')) {
-      const tex = nd.querySelector('annotation[encoding="application/x-tex"]').textContent;
-      parts.push({ s: nd.getAttribute('display') === 'block' ? `$$${tex}$$` : tex.includes('$') ? `$\`${tex}\`$` : `$${tex}$` });
-    }
+    else if (t === 'math' && nd.querySelector('annotation[encoding="application/x-tex"]')) parts.push(mdMathSource(nd));
     else if (t === 'sup' && nd.hasAttribute('data-fn-ref')) parts.push({ s: `[^${nd.getAttribute('data-fn-ref')}]` });
     else if (t === 'span' && nd.hasAttribute('data-emoji')) parts.push({ s: `:${nd.getAttribute('data-emoji')}:` });   // (E-34)
-    else if (t === 'code' && nd.classList.contains('md-math-error')) parts.push({ s: nd.textContent });
+    else if (t === 'code' && nd.classList.contains('md-math-error')) parts.push({ s: nd.getAttribute('data-md') ?? nd.textContent });
     else if (t === 'br' && mdPlain(nd)) parts.push({ s: br, br: true });
     else if ((t === 'strong' || t === 'b') && mdPlain(nd)) parts.push({ wrap: '**', tag: 'strong', inner: inner() });
     else if ((t === 'em' || t === 'i') && mdPlain(nd)) parts.push({ wrap: '*', tag: 'em', inner: inner() });
@@ -9073,7 +9103,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
   const first = j => { const p = parts[j]; return !p ? '' : p.wrap != null ? (p.inner.trim() ? '*' : p.inner[0] || '') : p.s[0] || ''; };
   let out = '';
   parts.forEach((p, i) => {
-    if (p.wrap == null) { let s = p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
+    if (p.wrap == null) { let s = p.alt && /\d/.test(first(i + 1)) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
     const core = p.inner.trim();
     if (!core) { out += p.inner; return; }
     const lead = p.inner.match(/^\s*/)[0], tail = trailingWs(p.inner);

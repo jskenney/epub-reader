@@ -1071,3 +1071,44 @@ test('after a reload, a Back or Forward called off still goes back to where it w
   assert.equal(await page.evaluate(() => location.href), at);
   assert.equal(await page.textContent('#bookTitle'), 'Doc A');
 });
+
+test('a draft\'s notice can be closed without editing, leaving the draft kept; the question says what Cancel does (round 28 review, M-167)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, doc('notes.md'), RAW);
+  await startEditing(page);
+  await typeAtEnd(page, 'A draft line.\n');
+  await page.waitForTimeout(1200);
+  await page.reload(); await h.waitForBook(page);
+  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /unsaved changes/);
+  assert.equal(await page.isVisible('#noticeClose'), true);
+  await page.click('#noticeClose');
+  assert.equal(await page.isHidden('#notice'), true);
+  await page.reload(); await h.waitForBook(page);
+  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /unsaved changes/, 'the draft is still kept');
+  const asked = []; page.on('dialog', d => { asked.push(d.message()); d.accept(); });
+  await page.click('#noticeAction');
+  await h.waitFor(() => asked.length, 3000);
+  assert.match(asked[0], /Cancel throws them away/);
+});
+
+test('Markdown written back keeps math as math and dollars as text: spaces at a formula\'s ends, a digit after it, a final \\, a $ inside, escaped $s among others, math that failed as written (round 28 review, M-162)', async () => {
+  const page = await h.newPage();
+  const [orig, back] = await typedRoundTrip(page, 'math-back.md');
+  for (const s of ['$` x `$', '$`b`$2', '$`p\\$q`$', '$$\\frac{$$', '```math\n\\frac{\n```', '$5 and $10']) assert.ok(back.includes(s), `${JSON.stringify(s)} in:\n${back}`);
+  assert.ok(back.includes('Prices $5 on $SKU\\$ here, and $5 and $10.'), back);   // (only the $ that would close a formula)
+  assert.match(back, /\$`a\\\\`\$/);
+  // The page shows the formulas and the text as the source means them.
+  const shown = await h.inFrame(page, doc => [...doc.querySelectorAll('annotation')].map(n => n.textContent).join('|') + '#' + doc.body.textContent.replace(/\s+/g, ' ').match(/Prices.*?10\./)?.[0]);
+  assert.equal(shown, 'x^2| x |b|a\\\\|p\\$q#Prices $5 on $SKU$ here, and $5 and $10.');
+  void orig;
+});
+
+test('math in a heading shows once in the title and the contents; an emoji\'s heading anchor uses its name (round 28 review, M-168, L-377)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/math-back.md`);
+  assert.equal(await page.textContent('#bookTitle'), 'Area x2 🚀');
+  const toc = await page.$$eval('#tocList a', as => as.map(a => a.textContent));
+  assert.ok(toc.includes('Area x2 🚀') && toc.includes('Second 🎉 part'), JSON.stringify(toc));
+  const ids = await h.inFrame(page, doc => [...doc.querySelectorAll('h1, h2')].map(e => e.id));
+  assert.ok(ids.includes('second-tada-part'), JSON.stringify(ids));
+});

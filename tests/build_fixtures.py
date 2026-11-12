@@ -1058,6 +1058,8 @@ def main():
     (books / "gh.md").write_text(GH_MD)
     (books / "gh2.md").write_text(GH2_MD)   # emoji shortcodes and highlighted code (E-34, E-35)
     (books / "autolink.md").write_text("# Links\n\nSmile :smile: and visit https://example.com/page today.\n")   # (M-165)
+    # Math and dollars whose write-back must keep their meaning (M-162); math and an emoji in a heading (M-168, L-377).
+    (books / "math-back.md").write_text("# Area $x^2$ :rocket:\n\nStart.\n\nSpaced $` x `$ then $`b`$2 and $`a\\\\`$ and $`p\\$q`$.\n\nPrices \\$5 on \\$SKU\\$ here, and $5 and $10.\n\n## Second :tada: part\n\nBad $$\\frac{$$ math.\n\n```math\n\\frac{\n```\n")
     (books / "times.md").write_text("# Times\n\nThe train leaves at 10:30:45 and again at 11:00:00.\n")   # (L-381)
     (books / "typing.md").write_text("# Typing\n\nI am happy :smile:\n\nA claim.[^1]\n\nEnergy $E=mc^2$\n\n[^1]: The note.\n")   # (H-43)
     # An ordinary long Markdown novel, and TeX that repeats a macro (round 28 review, H-40, H-41).
