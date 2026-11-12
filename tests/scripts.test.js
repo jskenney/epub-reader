@@ -201,7 +201,7 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
 test('the Subresource Integrity hashes in LIBS match the files in libs/, each its own (T-9, T-19)', { skip: !libsFetched && 'libs/ not fetched' }, () => {
   const page = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const libs = Object.fromEntries([...page.matchAll(/(\w+): \{ file: 'libs\/([^']+)'[^}]*?integrity: '([^']+)'/g)].map(m => [m[2], m[3]]));
-  assert.deepEqual(Object.keys(libs).sort(), ['jszip.min.js', 'lame.min.js', 'marked.min.js']);
+  assert.deepEqual(Object.keys(libs).sort(), ['jszip.min.js', 'lame.min.js', 'marked.min.js', 'temml.min.js']);
   for (const file of Object.keys(libs)) {
     const want = 'sha384-' + require('node:crypto').createHash('sha384').update(fs.readFileSync(path.join(__dirname, '..', 'libs', file))).digest('base64');
     assert.equal(libs[file], want, file);

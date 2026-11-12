@@ -971,3 +971,12 @@ test('unsaved changes and a link to a missing document: the changes stay kept, a
   await page.frameLocator('#page').locator('#up').click();
   assert.ok(await h.waitFor(() => asked.length === 2, 3000), 'asked again before leaving the changes');
 });
+
+test('Markdown written back: math as its TeX, footnotes as they were written, alerts as > [!NOTE], dollar amounts as they were (E-31, E-32, E-33)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'gh.md');
+  for (const s of ['Start. Typed.', '$E = mc^2$', '$\\sqrt{x}$', 'costs $5 and $10 stay text', '$$\\int_0^1 x^2\\,dx = \\frac{1}{3}$$\n\n$$\\sum_{n=1}^\\infty \\frac{1}{n^2} = \\frac{\\pi^2}{6}$$', 'A sentence with a note.[^first] And another.[^second] The first again.[^first]',
+    '> [!NOTE]\n> Useful information that users should know.', '> [!WARNING]\n> Urgent info', '> A plain quotation.', 'Bad math $\\frac{1}{$ here.',
+    '[^first]: The first note, with $x^2$ in it.', '[^second]: The second note.\n\n    It has a second paragraph.']) assert.ok(back.includes(s), `${JSON.stringify(s)} in:\n${back}`);
+  assert.doesNotMatch(back, /<math|<sup|data-fn|md-alert|↩/);
+});

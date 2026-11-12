@@ -131,6 +131,9 @@ def wav(path, seconds=1.0, rate=24000):
                 + b"data" + struct.pack("<I", len(pcm)) + pcm)
 
 
+GH_MD = '# GitHub extras\n\nStart.\n\nInline math $E = mc^2$ and $`\\sqrt{x}`$, but costs $5 and $10 stay text, and \\$x\\$ too.\n\n$$\n\\int_0^1 x^2\\,dx = \\frac{1}{3}\n$$\n\n```math\n\\sum_{n=1}^\\infty \\frac{1}{n^2} = \\frac{\\pi^2}{6}\n```\n\nA sentence with a note.[^first] And another.[^second] The first again.[^first]\n\n> [!NOTE]\n> Useful information that users should know.\n\n> [!WARNING]\n> Urgent info that needs immediate attention.\n\n> A plain quotation.\n\nBad math $\\frac{1}{$ here.\n\n[^first]: The first note, with $x^2$ in it.\n[^second]: The second note.\n\n    It has a second paragraph.\n'
+
+
 def main():
     if SITE.exists():
         shutil.rmtree(SITE)
@@ -1011,6 +1014,8 @@ def main():
     # A Markdown table, and the same table in an HTML document (drawn as a table in Markdown only).
     (books / "table.md").write_text("# Table\n\n| Affinity/Art | E | D |\n| --- | :---: | ---: |\n| Light Magic | 40 | 80 |\n| Water Magic | 600 | \\- |\n")
     (books / "table.html").write_text("<!DOCTYPE html><html><head><title>Table</title></head><body><table><tr><th>A</th><td>1</td></tr></table></body></html>")
+    # GitHub's math, footnotes and alerts in Markdown (E-31 to E-33).
+    (books / "gh.md").write_text(GH_MD)
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")

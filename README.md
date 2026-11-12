@@ -38,7 +38,15 @@ saved position) works as for EPUBs.
   flavour), loaded only when a Markdown file is opened: from `libs/` when
   self-hosted, otherwise from cdnjs. YAML front
   matter `title`, `author` and `lang` are used. Links to headings
-  (`[see](#a-heading)`) work.
+  (`[see](#a-heading)`) work. Tables are drawn with lines between their cells.
+  GitHub's additions work too:
+  - **Math:** `$…$` and `` $`…`$ `` in a line, `$$…$$` and ` ```math ` blocks, as GitHub writes them.
+    It is turned into MathML by [Temml](https://temml.org/), loaded only for a document with a `$` in it.
+    A dollar amount ("$5 and $10") stays text, and TeX that can't be read is shown as written.
+  - **Footnotes:** `[^1]` and `[^1]: …`, numbered as they are referred to, gathered at the end, with links both ways.
+  - **Alerts:** `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]`, set apart in their colours.
+
+  The editor writes all three back as they were written.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
   stylesheets and relative links load from its folder on the server; an
@@ -555,7 +563,7 @@ site as the reader.
 ## Self-hosting the libraries and fonts
 
 ```bash
-./fetch-libs.sh     # JSZip, marked, lamejs and CodeMirror into ./libs/ (about 750 KB)
+./fetch-libs.sh     # JSZip, marked, Temml, lamejs and CodeMirror into ./libs/ (about 900 KB)
 ./fetch-fonts.sh    # the interface and reading fonts into ./fonts/ (about 2 MB)
 ```
 
@@ -563,7 +571,7 @@ With these (and the voice scripts below), the reader loads nothing from other
 sites. Without them it falls back to cdnjs and Google Fonts.
 
 - **Libraries:** `libs/jszip.min.js` (opens EPUB and comic files),
-  `libs/marked.min.js` (Markdown), `libs/lame.min.js` (MP3 audiobooks) and
+  `libs/marked.min.js` (Markdown), `libs/temml.min.js` (math in Markdown), `libs/lame.min.js` (MP3 audiobooks) and
   `libs/codemirror/` (the editor's text view) are tried first. The local and the cdnjs
   copy must both match hashes pinned in `index.html` (Subresource Integrity),
   so a changed or damaged file is refused rather than run.
@@ -610,6 +618,7 @@ Library versions and model revisions are pinned in two places each, which must a
 | --- | --- | --- |
 | JSZip | `LIBS.jszip.cdn` | `JSZIP` in `fetch-libs.sh` |
 | marked | `MARKED_URL` | `MARKED` in `fetch-libs.sh` |
+| Temml | `LIBS.temml.cdn` | `TEMML` in `fetch-libs.sh` |
 | lamejs | `LIBS.lamejs.cdn` | `LAMEJS` in `fetch-libs.sh` |
 | CodeMirror | `CM_VERSION` (and a hash per file in `CM_FILES`) | `CODEMIRROR` in `fetch-libs.sh` |
 | kokoro-js | `KOKORO.lib` | `KOKORO_JS` in `fetch-kokoro.sh` (and `TRANSFORMERS`, the transformers.js it bundles) |
@@ -836,7 +845,7 @@ default books and the memory and request sizes stay the site's to set.
 | `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. A comic's place is kept as the page on screen, so changing it doesn't move readers to another page (a place saved by a version before this one follows the old sections once). |
 
 External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
-3.10.1, marked 15.0.12 and lamejs 1.2.1, with their SRI hashes), `CM_VERSION` and
+3.10.1, marked 15.0.12, Temml 0.14.0 and lamejs 1.2.1, with their SRI hashes), `CM_VERSION` and
 `CM_FILES` (CodeMirror 5.65.21, with its files' hashes), the `lib`/`ort` URLs and
 model `revision` in `KOKORO` (kokoro-js 1.2.1), and `POCKET` (pocket-tts-js
 0.1.0, onnxruntime-web 1.20.0, a fixed model revision). When upgrading, change
@@ -930,7 +939,7 @@ upstream (a CDN, Hugging Face's download hosts, a model file) show up.
 
 ## Requirements
 
-No build step. The libraries (JSZip, marked for Markdown, lamejs for MP3 audiobooks, CodeMirror for
+No build step. The libraries (JSZip, marked for Markdown and Temml for its math, lamejs for MP3 audiobooks, CodeMirror for
 editing) and fonts come
 from `libs/` and `fonts/` when self-hosted, otherwise from cdnjs and Google
 Fonts (with system font fallbacks).
@@ -945,7 +954,7 @@ their own licences, which the scripts save beside them (a `LICENSES/` folder
 with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/` and `pocket/`;
 a `NOTICE.txt` in `fonts/`):
 
-- JSZip: MIT or GPLv3 (your choice); marked: MIT; lamejs: LGPL-3.0 (a port of
+- JSZip: MIT or GPLv3 (your choice); marked: MIT; Temml: MIT; lamejs: LGPL-3.0 (a port of
   LAME; `LICENSES/LGPL-3.0.txt` holds the LGPL and the GPL text it builds on);
   CodeMirror: MIT.
 - The fonts (IBM Plex Sans and Mono, Literata and the reading fonts): SIL Open

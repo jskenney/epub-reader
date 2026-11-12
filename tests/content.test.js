@@ -416,3 +416,29 @@ test('a Markdown table is drawn as a table (lines between cells, the header row 
   await h.openReader(page, `${h.READER}?book=books/table.html`);
   assert.equal((await look()).border, 0, 'an HTML document\'s table as it was');
 });
+
+test('Markdown: GitHub\'s math (inline, $`…`$, $$ blocks, math code blocks) as MathML keeping its TeX, dollar amounts as text; footnotes numbered with links both ways; alerts set apart (E-31, E-32, E-33)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/gh.md`);
+  const r = await h.inFrame(page, doc => ({
+    math: doc.querySelectorAll('math').length, block: doc.querySelectorAll('math[display="block"]').length,
+    tex: [...doc.querySelectorAll('annotation[encoding="application/x-tex"]')].map(a => a.textContent.trim()),
+    text: doc.body.textContent.replace(/\s+/g, ' '),
+    refs: [...doc.querySelectorAll('sup[data-fn-ref] a')].map(a => [a.textContent, a.getAttribute('href'), a.id]),
+    notes: [...doc.querySelectorAll('.md-footnotes li')].map(li => [li.id, li.querySelectorAll('[data-fn-back]').length]),
+    alerts: [...doc.querySelectorAll('.md-alert')].map(a => [a.dataset.alert, a.querySelector('.md-alert-title').textContent, getComputedStyle(a).borderLeftColor]),
+    quotes: doc.querySelectorAll('blockquote').length, bad: doc.querySelector('.md-math-error')?.textContent }));
+  assert.deepEqual(r.tex, ['E = mc^2', '\\sqrt{x}', '\\int_0^1 x^2\\,dx = \\frac{1}{3}', '\\sum_{n=1}^\\infty \\frac{1}{n^2} = \\frac{\\pi^2}{6}', 'x^2']);
+  assert.equal(r.block, 2);
+  assert.match(r.text, /costs \$5 and \$10 stay text, and \$x\$ too/);
+  assert.deepEqual(r.refs.map(x => x[0]), ['1', '2', '1']);
+  assert.deepEqual(r.refs.map(x => x[2]), ['fnref-first', 'fnref-second', 'fnref-first-2']);
+  assert.deepEqual(r.notes, [['fn-first', 2], ['fn-second', 1]]);
+  assert.deepEqual(r.alerts.map(a => a.slice(0, 2)), [['NOTE', 'Note'], ['WARNING', 'Warning']]);
+  assert.notEqual(r.alerts[0][2], r.alerts[1][2], 'each kind its colour');
+  assert.equal(r.quotes, 1, 'the plain quotation stays one');
+  assert.equal(r.bad, '$\\frac{1}{$');
+  // A footnote mark goes to its note.
+  await page.frameLocator('#page').locator('sup[data-fn-ref="second"] a').click();
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('fn-second').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth; }), 5000), 'at the note');
+});
