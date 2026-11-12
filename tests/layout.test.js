@@ -519,9 +519,17 @@ test('right-to-left text without the book saying so: the information panel says 
   const flipped = () => page.evaluate(() => getComputedStyle(document.querySelector('#nextBtn svg')).transform !== 'none');
   await h.openReader(page, `${h.READER}?book=books/rtl-text.epub`, { 'spine:layout': 'one' });
   assert.equal(await flipped(), true);
+  // (Next on the left, Previous on the right: each points away from the middle: round 29 review, M-177, T-57.)
+  const side = () => page.evaluate(() => document.querySelector('#nextBtn').getBoundingClientRect().left < document.querySelector('#prevBtn').getBoundingClientRect().left);
+  assert.equal(await side(), true, 'Next on the left');
   assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /Right to left/);
+  for (const b of ['rtl-doc.md', 'rtl-doc.html']) {   // (and documents, in the scroll layout: round 29 review, L-394)
+    await h.openReader(page, `${h.READER}?book=books/${b}`, { 'spine:layout': 'scroll' });
+    assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /DirectionRight to left/, b);
+  }
   await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:layout': 'one' });
   assert.equal(await flipped(), false);
+  assert.equal(await side(), false, 'Next on the right');
   assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /Left to right/);
 });
 
