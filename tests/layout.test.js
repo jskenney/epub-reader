@@ -513,3 +513,14 @@ test('line spacing leaves the bar only below 400 px, and stays when Settings isn
   assert.equal(await shown(360, `${h.READER}?book=books/long.epub`), false, '360 px');
   assert.equal(await shown(360, `${h.SITE}/folder-noset/index.html?book=/reader/books/long.epub`), true, '360 px, no Settings');
 });
+
+test('right-to-left text without the book saying so: the information panel says right to left, the footer\'s chevrons point the pages\' way (round 28 review, L-379)', async () => {
+  const page = await h.newPage();
+  const flipped = () => page.evaluate(() => getComputedStyle(document.querySelector('#nextBtn svg')).transform !== 'none');
+  await h.openReader(page, `${h.READER}?book=books/rtl-text.epub`, { 'spine:layout': 'one' });
+  assert.equal(await flipped(), true);
+  assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /Right to left/);
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:layout': 'one' });
+  assert.equal(await flipped(), false);
+  assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /Left to right/);
+});
