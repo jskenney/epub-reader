@@ -578,9 +578,9 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 30's findings are fixed (see Resolved, iteration 4). Open (below): T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
-enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
-your decision (see Resolved).
+Round 30's findings are fixed (see Resolved, iteration 4). Open (below): enhancements only, E-29, E-30, E-36, E-37
+and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
+decision (see Resolved).
 
 ## Open items
 
@@ -588,7 +588,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | [E-37](#e-37-math-and-code-highlighting-in-html-and-epub) | TeX math and code highlighting in HTML pages and EPUB chapters, as in Markdown | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
@@ -658,6 +657,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| T-47 | `NCACHE_SEC` had no test. Left as it is, by your decision: it acts only after minutes of audio played, which streamed audio can't be sped through in a test, and the cache never goes below about a minute of audio; a test would need a hook in the reader for tests alone. The setting only decides how much finished audio is kept in memory for replay (more memory, or audio made again sooner, if wrong); its eviction is one line, and `LOOKAHEAD_SEC` has a test (`3d1deb1`). | Left as it is, by your decision |
 | H-47 | marked 15.0.12 took time with the square of emphasis delimiters. marked 18.1.3, which doesn't (`'a _'` × 20,000: under a second). | `56f3a4e` |
 | H-48 | Typing into a formula was lost (Chromium ignores contenteditable on MathML). In the editor a formula is held in a span the caret can't enter, and a click on a mark puts the caret after it. | `3420e89` |
 | M-182 | `mdNoMarks` cut a document's words naming the marks. Gone: a document's HTML is left as written; the reader's marks carry a token drawn per session, and only marks with it are written back from. | `3420e89` |
