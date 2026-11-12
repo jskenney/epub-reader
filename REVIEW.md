@@ -469,10 +469,14 @@ Findings:
 - **Low:** L-359 to L-372.
 - **Tests:** T-53, T-54. **Documentation:** D-32. **Enhancement:** E-30 (right-to-left text in the raw editor).
 
+Afterwards `9c9c624` fixed H-36, H-37 and M-153 to M-155, each with a test that fails on the code before it. Eleven kinds
+of book CSS aimed at paging (the reviewers' cases) are paged as a plain book is, to the last paragraph. All 426 tests
+pass.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
-**Tests.** All 421 tests pass (at `8f1df5b`). Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
+**Tests.** All 426 tests pass (at `9c9c624`). Six more need `SLOW=1` or `NETWORK=1`: the real Kokoro and Pocket TTS models,
 self-hosted and from the CDNs, and the libraries and fonts from the CDNs. Fixes from round 11 on have tests
 that fail on the code before them, except where an item says it was checked by reading.
 
@@ -501,7 +505,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 27's findings are open (below), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30 and the
+Round 27's findings are open (below) except H-36, H-37 and M-153 to M-155 (fixed), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30 and the
 enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
 your decision (see Resolved).
 
@@ -511,11 +515,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-36 | A book's CSS `div{--spine-x:0px !important}` stops page turns: the counter moves, the screen stays on page 1, and the rest of each chapter can't be reached (an author `!important` custom property beats the reader's inline value). Reproduced. | Security |
-| H-37 | A book's `@layer` rules beat every `!important` pin of the reader (paging, writing mode, line height, end marker, dark-theme colours): `@layer x{div{transform:none !important}}` freezes the pages; other rules collapse a chapter to one page. Reproduced. | Security |
-| M-153 | Back or Forward to an `?edit=` entry opens the default book, not the document (`popstate` reads only `book` and `get`). Reproduced. | Bug |
-| M-154 | Following a document's link with unsaved edits: accepting the loss clears them and deletes the draft before the open is tried; when the target is missing, the document stays with the edits shown but no longer kept, and the next link leaves them without asking. Reproduced. | Data loss |
-| M-155 | Book CSS that still moves or clips the pages: the flow's `height` (`div{height:auto !important}`: one page), `html` padding, `body` position, `columns` and `display:grid`, the `translate`/`scale`/`rotate` properties, `content-visibility` (the page count shifts while reading). Reproduced. | Bug |
 | M-158 | Edit opens the editor at the last heading of the page shown, past where the page starts (M-147 takes every heading on the page); a one-page document scrolls to its end. Reproduced. | Bug |
 | M-156 | Documents opened directly (HTML, Markdown, text) have no size limit, and one huge block (a list of 70,000 items) isn't split: a 4 MB list took 15 s and paged wrongly until a resize; 29 MB hung the tab. EPUB chapters within `MAX_MARKUP` are slower than its note says (8 MB: 54 s on a loaded machine). Reproduced. | Hardening |
 | M-157 | SVG pictures are limited per file (16 MB) but not per page: 40 of them, from a 620 KB EPUB, decompress to 600 MB and take 40 s. Reproduced. | Hardening |
@@ -583,11 +582,9 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-36, H-37 and M-155 together: the reader's pins in a CSS layer of their own, ahead of the book's, and the page
-   turn set inline with priority.
-2. M-153, M-154 (Back to `?edit=`, unsaved edits and a missing link), then M-158.
-3. M-156, M-157 (sizes of documents and SVG), M-160, M-159.
-4. The lows, tests and docs.
+1. M-158 (Edit opening at the page's start).
+2. M-156, M-157 (sizes of documents and SVG), M-160, M-159.
+3. The lows, tests and docs.
 3. E-25, E-22, as laid out in TODO.md.
 4. The other enhancements, as wanted.
 
@@ -597,6 +594,11 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-36 | A book's `--spine-x: … !important` stopped page turns. The offset is set inline with priority. | `9c9c624` |
+| H-37 | A book's `@layer` rules beat every `!important` pin of the reader. The reader's rules are also given in a layer of their own, named before any of the book's. | `9c9c624` |
+| M-153 | Back or Forward to an `?edit=` entry opened the default book. It opens that document for editing. | `9c9c624` |
+| M-154 | Unsaved edits were let go before a document's link was opened, and kept no more when the target was missing. They are let go only once the other document has opened. | `9c9c624` |
+| M-155 | Book CSS still moved or clipped the pages (the flow's height, html padding, body position, columns, grid, translate/scale, content-visibility). All pinned in the paged layouts. | `9c9c624` |
 | M-144 | A document's link to a missing file, or up a folder, replaced the document with the default book. Links are followed as written against the document's own address, and the target is opened before it is added to the history: a missing one leaves the document open, with a notice. | `4ea6db9` |
 | M-145 | After following a document's link, Back and Forward changed only the address; unsaved changes and a running export weren't asked about. They open the documents again (popstate), and both are asked about. | `4ea6db9` |
 | L-340 | A document's link to an EPUB or comic beside it gave an error; a link to its own file name reloaded it. Books beside it open; a link to itself goes to the place. | `4ea6db9` |
