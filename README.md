@@ -47,8 +47,8 @@ saved position) works as for EPUBs.
   - **Alerts:** `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]`, set apart in their colours.
   - **Emoji shortcodes:** `:smile:`, `:+1:` and the rest of [GitHub's names](https://github.com/github/gemoji), as
     the emoji. The list (`libs/emoji.json`, or from jsDelivr when not self-hosted: gemoji isn't on cdnjs) is read
-    only for a document with a `:name:` outside code; a time like 10:30:45 doesn't count. Unknown names, code and
-    times stay as written.
+    only for a document with something shaped like `:name:` in it (in code too); a time like 10:30:45 doesn't count.
+    Unknown names, code and times stay as written.
   - **Syntax highlighting:** a code block naming its language (` ```js `) is coloured by
     [highlight.js](https://highlightjs.org/) (its common languages), loaded only for a document with such a block;
     other code blocks are shown as they were.
@@ -56,8 +56,8 @@ saved position) works as for EPUBs.
   The editor writes these back with their meaning kept, and mostly as they were written: a formula as its TeX
   (`$…$`, or `` $`…`$ `` where `$…$` can't hold it, so `` $`x`$ `` may come back as `$x$` and a ` ```math ` block
   as `$$…$$`), TeX that couldn't be read as it was, a note's definition where it was, emoji as their `:name:`,
-  alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. A code block over 100 KB
-  isn't coloured.
+  alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. A code block over 100,000
+  characters isn't coloured.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
   stylesheets and relative links load from its folder on the server; an
