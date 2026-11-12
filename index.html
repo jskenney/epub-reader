@@ -663,7 +663,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0609</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0612</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1874,8 +1874,8 @@ function mdMarked(){
               break;
             }
             // (A line of the note wrapped without indenting it, as editors do: more of the note, unless it starts
-            // something else: round 28 review, M-164.)
-            if (body.at(-1).trim() && !/^(\[\^[^\]\s]+\]:|#{1,6}\s|>|[-*+]\s|\d+[.)]\s|```|~~~|\$\$|\||<)/.test(next.trim())) { body.push(next); at += 1 + next.length; continue; }
+            // something else: round 28 review, M-164; a rule or a heading's underline isn't more of it: round 29, M-178.)
+            if (body.at(-1).trim() && !/^(\[\^[^\]\s]+\]:|#{1,6}(\s|$)|>|[-*+]\s|\d+[.)]\s|```|~~~|\$\$|\||<|=+\s*$|-+\s*$|(\*\s*){3,}$|(_\s*){3,}$|(-\s*){3,}$)/.test(next.trim())) { body.push(next); at += 1 + next.length; continue; }
             break;
           }
           const raw = src.slice(0, Math.min(src.length, at + 1));
@@ -9004,9 +9004,13 @@ const MD_VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'inp
 const mdPlain = (el, ok = []) => [...el.attributes].every(a => ok.includes(a.name));
 const mdKept = k => ed.kept[k] ?? '';
 const mdComment = c => { const k = edKeepOf(c.data); return k != null ? mdKept(k) : `<!--${c.data}-->`; };
-let mdFn = { known: new Set(), done: new Set(), root: null };   // (the notes of the document being written back)
+let mdFn = { known: new Set(), done: new Set(), root: null, byKey: new Map() };   // (the notes of the document being written back)
 function htmlToMarkdown(root){
-  mdFn = { known: new Set([...root.querySelectorAll('li[data-fn]')].map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root };
+  const lis = [...root.querySelectorAll('section[data-footnotes] > ol > li[data-fn]')];
+  // (The notes by label, found once: each note's mark searched them all, slow with thousands: round 29 review, M-175.)
+  // (Two items of one label, as Enter in a note makes, are one note of two paragraphs: L-389.)
+  const byKey = new Map(); for (const li of lis) { const k = li.getAttribute('data-fn-key') ?? li.getAttribute('data-fn').toLowerCase(); byKey.set(k, [...(byKey.get(k) || []), li]); }
+  mdFn = { known: new Set([...root.querySelectorAll('li[data-fn]')].map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root, byKey };
   const md = mdBlocks(root).replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
   return md ? md + '\n' : '';
 }
@@ -9028,10 +9032,9 @@ function mdBlocks(node, sep = '\n\n'){
   flush();
   return parts.join(sep);
 }
-function mdNote(li){
-  const c = li.cloneNode(true); c.querySelectorAll('[data-fn-back]').forEach(a => a.remove());
-  const lines = mdBlocks(c).split('\n');
-  return `[^${li.getAttribute('data-fn')}]: ` + lines.map((l, i) => i && l ? '    ' + l : l).join('\n');
+function mdNote(group){
+  const md = group.map(li => { const c = li.cloneNode(true); c.querySelectorAll('[data-fn-back]').forEach(a => a.remove()); return mdBlocks(c); }).filter(Boolean).join('\n\n');
+  return `[^${group[0].getAttribute('data-fn')}]: ` + md.split('\n').map((l, i) => i && l ? '    ' + l : l).join('\n');
 }
 // A code block's text with the line breaks typed into it (Enter makes a <br>, not a "\n": round 28 review, M-164).
 function mdPreText(el){
@@ -9054,11 +9057,15 @@ function mdBlock(el){
   if (t === 'div' && el.hasAttribute('data-fn-raw')) return el.getAttribute('data-fn-raw');
   if (t === 'div' && el.hasAttribute('data-fn-at')) {
     const key = el.getAttribute('data-fn-at');
-    const li = [...(mdFn.root || el.ownerDocument).querySelectorAll('section[data-footnotes] > ol > li[data-fn]')].find(l => (l.getAttribute('data-fn-key') ?? l.getAttribute('data-fn').toLowerCase()) === key);
-    if (!li || mdFn.done.has(li)) return '';
-    mdFn.done.add(li); return mdNote(li);
+    const group = mdFn.byKey?.get(key);
+    if (!group || mdFn.done.has(group[0])) return '';
+    group.forEach(li => mdFn.done.add(li)); return mdNote(group);
   }
-  if (t === 'section' && el.hasAttribute('data-footnotes')) return [...el.querySelectorAll(':scope > ol > li[data-fn]')].filter(li => !mdFn.done.has(li)).map(mdNote).join('\n');
+  if (t === 'section' && el.hasAttribute('data-footnotes')) return [...el.querySelectorAll(':scope > ol > li[data-fn]')].flatMap(li => {
+    if (mdFn.done.has(li)) return [];
+    const group = mdFn.byKey?.get(li.getAttribute('data-fn-key') ?? li.getAttribute('data-fn').toLowerCase()) || [li];
+    group.forEach(l => mdFn.done.add(l)); return [mdNote(group)];
+  }).join('\n');
   if (/^h[1-6]$/.test(t) && mdPlain(el)) {
     const s = mdInline([...el.childNodes], { top: true, br: '<br>' }).replace(/[ \t]*\n[ \t]*/g, ' ').trim().replace(/(^|\s)(#+)$/, '$1\\$2');
     return s ? '#'.repeat(+t[1]) + ' ' + s : '';

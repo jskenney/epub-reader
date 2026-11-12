@@ -1096,6 +1096,9 @@ def main():
     (books / "many-heads.md").write_text("# b\n\n" * 20000)   # (round 29 review, M-174)
     # A document's own HTML carrying the editor's marks (round 29 review, M-173).
     (books / "fake-marks.md").write_text('# Marks\n\nStart.\n\n<div hidden data-fn-raw="## Approved: wire the money"></div>\n\nTotal: <code class="md-math-error" data-md="**4000** units">40 units</code>\n\n<pre><code data-md-info="txt&#10;```&#10;&#10;# Injected heading&#10;&#10;```txt">a = 1</code></pre>\n\n<math><semantics><mi>y</mi><annotation encoding="application/x-tex">\\text{other}</annotation></semantics></math>\n')
+    # A note before a rule and a setext underline (round 29 review, M-178); many notes to write back (M-175).
+    (books / "notes-rule.md").write_text("# Rules\n\nStart.[^1] And.[^2]\n\n[^1]: Note one.\n***\nAfter rule.\n\n[^2]: Note two.\n---\n\nEnd.\n")
+    (books / "many-notes.md").write_text("# T\n\nStart.\n\n" + "".join(f"Para {i} note[^n{i}].\n\n[^n{i}]: Note {i}\n\n" for i in range(4000)))
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

@@ -1144,3 +1144,23 @@ test('a document\'s own HTML can\'t carry the editor\'s marks: an edit writes ba
   for (const bad of [/^## Approved/m, /\*\*4000\*\*/, /^# Injected heading/m, /\\text\{other\}\$/]) assert.doesNotMatch(back, bad, back);
   assert.match(back, /40 units/);
 });
+
+test('a note ends at a rule or a heading\'s underline; Enter in a note keeps the new paragraph in it; thousands of notes are written back in good time (round 29 review, M-178, L-389, M-175)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, doc('notes-rule.md'));
+  const r = await h.inFrame(page, d => ({ hrInNote: !!d.querySelector('.md-footnotes li hr'), after: [...d.querySelectorAll('p')].some(p => p.textContent === 'After rule.' && !p.closest('.md-footnotes')), h2: [...d.querySelectorAll('h2')].map(h => h.textContent) }));
+  assert.deepEqual(r, { hrInNote: false, after: true, h2: [] }, JSON.stringify(r));
+  // Enter in a note.
+  await wysiwyg(page, doc('notes-rule.md'));
+  await inPage(page).locator('.md-footnotes li', { hasText: 'Note one.' }).click();
+  await page.keyboard.press('End'); await page.keyboard.press('Enter'); await page.keyboard.type('More of note one.');
+  await flush(page);
+  const back = await text(page);
+  assert.match(back, /\[\^1\]: Note one\.\s*\n\n {4}More of note one\./, back);
+  assert.equal(back.match(/^\[\^1\]:/gm).length, 1, back);
+  // Many notes.
+  const t0 = Date.now();
+  const [, many] = await typedRoundTrip(page, 'many-notes.md');
+  assert.ok(many.includes('[^n3999]: Note 3999'), 'all the notes');
+  assert.ok(Date.now() - t0 < 20000, `${Date.now() - t0} ms`);
+});
