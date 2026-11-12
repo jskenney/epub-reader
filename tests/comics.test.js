@@ -110,3 +110,20 @@ test('manga: a sideways trackpad swipe goes the same way as a touch swipe; a lay
   const shown = await onScreen(p2);
   assert.ok(shown.includes('Page 31'), JSON.stringify(shown));
 });
+
+test('Read aloud, off for a comic, says why; an information notice is a status, a problem an alert (round 28 review, L-380)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/manga.cbz`);
+  assert.equal(await page.isDisabled('#ttsBtn'), true);
+  assert.match(await page.getAttribute('#ttsBtn', 'title'), /comic has no text/);
+  assert.match(await page.getAttribute('#ttsBtn', 'aria-label'), /not available/);
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  assert.equal(await page.isDisabled('#ttsBtn'), false);
+  assert.match(await page.getAttribute('#ttsBtn', 'title'), /^Read aloud \(R starts/);
+  await h.openReader(page);
+  assert.ok(await h.waitFor(async () => /sample book/.test(await h.notice(page) || ''), 8000));
+  assert.equal(await page.getAttribute('#notice', 'role'), 'status');
+  await page.goto(`${h.READER}?book=index.html`);
+  await h.waitFor(async () => /own page/.test(await h.notice(page) || ''), 8000);
+  assert.equal(await page.getAttribute('#notice', 'role'), 'alert');
+});
