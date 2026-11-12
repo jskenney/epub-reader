@@ -657,7 +657,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0214</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0339</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -2871,8 +2871,13 @@ ${layout === 'two' ? `@media (min-width:641px){.cbz-page:nth-of-type(odd){justif
 ${layout === 'scroll' ? `.cbz-page{height:auto;break-after:auto;margin:0 auto 8px}
 .cbz-page img{max-height:none !important;max-width:min(100%,1100px) !important}` : ''}`;
 }
-const pinCss = css => `@layer spine-pins{\n${css}\n}`;
-function overrideCss(fx = null){
+// (The layer and the page-turn variable named at random, as the reader's elements are: a book can't add rules to a
+// layer it can't name, nor register the variable (@property) to make its value invalid: round 28 review, H-38, H-39.)
+const PIN_LAYER = RID.override.replace(/^spine-override/, 'spine-pins'), PAGE_X = `--${RID.flow}-x`;
+const pinCss = css => `@layer ${PIN_LAYER}{\n${css}\n}`;
+// layoutOnly: the rules the pages depend on (geometry, writing mode, line height, pictures' and code's fit), for the
+// layered copy: a book's own important colours and the rest of its look stay its own (round 28 review, L-376).
+function overrideCss(fx = null, layoutOnly = false){
   const t = tokens(), dark = isDark();
   if (fx) return fixedCss(fx, t, dark);
   // Side margin: at least a little, and whatever is left once the text reaches its width limit.
@@ -2893,11 +2898,12 @@ body{padding:var(--v) var(--m) var(--vb) !important;height:100vh !important;over
   position:static !important;inset:auto !important;display:block !important;columns:auto !important;float:none !important}
 html{padding:0 !important;border:0 !important}
 html,body{translate:none !important;scale:none !important;rotate:none !important;content-visibility:visible !important;contain:none !important}
-#${RID.clip}{height:100% !important;max-height:none !important;min-height:0 !important;overflow:hidden !important}
+#${RID.clip}{height:100% !important;max-height:none !important;min-height:0 !important;overflow:hidden !important;columns:auto !important}
 #${RID.flow}{height:100% !important;max-height:none !important;min-height:0 !important;column-count:${layout === 'two' ? 2 : 1} !important;column-width:auto !important;
   column-gap:var(--g) !important;column-fill:auto !important;column-rule:1px solid ${t.rule};overflow-wrap:break-word;
-  transform:translateX(var(--spine-x,0px)) !important}
+  transform:translateX(var(${PAGE_X},0px)) !important}
 #${RID.clip},#${RID.flow}{translate:none !important;scale:none !important;rotate:none !important;content-visibility:visible !important;contain:none !important;display:block !important}
+html,body,#${RID.clip},#${RID.flow}{transition:none !important;animation:none !important}
 #${RID.flow} *{content-visibility:visible !important}
 @media (max-width:640px){#${RID.flow}{column-count:1 !important}}
 @supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px) !important}}`;
@@ -2910,7 +2916,7 @@ html,body{translate:none !important;scale:none !important;rotate:none !important
   // border, margin, zoom or transform from a book's CSS on the flow or around it (round 26 review, M-149), and both
   // in whole pixels where the browser can round them, as a fraction of one is laid out snapped to 1/64 px and the
   // difference grew page by page (M-150).)
-  return `${frameCss}
+  const layoutCss = `${frameCss}
 #${RID.clip},#${RID.flow}{padding:0 !important;border:0 !important;margin:0 !important;box-sizing:content-box !important;min-width:0 !important;max-width:none !important;float:none !important;position:static !important;zoom:normal !important}
 #${RID.clip}{width:auto !important;transform:none !important}
 html,body{zoom:normal !important;transform:none !important}
@@ -2921,7 +2927,9 @@ html,body,#${RID.flow},#${RID.flow} :not(th,td,svg,svg *){writing-mode:horizonta
 img,svg,video,canvas{max-width:100% !important;max-height:calc(100vh - var(--v) - var(--vb) - 8px) !important;height:auto;object-fit:contain;break-inside:avoid}
 figure,table{break-inside:avoid}
 pre{white-space:pre-wrap !important}
-#${RID.end}{display:inline !important;position:static !important;float:none !important;margin:0 !important;padding:0 !important;transform:none !important}
+#${RID.end}{display:inline !important;position:static !important;float:none !important;margin:0 !important;padding:0 !important;transform:none !important}`;
+  if (layoutOnly) return layoutCss;
+  return `${layoutCss}
 ::highlight(tts-sentence){background-color:${t.soft}}
 ::highlight(tts-word){background-color:${t.ribbon};color:${t.onRibbon}}
 ::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
@@ -3202,10 +3210,11 @@ async function buildPage(src, path, item){
   // (A fixed-layout page has the book's styles only: none of the reader's fonts, sizes or colours.)
   // (The reader's rules again in a layer of their own, named before any of the book's: an important declaration in an
   // earlier layer wins over a later layer's and over unlayered ones, so a book's "!important", in a layer of its own
-  // or not, can't undo the reader's (round 27 review, H-37). Its normal declarations lose to the unlayered copy
-  // below, which is the same, so nothing else changes.)
+  // or not, can't undo the reader's (round 27 review, H-37). Only the rules the pages depend on are in it: the
+  // rest of the reader's look, the dark themes' colours included, stays unlayered, so a book's own important styles
+  // there stay its own (round 28 review, L-376).)
   head.innerHTML = `<meta charset="utf-8"><style id="${RID.override}-pin"></style><link id="${RID.font}" rel="stylesheet" href="${fx ? NO_CSS : fontHref()}"><style id="${RID.base}"></style>`;
-  head.querySelector(`#${RID.override}-pin`).textContent = pinCss(overrideCss(fx));
+  head.querySelector(`#${RID.override}-pin`).textContent = pinCss(overrideCss(fx, true));
   head.querySelector('#' + RID.base).textContent = fx ? '' : baseCss();
   for (const n of kids(sHead, 'link').concat(kids(sHead, 'style')).sort((x, y) => x.compareDocumentPosition(y) & 2 ? 1 : -1)) {
     if (n.localName === 'link') {
@@ -3540,7 +3549,7 @@ function showPage(n){
   // (Through the reader's own !important rule, which a book's CSS can't outdo: M-149.)
   // (With priority: an inline important value beats a book's "--spine-x: … !important", layered or not: round 27
   // review, H-36.)
-  g.flow.style.setProperty('--spine-x', `${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px`, 'important');
+  g.flow.style.setProperty(PAGE_X, `${(g.rtl ? 1 : -1) * Math.round(cur.page * g.step)}px`, 'important');
   cur.f = fraction();
   updateProgress(); savePos();
 }
@@ -4015,7 +4024,7 @@ function restyleFrame(){
   const b = doc.getElementById(RID.base), o = doc.getElementById(RID.override);
   const fixed = !!fxlOf(doc);
   if (b) b.textContent = fixed ? '' : baseCss();
-  if (o) { const fx = fxlOf(doc), css = overrideCss(fx && { w: fx[0], h: fx[1] }); o.textContent = css; const pin = doc.getElementById(RID.override + '-pin'); if (pin) pin.textContent = pinCss(css); }
+  if (o) { const fx = fxlOf(doc) && { w: fxlOf(doc)[0], h: fxlOf(doc)[1] }; o.textContent = overrideCss(fx); const pin = doc.getElementById(RID.override + '-pin'); if (pin) pin.textContent = pinCss(overrideCss(fx, true)); }
   const l = doc.getElementById(RID.font), h = fontHref();
   if (l && !fixed && l.getAttribute('href') !== h) {
     l.addEventListener('load', () => (doc.fonts?.ready || Promise.resolve()).then(relayout), { once: true });

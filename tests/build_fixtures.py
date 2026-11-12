@@ -1016,7 +1016,13 @@ def main():
                "height": "div{height:auto !important}", "htmlpad": "html{padding-top:300px !important}",
                "bodypos": "body{position:relative !important;top:-250px !important}", "translate": "div{translate:-200px 0 !important}",
                "bscale": "body{scale:0.3}", "bcols": "body{column-count:2 !important}",
-               "grid": "body{display:grid !important;grid-template-columns:1fr 300px !important}", "cv": "p{content-visibility:auto}"}
+               "grid": "body{display:grid !important;grid-template-columns:1fr 300px !important}", "cv": "p{content-visibility:auto}",
+               # (round 28 review, H-38, H-39)
+               "samelayer": "@layer spine-pins{:is(#x,body>div>div):is(#y,div):is(#z,div){transform:none !important}}",
+               "sublayer": "@layer spine-pins.x{div{transform:translateX(-30%) !important;column-count:3 !important}}",
+               "prop": "@property --spine-x{syntax:'<color>';inherits:false;initial-value:red}",
+               "trans": "body>div>div{transition:transform 30s linear !important}"}
+    epub(books / "own-colours.epub", "Own Colours", [("c1.xhtml", "One", '<p class="red" id="red">Red words.</p>' + hp, "<style>.red{color:#c00 !important}</style>")], uid="urn:own-colours")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
     # A folder book whose second and third chapters the test server makes, far too large (round 27 review, L-359), and a
