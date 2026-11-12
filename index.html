@@ -663,7 +663,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0607</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0609</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1741,7 +1741,7 @@ function mdMath(tex, display, raw = ''){
     if (window.temml && tex.length <= MATH_TEX_MAX && mdMathBudget.left > 0) {
       const out = window.temml.renderToString(tex, { displayMode: display, annotate: true, throwOnError: true, trust: false, maxExpand: 1000, maxSize: [40, 40] });
       mdMathBudget.left -= out.length;
-      if (out.length <= MATH_OUT_MAX) return out;
+      if (out.length <= MATH_OUT_MAX) return out.replace(/<math\b/, '<math data-md-tex=""');   // (ours: M-173)
     }
   } catch {}
   // (Written back as it was written: round 28 review, M-162.)
@@ -1794,6 +1794,7 @@ const fnSlug = id => id.replace(/[^A-Za-z0-9-]/gu, c => '_' + c.codePointAt(0).t
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
 let mdParser = null, mdEmoji = null;
 const HLJS_MAX = 100000;
+const mdNoMarks = s => s.replace(/\s(?:data-(?:fn|md|emoji|alert|footnotes)[\w.:-]*)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>=`]+))?/gi, '');
 function mdMarked(){
   if (mdParser) return mdParser;
   const fn = { defs: new Map(), used: [], seen: new Map() };
@@ -1817,6 +1818,9 @@ function mdMarked(){
       }
     },
     renderer: {
+      // (A document's own HTML can't carry the marks the editor writes back from (a note, a formula's source, a code
+      // block's info): they would put text it doesn't show into the file at the next edit: round 29 review, M-173.)
+      html(tok){ return mdNoMarks(tok.text); },
       code(tok){
         const info = (tok.lang || '').trim(), lang = info.split(/\s/)[0];
         if (/^math$/i.test(lang)) return mdMath(tok.text, true, tok.raw.replace(/\n+$/, '')) + '\n';
@@ -9162,10 +9166,10 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
     const t = nd.localName, inner = () => mdInline([...nd.childNodes], { br }), kk = edKeepOf(nd.getAttribute('data-ed-keep'));
     if (kk != null) parts.push({ s: mdKept(kk) });
     // (Math as its TeX, a footnote mark as its label, TeX that couldn't be read as it was written: E-31, E-32.)
-    else if (t === 'math' && nd.querySelector('annotation[encoding="application/x-tex"]')) parts.push(mdMathSource(nd));
+    else if (t === 'math' && nd.hasAttribute('data-md-tex') && nd.querySelector('annotation[encoding="application/x-tex"]')) parts.push(mdMathSource(nd));
     else if (t === 'sup' && nd.hasAttribute('data-fn-ref')) parts.push({ s: `[^${nd.getAttribute('data-fn-ref')}]` });
     else if (t === 'span' && nd.hasAttribute('data-emoji')) parts.push({ s: `:${nd.getAttribute('data-emoji')}:` });   // (E-34)
-    else if (t === 'code' && nd.classList.contains('md-math-error')) parts.push({ s: nd.getAttribute('data-md') ?? nd.textContent });
+    else if (t === 'code' && nd.classList.contains('md-math-error') && nd.hasAttribute('data-md')) parts.push({ s: nd.getAttribute('data-md') });
     else if (t === 'br' && mdPlain(nd)) parts.push({ s: br, br: true });
     else if ((t === 'strong' || t === 'b') && mdPlain(nd)) parts.push({ wrap: '**', tag: 'strong', inner: inner() });
     else if ((t === 'em' || t === 'i') && mdPlain(nd)) parts.push({ wrap: '*', tag: 'em', inner: inner() });

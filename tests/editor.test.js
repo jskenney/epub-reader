@@ -1136,3 +1136,11 @@ test('Markdown written back: a note stays where it was written, a second of the 
   await flush(page);
   assert.ok((await text(page)).includes('```\nplain\nnext line\n```'), await text(page));
 });
+
+test('a document\'s own HTML can\'t carry the editor\'s marks: an edit writes back nothing it didn\'t show (round 29 review, M-173)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'fake-marks.md');
+  assert.ok(back.includes('Start. Typed.'), back);
+  for (const bad of [/^## Approved/m, /\*\*4000\*\*/, /^# Injected heading/m, /\\text\{other\}\$/]) assert.doesNotMatch(back, bad, back);
+  assert.match(back, /40 units/);
+});
