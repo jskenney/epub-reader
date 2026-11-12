@@ -420,3 +420,28 @@ test('book CSS aimed at the reader\'s paging (--spine-x, @layer, the flow\'s hei
     assert.equal(await h.inFrame(page, doc => { const r = doc.getElementById('hp239').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth && r.top >= 0 && r.bottom <= doc.defaultView.innerHeight + 1; }), true, `${k}: the last paragraph on the last page`);
   }
 });
+
+test('a notice without an action of its own can be put away (OK); Read aloud is off for comics; the sample book\'s notice still offers to open a book (round 27 review, M-159)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/manga.cbz`);
+  assert.equal(await page.isDisabled('#ttsBtn'), true);
+  await page.keyboard.press('r');
+  assert.match(await h.waitFor(() => h.notice(page), 3000) || '', /no text to read aloud/);
+  assert.equal((await page.textContent('#noticeAction')).trim(), 'OK');
+  await page.click('#noticeAction');
+  assert.equal(await page.isHidden('#notice'), true);
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  assert.equal(await page.isDisabled('#ttsBtn'), false);
+});
+
+test('on phones 360 and 320 px wide every top-bar button is in sight, Settings, Edit and Open included (round 27 review, M-160)', async () => {
+  for (const width of [360, 320]) {
+    const page = await h.newPage({ viewport: { width, height: 700 } });
+    await h.openReader(page, `${h.READER}?book=books/long.epub`);
+    const out = await page.evaluate(() => ['ttsBtn', 'fontBtn', 'themeBtn', 'layoutBtn', 'fsBtn', 'smaller', 'larger', 'setBtn', 'editBtn', 'openBtn']
+      .filter(id => { const e = document.getElementById(id); if (!e?.offsetParent) return id === 'setBtn' || id === 'openBtn'; const r = e.getBoundingClientRect(); return r.right > innerWidth + 0.5 || r.left < 0; }));
+    assert.deepEqual(out, [], `${width}px`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width, 'no sideways scrolling');
+    await page.close();
+  }
+});
