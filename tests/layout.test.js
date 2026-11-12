@@ -498,3 +498,18 @@ test('only the rules the pages depend on are the reader\'s beyond a book\'s reac
   assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('red')).color), 'rgb(204, 0, 0)');
   assert.ok(Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]) > 3);
 });
+
+test('line spacing leaves the bar only below 400 px, and stays when Settings isn\'t shown (round 28 review, L-378)', async () => {
+  const shown = async (width, url) => {
+    const page = await h.newPage({ viewport: { width, height: 700 } });
+    await h.openReader(page, url);
+    const v = await page.isVisible('#lineGroup');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width, `${width} px: no sideways scrolling`);
+    const r = await page.evaluate(() => document.querySelector('#lineGroup').getBoundingClientRect().right);
+    assert.ok(r <= width, `in sight: ${r}`);
+    await page.close(); return v;
+  };
+  assert.equal(await shown(400, `${h.READER}?book=books/long.epub`), true, '400 px');
+  assert.equal(await shown(360, `${h.READER}?book=books/long.epub`), false, '360 px');
+  assert.equal(await shown(360, `${h.SITE}/folder-noset/index.html?book=/reader/books/long.epub`), true, '360 px, no Settings');
+});
