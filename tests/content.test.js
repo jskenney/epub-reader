@@ -442,3 +442,26 @@ test('Markdown: GitHub\'s math (inline, $`…`$, $$ blocks, math code blocks) as
   await page.frameLocator('#page').locator('sup[data-fn-ref="second"] a').click();
   assert.ok(await h.waitFor(() => h.inFrame(page, doc => { const r = doc.getElementById('fn-second').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth; }), 5000), 'at the note');
 });
+
+test('Markdown: emoji shortcodes GitHub knows as their emoji (not unknown names, code, or times); code blocks naming a language highlighted, others as they were (E-34, E-35)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/gh2.md`);
+  const r = await h.inFrame(page, doc => ({
+    emoji: [...doc.querySelectorAll('[data-emoji]')].map(e => [e.dataset.emoji, e.textContent, e.getAttribute('aria-label')]),
+    text: doc.body.textContent.replace(/\s+/g, ' '),
+    code: doc.querySelector('code').textContent,
+    blocks: [...doc.querySelectorAll('pre code')].map(c => [c.className, c.querySelectorAll('span[class^="hljs-"]').length]),
+    keyword: (() => { const k = doc.querySelector('.hljs-keyword'); return k && [k.textContent, getComputedStyle(k).color]; })(),
+    comment: (() => { const k = doc.querySelector('.hljs-comment'); return k && getComputedStyle(k).color; })() }));
+  assert.deepEqual(r.emoji, [['smile', '😄', 'smile'], ['+1', '👍', '+1'], ['tada', '🎉', 'tada']]);
+  assert.match(r.text, /but :not_an_emoji: and :smile: stay, and so does 10:30:45\./);
+  assert.equal(r.code, ':smile:', 'inline code as written');
+  assert.equal(r.blocks[0][0], 'hljs language-js');
+  assert.ok(r.blocks[0][1] >= 4, JSON.stringify(r.blocks));
+  assert.deepEqual(r.blocks.slice(1).map(b => b[1]), [0, 0], 'a block without a language, or with one not known, as it was');
+  assert.equal(r.keyword[0], 'const');
+  assert.notEqual(r.keyword[1], r.comment, 'keywords and comments in their colours');
+  // Dark: colours of their own.
+  await page.keyboard.press('t'); await page.waitForTimeout(400);
+  assert.notEqual(await h.inFrame(page, doc => getComputedStyle(doc.querySelector('.hljs-keyword')).color), r.keyword[1]);
+});

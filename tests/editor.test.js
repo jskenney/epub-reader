@@ -980,3 +980,11 @@ test('Markdown written back: math as its TeX, footnotes as they were written, al
     '[^first]: The first note, with $x^2$ in it.', '[^second]: The second note.\n\n    It has a second paragraph.']) assert.ok(back.includes(s), `${JSON.stringify(s)} in:\n${back}`);
   assert.doesNotMatch(back, /<math|<sup|data-fn|md-alert|↩/);
 });
+
+test('Markdown written back: emoji as their :names:, a name written out kept as text, highlighted code as plain fenced code (E-34, E-35)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'gh2.md');
+  for (const s of ['Start. Typed.', 'Smile :smile: and :+1: and :tada:, but :not_an_emoji: and `:smile:` stay', '10:30:45',
+    '```js\nconst x = 1; // a comment\nfunction f(a) { return "s" + a; }\n```', '```\na plain block\n```', '```nosuchlang\nnot highlighted\n```']) assert.ok(back.includes(s), `${JSON.stringify(s)} in:\n${back}`);
+  assert.doesNotMatch(back, /hljs|data-emoji|😄/);
+});

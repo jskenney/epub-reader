@@ -650,7 +650,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0054</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0120</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1498,6 +1498,13 @@ const LIBS = {
   // Math in Markdown (E-31): TeX to MathML, loaded only for a document that may hold some.
   temml: { file: 'libs/temml.min.js', cdn: 'https://cdnjs.cloudflare.com/ajax/libs/temml/0.14.0/temml.min.js',
     integrity: 'sha384-qJQ7P+DRhXNyeli+ZThz25Ds5LRfplio0XuymYx3/9Nbv/tDev8QyVPrCYQONe+r' },
+  // Syntax highlighting in Markdown's code blocks (E-35), loaded only for a document with a code block naming a language.
+  hljs: { file: 'libs/highlight.min.js', cdn: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.12.0/highlight.min.js',
+    integrity: 'sha384-wjfDDhOPPdjtva8vWBhWeVprSpmxisEu5aYT3q1JyACqXpdKpo3PWZTMVq24MBix' },
+  // Emoji shortcodes in Markdown (E-34): GitHub's list of emoji and their names (gemoji), read as data, only for a
+  // document with a :name: in it.
+  emoji: { file: 'libs/emoji.json', cdn: 'https://cdn.jsdelivr.net/gh/github/gemoji@v4.1.0/db/emoji.json',
+    integrity: 'sha384-HDjpx0RDnkh6dEsatXavEamcMgSLjXB2JhOKSHKIxXLu9x19szbTqwWHjiV+Hd3N' },
   lamejs: { file: 'libs/lame.min.js', cdn: 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js',
     integrity: 'sha384-xuasJXVcyv3hZq0eYpelEkBC8l4yufatZXDsKuyCU2rqfhDCb+ftuE/mSfZAteiK' },
 };
@@ -1520,6 +1527,19 @@ function loadLib(name){
     try { return await loadScript(lib.cdn, lib.integrity); }
     catch { throw new Error(`the ${name} library couldn't be loaded from ${new URL(lib.cdn).host}`); }
   })().catch(e => { delete libsLoaded[name]; throw e; });
+}
+// A data file of LIBS (JSON), from this site first, then the CDN; its hash checked as a script's is.
+const dataLoaded = {};
+function loadData(name){
+  const lib = LIBS[name];
+  return dataLoaded[name] ??= (async () => {
+    const get = async u => { const r = await fetch(u, { integrity: lib.integrity }); if (!r.ok) throw new Error(String(r.status)); return r.json(); };
+    try { return await get(new URL(lib.file, folderBase(LIB_FILES)).href); }
+    catch {}
+    if (!ALLOW_CDN) throw new Error(`libs/${lib.file.split('/').pop()} isn't on this site (run fetch-libs.sh); ALLOW_CDN is off`);
+    try { return await get(lib.cdn); }
+    catch { throw new Error(`the ${name} list couldn't be loaded from ${new URL(lib.cdn).host}`); }
+  })().catch(e => { delete dataLoaded[name]; throw e; });
 }
 const LANG_NAMES = { english: 'en', french: 'fr', german: 'de', spanish: 'es', italian: 'it', portuguese: 'pt', dutch: 'nl', chinese: 'zh',
   japanese: 'ja', russian: 'ru', latin: 'la', swedish: 'sv', danish: 'da', norwegian: 'no', finnish: 'fi', polish: 'pl', greek: 'el' };
@@ -1669,6 +1689,12 @@ async function markdownToHtml(md){
   if (!window.marked) await loadLib('marked');
   // (Temml only for a document that may hold math; without it, math is shown as written.)
   if (!window.temml && (md.includes('$') || /^ {0,3}(`{3,}|~{3,})[ \t]*math\b/im.test(md))) await loadLib('temml').catch(err => console.warn(`Math: ${err.message}`));
+  // (highlight.js for a code block that names a language; the emoji names for a :name: in the text.)
+  if (!window.hljs && /^ {0,3}(`{3,}|~{3,})[ \t]*(?!math\b)[\w+#.-]+/im.test(md)) await loadLib('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
+  if (!mdEmoji && /:[a-z0-9_+-]{1,50}:/.test(md)) {
+    await loadData('emoji').then(list => { mdEmoji = new Map(); for (const e of list) for (const a of e.aliases || []) if (!mdEmoji.has(a)) mdEmoji.set(a, e.emoji); })
+      .catch(err => console.warn(`Emoji: ${err.message}`));
+  }
   return { html: mdAlerts(mdMarked().parse(md)), ...meta };
 }
 /* GitHub's additions to Markdown beyond GFM: math (E-31), footnotes (E-32) and alerts (E-33). */
@@ -1701,7 +1727,7 @@ function mdInlineMath(src){
 // A footnote's label as an id (letters, digits, - and _ as they are; anything else by its code).
 const fnSlug = id => id.replace(/[^\w-]/g, c => '_' + c.codePointAt(0).toString(16));
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
-let mdParser = null;
+let mdParser = null, mdEmoji = null;
 function mdMarked(){
   if (mdParser) return mdParser;
   const fn = { defs: new Map(), used: [], seen: new Map() };
@@ -1725,7 +1751,15 @@ function mdMarked(){
       }
     },
     renderer: {
-      code(tok){ return /^math$/i.test((tok.lang || '').trim()) ? mdMath(tok.text, true) + '\n' : false; }
+      code(tok){
+        const lang = (tok.lang || '').trim().split(/\s/)[0];
+        if (/^math$/i.test(lang)) return mdMath(tok.text, true) + '\n';
+        // (A code block naming a language highlight.js knows, coloured: E-35. Its text is escaped by highlight.js.)
+        if (lang && window.hljs?.getLanguage(lang)) {
+          try { return `<pre><code class="hljs language-${escHtml(lang)}">${window.hljs.highlight(tok.text, { language: lang, ignoreIllegals: true }).value}</code></pre>\n`; } catch {}
+        }
+        return false;
+      }
     },
     extensions: [
       { name: 'mathBlock', level: 'block', start: s => s.match(/^ {0,3}\$\$/m)?.index,
@@ -1736,6 +1770,10 @@ function mdMarked(){
           return { type: 'mathBlock', raw: src.slice(0, e + 2 + after[0].length), text: src.slice(open[0].length, e).trim() };
         },
         renderer: t => mdMath(t.text, true) + '\n' },
+      // :name: as its emoji, for the names GitHub knows (E-34); outside code, which is read before.
+      { name: 'emoji', level: 'inline', start: s => { if (!mdEmoji) return; const i = s.indexOf(':'); return i < 0 ? undefined : i; },
+        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):/.exec(src); if (r && mdEmoji?.has(r[1])) return { type: 'emoji', raw: r[0], name: r[1] }; },
+        renderer: t => `<span class="md-emoji" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
       { name: 'math', level: 'inline', start: s => { const i = s.indexOf('$'); return i < 0 ? undefined : i; },
         tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; },
         renderer: t => mdMath(t.text, t.display) },
@@ -2728,7 +2766,21 @@ const mdExtraCss = t => `
 :where(.md-alert-title){font-weight:600;margin:.2em 0 .3em}
 :where(.md-alert-title)::before{content:"";display:inline-block;width:.55em;height:.55em;border-radius:50%;background:currentColor;margin-right:.45em;vertical-align:.08em}
 :where(.md-alert > p){margin:.35em 0}
+:where(pre){background:color-mix(in srgb, ${t.rule} 35%, transparent);border-radius:6px;padding:.7em .9em;font-size:.88em;line-height:1.45}
+:where(.md-emoji){font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-style:normal}
 :where(.md-alert > :last-child){margin-bottom:.2em}`;
+// Code tokens' colours (E-35), light and dark, after GitHub's; with the reader's rules, so the dark themes keep them.
+const MD_CODE_COLOURS = [
+  [['keyword', 'doctag', 'template-tag', 'selector-pseudo'], '#cf222e', '#ff7b72'],
+  [['string', 'regexp', 'template-variable'], '#0a3069', '#a5d6ff'],
+  [['number', 'literal', 'symbol', 'attr', 'attribute', 'meta', 'variable.constant_', 'selector-attr', 'selector-class', 'selector-id', 'link'], '#0550ae', '#79c0ff'],
+  [['comment', 'quote'], '#6e7781', '#8b949e'],
+  [['title', 'title.function_', 'title.class_', 'section'], '#8250df', '#d2a8ff'],
+  [['type', 'built_in', 'variable', 'params', 'property', 'title.class_.inherited__'], '#953800', '#ffa657'],
+  [['tag', 'name', 'selector-tag', 'addition', 'bullet'], '#116329', '#7ee787'],
+  [['deletion'], '#82071e', '#ffa198']];
+const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + MD_CODE_COLOURS.map(([names, l, d]) => names.map(n => `body pre .hljs-${n.replace(/\./g, '.')}`).join(',') + `{color:${dark ? d : l} !important}`).join('\n')
+  + '\nbody pre .hljs-comment,body pre .hljs-quote{font-style:italic}body pre .hljs-strong{font-weight:600}body pre .hljs-emphasis{font-style:italic}';
 const MD_ALERT_COLOURS = { note: ['#0969da', '#4493f8'], tip: ['#1a7f37', '#3fb950'], important: ['#8250df', '#ab7df8'], warning: ['#9a6700', '#d29922'], caution: ['#d1242f', '#f85149'] };
 const mdAlertCss = dark => Object.entries(MD_ALERT_COLOURS).map(([k, c]) => `body .md-alert-${k}{border-left-color:${c[+dark]} !important}body .md-alert-${k} > .md-alert-title{color:${c[+dark]} !important}`).join('\n');
 const mdTableCss = t => `
@@ -2810,7 +2862,7 @@ pre{white-space:pre-wrap !important}
 ::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
 ::highlight(search-current){background-color:${dark ? '#E0B040' : '#F2B630'};color:#1a1408}
 ${book?.comic ? comicCss() : ''}
-${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) : ''}
+${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) + '\n' + mdCodeCss(dark, t) : ''}
 ${faceStack() ? `#${RID.flow},#${RID.flow} :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
@@ -8791,7 +8843,8 @@ function mdTable(el){
 // (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
 const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
-  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/\$/g, mdDollar);
+  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/\$/g, mdDollar)
+  .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name) => mdEmoji?.has(name) ? '\\:' : c);   // (a name written out, not an emoji: E-34)
 // A $ in the text that Markdown would read as math (E-31) escaped: one before $ or `, or a pair GitHub's rules take;
 // "$5 and $10" stays as it is.
 function mdDollar(d, i, s){
@@ -8821,6 +8874,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
       parts.push({ s: nd.getAttribute('display') === 'block' ? `$$${tex}$$` : tex.includes('$') ? `$\`${tex}\`$` : `$${tex}$` });
     }
     else if (t === 'sup' && nd.hasAttribute('data-fn-ref')) parts.push({ s: `[^${nd.getAttribute('data-fn-ref')}]` });
+    else if (t === 'span' && nd.hasAttribute('data-emoji')) parts.push({ s: `:${nd.getAttribute('data-emoji')}:` });   // (E-34)
     else if (t === 'code' && nd.classList.contains('md-math-error')) parts.push({ s: nd.textContent });
     else if (t === 'br' && mdPlain(nd)) parts.push({ s: br, br: true });
     else if ((t === 'strong' || t === 'b') && mdPlain(nd)) parts.push({ wrap: '**', tag: 'strong', inner: inner() });

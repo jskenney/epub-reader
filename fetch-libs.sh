@@ -6,7 +6,7 @@
 #                              put a copy of this script there, with checksums/ beside it: it works in its
 #                              own folder)
 #
-# JSZip opens EPUB and comic files; marked renders Markdown (Temml its math); lamejs encodes MP3 audiobooks; CodeMirror is the
+# JSZip opens EPUB and comic files; marked renders Markdown (Temml its math, highlight.js its code, gemoji its emoji names); lamejs encodes MP3 audiobooks; CodeMirror is the
 # editor's text view (E-21). The reader checks
 # every copy against the same pinned hashes (Subresource Integrity), and this script checks them against
 # checksums/libs.sha256.
@@ -28,11 +28,14 @@ JSZIP=3.10.1     # must match LIBS.jszip in index.html
 MARKED=15.0.12   # must match MARKED_URL in index.html
 LAMEJS=1.2.1     # must match LIBS.lamejs in index.html
 TEMML=0.14.0     # must match LIBS.temml in index.html
+HLJS=11.12.0     # must match LIBS.hljs in index.html
+GEMOJI=4.1.0     # must match LIBS.emoji in index.html
 CODEMIRROR=5.65.21   # must match CM_VERSION in index.html
 GOT=()
 DEST=libs
 CDNJS=https://cdnjs.cloudflare.com/ajax/libs
 JSD=https://cdn.jsdelivr.net/npm
+JSDGH=https://cdn.jsdelivr.net/gh
 SPDX=https://cdn.jsdelivr.net/gh/spdx/license-list-data@v3.25.0/text   # (pinned licence texts)
 
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
@@ -88,6 +91,8 @@ get "$CDNJS/jszip/$JSZIP/jszip.min.js"     jszip.min.js
 get "$CDNJS/marked/$MARKED/marked.min.js"  marked.min.js
 get "$CDNJS/lamejs/$LAMEJS/lame.min.js"    lame.min.js
 get "$CDNJS/temml/$TEMML/temml.min.js"     temml.min.js
+get "$CDNJS/highlight.js/$HLJS/highlight.min.js" highlight.min.js
+get "$JSDGH/github/gemoji@v$GEMOJI/db/emoji.json" emoji.json
 # CodeMirror 5: the core, the Markdown (GFM) and HTML modes with what they use, search, and list continuation.
 for f in codemirror.min.js codemirror.min.css addon/mode/overlay.min.js mode/xml/xml.min.js mode/javascript/javascript.min.js \
     mode/css/css.min.js mode/htmlmixed/htmlmixed.min.js mode/markdown/markdown.min.js mode/gfm/gfm.min.js \
@@ -101,6 +106,8 @@ get "$JSD/jszip@$JSZIP/LICENSE.markdown"   LICENSES/jszip.md
 get "$JSD/marked@$MARKED/LICENSE.md"       LICENSES/marked.md
 get "$JSD/lamejs@$LAMEJS/LICENSE"          LICENSES/lamejs.txt
 get "$JSD/temml@$TEMML/LICENSE"            LICENSES/temml.txt
+get "$JSD/highlight.js@$HLJS/LICENSE"      LICENSES/highlight.js.txt
+get "$JSDGH/github/gemoji@v$GEMOJI/LICENSE" LICENSES/gemoji.txt
 get "$JSD/codemirror@$CODEMIRROR/LICENSE"  LICENSES/codemirror.txt
 get "$SPDX/LGPL-3.0-only.txt"              LICENSES/LGPL-3.0.txt   # (lamejs's licence; the GPL-3.0 text follows it)
 [ "$LIST" = 1 ] && exit 0
@@ -114,6 +121,8 @@ lamejs $LAMEJS (lame.min.js)   LGPL-3.0 (LGPL-3.0.txt)        https://github.com
                                (a port of LAME, LGPL-2.0 or later; lamejs.txt is its licence FAQ)
 CodeMirror $CODEMIRROR (codemirror/)  MIT (codemirror.txt)     https://codemirror.net/5/
 Temml $TEMML (temml.min.js)    MIT (temml.txt)                https://temml.org/
+highlight.js $HLJS (highlight.min.js)  BSD-3-Clause (highlight.js.txt)  https://highlightjs.org/
+gemoji $GEMOJI (emoji.json)    MIT (gemoji.txt)               https://github.com/github/gemoji
 NOTICE
 
 echo

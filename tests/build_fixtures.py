@@ -134,6 +134,9 @@ def wav(path, seconds=1.0, rate=24000):
 GH_MD = '# GitHub extras\n\nStart.\n\nInline math $E = mc^2$ and $`\\sqrt{x}`$, but costs $5 and $10 stay text, and \\$x\\$ too.\n\n$$\n\\int_0^1 x^2\\,dx = \\frac{1}{3}\n$$\n\n```math\n\\sum_{n=1}^\\infty \\frac{1}{n^2} = \\frac{\\pi^2}{6}\n```\n\nA sentence with a note.[^first] And another.[^second] The first again.[^first]\n\n> [!NOTE]\n> Useful information that users should know.\n\n> [!WARNING]\n> Urgent info that needs immediate attention.\n\n> A plain quotation.\n\nBad math $\\frac{1}{$ here.\n\n[^first]: The first note, with $x^2$ in it.\n[^second]: The second note.\n\n    It has a second paragraph.\n'
 
 
+GH2_MD = '# More extras\n\nStart.\n\nSmile :smile: and :+1: and :tada:, but :not_an_emoji: and `:smile:` stay, and so does 10:30:45.\n\n```js\nconst x = 1; // a comment\nfunction f(a) { return "s" + a; }\n```\n\n```\na plain block\n```\n\n```nosuchlang\nnot highlighted\n```\n'
+
+
 def main():
     if SITE.exists():
         shutil.rmtree(SITE)
@@ -1016,6 +1019,7 @@ def main():
     (books / "table.html").write_text("<!DOCTYPE html><html><head><title>Table</title></head><body><table><tr><th>A</th><td>1</td></tr></table></body></html>")
     # GitHub's math, footnotes and alerts in Markdown (E-31 to E-33).
     (books / "gh.md").write_text(GH_MD)
+    (books / "gh2.md").write_text(GH2_MD)   # emoji shortcodes and highlighted code (E-34, E-35)
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
     (shelf / "shelf-page.html").write_text("<!doctype html><html lang='en'><head><title>Shelf Page</title></head><body><h1>Shelf Page</h1><p>Only on the shelf.</p></body></html>")
