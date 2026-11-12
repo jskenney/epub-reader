@@ -197,18 +197,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Encoding", "gzip")
             self.send_header("Connection", "close")
             self.end_headers()
-            sent = 0
+            gz_sent = 0
             try:
                 self.wfile.write(z.compress(head))
                 block = line * 16384
                 for _ in range(200 * 1024 * 1024 // len(block)):
                     c = z.compress(block)
                     if c:
-                        self.wfile.write(c); sent += len(c)
+                        self.wfile.write(c); gz_sent += len(c)
                 self.wfile.write(z.flush())
-                big_log.append({"path": path, "complete": True, "sent": sent})
+                big_log.append({"path": path, "complete": True, "gz_sent": gz_sent})
             except (BrokenPipeError, ConnectionResetError):
-                big_log.append({"path": path, "complete": False, "sent": sent})
+                big_log.append({"path": path, "complete": False, "gz_sent": gz_sent})
             self.close_connection = True
             return
         if path == "/__big":

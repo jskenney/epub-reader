@@ -58,7 +58,11 @@ const decodes = file => execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-f',
 const ABC = `${h.READER}?book=books/abc.epub`;
 async function openExport(page, url = ABC, settings = { 'spine:ttsEngine': 'server' }) {
   await h.openReader(page, url, settings);
-  await h.readThenPause(page);   // (pause: export is started from the bar)
+  // (Paused before the first passage plays, so it is made whole and the dialog has the voice's speed to estimate from;
+  // export is started from the bar.)
+  await page.keyboard.press('r');
+  await page.waitForTimeout(500);
+  await page.keyboard.press(' ');
   await page.click('#ttsExport');
   // (Measuring every chapter, and the format check, can take a while when the whole suite runs at once.)
   await page.waitForFunction(() => document.querySelector('#abDialog').open && document.querySelector('#abList').dataset.measured && document.querySelector('#abDialog').dataset.formats, null, { timeout: 60000 });

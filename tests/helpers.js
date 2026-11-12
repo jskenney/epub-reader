@@ -90,7 +90,7 @@ async function waitFor(fn, ms = 20000, step = 100) {
 const playingNow = page => page.evaluate(() => document.querySelector('#ttsPlay')?.classList.contains('playing'));
 async function readThenPause(page) {
   await page.keyboard.press('r');
-  await waitFor(() => playingNow(page), 15000);
+  await waitFor(async () => await playingNow(page) && await spokenWord(page), 15000);   // (a word heard: the voice has spoken)
   await page.keyboard.press(' ');
   await waitFor(async () => !(await playingNow(page)), 5000);
 }
