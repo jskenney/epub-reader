@@ -988,3 +988,28 @@ test('Markdown written back: emoji as their :names:, a name written out kept as 
     '```js\nconst x = 1; // a comment\nfunction f(a) { return "s" + a; }\n```', '```\na plain block\n```', '```nosuchlang\nnot highlighted\n```']) assert.ok(back.includes(s), `${JSON.stringify(s)} in:\n${back}`);
   assert.doesNotMatch(back, /hljs|data-emoji|😄/);
 });
+
+test('Edit opens the editor at the heading the page shown falls under, not past where the page begins; a one-page document at its top (round 27 review, M-158)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, doc('long-notes.md'), { 'spine:layout': 'two' });
+  for (let k = 0; k < 2; k++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(300);
+  // The first paragraph on the page shown (its text), which the editor must not open past.
+  const first = await h.inFrame(page, doc => {
+    const w = doc.defaultView.innerWidth;
+    const ps = [...doc.querySelectorAll('p')].filter(p => { const r = p.getClientRects()[0]; return r && r.left >= 0 && r.left < w; });
+    ps.sort((a, b) => a.getClientRects()[0].left - b.getClientRects()[0].left || a.getClientRects()[0].top - b.getClientRects()[0].top);
+    return ps[0].textContent.trim();
+  });
+  await startEditing(page);
+  await page.waitForTimeout(500);
+  const top = await h.inFrame(page, (doc, t) => [...doc.querySelectorAll('p')].find(p => p.textContent.trim() === t)?.getBoundingClientRect().top, first);
+  assert.ok(top != null && top >= -2, `"${first}" at ${top} in the editor's page`);
+  await page.click('#editDone');
+  await h.openReader(page, doc('notes.md'), RAW);
+  await page.setViewportSize({ width: 375, height: 700 });
+  await startEditing(page);
+  await page.waitForTimeout(500);
+  const st = await h.inFrame(page, doc => [doc.scrollingElement.scrollTop, doc.scrollingElement.scrollHeight, doc.defaultView.innerHeight]);
+  assert.ok(st[0] < 5, `at the top: ${st}`);
+});
