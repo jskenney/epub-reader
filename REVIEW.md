@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-12, round 29): `index.html` (about 10,000 lines), the fetch scripts,
+Review of the repository (2026-11-12, round 30): `index.html` (about 10,100 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -528,6 +528,24 @@ iteration 2's fixes held under round trips of every Markdown form.
 
 Findings: **High** H-44. **Medium** M-169 to M-179. **Low** L-384 to L-397. **Tests** T-57. **Docs** D-34.
 
+### Round 30
+
+Since round 29, iteration 3 of the loop fixed all of round 29's findings (`c0e4fa1` to `39d3aff`); the full suite passed
+(469). Round 30 is a full review at `39d3aff` by three reviewers on copies of their own (regression, adversarial, the
+reader as its readers use it, with the README). One test failed once, a race (T-58).
+
+**What it found.** More CSS a book can use to stop paging: `column-height`, the html box's margin and width, the
+clip's writing mode, scroll snapping (H-45, M-180, M-181). The footnote mark's search was left unbounded (H-46), and
+marked itself takes time with the square of a paragraph's emphasis delimiters (H-47). Typing into a formula is lost:
+Chromium ignores `contenteditable=false` on MathML (H-48). My M-173 fix strips text that merely mentions the marks and
+can be passed with `/` (M-182, M-183); my M-179 marker collides with U+E000 (M-185); Enter twice in a note loses text
+(M-184).
+
+**What held up.** The round 29 fixes otherwise, the README against the code (no findings), nothing letting a book run
+script or reach another site.
+
+Findings: **High** H-45 to H-48. **Medium** M-180 to M-185. **Low** L-399 to L-408. **Tests** T-58.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -560,7 +578,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 29's findings are fixed (see Resolved, iteration 3). Open (below): T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
+Round 30's findings are open (below), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
 enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
 your decision (see Resolved).
 
@@ -570,6 +588,22 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-47 | marked 15.0.12 is itself quadratic on emphasis delimiters (`'a _'` repeated: 24 KB 9.6 s; 60 KB not open after 300 s), with no limit around it. Reproduced. | Hardening |
+| H-48 | WYSIWYG: typing into a formula (or End leaving the caret in one) is lost: Chromium ignores `contenteditable=false` on MathML. Reproduced. | Data loss |
+| M-182 | `mdNoMarks` strips text that merely names the marks (in a block's words, attribute values, code) and authors' attributes like `data-fname`, on the page and, at the next edit, in the file. Reproduced. | Data loss |
+| M-183 | M-173 passed in HTML blocks with `/` or a quote before the attribute (`<div hidden/data-fn-raw=…>`). Reproduced. | Security |
+| M-184 | Enter twice in a note loses the next text (a `<p>` outside the notes' list isn't written back); one Enter shows a duplicate note, misnumbered, until rebuilt. Reproduced. | Data loss |
+| M-185 | The write-back's marker U+E000 turns a document's own U+E000 (icon fonts) into `$`, or `\$` in code. Reproduced. | Data loss |
+| L-399 | A document's own zero-width spaces after a mark (Thai, Khmer) are removed, one per text node per write-back. Reproduced. | Bug |
+| L-401 | The section's headings cached for a page go stale when an EPUB chapter is edited (deleted headings stay current). Reproduced. | Bug |
+| L-402 | L-388's split misses a code block of one line, or with any element in it, and a huge paragraph (11–35 s). Reproduced. | Hardening |
+| L-403 | `mdDollars` costs length × `$`s per pause in typing (3 MB paragraph: 3.5 s). Reproduced. | Hardening |
+| L-404 | Focus still lost when a notice closes if where it came from is no longer visible (a closed drawer on a phone). Reproduced. | Accessibility |
+| L-405 | `#noticeLive` keeps a closed notice's text. Reproduced. | Accessibility |
+| L-406 | With "every book left to right" (FORCE_LTR), text right to left by its own direction still turns right to left, while the information panel says left to right. Reproduced. | Bug |
+| L-407 | At 320 px only Open wraps to the bar's second row, at the far left. Reproduced. | Bug |
+| L-408 | The 400-character notice cap cuts off the reason after a long name, not the name. Reproduced. | Bug |
+| T-58 | `waitFor` doesn't catch exceptions: the L-388 test fails when the frame is caught mid-swap. Reproduced. | Tests |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
@@ -616,8 +650,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. E-25, E-22, as laid out in TODO.md.
-2. E-36 and E-30 (small), then the other enhancements, as wanted.
+1. H-47, H-48, M-182 to M-185, then the lows and tests.
+2. E-25, E-22, as laid out in TODO.md; then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -625,6 +659,11 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-45 | `column-height` (rows of columns) stopped paging. Pinned with `column-wrap`. | `b3636b6` |
+| H-46 | The footnote mark's search scanned the rest of the paragraph at each stop. Within 4 KB. | `164f990` |
+| M-180 | The html box's margin and width, and the clip's writing mode, weren't pinned (no text seen). Pinned. | `b3636b6` |
+| M-181 | Scroll snapping put the clip back where it snapped. Pinned to none. | `b3636b6` |
+| L-400 | `column-span:none` on everything broke spanners in a book's own multi-column boxes. Only those whose nearest multi-column box is the reader's flow are kept to a column. | `164f990` |
 | H-44 | A book could stop paging with `offset-path` or `columns` on html. Both pinned. | `c0e4fa1` |
 | M-169 | `column-span:all` broke paging. Pinned to none in the pages. | `c0e4fa1` |
 | M-170 | The emoji `start` made one paragraph quadratic. It returns the first `:name:`-shaped place, within 4 KB. | `89a2506` |
