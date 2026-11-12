@@ -589,6 +589,7 @@ Most important first.
 | ID | Title | Kind |
 |---|---|---|
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
+| [E-37](#e-37-math-and-code-highlighting-in-html-and-epub) | TeX math and code highlighting in HTML pages and EPUB chapters, as in Markdown | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -631,6 +632,20 @@ across, so they can be read (H-33).
 
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
+
+### E-37. Math and code highlighting in HTML and EPUB
+TeX in an HTML page or EPUB chapter drawn as math, and `<pre><code class="language-…">` coloured, as Markdown is
+(E-31, E-35). Math as MathML made by Temml in the reader's page, the same as for Markdown: the browser draws it
+natively, it needs no script in the book's sandboxed frame (where none runs), no extra fonts, and it keeps the TeX in an
+annotation, for search, reading aloud and writing back. Not MathJax: its output needs its own script or web fonts in the
+page, it is several times larger, and it would be a second math engine beside Temml. To decide:
+- **Delimiters:** `\(…\)` and `\[…\]` always; `$…$` and `$$…$$` only when a setting asks for it, since in HTML a `$` is
+  far more often money than math. Never inside `code`, `pre`, `script`, `style`, `textarea` or existing `math`.
+- **Highlighting:** only blocks naming their language (`language-x` or `lang-x` on `code` or `pre`), not those already
+  highlighted (with element children), with the same size limit (`HLJS_MAX`).
+- **Editor:** the TeX and the plain code written back when an HTML document or chapter is saved, not the MathML or the
+  spans; the editor's marks carrying the session's token, as in Markdown (M-182).
+- **Libraries:** loaded only for a page that holds a delimiter or a `language-` block; a per-book budget as in H-41.
 
 ## Suggested order
 
