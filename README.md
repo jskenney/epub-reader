@@ -23,7 +23,7 @@ drop, or a `?book=` link. Each is converted to HTML and given a contents
 list built from its headings. It reads as one continuous document (split
 only past about 200,000 characters; a text file's paragraph of over 20,000
 characters, or block of over 2,000 short lines, is taken in pieces so it can
-be), and the contents entries jump within
+be, and a code block too long for one part is split by its lines), and the contents entries jump within
 it; everything else (pages, fonts, read-aloud,
 saved position) works as for EPUBs.
 
@@ -56,8 +56,11 @@ saved position) works as for EPUBs.
   The editor writes these back with their meaning kept, and mostly as they were written: a formula as its TeX
   (`$…$`, or `` $`…`$ `` where `$…$` can't hold it, so `` $`x`$ `` may come back as `$x$` and a ` ```math ` block
   as `$$…$$`), TeX that couldn't be read as it was, a note's definition where it was, emoji as their `:name:`,
-  alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. A code block over 100,000
-  characters isn't coloured.
+  alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. HTML written in the
+  document is written back as it is. A code block over 100,000 characters isn't coloured.
+
+  Math and highlighting are for Markdown. In HTML pages and EPUBs, MathML of their own is drawn by the browser;
+  TeX in them, and their code blocks, are shown as written (planned: E-37 in REVIEW.md).
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
   stylesheets and relative links load from its folder on the server; an
@@ -532,7 +535,8 @@ site as the reader.
   Exit button that appears when you move the mouse brings them back.
 - Text size (A− / A+) and line spacing (the tighter / looser line buttons,
   1.00–2.60) can be adjusted from the top bar (on a phone narrower than 400 px,
-  line spacing is in Settings → Text settings instead, unless Settings is hidden)
+  line spacing is in Settings → Text settings instead, unless Settings is hidden; on the narrowest phones the
+  bar's buttons take two rows)
 - Reading font picker (the Aa button): keep the book's own font, or override
   it with Literata, Source Serif 4, EB Garamond, Crimson Pro, Gentium Book Plus,
   Alegreya, Atkinson Hyperlegible, Lexend, Georgia or your system sans-serif. Code keeps its monospace.
@@ -867,7 +871,7 @@ default books and the memory and request sizes stay the site's to set.
 | `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |
 | `API_PROGRESS` ✓ ⚙ | `'/api/progress'` | Where reading progress is sent (see [Reading progress sent to your site](#reading-progress-sent-to-your-site)): an address on this site; `''` sends nothing. |
 | `API_COMPLETE` ✓ ⚙ | `'/api/complete'` | Where finishing a book is sent, once; `''` sends nothing. |
-| `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. |
+| `FORCE_LTR` ✓ ⚙ | `false` | `true` turns every book left to right, even those marked right to left (`page-progression-direction="rtl"`, right-to-left manga): for books marked so by mistake. Text right to left by its own direction (Arabic, Hebrew) still pages right to left, as its columns run that way, and the information panel says so. |
 | `SHOW_CONTENTS` ✓ ⚙ | `true` | `false` starts with the contents closed (on a narrow screen they always start closed). C shows or hides them, and is remembered. |
 | `SHOW_PROGRESS` ✓ ⚙ | `true` | `false` hides the bottom bar (progress, position, Previous and Next). P shows or hides it, and is remembered. |
 | `SHOW_TOPBAR` ✓ ⚙ | `true` | `false` hides the top bar. N shows or hides it, and is remembered; while it's hidden, a tap or click at the top right corner brings it back (unless the site locks it; in the scroll layout once you scroll up). |
