@@ -539,6 +539,11 @@ Most important first.
 | D-32 | README: following a document's link (opened as `?book=`, in the history; not while editing); the `font` preference's `g-<name>` ids. | Docs |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
+| [E-31](#e-31-latex-math-in-markdown) | LaTeX math in Markdown (`$…$`, `$$…$$`, ` ```math `) | Enhancement |
+| [E-32](#e-32-footnotes-in-markdown) | Footnotes in Markdown (`[^1]`) | Enhancement |
+| [E-33](#e-33-alerts-in-markdown) | Alerts in Markdown (`> [!NOTE]` and the rest) | Enhancement |
+| [E-34](#e-34-emoji-shortcodes-in-markdown) | Emoji shortcodes in Markdown (`:smile:`) | Enhancement |
+| [E-35](#e-35-syntax-highlighting-in-code-blocks) | Syntax highlighting in code blocks | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
 | [E-1](#e-1-footnote-pop-ups) to [E-4](#e-4-dictionary-lookup), [E-6](#e-6-a-bookshelf-page) to [E-8](#e-8-install-as-an-offline-app) | Enhancements | — |
 | [E-22](#e-22-a-server-api), [E-25](#e-25-add-remove-and-reorder-epub-chapters) | Server saving, EPUB chapters added, removed and reordered (plan in TODO.md) | — |
@@ -576,6 +581,27 @@ Reading progress and completion are sent already (see Resolved); the plan for th
 Books written in vertical text (`writing-mode: vertical-rl`, as many Japanese and Chinese novels are) laid out
 vertically, with pages turning right to left and the scroll layout scrolling sideways. Until then they are laid out
 across, so they can be read (H-33).
+
+### E-31. LaTeX math in Markdown
+GitHub's math syntax in Markdown documents (`$…$` and `` $`…`$ `` inline, `$$…$$` and ` ```math ` blocks) shown as
+math: converted to MathML in the reader's page (Temml, loaded only for documents with math), which browsers draw
+natively, with the TeX kept in each formula for the editor (written back as it was), search and reading aloud. Dollar
+amounts aren't taken for math.
+
+### E-32. Footnotes in Markdown
+`[^1]` references and `[^1]: …` notes, as GitHub writes them: numbered in the order they are referred to, gathered at
+the end of the document with links both ways; written back by the editor as they were.
+
+### E-33. Alerts in Markdown
+GitHub's alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) shown as notes set apart, with
+their title, in each theme; written back by the editor as they were.
+
+### E-34. Emoji shortcodes in Markdown
+`:smile:` and the like shown as the emoji, from a table of names (as GitHub does), outside code.
+
+### E-35. Syntax highlighting in code blocks
+Code blocks with a language (` ```js `) coloured, in each theme (highlight.js with the common languages, loaded only
+when a document has code blocks).
 
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
