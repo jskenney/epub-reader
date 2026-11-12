@@ -569,3 +569,13 @@ test('an SVG naming further SVGs doesn\'t lead past the page\'s limit (they aren
   }
   assert.equal(await shown(), 3, 'all three on the third return');
 });
+
+test('bare web addresses are linked in a document with emoji too; a time like 10:30:45 doesn\'t load the emoji list (round 28 review, M-165, L-381)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/gh2.md`);
+  await h.openReader(page, `${h.READER}?book=books/autolink.md`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelector('a[href="https://example.com/page"]')?.textContent), 'https://example.com/page');
+  const asked = []; page.on('request', r => { if (/emoji\.json/.test(r.url())) asked.push(r.url()); });
+  await h.openReader(page, `${h.READER}?book=books/times.md`);
+  assert.deepEqual(asked, []);
+});

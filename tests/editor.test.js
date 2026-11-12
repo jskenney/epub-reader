@@ -1049,3 +1049,25 @@ test('WYSIWYG: text typed after an emoji, a footnote mark or a formula at the en
   const src = await text(page);
   for (const s of ['I am happy :smile: and more', 'A claim.[^1] Then more.', 'Energy $E=mc^2$ is it']) assert.ok(src.includes(s), `${JSON.stringify(s)} in:\n${src}`);
 });
+
+test('after a reload, a Back or Forward called off still goes back to where it was, without reloading (round 28 review, M-163)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/linkdoc/a.html`, RAW);
+  await page.frameLocator('#page').locator('#tob').click();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc B' && /linkdoc%2Fb\.html/.test(location.search));
+  await page.reload(); await h.waitForBook(page);
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Doc A');
+  await startEditing(page);
+  await typeAtEnd(page, '<p>Changed.</p>');
+  await page.click('#editDone');
+  await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
+  const kinds = []; page.on('dialog', d => { kinds.push(d.type()); d.dismiss(); });
+  const at = await page.evaluate(() => location.href);
+  await page.goForward();
+  await h.waitFor(() => kinds.length >= 1, 3000);
+  await page.waitForTimeout(800);
+  assert.deepEqual(kinds, ['confirm'], 'asked once, and no page reload');
+  assert.equal(await page.evaluate(() => location.href), at);
+  assert.equal(await page.textContent('#bookTitle'), 'Doc A');
+});

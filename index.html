@@ -657,7 +657,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0350</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0353</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1717,7 +1717,7 @@ async function markdownToHtml(md){
   if (!window.temml && (md.includes('$') || /^ {0,3}(`{3,}|~{3,})[ \t]*math\b/im.test(md))) await loadLib('temml').catch(err => console.warn(`Math: ${err.message}`));
   // (highlight.js for a code block that names a language; the emoji names for a :name: in the text.)
   if (!window.hljs && /^ {0,3}(`{3,}|~{3,})[ \t]*(?!math\b)[\w+#.-]+/im.test(md)) await loadLib('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
-  if (!mdEmoji && /:[a-z0-9_+-]{1,50}:/.test(md)) {
+  if (!mdEmoji && mdShortcodeAt(md) >= 0) {   // (not a time, 10:30:45: L-381)
     await loadData('emoji').then(list => { mdEmoji = new Map(); for (const e of list) for (const a of e.aliases || []) if (!mdEmoji.has(a)) mdEmoji.set(a, e.emoji); })
       .catch(err => console.warn(`Emoji: ${err.message}`));
   }
@@ -1764,6 +1764,15 @@ function mdParaStart(s, re){
   const end = s.search(/\n[ \t]*\n/);
   const m = re.exec(end < 0 ? s : s.slice(0, end + 1));
   return m ? m.index : undefined;
+}
+// Where a :name: could be: not a time ("10:30:45": digits beside the colons), round 28 review, L-381.
+function mdShortcodeAt(s){
+  const re = /:([a-z0-9_+-]{1,50}):/g;
+  for (let m; (m = re.exec(s));) {
+    if (/[a-z+-]/.test(m[1]) || (!/\d/.test(s[m.index - 1] || '') && !/\d/.test(s[m.index + m[0].length] || ''))) return m.index;
+    re.lastIndex = m.index + 1;
+  }
+  return -1;
 }
 // A footnote's label as an id (letters, digits, - and _ as they are; anything else by its code).
 const fnSlug = id => id.replace(/[^\w-]/g, c => '_' + c.codePointAt(0).toString(16));
@@ -1812,8 +1821,10 @@ function mdMarked(){
         },
         renderer: t => mdMath(t.text, true) + '\n' },
       // :name: as its emoji, for the names GitHub knows (E-34); outside code, which is read before.
-      { name: 'emoji', level: 'inline', start: s => { if (!mdEmoji) return; const i = s.indexOf(':'); return i < 0 ? undefined : i; },
-        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):/.exec(src); if (r && mdEmoji?.has(r[1])) return { type: 'emoji', raw: r[0], name: r[1] }; },
+      // (Stopping only where a :name: could be, not at every colon: at "https:" it kept bare addresses from being
+      // linked: round 28 review, M-165.)
+      { name: 'emoji', level: 'inline', start: s => { if (!mdEmoji) return; const i = mdShortcodeAt(s); return i < 0 ? undefined : i; },
+        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):(?!\d)/.exec(src); if (r && mdEmoji?.has(r[1])) return { type: 'emoji', raw: r[0], name: r[1] }; },
         renderer: t => `<span class="md-emoji" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
       { name: 'math', level: 'inline', start: s => { const i = s.indexOf('$'); return i < 0 ? undefined : i; },
         tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; },
@@ -4005,13 +4016,15 @@ async function openLinkedDoc(u, frag){
 }
 // The address of the book shown, and where it is in the history: leaving it by Back or Forward called off goes back
 // there by as many steps, rather than adding an entry (so the next Back doesn't ask again: round 27 review, L-365).
-let shownAddress = location.href, histAt = 0, histUndo = false;
-history.replaceState({ ...(history.state || {}), spineAt: 0 }, '');
+// (Kept across a reload: the entry keeps its number, or a Back called off after one went the wrong way, or reloaded:
+// round 28 review, M-163.)
+let shownAddress = location.href, histAt = Number(history.state?.spineAt) || 0, histUndo = false;
+history.replaceState({ ...(history.state || {}), spineAt: histAt }, '');
 window.addEventListener('popstate', async e => {
   const to = Number(e.state?.spineAt) || 0;
   if (histUndo) { histUndo = false; return; }
   if (location.href === shownAddress) { histAt = to; return; }
-  if (!leaveOk()) { histUndo = true; history.go(histAt - to); return; }
+  if (!leaveOk()) { if (histAt !== to) { histUndo = true; history.go(histAt - to); } return; }
   shownAddress = location.href; histAt = to;
   const q = new URLSearchParams(location.search), ref = q.get('book'), getRef = q.get('get'), editRef = q.get('edit');
   // (As the page starts: an ?edit= entry opens its document for editing: round 27 review, M-153.)
