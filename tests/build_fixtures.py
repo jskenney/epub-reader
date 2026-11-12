@@ -1040,6 +1040,10 @@ def main():
     (fb / "OEBPS" / "content.opf").write_text('<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:bigfolder</dc:identifier><dc:title>Big Folder</dc:title><dc:language>en</dc:language></metadata>'
         '<manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="__big-plain.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="__big-gzip.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>')
     (fb / "OEBPS" / "c1.xhtml").write_text(xhtml("One", "<h1>One</h1><p>Start here.</p>"))
+    # A huge <details>, table and reversed list, each split into parts (L-382).
+    (books / "big-details.html").write_text("<!DOCTYPE html><html><head><title>Big details</title></head><body><details open><summary>The summary</summary>" + "".join(f"<p>Paragraph {i} of a very long details block, with words.</p>" for i in range(8000)) + "</details></body></html>")
+    (books / "big-table.html").write_text("<!DOCTYPE html><html><head><title>Big table</title></head><body><table><thead><tr><th>Head</th></tr></thead><tbody>" + "".join(f"<tr><td>Row {i} of a very long table, with some words.</td></tr>" for i in range(8000)) + "</tbody></table></body></html>")
+    (books / "big-reversed.html").write_text("<!DOCTYPE html><html><head><title>Big reversed</title></head><body><ol reversed>" + "".join(f"<li>Item {i} of a very long reversed list, with words.</li>" for i in range(8000)) + "</ol></body></html>")
     (books / "big-list.md").write_text("# Big list\n\n" + "".join(f"{i}. Item number {i} of a very long numbered list.\n" for i in range(1, 30001)))
     svg = lambda n: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><desc>' + "x" * n + '</desc><rect width="40" height="40" fill="teal"/></svg>'
     # SVGs naming further SVGs (round 28 review, H-42); a chapter of SVGs visited again and again (M-161).

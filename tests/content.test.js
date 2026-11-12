@@ -602,3 +602,22 @@ test('the reader\'s own page isn\'t opened by an address spelled another way; tw
   await h.openReader(page, `${h.READER}?book=books/body-var.epub`);
   assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.body).textDecoration), 'underline wavy rgb(1, 2, 3)');
 });
+
+test('a huge <details>, table or reversed list split into parts: each part keeps the summary, the table head, and counts down on (round 28 review, L-382)', async () => {
+  const page = await h.newPage();
+  const last = async (book, fn) => {
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    const parts = Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+    assert.ok(parts >= 2, `${book}: ${parts} parts`);
+    await page.focus('#ribbon'); await page.keyboard.press('End');
+    await page.waitForFunction(n => new RegExp(`spine ${n}/`).test(document.querySelector('#spinePos').textContent), parts, { timeout: 10000 });
+    // (The last part's page, once it is in the frame: its first item is past the first part's.)
+    await h.waitFor(() => h.inFrame(page, doc => !/(Paragraph|Row|Item) 0 /.test(doc.body.textContent.slice(0, 2000)) && /(Paragraph|Row|Item) \d+/.test(doc.body.textContent)), 10000);
+    return h.inFrame(page, fn);
+  };
+  assert.equal(await last('big-details.html', doc => doc.querySelector('details > summary')?.textContent), 'The summary');
+  assert.equal(await last('big-table.html', doc => doc.querySelector('table > thead th')?.textContent), 'Head');
+  const [start, first] = await last('big-reversed.html', doc => [Number(doc.querySelector('ol').getAttribute('start')), doc.querySelector('ol li').textContent]);
+  const i = Number(/Item (\d+)/.exec(first)[1]);
+  assert.equal(start, 8000 - i, `item ${i} numbered ${start}`);
+});
