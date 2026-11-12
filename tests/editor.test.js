@@ -1192,3 +1192,9 @@ test('WYSIWYG: text typed just before the reader\'s zero-width space after a mar
   assert.doesNotMatch(src, /​/, JSON.stringify(src));
   assert.match(src, /:smile: ?Y|Y ?:smile:/, src);
 });
+
+test('a ~~~ fence whose info string has a backtick is written back with tildes (round 29 review, L-386)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'tilde.md');
+  assert.ok(back.includes('~~~js `title`\nconst a = 1;\n~~~'), back);
+});

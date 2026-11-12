@@ -643,3 +643,18 @@ test('a document of twenty thousand headings turns its pages in good time (round
   for (let k = 0; k < 3; k++) { const before = await page.textContent('#spinePos'); await page.keyboard.press('ArrowRight'); await page.waitForFunction(b => document.querySelector('#spinePos').textContent !== b, before, { timeout: 20000 }); }
   assert.ok(Date.now() - t0 < 3000, `${Date.now() - t0} ms for three turns`);
 });
+
+test('a huge code block opens in good time, in parts; the reader\'s page isn\'t opened by "x%2F..%2Findex.html"; a long summary isn\'t copied into each part (round 29 review, L-388, L-387, L-390)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/huge-code.md`);
+  assert.ok(Date.now() - t0 < 20000, `${Date.now() - t0} ms`);
+  assert.ok(Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]) >= 5, 'in parts');
+  await page.goto(`${h.READER}?book=x%252F..%252Findex.html`);
+  assert.ok(await h.waitFor(async () => /reader's own page/.test(await h.notice(page) || ''), 8000), await h.notice(page));
+  await h.openReader(page, `${h.READER}?book=books/big-details-long.html`);
+  await page.focus('#ribbon'); await page.keyboard.press('End');
+  await page.waitForFunction(() => /spine (\d+)\/\1\b/.test(document.querySelector('#spinePos').textContent), null, { timeout: 10000 });
+  await h.waitFor(() => h.inFrame(page, doc => /Paragraph \d+/.test(doc.body.textContent) && !/Paragraph 0 /.test(doc.body.textContent)), 10000);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('summary').length), 0);
+});

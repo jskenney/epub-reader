@@ -1101,6 +1101,11 @@ def main():
     (books / "many-notes.md").write_text("# T\n\nStart.\n\n" + "".join(f"Para {i} note[^n{i}].\n\n[^n{i}]: Note {i}\n\n" for i in range(4000)))
     # $s on either side of emphasis and a link, written back (round 29 review, M-179).
     (books / "dollars-split.md").write_text("# Dollars\n\nStart.\n\nA \\$a *b* c\\$ here. Pay \\$5 [link](http://x) and 6\\$ more.\n\nParty :tada: and :+1:2 too.\n\nFormula $x$\n")
+    # A tilde fence whose info string has a backtick (round 29 review, L-386); a huge plain code block (L-388); a split
+    # <details> whose summary is long (L-390).
+    (books / "tilde.md").write_text("# Tilde\n\nStart.\n\n~~~js `title`\nconst a = 1;\n~~~\n\nAfter.\n")
+    (books / "huge-code.md").write_text("# Huge code\n\n```js\n" + "const value = compute(alpha, beta); // a line of filler code\n" * 45000 + "```\n")
+    (books / "big-details-long.html").write_text("<!DOCTYPE html><html><head><title>Long summary</title></head><body><details open><summary>" + "Long summary words. " * 200 + "</summary>" + "".join(f"<p>Paragraph {i} of a very long details block, with words.</p>" for i in range(8000)) + "</details></body></html>")
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
