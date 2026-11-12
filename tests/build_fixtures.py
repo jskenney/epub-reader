@@ -1086,6 +1086,13 @@ def main():
     (books / "typing.md").write_text("# Typing\n\nI am happy :smile:\n\nA claim.[^1]\n\nEnergy $E=mc^2$\n\n[^1]: The note.\n")   # (H-43)
     # An ordinary long Markdown novel, and TeX that repeats a macro (round 28 review, H-40, H-41).
     (books / "long-novel.md").write_text("# A long novel\n\n" + "".join(f"Paragraph {i}: the keeper walked along the cliffs and counted the boats below in the quiet evening.\n\n" for i in range(20000)))
+    # Markdown made to be slow to open (round 29 review, M-170, M-171, M-172), and formulas long but ordinary (M-176).
+    (books / "slow-emoji.md").write_text("x :smile:\n\n" + "1:2:3 \\* " * 18000 + "\n")
+    (books / "slow-fences.md").write_text("a\n```\nx\n```\n" * 25000)
+    (books / "fences-blank.md").write_text("a\n\n```\nx\n```\n\n" * 25000)   # (the same with blank lines, for the time to lay it out)
+    (books / "slow-tick.md").write_text("$` " * 40000 + "\n")
+    (books / "tick-x.md").write_text("x` " * 40000 + "\n")   # (the same code spans without the $s)
+    (books / "long-math.md").write_text("# Math\n\n$$" + " \\implies ".join(f"a_{{{i}}}" for i in range(40)) + "$$\n\n$$" + " \\, ".join("x" for i in range(120)) + " \\dots" * 150 + "$$\n")
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

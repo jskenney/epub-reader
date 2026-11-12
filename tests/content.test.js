@@ -621,3 +621,16 @@ test('a huge <details>, table or reversed list split into parts: each part keeps
   const i = Number(/Item (\d+)/.exec(first)[1]);
   assert.equal(start, 8000 - i, `item ${i} numbered ${start}`);
 });
+
+test('Markdown made to be slow opens in good time: :name:-like times in one paragraph, no blank lines, unclosed $`; long ordinary formulas are drawn (round 29 review, M-170, M-171, M-172, M-176)', async () => {
+  const page = await h.newPage();
+  const time = async b => { const t0 = Date.now(); await h.openReader(page, `${h.READER}?book=books/${b}`); return Date.now() - t0; };
+  const ms = await time('slow-emoji.md'); assert.ok(ms < 12000, `slow-emoji.md: ${ms} ms`);
+  const x = await time('tick-x.md'), tick = await time('slow-tick.md');
+  assert.ok(tick < x * 1.3 + 2000, `unclosed $\` ${tick} ms, the same code spans without $ ${x} ms`);
+  // (Tens of thousands of blocks take time to lay out: no longer than the same with blank lines, which was quick to read.)
+  const blank = await time('fences-blank.md'), none = await time('slow-fences.md');
+  assert.ok(none < blank * 1.3 + 2000, `no blank lines ${none} ms, with them ${blank} ms`);
+  await h.openReader(page, `${h.READER}?book=books/long-math.md`);
+  assert.deepEqual(await h.inFrame(page, doc => [doc.querySelectorAll('math').length, doc.querySelectorAll('.md-math-error').length]), [2, 0]);
+});
