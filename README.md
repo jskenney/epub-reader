@@ -885,7 +885,7 @@ default books and the memory and request sizes stay the site's to set.
 | `COMIC_PART` ✓ ⚙ | `40` | Comic pages per section. Keep it even so two-page spreads stay paired. A comic's place is kept as the page on screen, so changing it doesn't move readers to another page (a place saved by a version before this one follows the old sections once). |
 
 External code is pinned to exact versions in `index.html`: `LIBS` (JSZip
-3.10.1, marked 15.0.12, Temml 0.14.0, highlight.js 11.12.0, gemoji 4.1.0's emoji list and lamejs 1.2.1, with their SRI hashes), `CM_VERSION` and
+3.10.1, marked 18.1.3, Temml 0.14.0, highlight.js 11.12.0, gemoji 4.1.0's emoji list and lamejs 1.2.1, with their SRI hashes), `CM_VERSION` and
 `CM_FILES` (CodeMirror 5.65.21, with its files' hashes), the `lib`/`ort` URLs and
 model `revision` in `KOKORO` (kokoro-js 1.2.1), and `POCKET` (pocket-tts-js
 0.1.0, onnxruntime-web 1.20.0, a fixed model revision). When upgrading, change

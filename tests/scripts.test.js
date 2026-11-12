@@ -127,7 +127,7 @@ cat "${REPO}/\${out%.part}" >> "$out"
   // A partial file from the same address, on a server that can't resume: started again from the beginning.
   fs.rmSync(path.join(dir, 'libs', 'marked.min.js'));
   fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part'), 'partial');
-  fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part.url'), 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js\n');
+  fs.writeFileSync(path.join(dir, 'libs', 'marked.min.js.part.url'), 'https://cdnjs.cloudflare.com/ajax/libs/marked/18.1.3/lib/marked.umd.min.js\n');
   fs.writeFileSync(log, '');
   const r2 = run(dir, 'fetch-libs.sh', [], { PATH: `${bin}:${process.env.PATH}` });
   assert.equal(r2.code, 0, r2.out);
@@ -185,7 +185,7 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
   const def = re => page.match(re)?.[1];
   const block = name => page.slice(page.indexOf(`const ${name} = {`), page.indexOf('};', page.indexOf(`const ${name} = {`)));
   assert.equal(def(/jszip: \{ file: 'libs\/jszip\.min\.js', cdn: '[^']*\/jszip\/([^/]+)\/jszip\.min\.js'/), v(libs, 'JSZIP'), 'JSZIP');
-  assert.equal(def(/^const MARKED_URL = '[^']*\/marked\/([^/]+)\/marked\.min\.js';/m), v(libs, 'MARKED'), 'MARKED');
+  assert.equal(def(/^const MARKED_URL = '[^']*\/marked\/([^/]+)\/lib\/marked\.umd\.min\.js';/m), v(libs, 'MARKED'), 'MARKED');
   assert.equal(def(/lamejs: \{ file: 'libs\/lame\.min\.js', cdn: '[^']*\/lamejs\/([^/]+)\/lame\.min\.js'/), v(libs, 'LAMEJS'), 'LAMEJS');
   assert.equal(def(/^const CM_VERSION = '([^']+)';/m), v(libs, 'CODEMIRROR'), 'CODEMIRROR');
   assert.equal(block('KOKORO').match(/lib: '[^']*kokoro-js@([^/]+)\//)?.[1], v(kokoro, 'KOKORO_JS'), 'KOKORO_JS');

@@ -24,10 +24,10 @@ test('the CDN policy allows the editor\'s CodeMirror scripts and stylesheets fro
   const page = await h.newPage();
   const seen = [];
   await page.route(/^https:\/\/cdnjs\.cloudflare\.com\//, route => {
-    const u = route.request().url(), m = u.match(/\/ajax\/libs\/(?:codemirror\/[^/]+\/(.+)|marked\/[^/]+\/(marked\.min\.js))$/);
+    const u = route.request().url(), m = u.match(/\/ajax\/libs\/(?:codemirror\/[^/]+\/(.+)|marked\/[^/]+\/lib\/marked\.umd\.(min\.js))$/);
     seen.push(u);
     if (!m) return route.abort();
-    const file = m[1] ? path.join(repo, 'libs', 'codemirror', m[1]) : path.join(repo, 'libs', m[2]);
+    const file = m[1] ? path.join(repo, 'libs', 'codemirror', m[1]) : path.join(repo, 'libs', 'marked.' + m[2]);
     return route.fulfill({ contentType: file.endsWith('.css') ? 'text/css' : 'text/javascript', body: fs.readFileSync(file), headers: { 'access-control-allow-origin': '*' } });
   });
   await h.openReader(page, `${h.CDN}/folder-cdn/index.html?book=/reader/books/notes.md`);

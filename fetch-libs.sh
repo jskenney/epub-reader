@@ -25,7 +25,7 @@ for arg in "$@"; do
 done
 
 JSZIP=3.10.1     # must match LIBS.jszip in index.html
-MARKED=15.0.12   # must match MARKED_URL in index.html
+MARKED=18.1.3   # must match MARKED_URL in index.html
 LAMEJS=1.2.1     # must match LIBS.lamejs in index.html
 TEMML=0.14.0     # must match LIBS.temml in index.html
 HLJS=11.12.0     # must match LIBS.hljs in index.html
@@ -88,7 +88,7 @@ verify() {
 
 say "Libraries"
 get "$CDNJS/jszip/$JSZIP/jszip.min.js"     jszip.min.js
-get "$CDNJS/marked/$MARKED/marked.min.js"  marked.min.js
+get "$CDNJS/marked/$MARKED/lib/marked.umd.min.js"  marked.min.js
 get "$CDNJS/lamejs/$LAMEJS/lame.min.js"    lame.min.js
 get "$CDNJS/temml/$TEMML/temml.min.js"     temml.min.js
 get "$CDNJS/highlight.js/$HLJS/highlight.min.js" highlight.min.js
@@ -103,7 +103,7 @@ done
 
 say "Licences"
 get "$JSD/jszip@$JSZIP/LICENSE.markdown"   LICENSES/jszip.md
-get "$JSD/marked@$MARKED/LICENSE.md"       LICENSES/marked.md
+get "$JSD/marked@$MARKED/LICENSE"          LICENSES/marked.md
 get "$JSD/lamejs@$LAMEJS/LICENSE"          LICENSES/lamejs.txt
 get "$JSD/temml@$TEMML/LICENSE"            LICENSES/temml.txt
 get "$JSD/highlight.js@$HLJS/LICENSE"      LICENSES/highlight.js.txt

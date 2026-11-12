@@ -1119,6 +1119,7 @@ def main():
     # A document's own private-use characters and zero-width spaces after marks (round 30 review, M-185, L-399).
     (books / "own-chars.md").write_text("# Chars\n\nStart.\n\nIcon \ue000 here and `code \ue000`.\n\n```\nx \ue000 y\n```\n\nRef :smile:ab\u200bcd\u200bef end.\n")
     (books / "one-line-code.md").write_text("# One line\n\n```\n" + "x = 1; " * 400000 + "\n```\n")   # (round 30 review, L-402)
+    (books / "emphasis.md").write_text("# E\n\n" + "a _" * 20000 + "\n")   # (round 30 review, H-47: marked before 18.1.3)
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

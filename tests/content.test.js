@@ -658,3 +658,10 @@ test('a huge code block opens in good time, in parts; the reader\'s page isn\'t 
   await h.waitFor(() => h.inFrame(page, doc => /Paragraph \d+/.test(doc.body.textContent) && !/Paragraph 0 /.test(doc.body.textContent)), 10000);
   assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('summary').length), 0);
 });
+
+test('a paragraph of tens of thousands of emphasis marks opens in good time (round 30 review, H-47)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/emphasis.md`);
+  assert.ok(Date.now() - t0 < 10000, `${Date.now() - t0} ms`);
+});
