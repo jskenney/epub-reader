@@ -540,7 +540,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 28's findings are open (below), sorted by importance, with T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
+Round 28's findings are fixed (see Resolved, iteration 2 of the fix-and-review loop). Open (below): T-47's `NCACHE_SEC` half, E-29, E-30, E-36 and the
 enhancements E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110 and T-43 are left as they are, by
 your decision (see Resolved).
 
@@ -550,34 +550,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-38 | The reader's CSS layer has a fixed name: a book's `@layer spine-pins{…}` (or `spine-pins.x`) joins it and, with a more specific selector, undoes every pin (pages frozen, a chapter as one page). Reproduced by all three reviewers. | Security |
-| H-39 | A book can still stop page turns: `@property --spine-x{syntax:'<color>'…}` makes the reader's offset invalid, and `transition: transform 30s !important` (or a transition of a registered `--spine-x`) slows every turn to a crawl. Reproduced. | Security |
-| H-40 | Opening Markdown takes time growing with the square of its length: the math and footnote extensions' `start` searches the rest of the document for every paragraph (a 2 MB novel 40 s, 4 MB minutes; 32 MB allowed). Reproduced. | Bug |
-| H-41 | A few KB of TeX can freeze the tab: Temml runs with its defaults (1000 macro expansions, no size limit); `\def` repeated makes tens of MB of MathML from one formula. Reproduced. | Hardening |
-| H-42 | The per-page SVG budget is bypassed by SVGs referring to further SVGs (`fill:url(next.svg#a)`), each charged to its parent, with no depth limit: 468 MB parsed from a 510 KB EPUB. Reproduced. | Hardening |
-| H-43 | WYSIWYG: text typed after an emoji, a footnote mark or a formula (or in an alert's title) goes inside that element and is lost from the source and the saved file. Reproduced. | Data loss |
-| M-167 | A draft's notice offers only Edit, and Cancel on "Restore them?" deletes the draft for good. Reproduced. | Data loss |
-| M-162 | Writing back math and dollars can change meaning: `` $` x `$ `` and `` $`b`$2 `` come back as text, TeX ending in `\` or holding `` `$ `` breaks, and escaping one `$` of three lets the others pair as math (`\$5 on \$SKU\$`). Reproduced. | Data loss |
-| M-164 | Footnotes and code in the editor's write-back: a note's unindented next line leaves the note; every note moves to the end of the file; a second definition is dropped; `[^nope]` comes back escaped; Enter in a code block is lost; ` ```python title="x" ` loses its info string. Reproduced. | Bug |
-| M-163 | History positions are reset on reload, so a Back or Forward called off can run `history.go(0)` (a reload, losing edits) or go the wrong number of steps. Reproduced. | Bug |
-| M-161 | The SVG budget is never given back: a chapter's pictures disappear on the second or third visit to it; owner-less reads (the cover) share one bucket. Reproduced. | Bug |
-| M-168 | Math in a heading shows its TeX as well in the title, the tab, the contents and the footer ("x2x^2"): heading text includes MathML's annotation. Reproduced. | Bug |
-| M-165 | Once the emoji list is loaded (any document with `:name:`), bare URLs (`https://…`) are no longer linked, for the rest of the session. Reproduced. | Bug |
-| M-166 | Large code blocks are slow, and highlighting makes them far slower (a 2.5 MB `js` block: not open after 2 minutes; 11 MB of spans). Reproduced. | Hardening |
-| L-373 | The reader's own page still opens as a document by `?book=%2569ndex.html`, `.//index.html` or `/reader//index.html` (`readerPage` compares raw paths). Reproduced. | Hardening |
-| L-374 | Two footnote labels can make the same id (`a.` and `a_2e`), so one note's links go to the other. Reproduced. | Bug |
-| L-375 | `noImportant` loses a body style's shorthands that use `var()` (`background: var(--bg)` becomes empty longhands). Reproduced. | Bug |
-| L-376 | The layered copy of the reader's rules also makes its `!important` styling beat a book's (`pre` always wraps; dark themes take a book's important colours), contrary to its comment. Reproduced. | Bug |
-| L-377 | An emoji shortcode in a heading gives an anchor unlike GitHub's (`heading-with--emoji`), so links to it miss. Reproduced (id); GitHub's form read. | Bug |
-| L-378 | On phones line spacing leaves the bar (≤400 px, 400 included); with `SHOW_SETTINGS_BUTTON` false it can't be reached at all. Reproduced. | Bug |
-| L-379 | Right to left: the information panel says "Left to right" for right-to-left text without `page-progression-direction`; the footer's chevrons point the other way. Reproduced. | Bug |
-| L-380 | Accessibility: a long notice is clipped in a scroll box on phones; Read aloud disabled for comics gives no reason; every notice is `role="alert"`, info ones too. Reproduced. | Accessibility |
-| L-381 | A time like "10:30:45" makes the reader download the emoji list (from jsDelivr when not self-hosted). Read. | Bug |
-| L-382 | `piecesOf`: later copies of a split `<details>` have no `<summary>` (hidden), a split table repeats no `<thead>`, a `reversed` list numbers upward. Read. | Bug |
-| L-383 | In the scroll layout with the top bar hidden, the corner that brings it back is gone once the page is scrolled down: a phone without a keyboard must scroll to the top (README says a tap at the top right always works). Read. | Bug |
-| T-55 | Flaky tests: about 17 waits take the first notice shown (the sample book's notice can come first); `readThenPause` doesn't check its waits; fixed waits (600 ms after typing, 2.3–2.8 s around a 2 s pause). Reproduced. | Tests |
-| T-56 | No tests of: `@layer spine-pins` and `@property`/transition tricks; Markdown timing over ~20k paragraphs; TeX size; nested SVGs; SVGs on revisits; typing after emoji, notes and math; math in headings; heading slugs with emoji; code fence info strings; the draft's Cancel; line spacing on phones; the ribbon's click right to left. | Tests |
-| D-33 | README: the editor doesn't write every form back as written (` ```math ` as `$$`, `` $`…`$ `` as `$…$`); emoji.json falls back to jsDelivr, not cdnjs; line spacing on phones; the corner in the scroll layout; when the emoji list is read; fonts' size. | Docs |
 | T-47 | `NCACHE_SEC` has no test: it acts only after minutes of audio played, which streamed audio can't be sped through in a test. (`LOOKAHEAD_SEC` has one since `3d1deb1`.) | Tests |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
@@ -624,11 +596,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-38, H-39 (the layer and the variable named at random, transitions pinned), H-40, H-41, H-43, H-42.
-2. M-167, M-162, M-164 (data loss in the editor), then the other mediums.
-3. The lows, tests and docs.
-4. E-25, E-22, as laid out in TODO.md.
-5. The other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -636,6 +605,34 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-38 | The reader's CSS layer had a fixed name a book could join and undo the pins with. It is named at random per page. | `5f32611` |
+| H-39 | A book could stop page turns with `@property` on the offset variable or slow transitions. The variable is named at random and set inline, transitions and animations pinned to none. | `5f32611` |
+| H-40 | Opening Markdown took time growing with the square of its length. Block starts are looked for only to the paragraph's end; a note is read line by line. | `453acac` |
+| H-41 | A few KB of TeX could freeze the tab. Temml runs with expansion and size limits, and TeX and MathML per formula and per document are capped. | `453acac` |
+| H-42 | SVGs naming further SVGs got past the per-page budget. An SVG inside an SVG isn't followed. | `453acac` |
+| H-43 | Text typed after an emoji, a note mark or a formula was lost. They aren't editable in place, and the caret goes after them. | `1d3bf62` |
+| M-161 | The SVG budget was never given back. A page's count starts again each time it is built; reads for no page have the picture's limit only. | `453acac` |
+| M-162 | Math and dollars written back could change meaning. A formula is written in a form that reads back as the same formula; only a $ that would close one is escaped; TeX that failed comes back as written. | `382dd9c` |
+| M-163 | History positions were reset on reload. They are kept in the history entries. | `d7f8d55` |
+| M-164 | Footnotes and code in the write-back. A note is written back where it was, a second of the same label and an unknown `[^label]` as written, labels match in any case; a fence keeps its info string, and Enter in code is kept. (The unindented next line: `453acac`.) | `8fc122a` |
+| M-165 | Bare URLs stopped being linked once the emoji list was loaded. Fixed. | `d7f8d55` |
+| M-166 | Large code blocks were slow to highlight. Blocks over 100 KB aren't highlighted. | `8fc122a` |
+| M-167 | A draft's notice offered only Edit, and Cancel deleted the draft without saying so. The notice can be closed, and the question says what Cancel does. | `382dd9c` |
+| M-168 | Math in a heading showed its TeX too in titles and contents. Heading text leaves out the annotation. | `382dd9c` |
+| L-373 | The reader's page opened as a document by other spellings. Paths are compared decoded with slashes merged. | `47eb00c` |
+| L-374 | Two footnote labels could make the same id. Every other character is written by its code between two underscores. | `47eb00c` |
+| L-375 | `noImportant` lost shorthands using `var()`. It works on the style as the browser writes it back. | `47eb00c` |
+| L-376 | The layered copy made the reader's important styling beat a book's. The layer holds the layout rules only. | `5f32611` |
+| L-377 | An emoji in a heading gave an anchor unlike GitHub's. The anchor uses the emoji's name. | `382dd9c` |
+| L-378 | Line spacing left the phone bar at 400 px, and couldn't be reached with Settings hidden. Below 400 px only, and not with Settings hidden. | `784e473` |
+| L-379 | Right-to-left text without the book saying so: "Left to right" in the information panel, chevrons the other way. Both follow the pages. | `2d8c53d` |
+| L-380 | Long notices clipped on phones; Read aloud off with no reason; every notice an alert. Shown whole on phones; the button says why; info notices are statuses. | `f78d940` |
+| L-381 | A time like 10:30:45 loaded the emoji list. Digits-only names beside digits don't count. | `d7f8d55` |
+| L-382 | Split `<details>`, tables and reversed lists lost their summary, head and numbering. Each piece keeps them. | `d1b7a05` |
+| L-383 | In the scroll layout the hidden bar's corner was gone once scrolled down. It comes back on scrolling up. | `ceb3c46` |
+| T-55 | Flaky waits. Tests wait for the notice they expect (`noticeLike`), `readThenPause` checks its waits, and the editor's tests wait for the text to settle. The 2 s reading-time waits in progress tests are kept, with their margins: they test that time. | `28248b9` |
+| T-56 | Test gaps of round 28. Added with the fixes, and the ribbon clicked right to left. | `73dbbb8` |
+| D-33 | README on the editor's write-back, the emoji list's source and trigger, line spacing on phones, the corner in the scroll layout, the fonts' size. | `a4e5e9f` |
 | M-158 | Edit opened at the last heading of the page shown. It opens at the heading the page falls under, or at the top. | `726d31c` |
 | M-159 | Notices with no action couldn't be put away; Read aloud wasn't off for comics. They have OK; it is off. | `f507fc8` |
 | M-160 | On phones 360 px wide and less the top bar's last buttons were cut off. Line spacing leaves the bar below 400 px. | `f507fc8` |
