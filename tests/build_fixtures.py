@@ -1032,7 +1032,11 @@ def main():
                "offset": "body>div>div{offset-path:ray(0deg)}", "offset2": "html{offset-path:ray(0deg)} body>div{offset-path:path('M0 0 L10 10');offset-rotate:90deg}",
                "offset3": "body{offset-path:ray(45deg)}", "hcols": "html{columns:3 !important}",
                "span": "p:nth-child(5){column-span:all}", "span3": "p:nth-child(3n){column-span:all}",
-               "vars": "html body{--m:50vw !important;--g:0px !important}", "vars2": "html body{--v:200vh !important}"}
+               "vars": "html body{--m:50vw !important;--g:0px !important}", "vars2": "html body{--v:200vh !important}",
+               # (round 30 review)
+               "colheight": "body>div>div{column-height:300px}", "htmlmt": "html{margin-top:-90vh}", "htmlml": "html{margin-left:-60vw}",
+               "htmlw": "html{width:300vw}", "clipvert": "body>div{writing-mode:vertical-rl}",
+               "snap": "body>div{scroll-snap-type:x mandatory} #hp120{scroll-snap-align:start}"}
     epub(books / "own-colours.epub", "Own Colours", [("c1.xhtml", "One", '<p class="red" id="red">Red words.</p>' + hp, "<style>.red{color:#c00 !important}</style>")], uid="urn:own-colours")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
