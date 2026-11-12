@@ -1027,7 +1027,12 @@ def main():
                "samelayer": "@layer spine-pins{:is(#x,body>div>div):is(#y,div):is(#z,div){transform:none !important}}",
                "sublayer": "@layer spine-pins.x{div{transform:translateX(-30%) !important;column-count:3 !important}}",
                "prop": "@property --spine-x{syntax:'<color>';inherits:false;initial-value:red}",
-               "trans": "body>div>div{transition:transform 30s linear !important}"}
+               "trans": "body>div>div{transition:transform 30s linear !important}",
+               # (round 29 review, H-44, M-169, L-391)
+               "offset": "body>div>div{offset-path:ray(0deg)}", "offset2": "html{offset-path:ray(0deg)} body>div{offset-path:path('M0 0 L10 10');offset-rotate:90deg}",
+               "offset3": "body{offset-path:ray(45deg)}", "hcols": "html{columns:3 !important}",
+               "span": "p:nth-child(5){column-span:all}", "span3": "p:nth-child(3n){column-span:all}",
+               "vars": "html body{--m:50vw !important;--g:0px !important}", "vars2": "html body{--v:200vh !important}"}
     epub(books / "own-colours.epub", "Own Colours", [("c1.xhtml", "One", '<p class="red" id="red">Red words.</p>' + hp, "<style>.red{color:#c00 !important}</style>")], uid="urn:own-colours")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
