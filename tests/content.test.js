@@ -349,7 +349,7 @@ test('a document\'s links: a missing file leaves it open with a notice; "../" re
   await h.openReader(page, E, { 'spine:layout': 'scroll' });
   const before = await page.evaluate(() => location.href);
   await click('miss');
-  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /missing\.html/);
+  assert.match(await h.noticeLike(page, /missing\.html/, 5000), /missing\.html/);
   assert.equal(await title(), 'Doc E');
   assert.equal(await page.evaluate(() => location.href), before, 'the address is left as it was');
   await click('me');
@@ -390,7 +390,7 @@ test('a link to a very long name gives a short notice that leaves its button in 
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/linkdoc/long-link.html`, { 'spine:layout': 'scroll' });
   await page.frameLocator('#page').locator('#long').click();
-  const text = await h.waitFor(() => h.notice(page), 8000);
+  const text = await h.noticeLike(page, /\S{100}|…$/, 8000);
   assert.ok(text && text.length <= 420, `${text?.length} characters`);
   assert.equal(await page.isVisible('#noticeAction'), true);
   const r = await page.evaluate(() => document.querySelector('#notice').getBoundingClientRect().height);
@@ -480,7 +480,7 @@ test('a document of one huge numbered list is split into parts, numbered on acro
   assert.ok(start > 1000, `starts at ${start}`);
   // Over the limit: refused.
   await page.setInputFiles('#fileInput', { name: 'huge.md', mimeType: 'text/markdown', buffer: Buffer.alloc(33 * 1024 * 1024, 'a') });
-  assert.match(await h.waitFor(() => h.notice(page), 15000) || '', /huge\.md is too large to show \(33 MB; the limit is 32 MB\)/);
+  assert.match(await h.noticeLike(page, /huge\.md is too large to show \(33 MB; the limit is 32 MB\)/, 15000), /huge\.md is too large to show \(33 MB; the limit is 32 MB\)/);
 });
 
 test('SVG pictures: none over 4 MB, and no more than 24 MB of them for a page; the page shows quickly (round 27 review, M-157)', async () => {
@@ -501,7 +501,7 @@ test('a folder book\'s chapter over 16 MB is refused with a notice, by its lengt
   const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/bigfolder/`);
   await page.click('#nextBtn');
-  assert.match(await h.waitFor(() => h.notice(page), 15000) || '', /__big-plain\.xhtml is too large to show/);
+  assert.match(await h.noticeLike(page, /__big-plain\.xhtml is too large to show/, 15000), /__big-plain\.xhtml is too large to show/);
   await page.click('#noticeAction');
   await page.click('#nextBtn');
   assert.match(await h.waitFor(async () => /__big-gzip/.test(await h.notice(page)) && h.notice(page), 30000) || '', /__big-gzip\.xhtml is too large to show/);
@@ -516,12 +516,12 @@ test('document links: a site path starting with // stays this site\'s; the reade
   const click = id => page.frameLocator('#page').locator('#' + id).click();
   await h.openReader(page, G, { 'spine:layout': 'scroll' });
   await click('slashes');
-  const n1 = await h.waitFor(() => h.notice(page), 8000) || '';
+  const n1 = await h.noticeLike(page, /x\.html|same site/, 8000);
   assert.doesNotMatch(n1, /Only books hosted on this same site/);
   assert.match(n1, /x\.html/);
   await page.click('#noticeAction');
   await click('reader');
-  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /this reader's own page/);
+  assert.match(await h.noticeLike(page, /this reader's own page/, 5000), /this reader's own page/);
   assert.equal(await page.textContent('#bookTitle'), 'Doc G');
   await page.click('#noticeAction');
   await click('forged');

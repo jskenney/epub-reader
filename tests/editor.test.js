@@ -269,7 +269,18 @@ test('reading aloud reads the page beside the text (E-21)', async () => {
 
 // WYSIWYG (phases 2 and 3): the page itself is edited.
 const inPage = page => page.frameLocator('#page');
-const flush = page => page.waitForTimeout(600);   // (the page's edits are written into the text a moment after typing)
+// (The page's edits are written into the text 300 ms after typing stops: waited for until the text has held still for
+// longer than that, rather than a fixed 600 ms, which a slow machine could outrun: round 28 review, T-55.)
+async function flush(page) {
+  let last = await text(page), still = Date.now();
+  const t0 = Date.now();
+  await page.waitForTimeout(350);
+  while (Date.now() - t0 < 5000) {
+    const now = await text(page);
+    if (now !== last) { last = now; still = Date.now(); } else if (Date.now() - still >= 500) return;
+    await page.waitForTimeout(100);
+  }
+}
 async function wysiwyg(page, url, settings = {}) {
   await h.openReader(page, url, { 'spine:editMode': 'wysiwyg', 'spine:editSplit': true, ...settings });
   await startEditing(page);
@@ -964,7 +975,7 @@ test('unsaved changes and a link to a missing document: the changes stay kept, a
   await page.click('#editDone');
   await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
   await page.frameLocator('#page').locator('#miss').click();
-  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /missing\.html/);
+  assert.match(await h.noticeLike(page, /missing\.html/, 5000), /missing\.html/);
   assert.equal(asked.length, 1);
   assert.equal(await page.textContent('#bookTitle'), 'Doc E');
   await page.frameLocator('#page').locator('#up').click();
@@ -1024,7 +1035,7 @@ test('Back or Forward called off returns to where it was in the history, adding 
   await typeAtEnd(page, '<p>Changed.</p>');
   // A link in the page beside the text.
   await page.frameLocator('#page').locator('#tob').click();
-  assert.match(await h.waitFor(() => h.notice(page), 3000) || '', /work once you press Done/);
+  assert.match(await h.noticeLike(page, /work once you press Done/, 3000), /work once you press Done/);
   await page.click('#noticeAction');
   await page.click('#editDone');
   await page.waitForFunction(() => !document.querySelector('.app').classList.contains('editing'));
@@ -1079,12 +1090,12 @@ test('a draft\'s notice can be closed without editing, leaving the draft kept; t
   await typeAtEnd(page, 'A draft line.\n');
   await page.waitForTimeout(1200);
   await page.reload(); await h.waitForBook(page);
-  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /unsaved changes/);
+  assert.match(await h.noticeLike(page, /unsaved changes/, 5000), /unsaved changes/);
   assert.equal(await page.isVisible('#noticeClose'), true);
   await page.click('#noticeClose');
   assert.equal(await page.isHidden('#notice'), true);
   await page.reload(); await h.waitForBook(page);
-  assert.match(await h.waitFor(() => h.notice(page), 5000) || '', /unsaved changes/, 'the draft is still kept');
+  assert.match(await h.noticeLike(page, /unsaved changes/, 5000), /unsaved changes/, 'the draft is still kept');
   const asked = []; page.on('dialog', d => { asked.push(d.message()); d.accept(); });
   await page.click('#noticeAction');
   await h.waitFor(() => asked.length, 3000);

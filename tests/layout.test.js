@@ -426,7 +426,7 @@ test('a notice without an action of its own can be put away (OK); Read aloud is 
   await h.openReader(page, `${h.READER}?book=books/manga.cbz`);
   assert.equal(await page.isDisabled('#ttsBtn'), true);
   await page.keyboard.press('r');
-  assert.match(await h.waitFor(() => h.notice(page), 3000) || '', /no text to read aloud/);
+  assert.match(await h.noticeLike(page, /no text to read aloud/, 3000), /no text to read aloud/);
   assert.equal((await page.textContent('#noticeAction')).trim(), 'OK');
   await page.click('#noticeAction');
   assert.equal(await page.isHidden('#notice'), true);

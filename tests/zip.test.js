@@ -113,7 +113,7 @@ test('an entry that inflates past its declared size fails clearly instead of fil
     await h.openReader(page, `${base}/reader/index.html?book=books/bomb.epub`);
     assert.equal(await h.title(page), 'Bomb');
     await page.click('#tocList a >> nth=1');
-    const note = await h.waitFor(() => h.notice(page), 10000);
+    const note = await h.noticeLike(page, /damaged archive/, 10000);
     assert.match(note || '', /c2\.xhtml: damaged archive \(larger than it says\)/, base);
   }
 });
@@ -141,7 +141,7 @@ test('when the server stops answering ranges, the chapter fails, and works again
   try {
     await fetch(`${h.SITE}/__ranges?on=0`);
     await page.click('#tocList a >> nth=2');
-    assert.match(await h.waitFor(() => h.notice(page), 10000), /stopped answering range requests/);
+    assert.match(await h.noticeLike(page, /stopped answering range requests/, 10000), /stopped answering range requests/);
   } finally { await fetch(`${h.SITE}/__ranges?on=1`); }
   await page.click('#noticeAction');   // dismiss
   await page.click('#tocList a >> nth=2');   // the failed reads weren't remembered: this time it works
@@ -159,7 +159,7 @@ test('a book replaced on the server while it is open is reported, not read as a 
     assert.equal(await h.title(page), 'The Big Book');
     fs.copyFileSync(path.join(books, 'long.epub'), target);   // a different file under the same name
     await page.click('#tocList a >> nth=2');
-    assert.match(await h.waitFor(() => h.notice(page), 10000), /changed on the server while it was open/);
+    assert.match(await h.noticeLike(page, /changed on the server while it was open/, 10000), /changed on the server while it was open/);
   } finally { fs.rmSync(target, { force: true }); }
 });
 
@@ -183,7 +183,7 @@ test(`a book replaced by another of the same size is reported (${folder || 'stro
     await page.click('#tocList a >> nth=2');
     // With a strong ETag (which here includes the time to the nanosecond, as nginx's has the second and size)
     // the server may still see the same version; then the checksum catches it.
-    assert.match(await h.waitFor(() => h.notice(page), 10000), /changed on the server while it was open|the book changed while it was open/);
+    assert.match(await h.noticeLike(page, /changed on the server while it was open|the book changed while it was open/, 10000), /changed on the server while it was open|the book changed while it was open/);
     assert.doesNotMatch(await page.evaluate(() => (document.querySelector('#page').contentDocument?.body?.textContent || '')), /BBBB/);
   } finally { fs.rmSync(target, { force: true }); }
 });
@@ -199,7 +199,7 @@ test('a book cut short on a server without validators: the 416 reply is reported
     fs.writeFileSync(target, Buffer.alloc(100));   // every later range is past the end: 416
     await h.clearBytes();
     await page.click('#tocList a >> nth=2');
-    assert.match(await h.waitFor(() => h.notice(page), 10000) || '', /changed on the server while it was open/);
+    assert.match(await h.noticeLike(page, /changed on the server while it was open/, 10000), /changed on the server while it was open/);
   } finally { fs.rmSync(target, { force: true }); }
 });
 
@@ -222,7 +222,7 @@ test('a file inside a book that says it is huge is refused clearly, read in plac
     const page = await h.newPage();
     await h.openReader(page, `${base}/reader/index.html?book=books/huge-entry.epub`);
     await page.click('#tocList a >> nth=1');
-    assert.match(await h.waitFor(() => h.notice(page), 10000) || '', /too large to open \(600 MB; the limit is 512 MB\)/, base);
+    assert.match(await h.noticeLike(page, /too large to open \(600 MB; the limit is 512 MB\)/, 10000), /too large to open \(600 MB; the limit is 512 MB\)/, base);
   }
 });
 
@@ -296,6 +296,6 @@ test('an uploaded book changed on disk while open says so (M-7)', async () => {
     await h.waitForBook(page);
     fs.writeFileSync(tmp, 'replaced');
     await page.click('#tocList a >> nth=2');
-    assert.match(await h.waitFor(() => h.notice(page), 10000), /changed or moved on disk while it was open/);
+    assert.match(await h.noticeLike(page, /changed or moved on disk while it was open/, 10000), /changed or moved on disk while it was open/);
   } finally { fs.rmSync(tmp, { force: true }); }
 });

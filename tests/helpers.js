@@ -62,6 +62,11 @@ async function waitForBook(page) {
 
 const title = page => page.textContent('#bookTitle');
 const notice = async page => (await page.isVisible('#notice')) ? (await page.textContent('#noticeText')).trim() : '';
+// The notice once it matches re (another, the sample book's say, can come first: round 28 review, T-55); else the
+// notice shown when the time is up, for the assertion's message.
+async function noticeLike(page, re, ms = 5000) {
+  return (await waitFor(async () => { const n = await notice(page); return re.test(n) && n; }, ms)) || await notice(page);
+}
 const inFrame = (page, fn, arg) => page.evaluate(([src, a]) => {
   const doc = document.querySelector('#page').contentDocument;
   return new Function('doc', 'arg', `return (${src})(doc, arg)`)(doc, a);
@@ -90,9 +95,10 @@ async function waitFor(fn, ms = 20000, step = 100) {
 const playingNow = page => page.evaluate(() => document.querySelector('#ttsPlay')?.classList.contains('playing'));
 async function readThenPause(page) {
   await page.keyboard.press('r');
-  await waitFor(async () => await playingNow(page) && await spokenWord(page), 15000);   // (a word heard: the voice has spoken)
+  // (Each wait checked: one that ran out let the test go on from the wrong state: round 28 review, T-55.)
+  if (!await waitFor(async () => await playingNow(page) && await spokenWord(page), 15000)) throw new Error('readThenPause: no word was spoken');   // (a word heard: the voice has spoken)
   await page.keyboard.press(' ');
-  await waitFor(async () => !(await playingNow(page)), 5000);
+  if (!await waitFor(async () => !(await playingNow(page)), 5000)) throw new Error('readThenPause: still playing after the pause');
 }
-module.exports = { readThenPause, SITE, SOFT, REMOTE, NORANGE, CDN, PLAIN, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, inFrame,
+module.exports = { readThenPause, SITE, SOFT, REMOTE, NORANGE, CDN, PLAIN, READER, launch, close, closePages, newPage, bytesSent, clearBytes, openReader, waitForBook, title, notice, noticeLike, inFrame,
   remoteLog, clearRemoteLog, breezeLog, clearBreezeLog, spokenWord, waitFor };
