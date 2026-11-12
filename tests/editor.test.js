@@ -1181,3 +1181,14 @@ test('Markdown written back: $s on either side of emphasis or a link stay text; 
   assert.match(back, /\$`x`\$\\?\$5 off|\$x\$\\\$5 off/, back);
   assert.match(back, /:tada: and :\+1:2 too\. 2026/, back);
 });
+
+test('WYSIWYG: text typed just before the reader\'s zero-width space after a mark leaves none in the source (round 29 review, L-385)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('typing.md'));
+  await inPage(page).locator('p', { hasText: 'I am happy' }).first().click();
+  await page.keyboard.press('End'); await page.keyboard.press('ArrowLeft'); await page.keyboard.type('Y');
+  await flush(page);
+  const src = await text(page);
+  assert.doesNotMatch(src, /​/, JSON.stringify(src));
+  assert.match(src, /:smile: ?Y|Y ?:smile:/, src);
+});
