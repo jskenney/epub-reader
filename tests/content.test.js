@@ -465,3 +465,47 @@ test('Markdown: emoji shortcodes GitHub knows as their emoji (not unknown names,
   await page.keyboard.press('t'); await page.waitForTimeout(400);
   assert.notEqual(await h.inFrame(page, doc => getComputedStyle(doc.querySelector('.hljs-keyword')).color), r.keyword[1]);
 });
+
+test('a document of one huge numbered list is split into parts, numbered on across them; a document over 32 MB is refused with a notice (round 27 review, M-156)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/big-list.md`);
+  assert.ok(Date.now() - t0 < 20000, `${Date.now() - t0} ms`);
+  const parts = Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+  assert.ok(parts >= 5, `${parts} parts`);
+  // The last part's list goes on from the earlier parts' numbers.
+  await page.focus('#ribbon'); await page.keyboard.press('End');
+  await page.waitForFunction(n => new RegExp(`spine ${n}/`).test(document.querySelector('#spinePos').textContent), parts, { timeout: 10000 });
+  const start = await h.inFrame(page, doc => Number(doc.querySelector('ol')?.getAttribute('start')));
+  assert.ok(start > 1000, `starts at ${start}`);
+  // Over the limit: refused.
+  await page.setInputFiles('#fileInput', { name: 'huge.md', mimeType: 'text/markdown', buffer: Buffer.alloc(33 * 1024 * 1024, 'a') });
+  assert.match(await h.waitFor(() => h.notice(page), 15000) || '', /huge\.md is too large to show \(33 MB; the limit is 32 MB\)/);
+});
+
+test('SVG pictures: none over 4 MB, and no more than 24 MB of them for a page; the page shows quickly (round 27 review, M-157)', async () => {
+  const page = await h.newPage();
+  const warned = []; page.on('console', m => { if (/too large to show/.test(m.text())) warned.push(m.text()); });
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/svg-heavy.epub`);
+  await page.waitForTimeout(1000);
+  assert.ok(Date.now() - t0 < 15000);
+  const shown = await h.inFrame(page, doc => [...doc.querySelectorAll('img')].map(i => !!i.getAttribute('src')));
+  assert.equal(shown.at(-1), false, 'the 5 MB picture left out');
+  const n = shown.slice(0, 10).filter(Boolean).length;
+  assert.ok(n >= 6 && n <= 8, `${n} of the 3 MB pictures shown (24 MB a page)`);
+  assert.ok(warned.some(w => /huge\.svg/.test(w)), warned.join(' | '));
+});
+
+test('a folder book\'s chapter over 16 MB is refused with a notice, by its length or as it arrives compressed with no length, without reading it all (round 27 review, L-359)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/bigfolder/`);
+  await page.click('#nextBtn');
+  assert.match(await h.waitFor(() => h.notice(page), 15000) || '', /__big-plain\.xhtml is too large to show/);
+  await page.click('#noticeAction');
+  await page.click('#nextBtn');
+  assert.match(await h.waitFor(async () => /__big-gzip/.test(await h.notice(page)) && h.notice(page), 30000) || '', /__big-gzip\.xhtml is too large to show/);
+  await page.waitForTimeout(500);
+  const log = await (await fetch(`${h.SITE}/__big`)).json();
+  assert.ok(log.length && log.every(e => !e.complete), JSON.stringify(log));
+});

@@ -41,6 +41,7 @@ READER_PAGE_PATH = os.path.realpath(os.path.join(args.root, "reader", "index.htm
 
 seen, breeze_log, busy = [], [], threading.Lock()
 stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing)
+big_log = []   # the made-up big chapters: whether each was sent whole (GET /__big)
 api_log = []   # reading progress posted to /api-log/... (GET /__api lists, DELETE /__api clears: E-22)
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
@@ -173,6 +174,45 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self.json(200, {"status": "ok"})
             if path.startswith("/tts/"):
                 return self.json(404, {"detail": "Not Found"})
+        # A folder book's chapters made here, too large to show: one of 20 MB with its length, and one of 200 MB sent
+        # compressed with no length (round 27 review, L-359; the reader must give up as they arrive).
+        if path.endswith("/__big-plain.xhtml") or path.endswith("/__big-gzip.xhtml"):
+            head = b'<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Big</title></head><body>'
+            line = b"<p>The same line again and again, for a chapter far too large.</p>\n"
+            if path.endswith("plain.xhtml"):
+                body = head + line * (20 * 1024 * 1024 // len(line))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/xhtml+xml")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
+            import zlib
+            z = zlib.compressobj(9, zlib.DEFLATED, 31)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xhtml+xml")
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            sent = 0
+            try:
+                self.wfile.write(z.compress(head))
+                block = line * 16384
+                for _ in range(200 * 1024 * 1024 // len(block)):
+                    c = z.compress(block)
+                    if c:
+                        self.wfile.write(c); sent += len(c)
+                self.wfile.write(z.flush())
+                big_log.append({"path": path, "complete": True, "sent": sent})
+            except (BrokenPipeError, ConnectionResetError):
+                big_log.append({"path": path, "complete": False, "sent": sent})
+            self.close_connection = True
+            return
+        if path == "/__big":
+            return self.json(200, big_log)
         file = self.translate_path(self.path)
         self.file_validators = validators(file, self.path) if os.path.isfile(file) else None
         self.validators_sent = False   # one handler serves every request on a kept-alive connection

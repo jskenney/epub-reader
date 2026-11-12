@@ -653,7 +653,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0159</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261112.0204</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1010,7 +1010,8 @@ const KEEP_MAX = 4 << 20;
 const MAX_ENTRY = 512 << 20;   // a file inside a book larger than this isn't decompressed (it would fill memory)
 const tooLarge = (name, n) => `${name} is too large to open (${Math.round(n / 1048576)} MB; the limit is ${MAX_ENTRY / 1048576} MB)`;
 // A page, style sheet or contents file (text) larger than this isn't read: a chapter of 32 MB of markup froze the tab
-// for minutes, and one of 300 MB, compressed into a book of 1 MB, crashed it; 16 MB still shows in a few seconds
+// for minutes, and one of 300 MB, compressed into a book of 1 MB, crashed it; 16 MB shows in seconds on a fast machine
+// (a minute on a slow or busy one)
 // (round 26 review, H-35). Pictures, audio and video keep MAX_ENTRY.
 const MAX_MARKUP = 16 << 20;
 const tooLong = (name, n) => `${name} is too large to show (${Math.round(n / 1048576)} MB of text; the limit is ${MAX_MARKUP / 1048576} MB)`;
@@ -1293,6 +1294,7 @@ function zipSource(zip){
       return decodeText(b, { fallback: 'utf-8' });
     },
     async exists(p){ return !!getFile(zip, p); },
+    size(p){ return getFile(zip, p)?.size ?? 0; },   // (as the archive says, before reading: M-157)
     obf: null,   // obfuscated fonts: path -> key (fontKeys)
     async url(p, type){
       const f = getFile(zip, p); if (!f) return null;
@@ -1319,10 +1321,10 @@ function dirSource(base){
       try {
         const r = await fetch(u); if (!r.ok) return null;
         if (r.redirected && !sameSite(new URL(r.url), new URL(root))) return null;   // (sent on to another site: round 24 review)
-        const n = Number(r.headers.get('content-length'));   // (H-35: known before reading, unless compressed or not sent)
-        if (n > MAX_MARKUP && !r.headers.get('content-encoding')) { r.body?.cancel(); throw Object.assign(new Error(tooLong(p, n)), { tooLong: true }); }
-        const buf = new Uint8Array(await r.arrayBuffer());
-        if (buf.length > MAX_MARKUP) throw Object.assign(new Error(tooLong(p, buf.length)), { tooLong: true });
+        // (H-35, L-359: given up past the limit as it arrives, compressed or not.)
+        const n = Number(r.headers.get('content-length'));
+        const buf = await readCapped(r, MAX_MARKUP);
+        if (!buf) throw Object.assign(new Error(tooLong(p, n > MAX_MARKUP ? n : MAX_MARKUP + 1)), { tooLong: true });
         const t = decodeText(buf, { http: charsetOf(r), fallback: 'utf-8' });
         // (A site's "not found" page sent with status 200 isn't the file: round 13 review.)
         return await isSoftNotFound(u, t) ? null : t;
@@ -1530,6 +1532,23 @@ function loadLib(name){
     try { return await loadScript(lib.cdn, lib.integrity); }
     catch { throw new Error(`the ${name} library couldn't be loaded from ${new URL(lib.cdn).host}`); }
   })().catch(e => { delete libsLoaded[name]; throw e; });
+}
+// A response's body, read as it arrives and given up past max bytes (a compressed or unannounced one too: a folder
+// book's 2 MB of gzip expanding to 2 GB was read whole before: round 27 review, L-359). null past it.
+async function readCapped(r, max){
+  if (Number(r.headers.get('content-length')) > max && !r.headers.get('content-encoding')) { r.body?.cancel(); return null; }
+  if (!r.body?.getReader) { const b = new Uint8Array(await r.arrayBuffer()); return b.length > max ? null : b; }
+  const rd = r.body.getReader(), parts = []; let n = 0;
+  for (;;) {
+    const { done, value } = await rd.read();
+    if (done) break;
+    n += value.length;
+    if (n > max) { rd.cancel().catch(() => {}); return null; }
+    parts.push(value);
+  }
+  const out = new Uint8Array(n); let o = 0;
+  for (const v of parts) { out.set(v, o); o += v.length; }
+  return out;
 }
 // A data file of LIBS (JSON), from this site first, then the CDN; its hash checked as a script's is.
 const dataLoaded = {};
@@ -1846,11 +1865,37 @@ function docRoot(body, skip = null){
     root = kids[0];
   }
 }
+// A block longer than a part (a list of tens of thousands of items, a long table, a wrapper of everything) split into
+// copies of it, each holding some of its children, so no part is too long to lay out (round 27 review, M-156): a
+// numbered list keeps its numbers, and only the first copy keeps the block's id.
+const SPLITTABLE = /^(ul|ol|table|thead|tbody|tfoot|div|section|article|main|aside|blockquote|dl|figure|details)$/i;
+function piecesOf(nd, maxLen, depth = 0){
+  if (nd.nodeType !== 1 || depth > 8 || nd.childNodes.length < 2 || !SPLITTABLE.test(nd.localName) || nd.textContent.length <= maxLen) return [nd];
+  const kids = [...nd.childNodes].flatMap(c => piecesOf(c, maxLen, depth + 1));
+  const out = [];
+  let group = [], len = 0, items = 0;
+  const start = Number(nd.getAttribute('start')) || 1;
+  const flush = () => {
+    if (!group.some(x => x.nodeType === 1 || x.textContent.trim())) { group = []; len = 0; return; }
+    const c = nd.cloneNode(false);
+    if (out.length) c.removeAttribute('id');
+    if (c.localName === 'ol' && items) c.setAttribute('start', String(start + items));
+    c.append(...group);
+    items += group.filter(x => x.nodeType === 1 && x.localName === 'li').length;
+    out.push(c); group = []; len = 0;
+  };
+  for (const k of kids) {
+    if (len > maxLen) flush();
+    group.push(k); len += k.textContent.length;
+  }
+  flush();
+  return out.length ? out : [nd];
+}
 function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
   const root = docRoot(doc.body);
   const headOf = el => el?.nodeType !== 1 ? null : /^h[12]$/i.test(el.localName) ? el
     : (/^(section|div|header|article)$/i.test(el.localName) && /^h[12]$/i.test(el.firstElementChild?.localName || '') ? el.firstElementChild : null);
-  const nodes = [...root.childNodes];
+  const nodes = Number.isFinite(maxLen) ? [...root.childNodes].flatMap(n => piecesOf(n, maxLen)) : [...root.childNodes];
   const heads = nodes.map(headOf);
   const count = lv => heads.filter(h => h?.localName === lv).length;
   const levels = !headings ? [] : count('h2') >= 2 ? ['h1', 'h2'] : count('h1') >= 2 ? ['h1'] : [];
@@ -1874,8 +1919,12 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
 }
 // from: the address it was opened from (a book on a site; not a file from this computer), for reading progress (E-22).
 // forEdit: opened to go straight into the editor (?edit=): not finished as it opens (round 25 review, M-115).
+// A document opened on its own (HTML, Markdown, text) larger than this isn't read: one of 29 MB hung the tab (round 27
+// review, M-156).
+const MAX_DOC = 32 << 20;
 async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false, created = false, foreign = '', from = '', forEdit = false } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
+  if (buffer.byteLength > MAX_DOC) throw new Error(`${name} is too large to show (${Math.round(buffer.byteLength / 1048576)} MB; the limit is ${MAX_DOC / 1048576} MB)`);
   const text = decodeText(new Uint8Array(buffer), { http: charset, sniff: kind === 'html' });
   const built = await buildDocument(text, name, kind);
   const fallback = base ? dirSource(base) : null;
@@ -2349,8 +2398,15 @@ function typeOf(path){ return book.byPath.get(path)?.type || MIME[ext(path)] || 
 // resource document (<use href="x.svg#a">, filter:url(x.svg#f)) it is a document of its own, which the cleaning
 // of pages never saw (round 25 review, L-287): no script, no handlers, no address but its own fragments (and data:
 // pictures), its styles through the same CSS cleaning as a page's.
-async function svgURL(path, type, b = book){
+// SVG pictures: none over SVG_MAX, and no more than SVG_PAGE of them for one page (40 SVGs of 15 MB, from a book of
+// 620 KB, took 40 s to show: round 27 review, M-157). The size is known before reading where the archive says it.
+const SVG_MAX = 4 << 20, SVG_PAGE = 24 << 20;
+async function svgURL(path, type, b = book, owner = ''){
+  const said = b.src.size?.(path) ?? 0, spent = (b.svgSpent ||= new Map());
+  if (said > SVG_MAX || (spent.get(owner) || 0) + said > SVG_PAGE) { console.warn(`${path}: a picture too large to show`); return null; }
   const t = await b.src.text(path); if (t == null) return null;
+  if (t.length > SVG_MAX || (spent.get(owner) || 0) + t.length > SVG_PAGE) { console.warn(`${path}: a picture too large to show`); return null; }
+  spent.set(owner, (spent.get(owner) || 0) + t.length);
   const d = new DOMParser().parseFromString(t, 'image/svg+xml');
   if (!d.documentElement || d.getElementsByTagName('parsererror').length) return null;
   // (An SVG, or nothing: a page of XHTML typed as SVG would be a page, forms and all, opened on its own; and
@@ -2385,7 +2441,7 @@ function resourceURL(path, owner){
   let type = typeOf(path);
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
   // (An SVG by its type, with a parameter too (L-317), or by its name, whatever its type says: M-135.)
-  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' || /\.svgz?$/i.test(path) ? svgURL(path, 'image/svg+xml') : book.src.url(path, type);
+  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' || /\.svgz?$/i.test(path) ? svgURL(path, 'image/svg+xml', book, owner || '') : book.src.url(path, type);
   book.urls.set(path, job);
   job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
@@ -9452,7 +9508,10 @@ async function fetchDocument(u, kind, init = {}){
   // (Sent on to another site: not this file. ?get= follows it and names that site: round 24 review.)
   if (r.redirected && !sameSite(new URL(r.url), u) && !init.anySite) return { miss: `it is sent on to ${new URL(r.url).host}, another site` };
   if (kind !== 'html' && looksHtml(r)) return { miss: 'a web page came back instead' };
-  const buf = await r.arrayBuffer();
+  // (Read with the documents' limit, as it arrives: L-359, M-156.)
+  const bytes = await readCapped(r, MAX_DOC);
+  if (!bytes) return { miss: `it is larger than ${MAX_DOC / 1048576} MB, too large to show` };
+  const buf = bytes.buffer;
   if (await isSoftNotFound(u.href, new TextDecoder().decode(buf))) return { miss: `the site's "not found" page` };
   return { buf, charset: charsetOf(r), host: new URL(r.url).host, url: r.url };
 }

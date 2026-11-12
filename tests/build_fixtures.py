@@ -1008,6 +1008,19 @@ def main():
                "grid": "body{display:grid !important;grid-template-columns:1fr 300px !important}", "cv": "p{content-visibility:auto}"}
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
+    # A folder book whose second and third chapters the test server makes, far too large (round 27 review, L-359), and a
+    # Markdown document of one huge numbered list (M-156), and SVG pictures too large for a page (M-157).
+    fb = books / "bigfolder"
+    (fb / "META-INF").mkdir(parents=True)
+    (fb / "META-INF" / "container.xml").write_text('<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+    (fb / "OEBPS").mkdir()
+    (fb / "OEBPS" / "content.opf").write_text('<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:bigfolder</dc:identifier><dc:title>Big Folder</dc:title><dc:language>en</dc:language></metadata>'
+        '<manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="__big-plain.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="__big-gzip.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>')
+    (fb / "OEBPS" / "c1.xhtml").write_text(xhtml("One", "<h1>One</h1><p>Start here.</p>"))
+    (books / "big-list.md").write_text("# Big list\n\n" + "".join(f"{i}. Item number {i} of a very long numbered list.\n" for i in range(1, 30001)))
+    svg = lambda n: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><desc>' + "x" * n + '</desc><rect width="40" height="40" fill="teal"/></svg>'
+    epub(books / "svg-heavy.epub", "SVG Heavy", [("c1.xhtml", "One", "<p>Pictures:</p>" + "".join(f'<img id="s{i}" src="s{i}.svg" alt=""/>' for i in range(10)) + '<img id="huge" src="huge.svg" alt=""/>', "")],
+         uid="urn:svg-heavy", extra={**{f"OEBPS/s{i}.svg": svg(3 * 1024 * 1024).encode() for i in range(10)}, "OEBPS/huge.svg": svg(5 * 1024 * 1024).encode()})
     # A chapter of 20 MB of markup in a book of a few tens of KB (round 26 review, H-35).
     epub(books / "huge-chapter.epub", "Huge Chapter", [("c1.xhtml", "One", "<p>Start here.</p>", ""),
          ("c2.xhtml", "Two", "<p>The same line again and again.</p>" * (20 * 1024 * 1024 // 36), "")], uid="urn:huge-chapter")
