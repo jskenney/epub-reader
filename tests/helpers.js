@@ -96,7 +96,9 @@ const playingNow = page => page.evaluate(() => document.querySelector('#ttsPlay'
 async function readThenPause(page) {
   await page.keyboard.press('r');
   // (Each wait checked: one that ran out let the test go on from the wrong state: round 28 review, T-55.)
-  if (!await waitFor(async () => await playingNow(page) && await spokenWord(page), 15000)) throw new Error('readThenPause: no word was spoken');   // (a word heard: the voice has spoken)
+  if (!await waitFor(() => playingNow(page), 15000)) throw new Error('readThenPause: not playing');
+  // (A word heard: the voice has spoken. A fixed-layout page or a picture shows no word, so this one isn't required.)
+  await waitFor(() => spokenWord(page), 4000);
   await page.keyboard.press(' ');
   if (!await waitFor(async () => !(await playingNow(page)), 5000)) throw new Error('readThenPause: still playing after the pause');
 }

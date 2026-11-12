@@ -171,7 +171,8 @@ test('a fixed-layout page keeps its own styles: html sizing, "body >" selectors,
 test('in the scroll layout with the read-aloud bar open, the bottom of a fixed page can be scrolled into view (round 22 review)', async () => {
   const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
   await h.openReader(page, FIXED, { 'spine:layout': 'scroll' });
-  await h.readThenPause(page);
+  // (The read-aloud bar open is what matters here: the cover page has no words to read.)
+  await page.keyboard.press('r'); await page.waitForSelector('#tts', { state: 'visible' }); await page.waitForTimeout(500);
   const r = await page.evaluate(() => {
     const d = document.querySelector('#page').contentDocument, se = d.scrollingElement;
     se.scrollTop = se.scrollHeight;
@@ -184,7 +185,8 @@ test('in the scroll layout with the read-aloud bar open, the bottom of a fixed p
 test('in the page layouts the read-aloud bar doesn\'t cover the page (E-20)', async () => {
   const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
   await h.openReader(page, FIXED, { 'spine:layout': 'one' });
-  await h.readThenPause(page);
+  // (The read-aloud bar open is what matters here: the cover page has no words to read.)
+  await page.keyboard.press('r'); await page.waitForSelector('#tts', { state: 'visible' }); await page.waitForTimeout(500);
   await page.waitForTimeout(400);
   const r = await page.evaluate(() => ({ bottom: document.querySelector('#page').getBoundingClientRect().bottom, barTop: document.querySelector('#tts').getBoundingClientRect().top }));
   assert.ok(r.bottom <= r.barTop + 1, JSON.stringify(r));
