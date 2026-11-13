@@ -1274,3 +1274,12 @@ test('a document\'s own data-ed-unwrap is written back as it is; a \\ref alone k
   assert.match(back, /\\\$5 and \\\$10|\$5 and \$10/, back);
   assert.doesNotMatch(back, /[﷐-﷯]\$|\$[﷐-﷯]{2}/, 'no marker turned into $');
 });
+
+test('a formula before a hard break or an escape is written back as written; clicking a display formula twice leaves one new paragraph (round 32 review, L-418, L-420)', async () => {
+  const page = await h.newPage();
+  const [, back] = await typedRoundTrip(page, 'hard-break.md');
+  assert.ok(back.includes('Line one $x+1$\\\nline two $y$\\*not em\\* end.'), back);
+  await wysiwyg(page, doc('gh.md'));
+  for (let k = 0; k < 3; k++) await inPage(page).locator('math[display="block"]').first().click();
+  assert.equal(await h.inFrame(page, d => { const m = d.querySelector('math[display="block"]').closest('[data-ed-unwrap]') || d.querySelector('math[display="block"]'); let n = 0, x = m.nextElementSibling; while (x?.localName === 'p' && !x.textContent.trim()) { n++; x = x.nextElementSibling; } return n; }), 1);
+});

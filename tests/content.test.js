@@ -747,3 +747,19 @@ test('TeX that fails slowly, many times, and code of very long words open in goo
     assert.ok(Date.now() - t0 < 15000, `${b}: ${Date.now() - t0} ms`);
   }
 });
+
+test('unclosed \\(, a C# block, many code blocks open in good time; search over a book of costly TeX doesn\'t freeze for long; a wide formula scrolls in the page layouts; a page\'s own .hljs theme doesn\'t put the reader\'s colours on its dark background (round 32 review, H-52, H-53, M-197, M-193, M-198, M-199)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  const time = async b => { const t0 = Date.now(); await h.openReader(page, `${h.READER}?book=books/${b}`, { 'spine:layout': 'one' }); return Date.now() - t0; };
+  for (const b of ['unclosed.html', 'csharp.html', 'many-code.html']) { const ms = await time(b); assert.ok(ms < 15000, `${b}: ${ms} ms`); }
+  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('pre code.hljs').length) < 8, 'not every block coloured: the page\'s limit');
+  await time('costly-tex.epub');
+  const t0 = Date.now();
+  await page.fill('#searchBox', 'needle11'); await page.press('#searchBox', 'Enter');
+  assert.ok(await h.waitFor(() => page.evaluate(() => /needle11/.test(document.querySelector('#searchResults')?.textContent || '')), 40000), 'found');
+  assert.ok(Date.now() - t0 < 40000, `search ${Date.now() - t0} ms`);
+  await time('math-page.html');
+  assert.ok(await h.inFrame(page, doc => { const m = doc.querySelector('#wide math'); m.scrollLeft = 300; return new Promise(r => setTimeout(() => r(m.scrollLeft), 300)); }) > 0, 'the formula scrolled');
+  await time('own-hljs.html');
+  assert.notEqual(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('oh')).backgroundColor), 'rgb(40, 44, 52)');
+});

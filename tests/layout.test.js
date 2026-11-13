@@ -410,12 +410,14 @@ test('book CSS aimed at the reader\'s paging (--spine-x, @layer, the flow\'s hei
   const count = async () => Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
   await h.openReader(page, `${h.READER}?book=books/hostile-plain.epub`, { 'spine:layout': 'one' });
   const n = await count();
-  for (const k of ['varx', 'layer', 'layer2', 'height', 'htmlpad', 'bodypos', 'translate', 'bscale', 'bcols', 'grid', 'cv', 'samelayer', 'sublayer', 'prop', 'trans', 'offset', 'offset2', 'offset3', 'hcols', 'span', 'span3', 'vars', 'vars2', 'colheight', 'htmlmt', 'htmlml', 'htmlw', 'clipvert', 'snap', 'spanesc', 'before', 'hbefore']) {
+  for (const k of ['varx', 'layer', 'layer2', 'height', 'htmlpad', 'bodypos', 'translate', 'bscale', 'bcols', 'grid', 'cv', 'samelayer', 'sublayer', 'prop', 'trans', 'offset', 'offset2', 'offset3', 'hcols', 'span', 'span3', 'vars', 'vars2', 'colheight', 'htmlmt', 'htmlml', 'htmlw', 'clipvert', 'snap', 'spanesc', 'before', 'hbefore', 'marker', 'head', 'pseudospan', 'flowbefore', 'inlinespan', 'contents']) {
     await h.openReader(page, `${h.READER}?book=books/hostile-${k}.epub`, { 'spine:layout': 'one' });
-    assert.equal(await count(), n, `${k}: the page count`);
-    for (let i = 1; i < n; i++) await page.keyboard.press('ArrowRight');
+    // (A book's own pseudo-element of 90vh in the flow takes a page of its own: content, not a trick.)
+    const want = k === 'flowbefore' ? n + 1 : n;
+    assert.equal(await count(), want, `${k}: the page count`);
+    for (let i = 1; i < want; i++) await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(150);
-    assert.match(await page.textContent('#spinePos'), new RegExp(`page ${n}/${n}`), k);
+    assert.match(await page.textContent('#spinePos'), new RegExp(`page ${want}/${want}`), k);
     assert.ok(await overhang(page) < 1.5, `${k}: text ${await overhang(page)}px past an edge`);
     assert.equal(await h.inFrame(page, doc => { const r = doc.getElementById('hp239').getBoundingClientRect(); return r.right > 0 && r.left < doc.defaultView.innerWidth && r.top >= 0 && r.bottom <= doc.defaultView.innerHeight + 1; }), true, `${k}: the last paragraph on the last page`);
   }
@@ -606,4 +608,16 @@ test('a code block of one huge line opens in parts; with every book turned left 
   assert.ok(Number(/spine \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]) >= 5, 'in parts');
   await h.openReader(page, `${h.READER}?book=books/rtl-doc.md`, { 'spine:layout': 'one', 'spine:set:FORCE_LTR': true });
   assert.match(await page.evaluate(() => document.querySelector('#infoList').textContent), /DirectionRight to left/);
+});
+
+test('a book\'s own responsive multi-column box follows its media queries after a resize; boxes nested fifty deep open in good time (round 32 review, M-196, L-422)', async () => {
+  const page = await h.newPage({ viewport: { width: 1600, height: 900 } });
+  await h.openReader(page, `${h.READER}?book=books/own-cols.html`, { 'spine:layout': 'one' });
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('box')).columnCount), '3');
+  await page.setViewportSize({ width: 700, height: 900 });
+  await page.waitForTimeout(1200);
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('box')).columnCount), '1');
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/nested-cols.html`);
+  assert.ok(Date.now() - t0 < 15000, `${Date.now() - t0} ms`);
 });

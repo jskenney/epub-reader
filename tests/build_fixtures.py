@@ -1042,11 +1042,19 @@ def main():
                "snap": "body>div{scroll-snap-type:x mandatory} #hp120{scroll-snap-align:start}",
                # (round 31 review, M-189, M-190)
                "spanesc": "p:nth-child(5){column-sp\\61n:all}", "before": "body::before{content:'';display:block;height:100vh}",
-               "hbefore": "html::before{content:'';display:block;height:100vh}"}
+               "hbefore": "html::before{content:'';display:block;height:100vh}",
+               # (round 32 review, M-200)
+               "marker": "html{display:list-item !important;list-style-position:inside !important}html::marker{content:'X';font-size:100vh}",
+               "head": "head{display:block !important;height:100vh !important}",
+               "pseudospan": "#hp5::before{content:'';display:block;column-span:all;height:30vh}",
+               "flowbefore": "body>div>div::before{content:'';display:block;column-span:all;height:90vh}"}
     # A book's own two-column box whose heading spans it (round 30 review, L-400).
     epub(books / "own-span.epub", "Own Span", [("c1.xhtml", "One", '<div class="inner"><h3 id="sp">Glossary</h3>' + "".join(f"<p>Term {i}: a short entry.</p>" for i in range(20)) + "</div>" + hp,
          "<style>.inner{columns:2;column-gap:10px} .inner h3{column-span:all}</style>")], uid="urn:own-span")
     epub(books / "own-colours.epub", "Own Colours", [("c1.xhtml", "One", '<p class="red" id="red">Red words.</p>' + hp, "<style>.red{color:#c00 !important}</style>")], uid="urn:own-colours")
+    # (round 32 review, M-194, M-195: a book's inline important span; a "multi-column box" shown as contents)
+    epub(books / "hostile-inlinespan.epub", "Hostile inlinespan", [("c1.xhtml", "One", hp.replace("<p id='hp5'>", "<p id='hp5' style='column-span:all !important'>"), "")], uid="urn:hostile-inlinespan")
+    epub(books / "hostile-contents.epub", "Hostile contents", [("c1.xhtml", "One", '<div class="m">' + hp + '</div>', "<style>.m{columns:2;display:contents}.m p:nth-child(5){column-span:all}</style>")], uid="urn:hostile-contents")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
     # A folder book whose second and third chapters the test server makes, far too large (round 27 review, L-359), and a
@@ -1147,6 +1155,18 @@ def main():
     (books / "nonchars.md").write_text('# Non\n\nStart.\n\nAll ' + ''.join(chr(c) for c in range(0xFDD0, 0xFDF0)) + ' here, and $5 and $10.\n')
     (books / "tex-slow.md").write_text('# Slow\n\n' + ''.join('$$\\def\\a{' + 'x' * 3600 + '}\\def\\b{\\a\\b}\\b$$\n\n' for _ in range(40)))
     (books / "hl-long.html").write_text('<!DOCTYPE html><html><head><title>Long words</title></head><body><pre><code class="language-java">' + '$' * 99000 + '</code></pre></body></html>')
+    # Round 32 review: unclosed \( (H-52), a C# block (H-53), a book of costly TeX for search (M-193), many code blocks
+    # (M-197), a page's own .hljs theme (M-199), a book's own responsive multi-column box (M-196), nested boxes (L-422),
+    # a formula before a hard break (L-418).
+    (books / "unclosed.html").write_text('<!DOCTYPE html><html><head><title>Unclosed</title></head><body><p>' + '\\( ' * 300000 + '</p></body></html>')
+    (books / "csharp.html").write_text('<!DOCTYPE html><html><head><title>C sharp</title></head><body><pre><code class="language-csharp">' + 'a\n' * 49000 + '</code></pre></body></html>')
+    costly = '<p>' + ''.join('\\(' + '\\text{' * 200 + 'x' + '}' * 200 + '\\) ' for _ in range(150)) + '</p>'
+    epub(books / "costly-tex.epub", "Costly TeX", [(f"c{k}.xhtml", f"Chapter {k}", costly + (f"<p>needle{k} here.</p>"), "") for k in range(12)], uid="urn:costly-tex")
+    (books / "many-code.html").write_text('<!DOCTYPE html><html><head><title>Many code</title></head><body>' + ''.join(f'<pre><code class="language-js" id="c{k}">' + 'const value = compute(alpha, beta); // note\n' * 450 + '</code></pre>' for k in range(8)) + '</body></html>')
+    (books / "own-hljs.html").write_text('<!DOCTYPE html><html><head><title>Own hljs</title><style>.hljs{display:block;background:#282c34;color:#abb2bf}</style></head><body><pre><code class="language-js" id="oh">const s = "a string";</code></pre></body></html>')
+    (books / "own-cols.html").write_text('<!DOCTYPE html><html><head><title>Own cols</title><style>.box{column-count:3} @media (max-width:900px){.box{column-count:1}}</style></head><body><div class="box" id="box">' + ''.join(f'<p>Entry {i}.</p>' for i in range(30)) + '</div>' + ''.join(f'<p>After {i}.</p>' for i in range(30)) + '</body></html>')
+    (books / "nested-cols.html").write_text('<!DOCTYPE html><html><head><title>Nested</title><style>div.n{columns:2}</style></head><body>' + '<div class="n">' * 50 + 'Deep text.' + '</div>' * 50 + '<p>After.</p></body></html>')
+    (books / "hard-break.md").write_text('# Breaks\n\nStart.\n\nLine one $x+1$\\\nline two $y$\\*not em\\* end.\n')
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

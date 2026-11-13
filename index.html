@@ -670,7 +670,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261113.1306</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261113.1348</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1765,7 +1765,19 @@ function mdMath(tex, display, raw = ''){
   return `<code class="md-math-error" data-md-own="${MD_OWN}" data-md="${escHtml(src)}">${escHtml(src)}</code>`;
 }
 // TeX as MathML (Temml), the TeX kept in it, within the limits; null for TeX it can't read or past them.
+const texMade = new Map();   // (TeX made into MathML, kept a while: the page and its text read make the same formulas)
 function texToMathml(tex, display){
+  const key = (display ? 'D' : 'I') + tex, had = texMade.get(key);
+  if (had === null) return null;   // (TeX Temml couldn't read)
+  if (had) { if (mdMathBudget.count <= 0) return null; mdMathBudget.count--; return had; }
+  // (Not made now, by the limits or with Temml not there: nothing kept.)
+  if (!window.temml || tex.length > MATH_TEX_MAX || mdMathBudget.ms <= 0 || mdMathBudget.count <= 0 || mdMathBudget.left <= 0) return null;
+  const out = texToMathmlNew(tex, display);
+  if (texMade.size > 20000) texMade.clear();
+  if (tex.length < 2000 && (out ? out.length < 20000 : true)) texMade.set(key, out);
+  return out;
+}
+function texToMathmlNew(tex, display){
   if (mdMathBudget.ms <= 0 || mdMathBudget.count <= 0) return null;
   const t0 = performance.now();
   try {
@@ -1790,14 +1802,13 @@ function texToMathml(tex, display){
 // The formulas in a text, set apart by the marks chosen (MATH_DELIMITERS): each closing mark looked for within 4000
 // characters, and a text's escaped \$ left alone.
 function texSpans(s, marks){
-  const out = [], win = 4000, none = {};
-  // (Where a closing mark was last not found: not looked for again before then, so many marks never closed don't
-  // take time with their square: round 31 review.)
+  const out = [], win = 4000, next = {};
+  // (The next closing mark, found once and kept until the scan passes it: each opener found its own, a 4000-character
+  // search, and a remembered miss only helped near the text's end: round 32 review, H-52.)
   const close = (from, mark) => {
-    if (none[mark] >= Math.min(s.length, from + win)) return -1;
-    const e = s.slice(from, from + win).indexOf(mark);
-    if (e < 0) { none[mark] = Math.min(s.length, from + win); return -1; }
-    return from + e;
+    let e = next[mark];
+    if (e === undefined || (e !== -1 && e < from)) next[mark] = e = s.indexOf(mark, from);
+    return e >= 0 && e < from + win ? e : -1;
   };
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
@@ -1816,11 +1827,16 @@ function texSpans(s, marks){
   return out;
 }
 const TEX_SKIP = 'code, pre, kbd, samp, tt, var, script, style, textarea, math, svg, title, [contenteditable]';
-async function enhancePage(root){
+async function enhancePage(root, { forText = false } = {}){
   // (Not plain text either, where \( is what it says, a regular expression's group say: round 31 review.)
   if (book?.doc?.kind === 'markdown' || book?.doc?.kind === 'text' || book?.comic) return;
   const doc = root.ownerDocument;
+  // (For the text alone, as search and reading aloud read it: no colours, which don't change it, and math within a
+  // budget of its own for the book, given back slowly: each chapter read for search had a page's whole budget, and a
+  // book of costly TeX froze search for a minute: round 32 review, M-193.)
+  if (forText) return enhanceMath(root, doc, true);
   // Code blocks naming their language.
+  hlReset();   // (for each page, before the blocks are chosen: L-417)
   const blocks = [];
   for (const pre of root.querySelectorAll('pre')) {
     const code = pre.children.length === 1 && pre.firstElementChild.localName === 'code' ? pre.firstElementChild : !pre.children.length ? pre : null;
@@ -1828,13 +1844,18 @@ async function enhancePage(root){
     const lang = (`${code.className} ${pre.className}`.match(/(?:^|\s)(?:language|lang)-([\w+#.-]+)/i) || [])[1];
     if (lang && !/(^|\s)hljs(\s|$)/.test(code.className)) blocks.push({ code, lang: lang.toLowerCase() });
   }
-  hlBudget.ms = HLJS_MS;   // (for each page)
   if (blocks.length && !window.hljs) await loadLibSoon('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
   for (const { code, lang } of blocks) {
     if (!window.hljs?.getLanguage(lang)) continue;
-    if (hlBudget.ms <= 0) break;
+    if (!hlOk(code.textContent)) continue;
     try { code.innerHTML = hlRun(code.textContent, lang); code.classList.add('hljs'); code.setAttribute('data-md-own', MD_OWN); code.closest('pre').setAttribute('data-md-own', MD_OWN); } catch {}
   }
+  return enhanceMath(root, doc, false);
+}
+// For the text read by search, reading aloud ahead and the audiobook: Temml time shared by the whole book, filled up a
+// little each second it isn't used.
+const TEXT_MATH_MS = 4000, textMath = { ms: TEXT_MATH_MS, at: 0 };
+async function enhanceMath(root, doc, forText){
   // TeX in the text, between the marks chosen.
   const marks = new Set(MATH_DELIMITERS.split(' ').filter(Boolean));
   if (!marks.size) return;
@@ -1846,7 +1867,15 @@ async function enhancePage(root){
   if (!window.temml) await loadLibSoon('temml').catch(err => console.warn(`Math: ${err.message}`));
   if (!window.temml) return;
   mathBudgetReset();   // (for each page)
+  if (forText) {
+    const now = performance.now(); textMath.ms = Math.min(TEXT_MATH_MS, textMath.ms + (now - textMath.at) / 4); textMath.at = now;
+    mdMathBudget.ms = Math.min(mdMathBudget.ms, textMath.ms);
+  }
+  const before = mdMathBudget.ms;
+  let slice = performance.now();
   for (const n of nodes) {
+    // (The thread let go every 50 ms, so the reader doesn't freeze while a long chapter's math is made.)
+    if (performance.now() - slice > 50) { await new Promise(r => setTimeout(r)); slice = performance.now(); }
     const s = n.data, frag = doc.createDocumentFragment();
     let at = 0, changed = false;
     for (const m of texSpans(s, marks)) {
@@ -1861,6 +1890,7 @@ async function enhancePage(root){
     frag.append(s.slice(at));
     n.replaceWith(frag);
   }
+  if (forText) textMath.ms -= before - mdMathBudget.ms;
 }
 // Inline math as GitHub reads it: $…$ whose opening $ isn't followed by a space and whose closing $ (the next one not
 // escaped, on the same line) has no space before it and no digit after it, so "$5 and $10" stays text; $`…`$; and
@@ -1907,13 +1937,17 @@ function mdShortcodeAt(s){
 const fnSlug = id => id.replace(/[^A-Za-z0-9-]/gu, c => '_' + c.codePointAt(0).toString(16) + '_');
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
 let mdParser = null, mdEmoji = null;
-const HLJS_MAX = 100000;
+const HLJS_MAX = 20000;   // (a block's length: some grammars take time with its square, C# 98 KB 50 s: round 32 review, H-53)
 // highlight.js takes time with the square of a long word: a block holding one of over 1000 characters isn't coloured,
 // nor any once a document or page has spent HLJS_MS on it (round 31 review, H-51).
-const HLJS_MS = 2000, hlBudget = { ms: HLJS_MS };
-const hlOk = text => text.length <= HLJS_MAX && hlBudget.ms > 0 && !/\S{1000}/.test(text);
+// (And at most HLJS_CHARS coloured on a page or in a document: laying out the colours cost more than making them, three
+// 84 KB blocks 18 s: round 32 review, M-197.)
+const HLJS_MS = 2000, HLJS_CHARS = 60000, hlBudget = { ms: HLJS_MS, chars: HLJS_CHARS };
+const hlReset = () => Object.assign(hlBudget, { ms: HLJS_MS, chars: HLJS_CHARS });
+const hlOk = text => text.length <= HLJS_MAX && hlBudget.ms > 0 && text.length <= hlBudget.chars && !/\S{300}/.test(text);
 function hlRun(text, lang){
   const t0 = performance.now();
+  hlBudget.chars -= text.length;
   try { return window.hljs.highlight(text, { language: lang, ignoreIllegals: true }).value; }
   finally { hlBudget.ms -= performance.now() - t0; }
 }
@@ -1929,7 +1963,7 @@ function mdMarked(){
   const m = new window.marked.Marked({ gfm: true });
   m.use({
     hooks: {
-      preprocess(src){ fn.defs = new Map(); fn.used = []; fn.seen = new Map(); mathBudgetReset(); hlBudget.ms = HLJS_MS; return src; },
+      preprocess(src){ fn.defs = new Map(); fn.used = []; fn.seen = new Map(); mathBudgetReset(); hlReset(); return src; },
       // The notes, after the document: those referred to in the order they first were, then any never referred to
       // (kept, so the editor writes them back), each with links back to where it is referred to.
       postprocess(html){
@@ -3094,7 +3128,8 @@ const hlCss = (dark, scope) => MD_CODE_COLOURS.map(([names, l, d]) => names.map(
 // (The blocks the reader coloured in an HTML page or a book: on the reader's background, as a book's dark one made its
 // colours unreadable; the <pre> itself when it holds the code: round 31 review.)
 const hlOwnCss = (dark, t) => { const own = `[data-md-own="${MD_OWN}"]`, scope = `body pre:is(${own}, :has(> code${own}))`;
-  return `${scope}{background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, ${t.bg}) !important;color:${t.ink} !important}\n` + hlCss(dark, scope); };
+  // (On the <code> as well, where a book or a page's own .hljs theme can put a dark background: round 32 review, M-199.)
+  return `${scope},${scope} > code${own}{background:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, ${t.bg}) !important;color:${t.ink} !important}\n` + hlCss(dark, scope); };
 const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + hlCss(dark, 'body pre');
 const MD_ALERT_COLOURS = { note: ['#0969da', '#4493f8'], tip: ['#1a7f37', '#3fb950'], important: ['#8250df', '#ab7df8'], warning: ['#9a6700', '#d29922'], caution: ['#d1242f', '#f85149'] };
 const mdAlertCss = dark => Object.entries(MD_ALERT_COLOURS).map(([k, c]) => `body .md-alert-${k}{border-left-color:${c[+dark]} !important}body .md-alert-${k} > .md-alert-title{color:${c[+dark]} !important}`).join('\n');
@@ -3156,9 +3191,13 @@ html,body{translate:none !important;scale:none !important;rotate:none !important
   transform:translateX(var(${PAGE_X},0px)) !important}
 #${RID.clip},#${RID.flow}{translate:none !important;scale:none !important;rotate:none !important;content-visibility:visible !important;contain:none !important;display:block !important}
 html,body,#${RID.clip},#${RID.flow}{transition:none !important;animation:none !important;scroll-snap-type:none !important;scroll-marker-group:none !important}
-html::before,html::after,body::before,body::after,#${RID.clip}::before,#${RID.clip}::after{content:none !important;display:none !important}   /* (they pushed the page out of the frame: round 31 review, M-190) */
+html::before,html::after,body::before,body::after,#${RID.clip}::before,#${RID.clip}::after{position:absolute !important;float:none !important;column-span:none !important}   /* (out of the flow, which they pushed out of the frame, but still shown: round 31 review, M-190; round 32, L-419) */
+html{display:block !important}
+head{display:none !important}
+html::marker,body::marker,#${RID.clip}::marker,#${RID.flow}::marker{content:none !important}   /* (nor a marker, nor the head, pushing it: M-200) */
 #${RID.flow} *{content-visibility:visible !important}
-#${RID.flow} *:not([data-span-own="${MD_OWN}"]){column-span:none !important}
+#${RID.flow} *:not([data-span-own="${MD_OWN}"]),#${RID.flow}::before,#${RID.flow}::after,#${RID.flow} ::before,#${RID.flow} ::after{column-span:none !important}
+#${RID.flow} ::details-content{column-span:none !important}
 @media (max-width:640px){#${RID.flow}{column-count:1 !important}}
 @supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px) !important}}`;
   // (Small vertical elements in a horizontal page keep it: a table's vertical headers, SVG text: round 25 review,
@@ -3691,7 +3730,7 @@ async function chapterDoc(i){
   if (body) for (const c of [...body.childNodes]) into.append(out.importNode(c, true));
   // (Its TeX and code as the page shows them, so search finds what the page holds and the audiobook skips formulas as
   // reading aloud does: round 31 review.)
-  if (!fx && !ed.on) await enhancePage(flow);
+  if (!fx && !ed.on) await enhancePage(flow, { forText: true });
   const end = out.createElement('span'); end.id = RID.end; into.append(end);
   if (!fx) out.body.append(flow);
   sanitize(out);
@@ -3833,6 +3872,7 @@ function position(frag, f){
 }
 function relayout(){
   comicOrder(); fxlFit();
+  if (frame.contentDocument) unspan(frame.contentDocument);   // (boxes as laid out now: M-196)
   if (!book || cur.f == null) return;
   // (A fixed page whose spread now shows, or no longer does, after a layout change or a resize: shown again.)
   // (A facing page that couldn't be shown isn't tried again on every resize: round 23 review.)
@@ -4118,6 +4158,9 @@ async function positionAnswered(b, asked){
 let wheelAcc = 0, wheelAt = 0;
 function onWheel(e){
   if (scrolling()) { ttsUserNav(); return; }   // native scrolling; looking away while listening detaches the view
+  // (Sideways over a formula wider than its column: it scrolls, rather than the page turning: M-198.)
+  const m = e.target?.closest?.('math');
+  if (m && m.scrollWidth > m.clientWidth + 1 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
   e.preventDefault();
   const now = performance.now();
   if (now - wheelAt < 450) return;
@@ -4130,21 +4173,47 @@ function onWheel(e){
 // they carry the session's token, which the pin leaves out (L-400), and that box's columns are fixed as they are, so
 // it can't stop being one later and let them span the reader's (round 31 review, M-189: reading a book's styles for
 // "column-span" could be passed by an escape, or a style applying later).
+const SPAN_BOX_DISPLAY = /^(block|flow-root|list-item|inline-block|table-cell|table-caption)\b|\b(flow-root|block)$/;
 function unspan(doc){
   const flow = doc.getElementById(RID.flow);
-  // (A page whose styles never name columns has no box of its own: missing one only keeps its spanners to a column.)
-  if (!flow || (![...doc.querySelectorAll('style')].some(s => /column/i.test(s.textContent)) && !doc.querySelector('[style*="column" i]'))) return;
+  if (!flow) return;
+  // (A book's inline column-span, important or not, beats a stylesheet's important rule: overridden in place, but in a
+  // box of its own: round 32 review, M-194.)
+  for (const el of flow.querySelectorAll('[style]')) if (el.style.getPropertyValue('column-span') && el.getAttribute('data-span-own') !== MD_OWN) el.style.setProperty('column-span', 'none', 'important');
+  // (A page whose own styles never name columns has no box of its own: missing one only keeps its spanners to a
+  // column. The reader's own styles aren't looked at: they always name them: L-421.)
+  const mine = new Set([RID.override, RID.override + '-pin', RID.base]);
+  if (![...doc.querySelectorAll('style')].some(s => !mine.has(s.id) && /column/i.test(s.textContent)) && !flow.querySelector('[style*="column" i]')) return;
   const win = doc.defaultView;
-  for (const el of flow.querySelectorAll('*')) {
-    if (el.hasAttribute('data-span-box')) continue;
+  // (A multi-column box of the book's: only one that makes columns, a block container, not one shown as contents or
+  // inline, whose blocks then spanned the reader's columns: M-195. Its columns aren't fixed, so its own media queries and
+  // em widths still work (M-196); boxes are checked again as the page is laid out and turned: spanCheck.)
+  const isBox = el => { const cs = win.getComputedStyle(el); return (cs.columnCount !== 'auto' || cs.columnWidth !== 'auto') && SPAN_BOX_DISPLAY.test(cs.display); };
+  for (const el of flow.querySelectorAll('[data-span-own]')) el.removeAttribute('data-span-own');
+  for (const el of flow.querySelectorAll('[data-span-box]')) el.removeAttribute('data-span-box');
+  const visit = (n, depth) => {
+    for (const c of n.children) {
+      if (!isBox(c)) { visit(c, depth); continue; }
+      // (Boxes within boxes, past three deep, laid out as one column: the browser takes time exponential in their
+      // depth, a 1 KB page 50 deep never opened: L-422.)
+      if (depth >= 3) { c.style.setProperty('columns', 'auto', 'important'); visit(c, depth); continue; }
+      c.setAttribute('data-span-box', '');
+      const mark = m => { for (const k of m.children) { k.setAttribute('data-span-own', MD_OWN); if (!isBox(k)) mark(k); } };
+      mark(c);
+      visit(c, depth + 1);
+    }
+  };
+  visit(flow, 0);
+}
+// Still the boxes they were? (A style that applies later, a media query or :hover, can make one stop being one; its
+// blocks then lose the leave to span.)
+function spanCheck(doc){
+  const win = doc?.defaultView; if (!win) return false;
+  for (const el of doc.querySelectorAll('[data-span-box]')) {
     const cs = win.getComputedStyle(el);
-    if (cs.columnCount === 'auto' && cs.columnWidth === 'auto') continue;
-    el.setAttribute('data-span-box', '');
-    el.style.setProperty('column-count', cs.columnCount, 'important'); el.style.setProperty('column-width', cs.columnWidth, 'important');
-    // (Its blocks, down to the next multi-column box within it.)
-    const walk = n => { for (const c of n.children) { c.setAttribute('data-span-own', MD_OWN); const s = win.getComputedStyle(c); if (s.columnCount === 'auto' && s.columnWidth === 'auto') walk(c); } };
-    walk(el);
+    if ((cs.columnCount === 'auto' && cs.columnWidth === 'auto') || !SPAN_BOX_DISPLAY.test(cs.display)) { unspan(doc); return true; }
   }
+  return false;
 }
 function wireFrame(){
   const doc = frame.contentDocument; if (!doc) return;
@@ -4163,7 +4232,8 @@ function wireFrame(){
       return;
     }
     // Page layouts: focus or text selection can scroll the clipped area; pages move only by transform, so undo it.
-    if (t && (t.scrollLeft || t.scrollTop)) { t.scrollLeft = 0; t.scrollTop = 0; }
+    // (Not a wide formula scrolled within itself: round 32 review, M-198.)
+    if (t && (t.scrollLeft || t.scrollTop) && t.localName !== 'math') { t.scrollLeft = 0; t.scrollTop = 0; }
   }, true);
   doc.fonts?.addEventListener?.('loadingdone', relayout);
 }
@@ -4513,6 +4583,7 @@ function setSpinePos(where, n){
   $('#spinePos').replaceChildren(where, sp);
 }
 function updateProgress(){
+  if (!scrolling() && spanCheck(frame.contentDocument)) { relayout(); return; }   // (a box that stopped being one: M-196)
   if (!book) return;
   updateSection();
   turnedPage();
@@ -9459,7 +9530,9 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
   const first = j => { const p = parts[j]; return !p ? '' : p.wrap != null ? (p.inner.trim() ? '*' : p.inner[0] || '') : p.s[0] || ''; };
   let out = '';
   parts.forEach((p, i) => {
-    if (p.wrap == null) { let s = p.alt && (/[\d$\\]/.test(first(i + 1)) || (MD_TEXT_DOLLAR && first(i + 1) === MD_TEXT_DOLLAR)) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
+    // (Before a digit, a $ or an escaped \$, not before any backslash: a hard break changed $x$: round 32 review, L-418.)
+    const nx = parts[i + 1]?.s?.slice(0, 2) || '';
+    if (p.wrap == null) { let s = p.alt && (/[\d$]/.test(first(i + 1)) || nx === '\\$' || (MD_TEXT_DOLLAR && first(i + 1) === MD_TEXT_DOLLAR)) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
     const core = p.inner.trim();
     if (!core) { out += p.inner; return; }
     const lead = p.inner.match(/^\s*/)[0], tail = trailingWs(p.inner);
@@ -9539,7 +9612,12 @@ function editWysiwygReady(){
     let r = d.createRange();
     // (A display formula standing alone: the caret in a new paragraph after it, not at the start of the next one,
     // where what was typed joined that paragraph: round 31 review. Left empty, it writes back nothing.)
-    if (m.style.display === 'block' && m.parentElement?.id === RID.flow) { const np = d.createElement('p'); np.append(d.createElement('br')); m.after(np); r.setStart(np, 0); }
+    if (m.style.display === 'block' && m.parentElement?.id === RID.flow) {
+      // (One left empty by an earlier click is used again: round 32 review, L-420.)
+      let np = m.nextElementSibling;
+      if (!(np?.localName === 'p' && !np.textContent.trim() && !np.querySelector('img, math, [data-emoji]'))) { np = d.createElement('p'); np.append(d.createElement('br')); m.after(np); }
+      r.setStart(np, 0);
+    }
     else r.setStartAfter(m);
     r.collapse(true);
     const s = d.getSelection(); s.removeAllRanges(); s.addRange(r);

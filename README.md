@@ -57,7 +57,7 @@ saved position) works as for EPUBs.
   (`$…$`, or `` $`…`$ `` where `$…$` can't hold it, so `` $`x`$ `` may come back as `$x$` and a ` ```math ` block
   as `$$…$$`), TeX that couldn't be read as it was, a note's definition where it was, emoji as their `:name:`,
   alerts as `> [!NOTE]`, and highlighted code as fenced code with its whole info string. HTML written in the
-  document is written back as it is. A code block over 100,000 characters isn't coloured.
+  document is written back as it is. Code is coloured within limits, as below for HTML.
 
   HTML pages and EPUB chapters get math and highlighting too: TeX between `\(` and `\)` (in a line) or `\[` and
   `\]` (display) is drawn as math, and a code block naming its language (`<pre><code class="language-js">`, or
@@ -65,8 +65,9 @@ saved position) works as for EPUBs.
   Settings or `reader-config.json`) names them; not by default, as `$` is money far more often in HTML. TeX inside
   `code` or `pre` is left alone. A page's own MathML is drawn by the browser as it is, and code already
   coloured (holding elements, or marked `hljs`) keeps the book's own colours; the reader's colours come with its own
-  background. A page spends a few seconds at most on its math and on its code: past that, or in a block with a word of
-  over 1,000 characters, the rest is shown as written. While a page is being edited it shows
+  background. Limits, for Markdown too: a page (or document) draws at most 5,000 formulas in a few seconds, and colours
+  at most 60,000 characters of code in a couple of seconds, a block of up to 20,000 characters without a word of over 300;
+  past them, the rest is shown as written. While a page is being edited it shows
   its TeX and code as written, and that is what is saved.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
