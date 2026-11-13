@@ -945,9 +945,8 @@ each with its own `default.epub`:
 
 ## Version
 
-The version in Settings is one patch release above the latest release tag
-(after `v0.60.0` it reads `v0.60.1`), with the date and time it was stamped in
-UTC: `Version v0.60.1 - 20261111.1430`. Run `python3 tools/stamp-version.py`
+The version in Settings is the date and time `index.html` was stamped, in
+UTC: `Version 20261113.0416`. Run `python3 tools/stamp-version.py`
 before committing a change to `index.html` to bring it up to date
 (`--check` prints what it would write). `.githooks/pre-commit` does that on
 every commit that includes `index.html`; turn it on once per clone with

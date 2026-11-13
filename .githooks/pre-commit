@@ -1,6 +1,6 @@
 #!/bin/sh
 # Stamp the Settings dialog's version line (tools/stamp-version.py) whenever index.html is committed:
-# one patch release above the latest release tag, and the date and time now (UTC).
+# the date and time now (UTC).
 #
 # Turn it on once per clone:   git config core.hooksPath .githooks
 # Skip it for one commit:      git commit --no-verify

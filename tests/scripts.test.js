@@ -233,18 +233,12 @@ test('no GNU-only sed escapes (a tab written as \\t) in the scripts (M-4)', () =
   }
 });
 
-test('the version in Settings is one above the latest release tag, and tools/stamp-version.py writes it so', () => {
+test('the version in Settings is the date and time it was stamped, and tools/stamp-version.py writes it so', () => {
   const page = fs.readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  const shown = page.match(/<span id="setVer">(v\d+\.\d+\.\d+) - (\d{8}\.\d{4})<\/span>/);
-  assert.ok(shown, 'a version line');
-  const tags = spawnSync('git', ['-C', REPO, 'tag', '--list', 'v*', '--sort=-v:refname'], { encoding: 'utf8' }).stdout.split('\n').filter(t => /^v\d+\.\d+\.\d+$/.test(t));
+  assert.match(page, /<span id="setVer">\d{8}\.\d{4}<\/span>/, 'a version line: the date and time only');
   const r = spawnSync('python3', [path.join(REPO, 'tools', 'stamp-version.py'), '--check'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout.trim(), /^v\d+\.\d+\.\d+ - \d{8}\.\d{4}$/);
-  if (!tags.length) return;   // (a clone without tags: nothing to compare with)
-  const [maj, min, pat] = tags[0].slice(1).split('.').map(Number);
-  assert.equal(shown[1], `v${maj}.${min}.${pat + 1}`);
-  assert.equal(r.stdout.split(' ')[0], `v${maj}.${min}.${pat + 1}`);
+  assert.match(r.stdout.trim(), /^\d{8}\.\d{4}$/);
 });
 
 // Round 25 review (M-120, M-121): the stamp keeps line endings; the hook doesn't stamp a temporary index; the hook
@@ -259,11 +253,11 @@ test('stamp-version.py keeps the page\'s line endings; the pre-commit hook leave
   const page = '<p>\r\n<span id="setVer">v0.0.1 - 20000101.0000</span>\r\n</p>\r\n';
   fs.writeFileSync(path.join(d, 'index.html'), page);
   git('init', '-q'); git('config', 'core.hooksPath', '.githooks'); git('config', 'core.autocrlf', 'false');
-  git('add', '.'); assert.equal(git('commit', '-q', '--no-verify', '-m', 'one').status, 0); git('tag', 'v1.2.3');
+  git('add', '.'); assert.equal(git('commit', '-q', '--no-verify', '-m', 'one').status, 0);
   const r = spawnSync('python3', [path.join(d, 'tools', 'stamp-version.py')], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const stamped = fs.readFileSync(path.join(d, 'index.html'), 'utf8');
-  assert.match(stamped, /^<p>\r\n<span id="setVer">v1\.2\.4 - \d{8}\.\d{4}<\/span>\r\n<\/p>\r\n$/);
+  assert.match(stamped, /^<p>\r\n<span id="setVer">\d{8}\.\d{4}<\/span>\r\n<\/p>\r\n$/);   // (the earlier form, written in the new one)
   // A commit of named paths: not stamped (git gives the hook a temporary index), and nothing left half-staged.
   fs.writeFileSync(path.join(d, 'index.html'), page.replace('<p>', '<p class="x">'));
   const c = git('commit', '-q', '-m', 'two', '--', 'index.html');
@@ -274,7 +268,7 @@ test('stamp-version.py keeps the page\'s line endings; the pre-commit hook leave
   fs.writeFileSync(path.join(d, 'index.html'), page.replace('<p>', '<p class="y">'));
   git('add', 'index.html');
   assert.equal(git('commit', '-q', '-m', 'three').status, 0);
-  assert.match(git('show', 'HEAD:index.html').stdout, /v1\.2\.4 - \d{8}\.\d{4}/);
+  assert.match(git('show', 'HEAD:index.html').stdout, /<span id="setVer">\d{8}\.\d{4}<\/span>/);
   assert.equal(git('status', '--porcelain').stdout.trim(), '');
 });
 
