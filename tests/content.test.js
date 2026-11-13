@@ -686,3 +686,17 @@ test('TeX between \\( \\) and \\[ \\] in an HTML page and an EPUB chapter is dra
     assert.notEqual(r.colour, r.ownColour, `${b}: the book's own highlighting keeps its colours`);
   }
 });
+
+test('MATH_DELIMITERS chooses the marks around math in HTML: \\( and \\[ by default; a site\'s \\( and $$; $ too, dollar amounts staying text (E-37)', async () => {
+  const page = await h.newPage();
+  const which = () => h.inFrame(page, doc => ['br', 'dd', 'sd', 'money'].filter(id => doc.querySelector(`#${id} math`)));
+  await h.openReader(page, `${h.READER}?book=books/math-marks.html`);
+  assert.deepEqual(await which(), ['br'], 'the default');
+  await h.openReader(page, `${h.SITE}/folder-math/index.html?book=/reader/books/math-marks.html`);
+  assert.deepEqual(await which(), ['br', 'dd'], 'the site\'s \\( and $$');
+  await h.openReader(page, `${h.READER}?book=books/math-marks.html`, { 'spine:set:MATH_DELIMITERS': '\\( \\[ $$ $' });
+  assert.deepEqual(await which(), ['br', 'dd', 'sd'], 'all four, chosen in Settings');
+  assert.match(await h.inFrame(page, doc => doc.getElementById('money').textContent), /Costs \$5 and \$10, or \\\$7\./);
+  await h.openReader(page, `${h.READER}?book=books/math-marks.html`, { 'spine:set:MATH_DELIMITERS': '' });
+  assert.deepEqual(await which(), [], 'none');
+});

@@ -224,6 +224,9 @@ def main():
     (SITE / "folder-noset").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-noset" / "index.html")
     (SITE / "folder-noset" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "SHOW_SETTINGS_BUTTON": False}))
+    (SITE / "folder-math").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-math" / "index.html")
+    (SITE / "folder-math" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "MATH_DELIMITERS": ["\\(", "$$"]}))
     (SITE / "folder-brand" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand3" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand2" / "tall.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="80"><rect width="20" height="80" fill="purple"/></svg>')
@@ -1124,6 +1127,8 @@ def main():
     MATH_HTML_BODY = '<h1>Math page</h1><p>Start.</p><p id="inl">Energy \\(E = mc^2\\) and money $5 and $10.</p><p id="disp">\\[\\int_0^1 x^2\\,dx = \\frac{1}{3}\\]</p><p id="lit">Written as code: <code>\\(x\\)</code>.</p><p id="bad">Broken \\(\\frac{1}{\\) stays.</p><pre><code class="language-js" id="js">const a = 1; // note</code></pre><pre class="lang-python"><code id="py">def f(): return "s"</code></pre><pre><code class="language-nosuchlang" id="none">plain</code></pre><pre><code class="language-js hljs" id="own"><span class="hljs-keyword">let</span> b</code></pre>'
     (books / "math-page.html").write_text("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Math page</title></head><body>" + MATH_HTML_BODY + "</body></html>")
     epub(books / "math-epub.epub", "Math EPUB", [("c1.xhtml", "One", MATH_HTML_BODY.replace("<h1>Math page</h1>", "<h1>One</h1>"), "")], uid="urn:math-epub")
+    # Every kind of math mark in an HTML page, for MATH_DELIMITERS (E-37), and a folder whose config names \\( and $$.
+    (books / "math-marks.html").write_text("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Marks</title></head><body>" + '<h1>Dollars</h1><p id="br">Bracket \\(a^2\\) here.</p><p id="dd">Display $$b^2$$ here.</p><p id="sd">Single $c^2$ here.</p><p id="money">Costs $5 and $10, or \\$7.</p>' + "</body></html>")
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")
