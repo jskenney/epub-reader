@@ -625,7 +625,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 32's findings are open (below), sorted by importance, recorded by the final review and not yet fixed, with T-59 and the enhancements E-29, E-30, E-36
+Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -635,24 +635,7 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-52 | H-49 isn't fixed: the failed-closer memo only skips a search ending before the last miss's end, so each unclosed `\\(` still searches 4000 characters (1 MB: 12 s to open, as before), now in `chapterDoc` too. Reproduced. | Hardening |
-| H-53 | highlight.js's `csharp` (also `cpp`, `c`, `vbnet`) takes time with the square of a whole block in one call: 98 KB of short lines, 50 s, past the 2 s budget (checked between blocks only); HLJS_MAX is far too high for them. Reproduced. | Hardening |
-| M-193 | The math and highlighting budgets reset for every `chapterDoc`: search over a 24-chapter book with costly TeX froze 74 s; ordinary math books search 4–5× slower; the audiobook, read-aloud ahead and time left pay it too. Reproduced. | Hardening |
-| M-194 | A book's inline `column-span:all !important` beats the layered pin (the old `unspan` overrode it inline): 1172 pages for 69, text lost. Regression. Reproduced. | Security |
-| M-195 | A "multi-column box" that isn't one (`display:contents`, inline) still exempts its blocks from the pin (234 of 240 paragraphs never shown); its `display` isn't fixed either. Reproduced. | Security |
-| M-196 | `unspan` fixes a book's column count and width inline: its media queries stop working after a resize, and `columns:14em` no longer follows the text size. Reproduced. | Bug |
-| M-197 | The highlighting budget bounds highlight.js, not laying out its spans: three ordinary 84 KB `js` blocks took 18 s to open, 40 of them 141 s. Reproduced. | Hardening |
-| M-198 | Wide display math can't be scrolled in the page layouts: the frame's scroll handler puts every scrolled box back (M-187 holds in the scroll layout only; Markdown too). Reproduced. | Bug |
-| M-199 | M-188 holds only for a `<pre>`: a dark background on the `<code>`, or a page's own `.hljs` theme (applied now the reader adds the class), puts the light colours on dark. Reproduced. | Bug |
-| M-200 | Still pushing the page: `column-span` on pseudo-elements (the flow's `::before`, `::details-content`), `html::marker` with html as a list item, `head{display:block;height:100vh}`. Reproduced. | Security |
-| L-417 | The highlighting budget is checked before it is reset: a heavy page (or a search's `chapterDoc`) leaves the next page's code uncoloured. Reproduced. | Bug |
-| L-418 | Written back, a formula before any backslash (a hard line break, an escape) takes its `` $`…`$ `` form on any edit. Reproduced. | Bug |
-| L-419 | The pseudo-element pin removes a book's own decoration on html or body (`body::before`) in the page layouts. Reproduced. | Bug |
-| L-420 | Each click on a standalone display formula in the editor adds another empty paragraph (written back as nothing). Reproduced. | Bug |
-| L-421 | `unspan`'s check for "column" in the styles never skips anything: the reader's own style holds the word. Reproduced. | Hardening |
-| L-422 | Nested multi-column boxes take Chromium time exponential in their depth (15 deep: 43 s; 50 deep, a 1 KB page, not open in 100 s). Not new. Reproduced. | Hardening |
 | T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. | Tests |
-| D-36 | README's E-37 limits leave out the 5,000 formulas, and the 2 s and long-word rules apply to Markdown too. (The stale version comment is fixed in `9e527b6`.) | Docs |
 | T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
@@ -699,8 +682,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-52, H-53, M-194, M-195, M-200 (a book stopping the reader), M-193, M-197, then the other mediums, lows and docs.
-2. E-25, E-22, as laid out in TODO.md; E-36 and E-30; then the other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -708,6 +691,23 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-52 | H-49 wasn't fixed. The next closing mark is found once and kept until the scan passes it: linear. | `257eaf5` |
+| H-53 | Some highlight.js grammars took time with the square of a block. Blocks of up to 20,000 characters, with no word over 300. | `257eaf5` |
+| M-193 | Each `chapterDoc` had a page's whole budget. Text read for search, reading aloud ahead and the audiobook gets no colours, and math within one budget for the book, filled up slowly, giving the thread back every 50 ms; Temml results are kept by their TeX. | `257eaf5` |
+| M-194 | A book's inline `column-span:all !important` beat the pin. Overridden in place, outside a book's own box. | `257eaf5` |
+| M-195 | A "multi-column box" that wasn't one exempted its blocks. Only block containers count. | `257eaf5` |
+| M-196 | Fixing a book's columns froze its responsive layouts. Not fixed any more; boxes are checked again on relayout and page turns, and lose their exemption if they stop being boxes. | `257eaf5` |
+| M-197 | Laying out colours wasn't bounded. At most 60,000 characters of code coloured per page or document. | `257eaf5` |
+| M-198 | Wide display math couldn't scroll in the page layouts. A formula's own scrolling isn't undone, and a sideways wheel over it scrolls it. | `257eaf5` |
+| M-199 | The reader's colours could land on a dark `<code>` or a page's own `.hljs` theme. Its background and colour go on the `<code>` too. | `257eaf5` |
+| M-200 | Pseudo-elements, `html::marker` and `head` pushed the page. `column-span` pinned on pseudo-elements, html `display:block`, the head hidden, markers off. | `257eaf5` |
+| L-417 | The highlighting budget was checked before its reset. Reset before blocks are chosen. | `257eaf5` |
+| L-418 | A formula before any backslash took its tick form. Only before a digit, `$` or `\$`. | `257eaf5` |
+| L-419 | The pin removed a book's html/body decorations. They're taken out of the flow instead, still shown. | `257eaf5` |
+| L-420 | Each click on a display formula added a paragraph. An empty one after it is used again. | `257eaf5` |
+| L-421 | `unspan`'s check never skipped. The reader's own styles aren't looked at. | `257eaf5` |
+| L-422 | Nested multi-column boxes took exponential time. Past three deep they're laid out as one column. | `257eaf5` |
+| D-36 | README on the limits for math and code, Markdown included. | `257eaf5` |
 | H-49 | Unclosed `\(` froze the tab. A closing mark not found isn't looked for again before where the search ended. | `cfb5b89` |
 | H-50 | Temml work wasn't bounded. Each document or page has 3 s of Temml time (failures charged) and 5,000 formulas; past them TeX is shown as written. | `cfb5b89` |
 | H-51 | highlight.js took time with the square of a long word. 2 s of highlighting per document or page, and no block with a word over 1,000 characters. | `cfb5b89` |
