@@ -61,8 +61,9 @@ saved position) works as for EPUBs.
 
   HTML pages and EPUB chapters get math and highlighting too: TeX between `\(` and `\)` (in a line) or `\[` and
   `\]` (display) is drawn as math, and a code block naming its language (`<pre><code class="language-js">`, or
-  `lang-js`, on the `code` or the `pre`) is coloured. `$` isn't read as math there, being money far more often, and
-  TeX inside `code` or `pre` is left alone. A page's own MathML is drawn by the browser as it is, and code already
+  `lang-js`, on the `code` or the `pre`) is coloured. `$$…$$` and `$…$` are read too when `MATH_DELIMITERS` (in
+  Settings or `reader-config.json`) names them; not by default, as `$` is money far more often in HTML. TeX inside
+  `code` or `pre` is left alone. A page's own MathML is drawn by the browser as it is, and code already
   coloured (holding elements, or marked `hljs`) keeps the book's own colours. While a page is being edited it shows
   its TeX and code as written, and that is what is saved.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
@@ -872,6 +873,7 @@ default books and the memory and request sizes stay the site's to set.
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
 | `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lora", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
+| `MATH_DELIMITERS` ✓ ⚙ | `"\\( \\["` | The marks around TeX that is drawn as math in HTML pages and EPUB chapters, separated by spaces (in `reader-config.json` a list too): any of `\(` for `\(…\)`, `\[` for `\[…\]`, `$$` for `$$…$$` (display) and `$` for `$…$`, which is read as GitHub reads it, so "$5 and $10" stays text. `""` reads none. Markdown always reads its own (`$…$`, `$$…$$`, ` ```math `). Applies when the page is reloaded. |
 | `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |
 | `API_PROGRESS` ✓ ⚙ | `'/api/progress'` | Where reading progress is sent (see [Reading progress sent to your site](#reading-progress-sent-to-your-site)): an address on this site; `''` sends nothing. |
 | `API_COMPLETE` ✓ ⚙ | `'/api/complete'` | Where finishing a book is sent, once; `''` sends nothing. |
