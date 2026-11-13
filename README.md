@@ -569,6 +569,14 @@ site as the reader.
   light and dark themes you last chose (Light or Sepia, Dark or Black). Until
   you pick one, the page uses the folder's default theme if its
   `reader-config.json` sets one, otherwise your system setting.
+- Themes of your own: in Settings, **Make a theme of my own from this one**
+  copies the theme in use; give it a name, choose its page, text, link and
+  interface colours, and say whether it's dark (a dark theme takes a book's
+  own colours off, as Dark does). The rest of the interface's colours are
+  worked out from these, and a note warns when text would be hard to read
+  (under 4.5:1). Your themes are kept in this browser, are listed with the
+  others, and Generate config gives them as a site's `THEMES`. A site's own
+  themes are listed too (below).
 - Settings (the gear button in the top bar): the theme, and reader options
   that otherwise only the site sets: the contents, bottom bar and top bar,
   the time left in the footer, turning
@@ -923,9 +931,16 @@ each with its own `default.epub`:
 ```
 
 - Any setting marked ✓ in the table above, by name.
+- `THEMES`: themes of the site's own, offered beside the built-in ones, each
+  `{"name": "Ocean", "dark": true, "page": "#0b2533", "text": "#e6f1f5", "accent": "#4fb3d9"}`, with
+  `"ui"` and `"uiText"` for the interface's background and text if they
+  shouldn't be worked out from the page's. Colours as `#rgb` or `#rrggbb`
+  only; a theme without a name or with another colour is left out, with a
+  warning in the console. `dark` (default: from the page's colour) decides
+  whether a book's own colours are taken off, as in Dark.
 - Starting preferences, used until the reader picks their own: `theme`
-  (`"light"`, `"sepia"`, `"dark"` or `"black"`; without one the page follows
-  the system), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
+  (`"light"`, `"sepia"`, `"dark"` or `"black"`, or the name of one of
+  `THEMES`; without one the page follows the system), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
   such as `"literata"`, or `g-` and the name of a font of `ADDITIONAL_FONTS` in lower case with hyphens, such as
   `"g-merriweather"`), `fontSize` (percent, 70–200), `lineSpacing`

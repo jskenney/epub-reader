@@ -9,8 +9,11 @@
 <!-- The reader's theme before anything is drawn (a flash of the light theme is worst with Black at night). -->
 <!-- Without one, this folder's default theme (from its reader-config.json, as last seen) until the config arrives. -->
 <!-- A folder that locks the theme (its LOCKED list) has its own, whatever the reader chose elsewhere. -->
-<script>try { const ok = t => ['light', 'sepia', 'dark', 'black'].includes(t), get = k => JSON.parse(localStorage.getItem(k)), dir = location.pathname.replace(/[^/]*$/, '');
-  const mine = get('spine:theme'), folder = get('spine:folderTheme:' + dir), set = t => document.documentElement.setAttribute('data-theme', t);
+<!-- A theme of the reader's own or the site's (E-38, E-39): its colours as last worked out, kept for this. -->
+<script>try { const get = k => JSON.parse(localStorage.getItem(k)), cache = get('spine:themeCache') || {}, dir = location.pathname.replace(/[^/]*$/, '');
+  const ok = t => ['light', 'sepia', 'dark', 'black'].includes(t) || (typeof t === 'string' && !!cache[t]);
+  const mine = get('spine:theme'), folder = get('spine:folderTheme:' + dir);
+  const set = t => { const el = document.documentElement; el.setAttribute('data-theme', t); for (const [k, v] of Object.entries(cache[t] || {})) if (/^(--[a-z-]+|color-scheme)$/.test(k) && /^[#a-z0-9 .,()%\/-]*$/i.test(v)) el.style.setProperty(k, v); };
   if (get('spine:folderThemeLocked:' + dir)) { if (ok(folder)) set(folder); } else if (ok(mine)) set(mine); else if (mine == null && ok(folder)) set(folder); } catch {}</script>
 <style>
 /* Layout: one-screen reading app. Top bar, contents rail on the left, the page as the one framed object, a segmented spine ribbon along the bottom. */
@@ -254,6 +257,13 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-row small:empty{display:none}
 .set-row.set-off label,.set-row.set-off{cursor:default;color:var(--muted)}
 .set-theme:has(input:disabled){cursor:default;opacity:.6}
+.theme-edit{margin-top:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.theme-fields{display:flex;flex-direction:column;gap:8px;width:100%}
+.theme-fields label{display:flex;align-items:center;gap:8px;font-size:13px}
+.theme-name input{flex:1;min-width:0}
+.theme-colours{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 12px}
+.theme-colours input{width:40px;height:28px;padding:0;border:1px solid var(--field);border-radius:4px;background:none}
+#themeContrast:empty{display:none}
 
 .set-row input[type=checkbox]{width:17px;height:17px;margin:0;accent-color:var(--ribbon);flex:none}
 .set-row input[type=text]{width:11em;height:30px;box-sizing:border-box;flex:none;font:400 13px var(--font-mono);color:var(--ink);background:var(--paper);border:1px solid var(--field);border-radius:6px;padding:0 6px}
@@ -670,7 +680,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261113.1348</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261113.2202</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -681,6 +691,22 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <label class="set-theme"><input type="radio" name="theme" value="black"><span class="sw sw-black" aria-hidden="true">Aa</span>Black</label>
         </div>
         <p class="ab-muted set-locked" id="setThemeLocked" hidden>The theme is set by this site.</p>
+        <div class="theme-edit" id="themeEdit">
+          <button type="button" class="btn" id="themeNew">New theme from this one</button>
+          <div class="theme-fields" id="themeFields" hidden>
+            <label class="theme-name">Name <input id="themeName" type="text" maxlength="40" spellcheck="false" autocomplete="off"></label>
+            <label class="theme-dark"><input id="themeDark" type="checkbox"> Dark (a book's own colours are taken off, as in Dark)</label>
+            <div class="theme-colours">
+              <label><input type="color" data-theme-key="page"> Page</label>
+              <label><input type="color" data-theme-key="text"> Text</label>
+              <label><input type="color" data-theme-key="accent"> Links and ribbon</label>
+              <label><input type="color" data-theme-key="ui"> Interface</label>
+              <label><input type="color" data-theme-key="uiText"> Interface text</label>
+            </div>
+            <p class="ab-muted" id="themeContrast" aria-live="polite"></p>
+            <button type="button" class="btn ghost" id="themeDelete">Delete this theme</button>
+          </div>
+        </div>
       </fieldset>
       <fieldset class="set-group"><legend>Layout</legend>
         <div class="set-row"><span><label for="set-SHOW_CONTENTS">Contents beside the page</label><small>C shows or hides them. On a narrow screen they start closed.</small><small class="set-def"></small></span><input id="set-SHOW_CONTENTS" type="checkbox" data-set="SHOW_CONTENTS"></div>
@@ -3071,9 +3097,68 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
 /* ---------- building a page ---------- */
 // Themes (E-5): light and sepia, dark and black; with none chosen the page follows the system.
 const THEMES = ['light', 'sepia', 'dark', 'black'], DARK_THEMES = ['dark', 'black'];
+/* Themes of the reader's own (E-38) and the site's (E-39, reader-config.json's THEMES), beside the four built in: a
+   name, whether it is dark, and its colours, hex only (so a value can't carry CSS): the page's background and text, the
+   accent (links, the ribbon), and, if given, the interface's background and text; the rest is worked out from them. */
+let siteThemes = [], userThemes = [];
+const THEME_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, THEME_MAX = 40;
+const themeById = id => siteThemes.find(t => t.id === id) || userThemes.find(t => t.id === id) || null;
+const knownTheme = id => THEMES.includes(id) || !!themeById(id);
+const themeIsDark = id => THEMES.includes(id) ? DARK_THEMES.includes(id) : !!themeById(id)?.dark;
+const hexRgb = h => { h = h.slice(1); if (h.length === 3) h = [...h].map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+const rgbHex = c => '#' + c.map(x => Math.round(Math.min(255, Math.max(0, x))).toString(16).padStart(2, '0')).join('');
+const hexMix = (a, b, w) => { const x = hexRgb(a), y = hexRgb(b); return rgbHex(x.map((v, i) => v * w + y[i] * (1 - w))); };   // (w of a)
+const hexLum = h => { const [r, g, b] = hexRgb(h).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const hexContrast = (a, b) => { const [x, y] = [hexLum(a), hexLum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+const themeSlug = name => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'theme';
+// A theme as given (by a site's config or the reader's own list) checked: its name and colours; throws with the reason.
+function themeCheck(o, prefix){
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('should be an object');
+  const name = typeof o.name === 'string' ? o.name.trim().slice(0, THEME_MAX) : '';
+  if (!name) throw new Error('needs a name');
+  const th = { id: typeof o.id === 'string' && /^[us]-[a-z0-9-]{1,40}$/.test(o.id) && o.id[0] === prefix[0] ? o.id : prefix + themeSlug(name), name };
+  for (const k of ['page', 'text', 'accent', 'ui', 'uiText']) {
+    if (o[k] == null || o[k] === '') { if (['page', 'text', 'accent'].includes(k)) throw new Error(`needs "${k}", a colour as #rgb or #rrggbb`); continue; }
+    if (typeof o[k] !== 'string' || !THEME_HEX.test(o[k].trim())) throw new Error(`"${k}" should be a colour as #rgb or #rrggbb`);
+    th[k] = o[k].trim().toLowerCase();
+  }
+  th.dark = typeof o.dark === 'boolean' ? o.dark : hexLum(th.page) < 0.25;
+  return th;
+}
+// Its colours as the reader's variables: the interface's worked out from the page's where not given.
+function themeVars(th){
+  const d = th.dark, paper = th.ui || hexMix(th.text, th.page, d ? 0.06 : 0.05), ink = th.uiText || th.text;
+  const on = hexContrast(th.accent, '#ffffff') >= hexContrast(th.accent, '#000000') ? '#ffffff' : '#000000';
+  return {
+    '--paper': paper, '--surface': hexMix(paper, th.page, 0.5), '--ink': ink, '--muted': hexMix(ink, paper, 0.62),
+    '--rule': hexMix(ink, paper, 0.16), '--field': hexMix(ink, paper, 0.45),
+    '--ribbon': th.accent, '--on-ribbon': on, '--ribbon-soft': hexMix(th.accent, th.page, 0.18), '--warn-soft': hexMix('#d29922', th.page, 0.22),
+    '--page-bg': th.page, '--page-ink': th.text,
+    '--shadow': d ? '0 1px 2px rgb(0 0 0 / .4), 0 12px 30px -14px rgb(0 0 0 / .7)' : '0 1px 2px rgb(20 30 25 / .05), 0 10px 30px -14px rgb(20 30 25 / .22)',
+    'color-scheme': d ? 'dark' : 'light',
+  };
+}
+const THEME_VARS = Object.keys(themeVars({ page: '#ffffff', text: '#000000', accent: '#880000', dark: false }));
+// The theme in use: a custom one's colours set on the page, a built-in one's left to its CSS.
+function applyThemeVars(){
+  const el = document.documentElement, th = themeById(el.getAttribute('data-theme'));
+  const vars = th ? themeVars(th) : null;
+  for (const k of THEME_VARS) { if (vars) el.style.setProperty(k, vars[k]); else el.style.removeProperty(k); }
+}
+// The custom themes' colours kept for the script that draws the theme before anything else.
+function themeCacheSave(){
+  const all = [...siteThemes, ...userThemes];
+  if (all.length) store.set('spine:themeCache', Object.fromEntries(all.map(th => [th.id, themeVars(th)]))); else store.del('spine:themeCache');
+}
+function userThemesLoad(){
+  const list = store.get('spine:themes');
+  userThemes = [];
+  for (const o of Array.isArray(list) ? list.slice(0, 50) : []) { try { const th = themeCheck(o, 'u-'); if (!themeById(th.id)) userThemes.push(th); } catch {} }
+}
+const userThemesSave = () => { if (userThemes.length) store.set('spine:themes', userThemes); else store.del('spine:themes'); themeCacheSave(); };
 function isDark(){
   const t = document.documentElement.getAttribute('data-theme');
-  return t ? DARK_THEMES.includes(t) : darkMq.matches;
+  return t ? themeIsDark(t) : darkMq.matches;
 }
 function tokens(){
   const cs = getComputedStyle(document.documentElement);
@@ -5023,7 +5108,7 @@ buildFontMenu();
    Until the reader picks one, the page follows the system setting. */
 function syncThemeBtn(){
   const dark = isDark(), b = $('#themeBtn'), next = themeTarget();
-  const label = `Switch to ${next === 'light' ? 'light mode' : next === 'dark' ? 'dark mode' : next[0].toUpperCase() + next.slice(1)}`;
+  const label = `Switch to ${next === 'light' ? 'light mode' : next === 'dark' ? 'dark mode' : themeById(next)?.name || next[0].toUpperCase() + next.slice(1)}`;
   b.classList.toggle('dark', dark);
   b.title = label + ' (T)'; b.setAttribute('aria-label', label);
   b.disabled = LOCKED.has('theme');
@@ -5035,19 +5120,19 @@ function setTheme(mode){
   if (mode === 'system') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', mode);
   store.set('spine:theme', mode);
-  if (THEMES.includes(mode)) store.set(DARK_THEMES.includes(mode) ? 'spine:themeDark' : 'spine:themeLight', mode);
+  if (knownTheme(mode)) store.set(themeIsDark(mode) ? 'spine:themeDark' : 'spine:themeLight', mode);
   syncThemeBtn();
 }
 // The theme the button and T switch to: the last one of the other kind chosen, else the folder's default theme
 // if it is of that kind, else plain light or dark.
 function themeTarget(){
-  const dark = !isDark(), fit = t => THEMES.includes(t) && DARK_THEMES.includes(t) === dark;
+  const dark = !isDark(), fit = t => knownTheme(t) && themeIsDark(t) === dark;
   const t = store.get(dark ? 'spine:themeDark' : 'spine:themeLight'), site = readerConfig?.theme;
   return fit(t) ? t : fit(site) ? site : dark ? 'dark' : 'light';
 }
 const toggleTheme = () => setTheme(themeTarget());
 $('#themeBtn').addEventListener('click', toggleTheme);
-new MutationObserver(restyleFrame).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+new MutationObserver(() => { applyThemeVars(); restyleFrame(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
 function onDragEnter(e){ if (!hasFiles(e)) return; e.preventDefault(); $('#drop').hidden = false; }
@@ -8216,7 +8301,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   COMIC_PART: ['number', v => { COMIC_PART = Math.min(1000, Math.max(2, Math.round(v / 2) * 2)); }],
 };
 const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
-  theme: ['spine:theme', v => THEMES.includes(v), v => document.documentElement.setAttribute('data-theme', v)],
+  theme: ['spine:theme', v => knownTheme(v), v => document.documentElement.setAttribute('data-theme', v)],
   layout: ['spine:layout', v => v in LAYOUTS, v => { layout = v; }],
   width: ['spine:width', v => WIDTHS.some(w => w[0].toLowerCase() === String(v).toLowerCase()), v => { widthStep = WIDTHS.findIndex(w => w[0].toLowerCase() === v.toLowerCase()); }],
   font: ['spine:face', v => FONTS.some(f => f.id === v) || /^g-[a-z0-9-]+$/.test(v), v => { fontFace = v; }],   // (g-: a font of ADDITIONAL_FONTS)
@@ -8231,6 +8316,16 @@ async function loadConfig(){
     const r = await fetch(new URL(CONFIG_FILE, location.href), { cache: 'no-cache' });
     if (r.ok && !looksHtml(r)) cfg = JSON.parse(await r.text());
   } catch (err) { if (!(err instanceof TypeError)) console.warn(`${CONFIG_FILE} isn't valid JSON, so it was ignored:`, err.message); }
+  // (The site's themes, before the folder's default theme is looked at: E-39. Its "theme" may name one.)
+  siteThemes = [];
+  if (cfg && typeof cfg === 'object' && Array.isArray(cfg.THEMES)) {
+    for (const o of cfg.THEMES.slice(0, 50)) {
+      try { const th = themeCheck(o, 's-'); if (siteThemes.some(x => x.id === th.id)) throw new Error('another has that name'); siteThemes.push(th); }
+      catch (e) { console.warn(`${CONFIG_FILE}: THEMES: ${o?.name ?? JSON.stringify(o)} ignored (${e.message})`); }
+    }
+    if (typeof cfg.theme === 'string' && !knownTheme(cfg.theme)) { const byName = siteThemes.find(th => th.name.toLowerCase() === cfg.theme.toLowerCase() || th.id === 's-' + themeSlug(cfg.theme)); if (byName) cfg.theme = byName.id; }
+  } else if (cfg && typeof cfg === 'object' && 'THEMES' in cfg) console.warn(`${CONFIG_FILE}: THEMES should be a list of themes`);
+  themeCacheSave();
   // Settings readers can't change here (E-18): read first, as the folder's defaults then apply whatever they chose.
   if (cfg && typeof cfg === 'object' && 'LOCKED' in cfg) {
     const v = cfg.LOCKED, lockable = [...Object.keys(SET_VARS), 'theme', 'shortcuts'];
@@ -8240,12 +8335,12 @@ async function loadConfig(){
   // (This folder's default theme, and whether it's locked, remembered for the script in <head>: L-204, E-18.)
   const dir = location.pathname.replace(/[^/]*$/, ''), folderKey = 'spine:folderTheme:' + dir;
   if (LOCKED.has('theme')) store.set('spine:folderThemeLocked:' + dir, true); else store.del('spine:folderThemeLocked:' + dir);
-  if (THEMES.includes(cfg?.theme)) store.set(folderKey, cfg.theme);
+  if (knownTheme(cfg?.theme)) store.set(folderKey, cfg.theme);
   else { store.del(folderKey); if (store.get('spine:theme') == null) document.documentElement.removeAttribute('data-theme'); }   // (it had one before)
   if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return;
   readerConfig = cfg;
   for (let [key, value] of Object.entries(cfg)) {
-    if (key === 'LOCKED') continue;
+    if (key === 'LOCKED' || key === 'THEMES') continue;   // (THEMES read first: E-39)
     try {
       if (CONFIG_SETTINGS[key]) {
         const [type, apply] = CONFIG_SETTINGS[key];
@@ -9869,7 +9964,7 @@ function loadUserSettings(){
     loadedValue[name] = get();
   }
   siteValue.shortcuts = typeof readerConfig?.shortcuts === 'boolean' ? readerConfig.shortcuts : true;
-  siteValue.theme = THEMES.includes(readerConfig?.theme) ? readerConfig.theme : 'system';
+  siteValue.theme = knownTheme(readerConfig?.theme) ? readerConfig.theme : 'system';
   if (LOCKED.has('shortcuts')) { singleKeys = siteValue.shortcuts; syncFontMenu(); }
   if (LOCKED.has('theme')) {
     if (siteValue.theme === 'system') document.documentElement.removeAttribute('data-theme');
@@ -9883,11 +9978,79 @@ function setShown(name){
   return after === 'reload' && !LOCKED.has(name) ? store.get(setKey(name)) ?? siteValue[name] : get();
 }
 const setText = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : v === '' ? 'none' : String(v);
+// The site's and the reader's own themes among the choices (Settings' grid, Text settings' list: E-38, E-39).
+function renderThemeChoices(){
+  const grid = $('#setForm .set-themes'), custom = [...siteThemes, ...userThemes];
+  grid.querySelectorAll('[data-custom]').forEach(l => l.remove());
+  for (const th of custom) {
+    const l = document.createElement('label'); l.className = 'set-theme'; l.dataset.custom = '';
+    const r = document.createElement('input'); r.type = 'radio'; r.name = 'theme'; r.value = th.id;
+    const sw = document.createElement('span'); sw.className = 'sw'; sw.setAttribute('aria-hidden', 'true'); sw.textContent = 'Aa';
+    sw.style.background = th.page; sw.style.color = th.text; sw.style.borderColor = th.accent;
+    l.append(r, sw, th.name + (th.id.startsWith('s-') ? '' : ''));
+    l.title = th.id.startsWith('s-') ? `${th.name}: this site's theme` : `${th.name}: your theme`;
+    grid.append(l);
+  }
+  const sel = $('#txtTheme'), keep = sel.value;
+  sel.querySelectorAll('[data-custom]').forEach(o => o.remove());
+  for (const th of custom) { const o = document.createElement('option'); o.value = th.id; o.textContent = th.name; o.dataset.custom = ''; sel.append(o); }
+  sel.value = keep;
+}
+// The editor of the reader's own theme in use (E-38): its fields, and how readable its text is.
+function themeEditSync(){
+  const id = document.documentElement.getAttribute('data-theme'), th = userThemes.find(x => x.id === id), lock = LOCKED.has('theme');
+  $('#themeEdit').hidden = lock;
+  $('#themeFields').hidden = !th;
+  $('#themeNew').textContent = th ? 'New theme from this one' : 'Make a theme of my own from this one';
+  if (!th) return;
+  if (document.activeElement !== $('#themeName')) $('#themeName').value = th.name;
+  $('#themeDark').checked = th.dark;
+  const vars = themeVars(th);
+  for (const inp of $('#themeFields').querySelectorAll('[data-theme-key]')) {
+    const k = inp.dataset.themeKey, v = th[k] || (k === 'ui' ? vars['--paper'] : k === 'uiText' ? vars['--ink'] : '#000000');
+    if (document.activeElement !== inp) inp.value = hexRgb(v).length ? rgbHex(hexRgb(v)) : v;
+  }
+  const page = hexContrast(th.page, th.text), ui = hexContrast(vars['--paper'], vars['--ink']), link = hexContrast(th.page, th.accent);
+  const low = [page < 4.5 && `the text on the page (${page.toFixed(1)}:1)`, ui < 4.5 && `the interface's text (${ui.toFixed(1)}:1)`, link < 3 && `links on the page (${link.toFixed(1)}:1)`].filter(Boolean);
+  $('#themeContrast').textContent = low.length ? `Hard to read: ${low.join(', ')}; 4.5:1 or more is advised (3:1 for links).` : '';
+}
+// A colour of the page in use now, as #rrggbb (for a new theme made from it).
+function varHex(name){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (THEME_HEX.test(v)) return rgbHex(hexRgb(v));
+  const m = v.match(/^rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/); return m ? rgbHex([+m[1], +m[2], +m[3]]) : '#888888';
+}
+$('#themeNew').addEventListener('click', () => {
+  if (LOCKED.has('theme')) return;
+  const cur = themeById(document.documentElement.getAttribute('data-theme'));
+  let n = 1, name;
+  do name = cur ? `${cur.name} ${++n}` : `My theme${n++ > 1 ? ' ' + (n - 1) : ''}`; while (userThemes.some(x => x.name === name) || siteThemes.some(x => x.name === name));
+  const th = themeCheck({ name, dark: isDark(), page: varHex('--page-bg'), text: varHex('--page-ink'), accent: varHex('--ribbon'), ui: varHex('--paper'), uiText: varHex('--ink') }, 'u-');
+  let id = th.id, k = 2; while (knownTheme(id)) id = `${th.id}-${k++}`;
+  th.id = id; userThemes.push(th); userThemesSave(); renderThemeChoices(); setTheme(id); setSync();
+  $('#themeName').focus(); $('#themeName').select();
+});
+function themeEdit(change){
+  const id = document.documentElement.getAttribute('data-theme'), i = userThemes.findIndex(x => x.id === id);
+  if (i < 0 || LOCKED.has('theme')) return;
+  try { userThemes[i] = themeCheck({ ...userThemes[i], ...change }, 'u-'); } catch { return; }
+  userThemesSave(); applyThemeVars(); restyleFrame(); renderThemeChoices(); syncThemeBtn(); setSync();
+}
+$('#themeName').addEventListener('input', e => { if (e.target.value.trim()) themeEdit({ name: e.target.value }); });
+$('#themeDark').addEventListener('change', e => themeEdit({ dark: e.target.checked }));
+$('#themeFields').addEventListener('input', e => { const k = e.target.dataset?.themeKey; if (k) themeEdit({ [k]: e.target.value }); });
+$('#themeDelete').addEventListener('click', () => {
+  const id = document.documentElement.getAttribute('data-theme'), th = userThemes.find(x => x.id === id);
+  if (!th || !confirm(`Delete the theme "${th.name}"?`)) return;
+  userThemes = userThemes.filter(x => x.id !== id); userThemesSave();
+  setTheme(th.dark ? 'dark' : 'light'); renderThemeChoices(); setSync();
+});
 function setSync(){
   const f = $('#setForm');
   const theme = document.documentElement.getAttribute('data-theme') || 'system';
   for (const r of f.querySelectorAll('input[name="theme"]')) { r.checked = r.value === theme; r.disabled = LOCKED.has('theme'); }
   $('#setThemeLocked').hidden = !LOCKED.has('theme');
+  themeEditSync();
   let reload = false;
   for (const el of f.querySelectorAll('[data-set]')) {
     const name = el.dataset.set, now = setShown(name), site = siteValue[name];
@@ -9992,7 +10155,11 @@ function configNow(){
   // (Starting preferences: the theme only when one is chosen, as "follow the device" has no value; read aloud
   // only when it's one a config can name.)
   const theme = document.documentElement.getAttribute('data-theme');
+  // (The site's themes and the reader's own, as a site's THEMES: E-39. One in use named as the site will call it.)
+  const custom = [...siteThemes, ...userThemes];
+  if (custom.length) c.THEMES = custom.map(({ name, dark, page, text, accent, ui, uiText }) => ({ name, dark, page, text, accent, ...(ui ? { ui } : {}), ...(uiText ? { uiText } : {}) }));
   if (THEMES.includes(theme)) c.theme = theme;
+  else if (themeById(theme)) c.theme = 's-' + themeSlug(themeById(theme).name);
   Object.assign(c, { layout: ed.on && ed.prevLayout ? ed.prevLayout : layout, width: WIDTHS[widthStep][0], font: fontFace, fontSize: fontPct, lineSpacing: lineH });
   if (['device', 'kokoro', 'pocket', 'server'].includes(tts.engine)) c.readAloud = tts.engine;
   c.shortcuts = singleKeys;
@@ -10075,6 +10242,7 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
 
 /* ---------- start ---------- */
 (async () => {
+  userThemesLoad();   // (the reader's own themes, before the folder's default theme is looked at: E-38)
   await loadConfig();
   loadUserSettings();
   // (Saved speech over a limit lowered since the last visit, or any with a limit of 0: L-305. Only then, so a page
@@ -10092,7 +10260,8 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   setWidth(widthStep, false);
   setLayout(layout, false);
   syncFontMenu();
-  { const t = store.get('spine:theme'); if (THEMES.includes(t) && !LOCKED.has('theme')) document.documentElement.setAttribute('data-theme', t); }
+  { const t = store.get('spine:theme'); if (knownTheme(t) && !LOCKED.has('theme')) document.documentElement.setAttribute('data-theme', t); }
+  applyThemeVars(); renderThemeChoices();
   syncThemeBtn();
   setToc(!narrow.matches && SHOW_CONTENTS);
   syncBars();

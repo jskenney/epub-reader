@@ -227,6 +227,13 @@ def main():
     (SITE / "folder-math").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-math" / "index.html")
     (SITE / "folder-math" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "MATH_DELIMITERS": ["\\(", "$$"]}))
+    # Site themes (E-39): one the folder's default, one with its interface colours, one left out (a bad colour).
+    (SITE / "folder-themes").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-themes" / "index.html")
+    (SITE / "folder-themes" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "theme": "Ocean", "THEMES": [
+        {"name": "Ocean", "dark": True, "page": "#0b2533", "text": "#e6f1f5", "accent": "#4fb3d9"},
+        {"name": "Paper", "page": "#fbf7ee", "text": "#222222", "accent": "#a33", "ui": "#e9e2d0", "uiText": "#111111"},
+        {"name": "Bad", "page": "red;background:url(x)", "text": "#000", "accent": "#000"}]}))
     (SITE / "folder-brand" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand3" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand2" / "tall.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="80"><rect width="20" height="80" fill="purple"/></svg>')

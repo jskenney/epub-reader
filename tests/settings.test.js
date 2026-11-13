@@ -581,3 +581,55 @@ test('Marks around math typed in Settings: a bad value is refused with its reaso
   await field.fill('$$, \\('); await field.dispatchEvent('change');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:set:MATH_DELIMITERS'))), '\\( $$');
 });
+
+test('a theme of the reader\'s own: made from the one in use, its colours edited, kept across a reload and drawn before the page, given by Generate config, deleted (E-38)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, LONG);
+  await openSettings(page);
+  await page.click('#themeNew');
+  const id = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+  assert.match(id, /^u-/);
+  assert.equal(await page.isVisible('#themeFields'), true);
+  await page.fill('#themeName', 'Night owl');
+  await page.locator('[data-theme-key="page"]').evaluate(el => { el.value = '#102030'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.locator('[data-theme-key="text"]').evaluate(el => { el.value = '#e0e8f0'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.click('#themeDark');
+  const bg = () => h.inFrame(page, doc => getComputedStyle(doc.documentElement).backgroundColor);
+  assert.ok(await h.waitFor(async () => await bg() === 'rgb(16, 32, 48)', 3000), await bg());
+  assert.match(await page.textContent('.set-themes'), /Night owl/);
+  // Generate config gives it, as a site's theme.
+  await page.click('#setGenerate');
+  const cfg = JSON.parse(await page.inputValue('#cfgText'));
+  assert.deepEqual(cfg.THEMES?.map(x => [x.name, x.page, x.text, x.dark]), [['Night owl', '#102030', '#e0e8f0', true]]);
+  assert.equal(cfg.theme, 's-night-owl');
+  await page.keyboard.press('Escape');
+  // Kept, and drawn as the page loads.
+  await page.reload();
+  assert.equal(await page.evaluate(() => [document.documentElement.getAttribute('data-theme'), document.documentElement.style.getPropertyValue('--page-bg')].join(' ')), `${id} #102030`);
+  await h.waitForBook(page);
+  assert.equal(await bg(), 'rgb(16, 32, 48)');
+  assert.equal(await page.evaluate(() => document.querySelector('#themeBtn').classList.contains('dark')), true, 'a dark theme');
+  // Deleted.
+  await openSettings(page);
+  page.once('dialog', d => d.accept());
+  await page.click('#themeDelete');
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), 'dark');
+  assert.doesNotMatch(await page.textContent('.set-themes'), /Night owl/);
+});
+
+test('a site\'s themes from reader-config.json: offered beside the built-in ones, the folder\'s default by its name, interface colours of its own; a bad one left out (E-39)', async () => {
+  const page = await h.newPage();
+  const warns = []; page.on('console', m => { if (m.type() === 'warning') warns.push(m.text()); });
+  await h.openReader(page, `${h.SITE}/folder-themes/index.html?book=/reader/books/long.epub`);
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), 's-ocean');
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.documentElement).backgroundColor), 'rgb(11, 37, 51)');
+  assert.ok(warns.some(w => /THEMES: Bad ignored/.test(w)), warns.join(' | '));
+  await openSettings(page);
+  const names = await page.$$eval('.set-themes .set-theme', ls => ls.map(l => l.textContent.trim()));
+  assert.deepEqual(names.slice(-2), ['AaOcean', 'AaPaper']);
+  assert.equal(await page.isVisible('#themeFields'), false, 'a site\'s theme isn\'t edited');
+  await page.click('.set-theme:has(input[value="s-paper"])');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()), '#e9e2d0');
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.documentElement).backgroundColor), 'rgb(251, 247, 238)');
+  assert.equal(await page.evaluate(() => document.querySelector('#themeBtn').classList.contains('dark')), false);
+});
