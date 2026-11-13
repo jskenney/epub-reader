@@ -625,7 +625,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-40, E-41
+Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -637,8 +637,6 @@ Most important first.
 |---|---|---|
 | T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. | Tests |
 | T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
-| [E-40](#e-40-code-and-alert-colours-from-the-theme) | Code highlighting and alert colours that follow the theme, not two fixed palettes | Enhancement |
-| [E-41](#e-41-special-purpose-themes) | E-ink, high-contrast and low-blue-light themes | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -682,22 +680,10 @@ across, so they can be read (H-33).
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
 
-### E-40. Code and alert colours from the theme
-The colours of highlighted code (E-35, E-37) and of alerts (E-33) worked out from the theme's colours (its accent, text
-and background), or given by the theme, instead of GitHub's two fixed palettes, so code stays readable on any theme's
-background; a theme can set them outright.
-
-### E-41. Special-purpose themes
-- **E-ink:** black on white, no tints, shadows or transitions, page turns without animation.
-- **High contrast:** following `prefers-contrast: more` and forced colours (Windows High Contrast).
-- **Low blue light:** a warm night theme.
-
-Palettes plus a few CSS switches once E-38's theme data is in.
-
 ## Suggested order
 
-1. E-40 and E-41, on E-38's theme data.
-2. E-25, E-22, as laid out in TODO.md; E-36 and E-30; then the other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -705,6 +691,8 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| E-40 | Code and alert colours follow the theme: a theme's own (`code`, `alerts` in THEMES) as given, else GitHub's made readable (4.5:1) on its background; in e-ink and high contrast the text's colour, in bold. | `b39c8c8` |
+| E-41 | E-ink (no shadows or motion), High contrast (and System when the device asks for more contrast) and Night (warm, dark) themes; e-ink and high contrast show a book's text in their own colours. | `b39c8c8` |
 | E-38 | Themes of the reader's own: made from the theme in use in Settings, named, coloured (page, text, links, interface), dark or not, with a warning under 4.5:1 contrast; kept in the browser and drawn before the first paint; the rest of the interface's colours worked out; hex colours only. | `b70323c` |
 | E-39 | A site's `THEMES` in reader-config.json, offered beside the built-in ones; `theme` may name one as the folder's default, `LOCKED` can lock it; a bad one left out with a warning; Generate config gives the site's and the reader's themes. | `b70323c` |
 | H-52 | H-49 wasn't fixed. The next closing mark is found once and kept until the scan passes it: linear. | `257eaf5` |
