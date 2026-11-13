@@ -1039,7 +1039,10 @@ def main():
                # (round 30 review)
                "colheight": "body>div>div{column-height:300px}", "htmlmt": "html{margin-top:-90vh}", "htmlml": "html{margin-left:-60vw}",
                "htmlw": "html{width:300vw}", "clipvert": "body>div{writing-mode:vertical-rl}",
-               "snap": "body>div{scroll-snap-type:x mandatory} #hp120{scroll-snap-align:start}"}
+               "snap": "body>div{scroll-snap-type:x mandatory} #hp120{scroll-snap-align:start}",
+               # (round 31 review, M-189, M-190)
+               "spanesc": "p:nth-child(5){column-sp\\61n:all}", "before": "body::before{content:'';display:block;height:100vh}",
+               "hbefore": "html::before{content:'';display:block;height:100vh}"}
     # A book's own two-column box whose heading spans it (round 30 review, L-400).
     epub(books / "own-span.epub", "Own Span", [("c1.xhtml", "One", '<div class="inner"><h3 id="sp">Glossary</h3>' + "".join(f"<p>Term {i}: a short entry.</p>" for i in range(20)) + "</div>" + hp,
          "<style>.inner{columns:2;column-gap:10px} .inner h3{column-span:all}</style>")], uid="urn:own-span")
@@ -1125,10 +1128,25 @@ def main():
     (books / "emphasis.md").write_text("# E\n\n" + "a _" * 20000 + "\n")   # (round 30 review, H-47: marked before 18.1.3)
     # TeX and code blocks in an HTML page and an EPUB chapter (E-37).
     MATH_HTML_BODY = '<h1>Math page</h1><p>Start.</p><p id="inl">Energy \\(E = mc^2\\) and money $5 and $10.</p><p id="disp">\\[\\int_0^1 x^2\\,dx = \\frac{1}{3}\\]</p><p id="lit">Written as code: <code>\\(x\\)</code>.</p><p id="bad">Broken \\(\\frac{1}{\\) stays.</p><pre><code class="language-js" id="js">const a = 1; // note</code></pre><pre class="lang-python"><code id="py">def f(): return "s"</code></pre><pre><code class="language-nosuchlang" id="none">plain</code></pre><pre><code class="language-js hljs" id="own"><span class="hljs-keyword">let</span> b</code></pre>'
+    MATH_HTML_BODY += (r'<pre style="background:#272822;color:#f8f8f2"><code class="language-js" id="dark">const s = "a string";</code></pre>'
+        r'<pre class="language-js" id="preonly">const x = 1;</pre>'
+        r'<p id="wide">\[' + ' + '.join(f'a_{{{i}}}' for i in range(40)) + r'\]</p>')
     (books / "math-page.html").write_text("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Math page</title></head><body>" + MATH_HTML_BODY + "</body></html>")
     epub(books / "math-epub.epub", "Math EPUB", [("c1.xhtml", "One", MATH_HTML_BODY.replace("<h1>Math page</h1>", "<h1>One</h1>"), "")], uid="urn:math-epub")
     # Every kind of math mark in an HTML page, for MATH_DELIMITERS (E-37), and a folder whose config names \\( and $$.
     (books / "math-marks.html").write_text("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Marks</title></head><body>" + '<h1>Dollars</h1><p id="br">Bracket \\(a^2\\) here.</p><p id="dd">Display $$b^2$$ here.</p><p id="sd">Single $c^2$ here.</p><p id="money">Costs $5 and $10, or \\$7.</p>' + "</body></html>")
+    # Round 31 review: a text file with \\( in it; two HTML blocks in Markdown; a heading that spans columns only in a
+    # wide window.
+    (books / "tex.txt").write_text("Regex groups\n\nIn sed, group with \\(ab\\)* and more.\n")
+    (books / "two-blocks.md").write_text('# Blocks\n\n<img alt="one" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">\n\n<img alt="two" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">\n')
+    (books / "span-wide.html").write_text("<!DOCTYPE html><html><head><title>Span wide</title><style>@media (min-width:900px){h2{column-span:all}}</style></head><body>" + "".join(f"<p>Paragraph {i} " + "word " * 120 + "</p>" for i in range(15)) + "<h2 id=\"mid\">Middle</h2>" + "".join(f"<p>Later {i} " + "word " * 120 + "</p>" for i in range(15)) + "</body></html>")
+    # Round 31 review: a document's own data-ed-unwrap (M-191); a \ref alone (L-416); every noncharacter (L-415); TeX
+    # that fails slowly, many times (H-50); code of very long words (H-51).
+    (books / "own-unwrap.md").write_text('# Unwrap\n\nStart.\n\n<div data-ed-unwrap hidden>\n\n**Approved: wire the money**\n\n</div>\n\n<p>Total <span data-ed-unwrap style="display:none">4000</span>40 units.</p>\n')
+    (books / "ref-only.md").write_text('# Ref\n\nStart.\n\nSee $\\ref{eq1}$ here.\n')
+    (books / "nonchars.md").write_text('# Non\n\nStart.\n\nAll ' + ''.join(chr(c) for c in range(0xFDD0, 0xFDF0)) + ' here, and $5 and $10.\n')
+    (books / "tex-slow.md").write_text('# Slow\n\n' + ''.join('$$\\def\\a{' + 'x' * 3600 + '}\\def\\b{\\a\\b}\\b$$\n\n' for _ in range(40)))
+    (books / "hl-long.html").write_text('<!DOCTYPE html><html><head><title>Long words</title></head><body><pre><code class="language-java">' + '$' * 99000 + '</code></pre></body></html>')
     (books / "texbomb.md").write_text("# TeX\n\nBefore.\n\n```math\n\\def\\a{" + "x" * 3000 + "}" + "\\a" * 990 + "\n```\n\nAfter.\n")
     (books / "notes.md").write_text("# Notes\n\nIntro with a [link](#later).\n\n## First\n\nText.\n\n## Later\n\nThe end.\n")
     (books / "plain.txt").write_text("CHAPTER I.\n\nIt was a dark night.\n\nCHAPTER II.\n\nMorning came.\n")

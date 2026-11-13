@@ -410,7 +410,7 @@ test('book CSS aimed at the reader\'s paging (--spine-x, @layer, the flow\'s hei
   const count = async () => Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
   await h.openReader(page, `${h.READER}?book=books/hostile-plain.epub`, { 'spine:layout': 'one' });
   const n = await count();
-  for (const k of ['varx', 'layer', 'layer2', 'height', 'htmlpad', 'bodypos', 'translate', 'bscale', 'bcols', 'grid', 'cv', 'samelayer', 'sublayer', 'prop', 'trans', 'offset', 'offset2', 'offset3', 'hcols', 'span', 'span3', 'vars', 'vars2', 'colheight', 'htmlmt', 'htmlml', 'htmlw', 'clipvert', 'snap']) {
+  for (const k of ['varx', 'layer', 'layer2', 'height', 'htmlpad', 'bodypos', 'translate', 'bscale', 'bcols', 'grid', 'cv', 'samelayer', 'sublayer', 'prop', 'trans', 'offset', 'offset2', 'offset3', 'hcols', 'span', 'span3', 'vars', 'vars2', 'colheight', 'htmlmt', 'htmlml', 'htmlw', 'clipvert', 'snap', 'spanesc', 'before', 'hbefore']) {
     await h.openReader(page, `${h.READER}?book=books/hostile-${k}.epub`, { 'spine:layout': 'one' });
     assert.equal(await count(), n, `${k}: the page count`);
     for (let i = 1; i < n; i++) await page.keyboard.press('ArrowRight');

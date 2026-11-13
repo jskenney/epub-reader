@@ -64,7 +64,9 @@ saved position) works as for EPUBs.
   `lang-js`, on the `code` or the `pre`) is coloured. `$$…$$` and `$…$` are read too when `MATH_DELIMITERS` (in
   Settings or `reader-config.json`) names them; not by default, as `$` is money far more often in HTML. TeX inside
   `code` or `pre` is left alone. A page's own MathML is drawn by the browser as it is, and code already
-  coloured (holding elements, or marked `hljs`) keeps the book's own colours. While a page is being edited it shows
+  coloured (holding elements, or marked `hljs`) keeps the book's own colours; the reader's colours come with its own
+  background. A page spends a few seconds at most on its math and on its code: past that, or in a block with a word of
+  over 1,000 characters, the rest is shown as written. While a page is being edited it shows
   its TeX and code as written, and that is what is saved.
 - **HTML:** the page's title, `meta name="author"` and `lang` are used, and
   its scripts are removed. Opened by a `?book=` link, its images,
@@ -573,7 +575,7 @@ site as the reader.
   pictures from other sites, shortcuts, how long positions are kept, how many
   search matches are listed, comic section size, the sleep timer, how much
   speech is prepared ahead and saved, full-precision voice models, and the
-  more reading fonts (`ADDITIONAL_FONTS`), and the addresses reading progress is
+  more reading fonts (`ADDITIONAL_FONTS`), the marks around math in HTML and EPUB (`MATH_DELIMITERS`), and the addresses reading progress is
   asked for and sent to (see
   [Reading progress sent to your site](#reading-progress-sent-to-your-site)). Each
   starts at the site's value (see [Settings](#settings) below); one you change
@@ -600,7 +602,7 @@ With these (and the voice scripts below), the reader loads nothing from other
 sites. Without them it falls back to cdnjs and Google Fonts.
 
 - **Libraries:** `libs/jszip.min.js` (opens EPUB and comic files),
-  `libs/marked.min.js` (Markdown), `libs/temml.min.js` (math in Markdown), `libs/highlight.min.js` and `libs/emoji.json` (code and emoji in Markdown), `libs/lame.min.js` (MP3 audiobooks) and
+  `libs/marked.min.js` (Markdown), `libs/temml.min.js` (math in Markdown, HTML and EPUB), `libs/highlight.min.js` (code in them), `libs/emoji.json` (emoji in Markdown), `libs/lame.min.js` (MP3 audiobooks) and
   `libs/codemirror/` (the editor's text view) are tried first. The local and the cdnjs
   copy must both match hashes pinned in `index.html` (Subresource Integrity),
   so a changed or damaged file is refused rather than run.

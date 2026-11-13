@@ -569,3 +569,15 @@ test('a font added in Settings on a site that self-hosts its fonts shows in the 
   await page.fill('#set-ADDITIONAL_FONTS', 'Merriweather'); await page.press('#set-ADDITIONAL_FONTS', 'Tab');
   assert.ok(await h.waitFor(async () => /style-src[^;]*https:\/\/fonts\.googleapis\.com/.test(await policy()), 5000), 'the open page allows it');
 });
+
+test('Marks around math typed in Settings: a bad value is refused with its reason, a good one kept in its normal form (round 31 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await page.click('#setBtn');
+  const field = page.locator('#set-MATH_DELIMITERS');
+  await field.fill('\\{ foo'); await field.dispatchEvent('change');
+  assert.match(await page.locator('#set-MATH_DELIMITERS').locator('xpath=ancestor::div[contains(@class,"set-row")]').locator('.set-def').textContent(), /Not changed: .*isn't one of/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('spine:set:MATH_DELIMITERS')), null);
+  await field.fill('$$, \\('); await field.dispatchEvent('change');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:set:MATH_DELIMITERS'))), '\\( $$');
+});

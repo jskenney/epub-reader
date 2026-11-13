@@ -1251,3 +1251,26 @@ test('an HTML page with TeX and coloured code is edited and saved as written: no
   assert.ok(back.includes('<code class="language-js" id="js">const a = 1; // note</code>'), back);
   void orig;
 });
+
+test('WYSIWYG: a click on a display formula standing alone and typing makes a paragraph after it, not part of the next (round 31 review)', async () => {
+  const page = await h.newPage();
+  await wysiwyg(page, doc('gh.md'));
+  await inPage(page).locator('math[display="block"]').first().click();
+  await page.keyboard.type('Typed alone.');
+  await flush(page);
+  const src = await text(page);
+  assert.match(src, /\$\$\n\nTyped alone\.\n\n/, src);
+});
+
+test('a document\'s own data-ed-unwrap is written back as it is; a \\ref alone keeps its TeX; with every noncharacter in a document its $s are escaped (round 31 review, M-191, L-416, L-415)', async () => {
+  const page = await h.newPage();
+  let [, back] = await typedRoundTrip(page, 'own-unwrap.md');
+  const shown = await page.evaluate(md => { const d = document.createElement('div'); d.innerHTML = window.marked.parse(md); d.querySelectorAll('[hidden], [style*="none"]').forEach(e => e.remove()); return d.textContent; }, back);
+  assert.doesNotMatch(shown, /Approved|4000/, back);
+  [, back] = await typedRoundTrip(page, 'ref-only.md');
+  assert.ok(back.includes('See $\\ref{eq1}$ here.'), back);
+  [, back] = await typedRoundTrip(page, 'nonchars.md');
+  assert.ok(back.includes(String.fromCharCode(...Array.from({ length: 32 }, (_, k) => 0xFDD0 + k))), 'the noncharacters kept');
+  assert.match(back, /\\\$5 and \\\$10|\$5 and \$10/, back);
+  assert.doesNotMatch(back, /[﷐-﷯]\$|\$[﷐-﷯]{2}/, 'no marker turned into $');
+});

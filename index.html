@@ -670,7 +670,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: one above the latest release, and when it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261113.0057</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">v0.60.1 - 20261113.0416</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1542,7 +1542,15 @@ function loadScript(src, integrity){
     document.head.append(el);
   });
 }
-const libsLoaded = {};
+const libsLoaded = {}, libsSlow = {};
+// An optional library for a page (math, highlighting: E-37): waited for at most a few seconds, then the page is shown
+// without it, and it isn't waited for again (round 31 review: one that never answered kept a chapter from showing).
+async function loadLibSoon(name, ms = 8000){
+  if (libsSlow[name]) throw new Error('it was too slow before');
+  let timer;
+  try { return await Promise.race([loadLib(name), new Promise((_, rej) => { timer = setTimeout(() => { libsSlow[name] = true; rej(new Error('it took too long')); }, ms); })]); }
+  finally { clearTimeout(timer); }
+}
 function loadLib(name){
   const lib = LIBS[name];
   return libsLoaded[name] ??= (async () => {
@@ -1743,7 +1751,12 @@ async function markdownToHtml(md){
 // Math: the TeX as MathML (Temml), which browsers draw, with the TeX kept in it (for the editor, search and reading
 // aloud); TeX it can't read is shown as it was written, marked.
 const MATH_TEX_MAX = 20000, MATH_OUT_MAX = 200000, MATH_DOC_MAX = 8 << 20;
-const mdMathBudget = { left: MATH_DOC_MAX };   // (MathML made for the document being read, reset for each)
+// (MathML made for the document being read, and the time spent and formulas made, reset for each document or page:
+// TeX that failed was never charged, and tens of thousands of small formulas took minutes to lay out: round 31 review,
+// H-50.)
+const MATH_MS_MAX = 3000, MATH_COUNT_MAX = 5000;
+const mdMathBudget = { left: MATH_DOC_MAX, ms: MATH_MS_MAX, count: MATH_COUNT_MAX };
+const mathBudgetReset = () => Object.assign(mdMathBudget, { left: MATH_DOC_MAX, ms: MATH_MS_MAX, count: MATH_COUNT_MAX });
 function mdMath(tex, display, raw = ''){
   const ml = texToMathml(tex, display);
   if (ml) return ml;
@@ -1753,28 +1766,39 @@ function mdMath(tex, display, raw = ''){
 }
 // TeX as MathML (Temml), the TeX kept in it, within the limits; null for TeX it can't read or past them.
 function texToMathml(tex, display){
+  if (mdMathBudget.ms <= 0 || mdMathBudget.count <= 0) return null;
+  const t0 = performance.now();
   try {
     // (Limits: a few KB of TeX repeating macros made tens of MB of MathML from one formula: round 28 review, H-41.
     // Expansions at KaTeX's 1000, which counts Temml's own macros too: at 200, 27 \implies failed: round 29, M-176.)
     if (window.temml && tex.length <= MATH_TEX_MAX && mdMathBudget.left > 0) {
       const out = window.temml.renderToString(tex, { displayMode: display, annotate: true, throwOnError: true, trust: false, maxExpand: 1000, maxSize: [40, 40] });
       mdMathBudget.left -= out.length;
-      if (out.length <= MATH_OUT_MAX) return out.replace(/<math\b/, `<math data-md-tex="" data-md-own="${MD_OWN}"`);   // (ours: M-173)
+      // (Only a formula: Temml gives a bare link for \ref alone, which the editor couldn't write back: L-416.)
+      if (out.length <= MATH_OUT_MAX && /^\s*<math\b/.test(out)) { mdMathBudget.count--; return out.replace(/<math\b/, `<math data-md-tex="" data-md-own="${MD_OWN}"`); }   // (ours: M-173)
     }
   } catch {}
+  finally { mdMathBudget.ms -= performance.now() - t0; }
   return null;
 }
 // E-37: TeX and code in an HTML page or a book's chapter, as in Markdown. TeX between the marks chosen (\(…\) and
 // \[…\] unless MATH_DELIMITERS says otherwise) is drawn as MathML, by Temml, as Markdown's is: the browser draws it, no
-// script runs in the book's frame, and the TeX stays in it for search. A code
+// script runs in the book's frame, and the TeX stays in it (for the editor's Markdown). A code
 // block naming its language (language-x or lang-x, on its <code> or <pre>) and not coloured already is coloured by
 // highlight.js. Not in Markdown (done as it is read), fixed-layout pages, or a page being edited (the source is what
 // is edited, and saved). TeX that can't be read, or past the limits, stays as it was written.
 // The formulas in a text, set apart by the marks chosen (MATH_DELIMITERS): each closing mark looked for within 4000
 // characters, and a text's escaped \$ left alone.
 function texSpans(s, marks){
-  const out = [], win = 4000;
-  const close = (from, mark) => { const e = s.slice(from, from + win).indexOf(mark); return e < 0 ? -1 : from + e; };
+  const out = [], win = 4000, none = {};
+  // (Where a closing mark was last not found: not looked for again before then, so many marks never closed don't
+  // take time with their square: round 31 review.)
+  const close = (from, mark) => {
+    if (none[mark] >= Math.min(s.length, from + win)) return -1;
+    const e = s.slice(from, from + win).indexOf(mark);
+    if (e < 0) { none[mark] = Math.min(s.length, from + win); return -1; }
+    return from + e;
+  };
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (c === '\\' && (s[i + 1] === '(' || s[i + 1] === '[')) {
@@ -1793,20 +1817,23 @@ function texSpans(s, marks){
 }
 const TEX_SKIP = 'code, pre, kbd, samp, tt, var, script, style, textarea, math, svg, title, [contenteditable]';
 async function enhancePage(root){
-  if (book?.doc?.kind === 'markdown' || book?.comic) return;
+  // (Not plain text either, where \( is what it says, a regular expression's group say: round 31 review.)
+  if (book?.doc?.kind === 'markdown' || book?.doc?.kind === 'text' || book?.comic) return;
   const doc = root.ownerDocument;
   // Code blocks naming their language.
   const blocks = [];
   for (const pre of root.querySelectorAll('pre')) {
     const code = pre.children.length === 1 && pre.firstElementChild.localName === 'code' ? pre.firstElementChild : !pre.children.length ? pre : null;
-    if (!code || code.children.length || code.textContent.length > HLJS_MAX) continue;
+    if (!code || code.children.length || !hlOk(code.textContent)) continue;
     const lang = (`${code.className} ${pre.className}`.match(/(?:^|\s)(?:language|lang)-([\w+#.-]+)/i) || [])[1];
     if (lang && !/(^|\s)hljs(\s|$)/.test(code.className)) blocks.push({ code, lang: lang.toLowerCase() });
   }
-  if (blocks.length && !window.hljs) await loadLib('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
+  hlBudget.ms = HLJS_MS;   // (for each page)
+  if (blocks.length && !window.hljs) await loadLibSoon('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
   for (const { code, lang } of blocks) {
     if (!window.hljs?.getLanguage(lang)) continue;
-    try { code.innerHTML = window.hljs.highlight(code.textContent, { language: lang, ignoreIllegals: true }).value; code.classList.add('hljs'); code.setAttribute('data-md-own', MD_OWN); } catch {}
+    if (hlBudget.ms <= 0) break;
+    try { code.innerHTML = hlRun(code.textContent, lang); code.classList.add('hljs'); code.setAttribute('data-md-own', MD_OWN); code.closest('pre').setAttribute('data-md-own', MD_OWN); } catch {}
   }
   // TeX in the text, between the marks chosen.
   const marks = new Set(MATH_DELIMITERS.split(' ').filter(Boolean));
@@ -1816,9 +1843,9 @@ async function enhancePage(root){
   const nodes = [], walk = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let n; (n = walk.nextNode());) if (may(n.data) && !n.parentElement?.closest(TEX_SKIP)) nodes.push(n);
   if (!nodes.length) return;
-  if (!window.temml) await loadLib('temml').catch(err => console.warn(`Math: ${err.message}`));
+  if (!window.temml) await loadLibSoon('temml').catch(err => console.warn(`Math: ${err.message}`));
   if (!window.temml) return;
-  mdMathBudget.left = MATH_DOC_MAX;   // (for each page)
+  mathBudgetReset();   // (for each page)
   for (const n of nodes) {
     const s = n.data, frag = doc.createDocumentFragment();
     let at = 0, changed = false;
@@ -1881,6 +1908,15 @@ const fnSlug = id => id.replace(/[^A-Za-z0-9-]/gu, c => '_' + c.codePointAt(0).t
 const MD_ALERTS = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' };
 let mdParser = null, mdEmoji = null;
 const HLJS_MAX = 100000;
+// highlight.js takes time with the square of a long word: a block holding one of over 1000 characters isn't coloured,
+// nor any once a document or page has spent HLJS_MS on it (round 31 review, H-51).
+const HLJS_MS = 2000, hlBudget = { ms: HLJS_MS };
+const hlOk = text => text.length <= HLJS_MAX && hlBudget.ms > 0 && !/\S{1000}/.test(text);
+function hlRun(text, lang){
+  const t0 = performance.now();
+  try { return window.hljs.highlight(text, { language: lang, ignoreIllegals: true }).value; }
+  finally { hlBudget.ms -= performance.now() - t0; }
+}
 // The reader's own marks (a note, a formula's source, a code block's info, an emoji, an alert) carry a token drawn at
 // random for the session, which a document can't know: the editor writes back from a mark only where it is, and a
 // document's own HTML, marks or not, is left as it is written (round 30 review, M-182, M-183: stripping the marks'
@@ -1893,7 +1929,7 @@ function mdMarked(){
   const m = new window.marked.Marked({ gfm: true });
   m.use({
     hooks: {
-      preprocess(src){ fn.defs = new Map(); fn.used = []; fn.seen = new Map(); mdMathBudget.left = MATH_DOC_MAX; return src; },
+      preprocess(src){ fn.defs = new Map(); fn.used = []; fn.seen = new Map(); mathBudgetReset(); hlBudget.ms = HLJS_MS; return src; },
       // The notes, after the document: those referred to in the order they first were, then any never referred to
       // (kept, so the editor writes them back), each with links back to where it is referred to.
       postprocess(html){
@@ -1910,6 +1946,9 @@ function mdMarked(){
       }
     },
     renderer: {
+      // (An HTML block followed by its line break, as marked 15 and GitHub give it, so two pictures in blocks of their own
+      // don't touch: marked 18 leaves it out: round 31 review.)
+      html(tok){ return tok.block && !tok.text.endsWith('\n') ? tok.text + '\n' : tok.text; },
       code(tok){
         const info = (tok.lang || '').trim(), lang = info.split(/\s/)[0];
         if (/^math$/i.test(lang)) return mdMath(tok.text, true, tok.raw.replace(/\n+$/, '')) + '\n';
@@ -1917,8 +1956,8 @@ function mdMarked(){
         const more = info !== lang ? ` data-md-info="${escHtml(info)}" data-md-own="${MD_OWN}"` : '';
         // (A code block naming a language highlight.js knows, coloured: E-35. Its text is escaped by highlight.js. Not
         // past HLJS_MAX: a block of megabytes took minutes and made millions of spans: round 28 review, M-166.)
-        if (lang && window.hljs?.getLanguage(lang) && tok.text.length <= HLJS_MAX) {
-          try { return `<pre><code class="hljs language-${escHtml(lang)}"${more}>${window.hljs.highlight(tok.text, { language: lang, ignoreIllegals: true }).value}</code></pre>\n`; } catch {}
+        if (lang && window.hljs?.getLanguage(lang) && hlOk(tok.text)) {
+          try { return `<pre><code class="hljs language-${escHtml(lang)}"${more}>${hlRun(tok.text, lang)}</code></pre>\n`; } catch {}
         }
         if (more) return `<pre><code${lang ? ` class="language-${escHtml(lang)}"` : ''}${more}>${escHtml(tok.text)}</code></pre>\n`;
         return false;
@@ -3011,16 +3050,19 @@ function baseCss(){
   const t = tokens();
   return `body{font-family:"Literata",Georgia,"Times New Roman",serif;font-size:1.0625rem;line-height:1.65;color:${t.ink};overflow-wrap:break-word}
 h1,h2,h3{line-height:1.25;text-wrap:balance}
-a{color:${t.ribbon}}${book?.doc?.kind === 'markdown' ? mdTableCss(t) + mdExtraCss(t) : ''}`;
+a{color:${t.ribbon}}${MATH_CSS}${book?.doc?.kind === 'markdown' ? mdTableCss(t) + mdExtraCss(t) : ''}`;
 }
 // Markdown tables drawn as tables (without, a table's cells read as loose words): lines between the cells, room in
 // them, the header row set apart. Of no weight (:where), so a document's own styles still win; a column's alignment
 // (":---:", "---:") is kept. (EPUBs and HTML documents keep their own look: their tables can be for layout.)
 // Math, footnotes and alerts in Markdown (E-31 to E-33), likewise of no weight. (Alerts' colours are in mdAlertCss,
 // with the reader's rules, so the dark themes, which take colours off the page, keep them.)
-const mdExtraCss = t => `
+// (Math in any document: a display formula wider than the column scrolls in it, rather than running over the next
+// column or past the screen: round 31 review. A book's own styling of its math comes first: :where.)
+const MATH_CSS = `
 :where(math){font-family:"Latin Modern Math","STIX Two Math","Cambria Math",math}
-:where(math[display="block"]){display:block math;margin:.8em 0;overflow-x:auto;overflow-y:hidden}
+:where(math[display="block"]){display:block math;margin:.8em 0;overflow-x:auto;overflow-y:hidden;max-width:100%}`;
+const mdExtraCss = t => `
 :where(.md-math-error){color:${t.ribbon}}
 :where(.md-fnref){font-size:.75em;line-height:0;vertical-align:super}
 :where(.md-fnref a){text-decoration:none;padding:0 .1em}
@@ -3049,6 +3091,10 @@ const MD_CODE_COLOURS = [
 // those the reader coloured (E-37), so a book's own highlighting keeps its own colours.
 const hlCss = (dark, scope) => MD_CODE_COLOURS.map(([names, l, d]) => names.map(n => `${scope} .hljs-${n.replace(/\./g, '.')}`).join(',') + `{color:${dark ? d : l} !important}`).join('\n')
   + `\n${scope} .hljs-comment,${scope} .hljs-quote{font-style:italic}${scope} .hljs-strong{font-weight:600}${scope} .hljs-emphasis{font-style:italic}`;
+// (The blocks the reader coloured in an HTML page or a book: on the reader's background, as a book's dark one made its
+// colours unreadable; the <pre> itself when it holds the code: round 31 review.)
+const hlOwnCss = (dark, t) => { const own = `[data-md-own="${MD_OWN}"]`, scope = `body pre:is(${own}, :has(> code${own}))`;
+  return `${scope}{background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, ${t.bg}) !important;color:${t.ink} !important}\n` + hlCss(dark, scope); };
 const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + hlCss(dark, 'body pre');
 const MD_ALERT_COLOURS = { note: ['#0969da', '#4493f8'], tip: ['#1a7f37', '#3fb950'], important: ['#8250df', '#ab7df8'], warning: ['#9a6700', '#d29922'], caution: ['#d1242f', '#f85149'] };
 const mdAlertCss = dark => Object.entries(MD_ALERT_COLOURS).map(([k, c]) => `body .md-alert-${k}{border-left-color:${c[+dark]} !important}body .md-alert-${k} > .md-alert-title{color:${c[+dark]} !important}`).join('\n');
@@ -3109,8 +3155,10 @@ html,body{translate:none !important;scale:none !important;rotate:none !important
   column-gap:var(--g) !important;column-fill:auto !important;column-height:auto !important;column-wrap:nowrap !important;column-rule:1px solid ${t.rule};overflow-wrap:break-word;
   transform:translateX(var(${PAGE_X},0px)) !important}
 #${RID.clip},#${RID.flow}{translate:none !important;scale:none !important;rotate:none !important;content-visibility:visible !important;contain:none !important;display:block !important}
-html,body,#${RID.clip},#${RID.flow}{transition:none !important;animation:none !important;scroll-snap-type:none !important}
+html,body,#${RID.clip},#${RID.flow}{transition:none !important;animation:none !important;scroll-snap-type:none !important;scroll-marker-group:none !important}
+html::before,html::after,body::before,body::after,#${RID.clip}::before,#${RID.clip}::after{content:none !important;display:none !important}   /* (they pushed the page out of the frame: round 31 review, M-190) */
 #${RID.flow} *{content-visibility:visible !important}
+#${RID.flow} *:not([data-span-own="${MD_OWN}"]){column-span:none !important}
 @media (max-width:640px){#${RID.flow}{column-count:1 !important}}
 @supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px) !important}}`;
   // (Small vertical elements in a horizontal page keep it: a table's vertical headers, SVG text: round 25 review,
@@ -3144,7 +3192,7 @@ pre{white-space:pre-wrap !important}
 ::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
 ::highlight(search-current){background-color:${dark ? '#E0B040' : '#F2B630'};color:#1a1408}
 ${book?.comic ? comicCss() : ''}
-${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) + '\n' + mdCodeCss(dark, t) : hlCss(dark, `body pre code[data-md-own="${MD_OWN}"]`)}
+${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) + '\n' + mdCodeCss(dark, t) : hlOwnCss(dark, t)}
 ${faceStack() ? `#${RID.flow},#${RID.flow} :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
 ${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
@@ -3641,6 +3689,9 @@ async function chapterDoc(i){
   const into = fx ? out.body : flow;
   const body = src.getElementsByTagNameNS('*', 'body')[0];
   if (body) for (const c of [...body.childNodes]) into.append(out.importNode(c, true));
+  // (Its TeX and code as the page shows them, so search finds what the page holds and the audiobook skips formulas as
+  // reading aloud does: round 31 review.)
+  if (!fx && !ed.on) await enhancePage(flow);
   const end = out.createElement('span'); end.id = RID.end; into.append(end);
   if (!fx) out.body.append(flow);
   sanitize(out);
@@ -4074,18 +4125,25 @@ function onWheel(e){
   wheelAcc += Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : turnRtl() ? -e.deltaX : e.deltaX;
   if (Math.abs(wheelAcc) > 40) { wheelAcc > 0 ? pageNext() : pagePrev(); wheelAcc = 0; wheelAt = now; }
 }
-// A block spanning the reader's columns broke the pages (round 29 review, M-169): those whose nearest multi-column box
-// is the reader's flow are kept to their column, while a spanner in a book's own multi-column box (a glossary's heading)
-// still spans that box (round 30 review, L-400).
+// A block spanning the reader's columns broke the pages (round 29 review, M-169): every block in the flow is kept to its
+// column (a CSS pin), but those inside a book's own multi-column box (a glossary's heading) may still span that box:
+// they carry the session's token, which the pin leaves out (L-400), and that box's columns are fixed as they are, so
+// it can't stop being one later and let them span the reader's (round 31 review, M-189: reading a book's styles for
+// "column-span" could be passed by an escape, or a style applying later).
 function unspan(doc){
   const flow = doc.getElementById(RID.flow);
-  if (!flow || ![...doc.querySelectorAll('style')].some(s => s.textContent.includes('column-span')) && !doc.querySelector('[style*="column-span"]')) return;
-  const win = doc.defaultView, multi = el => { const cs = win.getComputedStyle(el); return cs.columnCount !== 'auto' || cs.columnWidth !== 'auto'; };
+  // (A page whose styles never name columns has no box of its own: missing one only keeps its spanners to a column.)
+  if (!flow || (![...doc.querySelectorAll('style')].some(s => /column/i.test(s.textContent)) && !doc.querySelector('[style*="column" i]'))) return;
+  const win = doc.defaultView;
   for (const el of flow.querySelectorAll('*')) {
-    if (win.getComputedStyle(el).columnSpan !== 'all') continue;
-    let a = el.parentElement;
-    while (a && a !== flow && !multi(a)) a = a.parentElement;
-    if (a === flow) el.style.setProperty('column-span', 'none', 'important');
+    if (el.hasAttribute('data-span-box')) continue;
+    const cs = win.getComputedStyle(el);
+    if (cs.columnCount === 'auto' && cs.columnWidth === 'auto') continue;
+    el.setAttribute('data-span-box', '');
+    el.style.setProperty('column-count', cs.columnCount, 'important'); el.style.setProperty('column-width', cs.columnWidth, 'important');
+    // (Its blocks, down to the next multi-column box within it.)
+    const walk = n => { for (const c of n.children) { c.setAttribute('data-span-own', MD_OWN); const s = win.getComputedStyle(c); if (s.columnCount === 'auto' && s.columnWidth === 'auto') walk(c); } };
+    walk(el);
   }
 }
 function wireFrame(){
@@ -4511,7 +4569,7 @@ function showNotice(msg, kind, action = null){
   // (Only a problem interrupts a screen reader; other notices are read when it is free: round 28 review, L-380. Those
   // through a status region always there, as one given its role as it appears may not be read: round 29, L-396.)
   if (kind === 'error') $('#notice').setAttribute('role', 'alert'); else $('#notice').removeAttribute('role');
-  $('#noticeLive').textContent = kind === 'error' ? '' : String(msg).slice(0, 400);
+  { const m = String(msg); $('#noticeLive').textContent = kind === 'error' ? '' : m.length > 400 ? m.slice(0, 199) + '…' + m.slice(-200) : m; }   // (cut as the notice is: round 31 review)
   // (Where the keyboard was, to go back to once the notice is closed: L-395.)
   if (!$('#notice').contains(document.activeElement) && document.activeElement !== document.body) noticeFrom = document.activeElement;
   // (A book's link can put text of its choosing in a notice: kept short, so it can't cover the page and the notice's
@@ -9060,7 +9118,8 @@ function editRestore(nodes, model, html){
   // (Parsed in its place, so an SVG's style or a table's script comes back as what it was.)
   const keptNodes = (k, parent) => { const r = model.createRange(); r.selectNodeContents(parent); try { return r.createContextualFragment(ed.kept[k] ?? ''); } catch { return model.createTextNode(''); } };
   const fix = node => {
-    for (const w of node.querySelectorAll(':scope > [data-ed-unwrap]')) w.replaceWith(...w.childNodes);   // (a formula's holder: H-48)
+    // (A formula's holder: H-48; only the reader's, by its token, not a document's own: round 31 review, M-191.)
+    for (const w of node.querySelectorAll(':scope > [data-ed-unwrap]')) if (w.getAttribute('data-ed-unwrap') === MD_OWN) w.replaceWith(...w.childNodes);
     for (const c of [...node.childNodes]) {
       if (c.nodeType === 8) { const k = edKeepOf(c.data); if (k != null && html) c.replaceWith(keptNodes(k, node)); continue; }
       if (c.nodeType !== 1) continue;
@@ -9190,8 +9249,10 @@ function htmlToMarkdown(root){
   }
   mdFn = { known: new Set(lis.map(li => li.getAttribute('data-fn').toLowerCase())), done: new Set(), root, byKey, extra };
   const all = root.outerHTML + (ed.kept || []).join('');
-  for (let c = 0xFDD0; c <= 0xFDEF; c++) { MD_TEXT_DOLLAR = String.fromCharCode(c); if (!all.includes(MD_TEXT_DOLLAR)) break; }
-  const md = mdBlocks(root).replaceAll(MD_TEXT_DOLLAR, '\\$').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
+  // (None free, all 32 in the document: every $ of its text escaped, without a marker: round 31 review, L-415.)
+  MD_TEXT_DOLLAR = '';
+  for (let c = 0xFDD0; c <= 0xFDEF; c++) { const m = String.fromCharCode(c); if (!all.includes(m)) { MD_TEXT_DOLLAR = m; break; } }
+  const md = (MD_TEXT_DOLLAR ? mdBlocks(root).replaceAll(MD_TEXT_DOLLAR, '\\$') : mdBlocks(root)).replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd();   // (no pattern trimming the end: L-337)
   return md ? md + '\n' : '';
 }
 const mdIsBlock = c => c.nodeType === 1 && (MD_BLOCKS.has(c.localName) || (c.localName === 'math' && c.getAttribute('display') === 'block') || (edKeepOf(c.getAttribute('data-ed-keep')) != null && /^<(script|style|iframe|object|embed|template|noscript|frameset|frame)\b/i.test(mdKept(edKeepOf(c.getAttribute('data-ed-keep')))) && !c.parentElement?.closest('p, li, td, th, h1, h2, h3, h4, h5, h6')));
@@ -9311,7 +9372,7 @@ function mdTable(el){
 // (Only what would be read as Markdown: a backslash before punctuation, ` * [ ~, an _ not inside a word, a < that
 // could start a tag, an & that could start an entity. > at a line's start: mdLines; | in a table: mdTable.)
 const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]~]/g, '\\$&').replace(/(^|[^\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, (m, a) => a != null ? a + '\\_' : '\\_')
-  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/\\[\s\S]|\$/g, m => m === '$' ? MD_TEXT_DOLLAR : m)
+  .replace(/<(?=[a-zA-Z\/!?])/g, '\\<').replace(/&(?=#?\w+;)/g, '&amp;').replace(/\\[\s\S]|\$/g, m => m === '$' ? MD_TEXT_DOLLAR || '\\$' : m)
   .replace(/:(?=([a-z0-9_+-]{1,50}):)/g, (c, name, at, s) => mdEmoji?.has(name) && !(/^\d+$/.test(name) && /\d/.test(s[at + name.length + 2] || '')) ? '\\:' : c)   // (a name written out, not an emoji: E-34)
   // (A [^label] with no note of that label stays as written: round 28 review, M-164.)
   .replace(/\\\[\^([^\]\s\\]{1,100})\\\](?![(\[:])/g, (m, l) => mdFn.known.has(l.toLowerCase()) ? m : `[^${l}]`);
@@ -9324,7 +9385,7 @@ const mdEsc = s => s.replace(/\\(?=[!-\/:-@[-`{-~]|$)/g, '\\\\').replace(/[`*[\]
 // icon-font characters into $s: round 30 review, M-185.)
 let MD_TEXT_DOLLAR = '\uFDD0';
 function mdDollars(s){
-  if (!s.includes(MD_TEXT_DOLLAR)) return s;
+  if (!MD_TEXT_DOLLAR || !s.includes(MD_TEXT_DOLLAR)) return s;
   // (Past 60, every one escaped: each round reads the block again, slow in a long one: round 30 review, L-403.)
   if (s.split(MD_TEXT_DOLLAR).length > 60) return s.replaceAll(MD_TEXT_DOLLAR, '\\$');
   for (;;) {
@@ -9398,7 +9459,7 @@ function mdInline(nodes, { top = false, br = '\\\n' } = {}){
   const first = j => { const p = parts[j]; return !p ? '' : p.wrap != null ? (p.inner.trim() ? '*' : p.inner[0] || '') : p.s[0] || ''; };
   let out = '';
   parts.forEach((p, i) => {
-    if (p.wrap == null) { let s = p.alt && (/[\d$]/.test(first(i + 1)) || first(i + 1) === MD_TEXT_DOLLAR) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
+    if (p.wrap == null) { let s = p.alt && (/[\d$\\]/.test(first(i + 1)) || (MD_TEXT_DOLLAR && first(i + 1) === MD_TEXT_DOLLAR)) ? p.alt : p.s; if (s.endsWith('!') && !s.endsWith('\\!') && first(i + 1) === '[') s = s.slice(0, -1) + '\\!'; out += s; return; }
     const core = p.inner.trim();
     if (!core) { out += p.inner; return; }
     const lead = p.inner.match(/^\s*/)[0], tail = trailingWs(p.inner);
@@ -9456,7 +9517,7 @@ function editWysiwygReady(){
   if (ed.kind === 'markdown') for (let el of flow.querySelectorAll('math, [data-emoji], sup[data-fn-ref], [data-alert-title], .md-math-error')) {
     // (A formula held in a span that isn't editable: Chromium ignores contenteditable on MathML, and text typed into one
     // was lost: round 30 review, H-48. The holder is taken away again when the page is written back.)
-    if (el.localName === 'math') { const w = d.createElement('span'); w.setAttribute('data-ed-unwrap', ''); if (el.getAttribute('display') === 'block') w.style.display = 'block'; el.replaceWith(w); w.append(el); el = w; }
+    if (el.localName === 'math') { const w = d.createElement('span'); w.setAttribute('data-ed-unwrap', MD_OWN); if (el.getAttribute('display') === 'block') w.style.display = 'block'; el.replaceWith(w); w.append(el); el = w; }
     el.setAttribute('contenteditable', 'false');
     // (At the end of its block, a zero-width space after it, so the caret has somewhere to go there; taken out
     // again when the text is written back.)
@@ -9475,7 +9536,12 @@ function editWysiwygReady(){
     if (!ed.on || ed.kind !== 'markdown') return;
     const m = e.target.closest?.('[contenteditable="false"]');
     if (!m || m.hasAttribute('data-ed-keep') || !m.closest('[contenteditable="true"]')) return;
-    const r = d.createRange(); r.setStartAfter(m); r.collapse(true);
+    let r = d.createRange();
+    // (A display formula standing alone: the caret in a new paragraph after it, not at the start of the next one,
+    // where what was typed joined that paragraph: round 31 review. Left empty, it writes back nothing.)
+    if (m.style.display === 'block' && m.parentElement?.id === RID.flow) { const np = d.createElement('p'); np.append(d.createElement('br')); m.after(np); r.setStart(np, 0); }
+    else r.setStartAfter(m);
+    r.collapse(true);
     const s = d.getSelection(); s.removeAllRanges(); s.addRange(r);
   });
   d.addEventListener('paste', editPaste);
@@ -9765,8 +9831,12 @@ function setChange(name, v){
   }
   const [get, after] = SET_VARS[name], before = setShown(name);
   if (after === 'reload') {   // (saved now, used from the next page load)
-    if (typeof v === CONFIG_SETTINGS[name][0]) setSave(name, v);
-    return;
+    if (typeof v !== CONFIG_SETTINGS[name][0]) return false;
+    // (Checked as reader-config.json's value is, and kept in its normal form: a bad one was saved, offered a reload
+    // and was dropped without a word: round 31 review.)
+    if (name === 'MATH_DELIMITERS') { try { v = mathDelims(v); } catch (e) { setVar.why = e.message; return false; } }
+    setSave(name, v);
+    return true;
   }
   if (!setVar(name, v)) return false;
   setSave(name, get());

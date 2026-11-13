@@ -6,7 +6,7 @@
 #                              put a copy of this script there, with checksums/ beside it: it works in its
 #                              own folder)
 #
-# JSZip opens EPUB and comic files; marked renders Markdown (Temml its math, highlight.js its code, gemoji its emoji names); lamejs encodes MP3 audiobooks; CodeMirror is the
+# JSZip opens EPUB and comic files; marked renders Markdown (gemoji its emoji names); Temml draws math and highlight.js colours code, in Markdown, HTML and EPUB; lamejs encodes MP3 audiobooks; CodeMirror is the
 # editor's text view (E-21). The reader checks
 # every copy against the same pinned hashes (Subresource Integrity), and this script checks them against
 # checksums/libs.sha256.

@@ -700,3 +700,50 @@ test('MATH_DELIMITERS chooses the marks around math in HTML: \\( and \\[ by defa
   await h.openReader(page, `${h.READER}?book=books/math-marks.html`, { 'spine:set:MATH_DELIMITERS': '' });
   assert.deepEqual(await which(), [], 'none');
 });
+
+test('HTML and EPUB math and code (round 31 review): search shows a match beside a formula; wide display math scrolls in its column; the reader\'s colours on its own background; a <pre> holding its code coloured; a text file\'s \\( left alone; a slow library doesn\'t keep the page from showing', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/math-page.html`, { 'spine:layout': 'one' });
+  await page.fill('#searchBox', 'money'); await page.press('#searchBox', 'Enter');
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => (doc.defaultView.CSS.highlights.get('search-current')?.size || 0) > 0), 5000), 'the match beside a formula is shown');
+  const r = await h.inFrame(page, doc => {
+    const css = el => doc.defaultView.getComputedStyle(el);
+    return { over: css(doc.querySelector('#wide math')).overflowX, fits: doc.querySelector('#wide math').getBoundingClientRect().width <= doc.querySelector('#wide').getBoundingClientRect().width + 1,
+      darkBg: css(doc.getElementById('dark').closest('pre')).backgroundColor, pre: css(doc.getElementById('preonly')).color, kw: css(doc.querySelector('#preonly .hljs-keyword')).color };
+  });
+  assert.equal(r.over, 'auto'); assert.equal(r.fits, true);
+  assert.notEqual(r.darkBg, 'rgb(39, 40, 34)', 'the reader\'s background under its colours');
+  assert.notEqual(r.kw, r.pre, 'a <pre> holding its code is coloured');
+  await h.openReader(page, `${h.READER}?book=books/tex.txt`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('math').length), 0);
+  // A library that never answers: the page is shown without it.
+  const slow = await h.newPage();
+  await slow.route(/highlight\.min\.js/, () => {});
+  const t0 = Date.now();
+  await h.openReader(slow, `${h.READER}?book=books/math-page.html`);
+  assert.ok(Date.now() - t0 < 20000, `${Date.now() - t0} ms`);
+  assert.equal(await h.inFrame(slow, doc => !!doc.querySelector('#inl math')), true, 'math still drawn');
+});
+
+test('Markdown under marked 18: two HTML blocks keep the space between them; a heading made to span columns by a wide window doesn\'t break the pages after a resize (round 31 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 700, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/two-blocks.md`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelector('img[alt="one"]').nextSibling?.nodeType), 3, 'text (a line break) between them');
+  await h.openReader(page, `${h.READER}?book=books/span-wide.html`, { 'spine:layout': 'one' });
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.waitForTimeout(1200);
+  const n = Number(/page \d+\/(\d+)/.exec(await page.textContent('#spinePos'))[1]);
+  const fresh = await h.newPage({ viewport: { width: 1600, height: 900 } });
+  await h.openReader(fresh, `${h.READER}?book=books/span-wide.html`, { 'spine:layout': 'one' });
+  const m = Number(/page \d+\/(\d+)/.exec(await fresh.textContent('#spinePos'))[1]);
+  assert.ok(Math.abs(n - m) <= 1, `after the resize ${n} pages, opened wide ${m}`);
+});
+
+test('TeX that fails slowly, many times, and code of very long words open in good time (round 31 review, H-50, H-51)', async () => {
+  const page = await h.newPage();
+  for (const b of ['tex-slow.md', 'hl-long.html']) {
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${b}`);
+    assert.ok(Date.now() - t0 < 15000, `${b}: ${Date.now() - t0} ms`);
+  }
+});
