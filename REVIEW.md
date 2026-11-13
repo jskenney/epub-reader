@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-12, round 30): `index.html` (about 10,100 lines), the fetch scripts,
+Review of the repository (2026-11-13, round 31): `index.html` (about 10,300 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -546,6 +546,29 @@ script or reach another site.
 
 Findings: **High** H-45 to H-48. **Medium** M-180 to M-185. **Low** L-399 to L-408. **Tests** T-58.
 
+### Round 31
+
+Since round 30: iteration 4 of the loop fixed round 30's findings (`b3636b6` to `56f3a4e`, marked 18.1.3 among them),
+T-47 was left as it is by your decision, and E-37 added math and code highlighting to HTML pages and EPUB chapters,
+with `MATH_DELIMITERS` (`1004c3c`, `966c3e7`). Round 31 is a full review at `9a03769` by three reviewers on copies of
+their own (regression, adversarial, the reader as its readers use it, with the README). The full suite passed (480, none
+failing, 6 skipped).
+
+**What it found.** Mostly E-37, which was new: unclosed `\(` freezes the tab (H-49); TeX that fails is never charged to
+the math budget, and tens of thousands of small formulas take minutes to lay out (H-50); highlight.js takes time with the
+square of a long word, now in every HTML page and chapter (H-51). Search, the audiobook and read-aloud ahead read the raw
+TeX the page no longer shows (M-186); wide display math overflows (M-187); the reader's code colours on a book's dark
+background (M-188); a bad Marks around math value saved silently (M-192). And beyond E-37: `unspan` (L-400) can be
+passed by an escaped name or a state that applies later (M-189); pseudo-elements push the page out of the frame (M-190);
+a document's own `data-ed-unwrap` is unwrapped on write-back (M-191).
+
+**What held up.** Temml with `trust:false` and highlight.js output through the cleaning: no script, no request to
+another site; the session token can't be guessed or used; marked 18 renders as 15 did but for one blank line (L-414) and
+CommonMark fixes; the editor with E-37 (the source while editing, math again after Done); the README's settings and
+library versions.
+
+Findings: **High** H-49 to H-51. **Medium** M-186 to M-192. **Low** L-409 to L-416. **Tests** T-59. **Docs** D-35.
+
 *Reproduced* means confirmed in Chromium, Node or nginx against the real code; *read* means confirmed by
 reading the code only.
 
@@ -578,7 +601,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 30's findings are fixed (see Resolved, iteration 4). Open (below): enhancements only, E-29, E-30, E-36
+Round 31's findings are open (below), sorted by importance, with the enhancements E-29, E-30, E-36
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -588,6 +611,26 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-49 | Unclosed `\(` or `\[` (the default marks) costs a 4000-character search each: 4 MB of them took 66 s to open, paid on every visit. Reproduced. | Hardening |
+| H-50 | Temml work isn't bounded: TeX that fails (after 1000 expansions, ~0.3 s each) is never charged (100 formulas, a 2 KB EPUB: 44 s; Markdown too), and 200,000 small formulas make 83,000 `<math>` (1–2 minutes to lay out). Reproduced. | Hardening |
+| H-51 | highlight.js takes time with the square of a long word (`java` with 99,000 `$`: 108 s; `js`: 21 s); HLJS_MAX is the only cap, per block, with no total. Reproduced. | Hardening |
+| M-186 | E-37 changes only the page: search (its index from `chapterDoc`) can't show a match in a block with a formula; the audiobook, read-aloud ahead and lengths read the raw TeX. Reproduced. | Bug |
+| M-187 | HTML and EPUB display math has no overflow rule (Markdown's only): it runs over the next column or is cut off. Reproduced. | Bug |
+| M-188 | The reader's code colours (light theme) on a book's own dark `pre` background: strings at 1.4:1. Reproduced. | Bug |
+| M-189 | `unspan` (L-400) is passed by an escaped `column-sp\61n`, a style applying later (`:hover`, a media query after a resize): M-169 again (121 pages, text cut off). Reproduced. | Security |
+| M-190 | `::before` on html or body (and `::scroll-marker-group`) pushes the page out of the frame: no text on any page. Reproduced. | Security |
+| M-191 | A document's own `data-ed-unwrap` elements are unwrapped on write-back: hidden text becomes visible in the saved file (as M-182). Reproduced. | Data loss |
+| M-192 | Marks around math typed in Settings isn't checked: a bad value is saved without a word, offers a reload, goes into Generate config, then is dropped; a good one isn't put in its normal form. Reproduced. | Bug |
+| L-409 | A `<pre class="language-js">` holding the code itself is given spans but not coloured. Reproduced. | Bug |
+| L-410 | E-37 runs on plain text too: a text file's `\(ab\)` becomes math. Reproduced. | Bug |
+| L-411 | A library for E-37 that never answers keeps a chapter from showing (no time limit). Reproduced. | Bug |
+| L-412 | A click on a display formula and typing: alone, the text joins the next paragraph; within a line, the space after it is lost. Reproduced. | Bug |
+| L-413 | `#noticeLive` keeps a long notice's start, not the middle cut the notice shows (L-408). Read. | Accessibility |
+| L-414 | marked 18 leaves out the line break after an HTML block: two pictures in blocks of their own touch. Reproduced. | Bug |
+| L-415 | With all 32 noncharacters U+FDD0–U+FDEF in a document, the write-back's marker collides with one (M-185). Reproduced. | Data loss |
+| L-416 | A formula only `\ref` or `\eqref` gives no `<math>` (a bare link), so the editor writes the link back, not the TeX. Reproduced. | Bug |
+| T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. | Tests |
+| D-35 | README: Temml and highlight.js are said to be for Markdown (and in `fetch-libs.sh`); Settings' list lacks Marks around math. | Docs |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -633,8 +676,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. E-25, E-22, as laid out in TODO.md.
-2. E-36 and E-30 (small), then the other enhancements, as wanted.
+1. H-49 to H-51, M-189 to M-191, M-186 to M-188, M-192, then the lows and docs.
+2. E-25, E-22, as laid out in TODO.md; E-36 and E-30; then the other enhancements, as wanted.
 
 ## Resolved
 
