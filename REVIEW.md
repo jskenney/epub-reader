@@ -625,7 +625,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36
+Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-38 to E-41
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -637,6 +637,10 @@ Most important first.
 |---|---|---|
 | T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. | Tests |
 | T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
+| [E-38](#e-38-custom-themes) | Custom themes: a reader's own colours, made and edited in Settings | Enhancement |
+| [E-39](#e-39-site-themes) | Site themes in `reader-config.json` (`THEMES`), offered beside the built-in ones, and the default or locked theme | Enhancement |
+| [E-40](#e-40-code-and-alert-colours-from-the-theme) | Code highlighting and alert colours that follow the theme, not two fixed palettes | Enhancement |
+| [E-41](#e-41-special-purpose-themes) | E-ink, high-contrast and low-blue-light themes | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -680,10 +684,37 @@ across, so they can be read (H-33).
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
 
+### E-38. Custom themes
+A theme becomes data rather than a fixed block of CSS: a name, whether it is dark, and its colours (the page's
+background and text, the accent for links and the ribbon, the interface's background and text), from which the rest
+(surfaces, rules, muted text, soft accent) is worked out. Settings lists the built-in themes and the reader's own; a new
+one starts from the theme in use, with a colour picker for each colour, a live preview, and a warning when the text's
+contrast with its background is under 4.5:1 (WCAG AA). Kept in the browser, and drawn before the first paint as the
+built-in ones are; the dark flag decides what the dark themes decide today (a book's colours taken off, the dark code and
+alert palettes). Colours as hex only, so a value can't carry CSS of its own.
+
+### E-39. Site themes
+`THEMES` in `reader-config.json`: a list of themes in the same form, offered beside the built-in ones (a site's own
+branded theme, say); `theme` can name one as the folder's default, and `LOCKED` can lock it. Checked as the other
+settings are (a bad entry left out with a warning), and given by Generate config with the reader's own themes, to copy
+into a site's config.
+
+### E-40. Code and alert colours from the theme
+The colours of highlighted code (E-35, E-37) and of alerts (E-33) worked out from the theme's colours (its accent, text
+and background), or given by the theme, instead of GitHub's two fixed palettes, so code stays readable on any theme's
+background; a theme can set them outright.
+
+### E-41. Special-purpose themes
+- **E-ink:** black on white, no tints, shadows or transitions, page turns without animation.
+- **High contrast:** following `prefers-contrast: more` and forced colours (Windows High Contrast).
+- **Low blue light:** a warm night theme.
+
+Palettes plus a few CSS switches once E-38's theme data is in.
+
 ## Suggested order
 
-1. E-25, E-22, as laid out in TODO.md.
-2. E-36 and E-30 (small), then the other enhancements, as wanted.
+1. E-38 and E-39 (under way), then E-40 and E-41.
+2. E-25, E-22, as laid out in TODO.md; E-36 and E-30; then the other enhancements, as wanted.
 
 ## Resolved
 
