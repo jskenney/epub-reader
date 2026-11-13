@@ -347,7 +347,7 @@ test('final review: the button waits for the site\'s values; under a day is a da
   await page.click('.set-theme:has(input[value="sepia"])');
   await page.emulateMedia({ forcedColors: 'active' });
   const widths = await page.evaluate(() => [...document.querySelectorAll('.set-theme')].map(c => getComputedStyle(c).borderTopWidth));
-  assert.deepEqual(widths, ['1px', '1px', '3px', '1px', '1px']);
+  assert.deepEqual(widths.map((w, i) => [i, w]).filter(([, w]) => w !== '1px'), [[2, '3px']], 'the chosen card alone (any number of themes: E-41)');
   await page.emulateMedia({ forcedColors: 'none' });
   // A folder's default theme, once seen, is there before the page draws.
   const p2 = await h.newPage();
