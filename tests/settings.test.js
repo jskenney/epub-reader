@@ -443,11 +443,11 @@ test('a locked days-to-keep doesn\'t delete other folders\' positions; a locked 
   assert.equal(await p2.getAttribute('#keysOpt', 'aria-checked'), 'true');
 });
 
-test('Settings shows the version (one above the latest release, with when it was stamped) and a link to the project on GitHub', async () => {
+test('Settings shows the version (the date and time it was stamped, in UTC) and a link to the project on GitHub', async () => {
   const page = await h.newPage();
   await h.openReader(page, LONG);
   await openSettings(page);
-  assert.match(await page.textContent('.set-version'), /^Version v\d+\.\d+\.\d+ - \d{8}\.\d{4}\s*$/);
+  assert.match(await page.textContent('.set-version'), /^Version \d{8}\.\d{4}\s*$/);
   const a = page.locator('.set-version a');
   assert.equal(await a.getAttribute('href'), 'https://github.com/jskenney/epub-reader');
   assert.equal(await a.getAttribute('target'), '_blank');
