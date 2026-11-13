@@ -601,7 +601,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 31's findings are open (below), sorted by importance, with the enhancements E-29, E-30, E-36
+Round 31's findings are fixed (see Resolved) but T-59, left open as a test item. Open (below): T-59 and the enhancements E-29, E-30, E-36
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -611,26 +611,7 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-49 | Unclosed `\(` or `\[` (the default marks) costs a 4000-character search each: 4 MB of them took 66 s to open, paid on every visit. Reproduced. | Hardening |
-| H-50 | Temml work isn't bounded: TeX that fails (after 1000 expansions, ~0.3 s each) is never charged (100 formulas, a 2 KB EPUB: 44 s; Markdown too), and 200,000 small formulas make 83,000 `<math>` (1–2 minutes to lay out). Reproduced. | Hardening |
-| H-51 | highlight.js takes time with the square of a long word (`java` with 99,000 `$`: 108 s; `js`: 21 s); HLJS_MAX is the only cap, per block, with no total. Reproduced. | Hardening |
-| M-186 | E-37 changes only the page: search (its index from `chapterDoc`) can't show a match in a block with a formula; the audiobook, read-aloud ahead and lengths read the raw TeX. Reproduced. | Bug |
-| M-187 | HTML and EPUB display math has no overflow rule (Markdown's only): it runs over the next column or is cut off. Reproduced. | Bug |
-| M-188 | The reader's code colours (light theme) on a book's own dark `pre` background: strings at 1.4:1. Reproduced. | Bug |
-| M-189 | `unspan` (L-400) is passed by an escaped `column-sp\61n`, a style applying later (`:hover`, a media query after a resize): M-169 again (121 pages, text cut off). Reproduced. | Security |
-| M-190 | `::before` on html or body (and `::scroll-marker-group`) pushes the page out of the frame: no text on any page. Reproduced. | Security |
-| M-191 | A document's own `data-ed-unwrap` elements are unwrapped on write-back: hidden text becomes visible in the saved file (as M-182). Reproduced. | Data loss |
-| M-192 | Marks around math typed in Settings isn't checked: a bad value is saved without a word, offers a reload, goes into Generate config, then is dropped; a good one isn't put in its normal form. Reproduced. | Bug |
-| L-409 | A `<pre class="language-js">` holding the code itself is given spans but not coloured. Reproduced. | Bug |
-| L-410 | E-37 runs on plain text too: a text file's `\(ab\)` becomes math. Reproduced. | Bug |
-| L-411 | A library for E-37 that never answers keeps a chapter from showing (no time limit). Reproduced. | Bug |
-| L-412 | A click on a display formula and typing: alone, the text joins the next paragraph; within a line, the space after it is lost. Reproduced. | Bug |
-| L-413 | `#noticeLive` keeps a long notice's start, not the middle cut the notice shows (L-408). Read. | Accessibility |
-| L-414 | marked 18 leaves out the line break after an HTML block: two pictures in blocks of their own touch. Reproduced. | Bug |
-| L-415 | With all 32 noncharacters U+FDD0–U+FDEF in a document, the write-back's marker collides with one (M-185). Reproduced. | Data loss |
-| L-416 | A formula only `\ref` or `\eqref` gives no `<math>` (a bare link), so the editor writes the link back, not the TeX. Reproduced. | Bug |
-| T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. | Tests |
-| D-35 | README: Temml and highlight.js are said to be for Markdown (and in `fetch-libs.sh`); Settings' list lacks Marks around math. | Docs |
+| T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -676,8 +657,8 @@ Change an EPUB's chapters, keeping its package file and contents in step. The pl
 
 ## Suggested order
 
-1. H-49 to H-51, M-189 to M-191, M-186 to M-188, M-192, then the lows and docs.
-2. E-25, E-22, as laid out in TODO.md; E-36 and E-30; then the other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -685,6 +666,25 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-49 | Unclosed `\(` froze the tab. A closing mark not found isn't looked for again before where the search ended. | `cfb5b89` |
+| H-50 | Temml work wasn't bounded. Each document or page has 3 s of Temml time (failures charged) and 5,000 formulas; past them TeX is shown as written. | `cfb5b89` |
+| H-51 | highlight.js took time with the square of a long word. 2 s of highlighting per document or page, and no block with a word over 1,000 characters. | `cfb5b89` |
+| M-186 | Search, the audiobook and read-aloud ahead read the raw TeX. `chapterDoc` reads TeX and code as the page does. | `cfb5b89` |
+| M-187 | HTML and EPUB display math overflowed. The overflow rule is for every document. | `cfb5b89` |
+| M-188 | The reader's code colours on a book's dark background. Its coloured blocks have its own background and text colour. | `cfb5b89` |
+| M-189 | `unspan` could be passed. `column-span` is pinned in the flow again; only blocks inside a book's own multi-column box carry the session token that exempts them, and that box's columns are fixed so it can't stop being one. | `cfb5b89` |
+| M-190 | Pseudo-elements and scroll-marker groups pushed the page out. `::before`/`::after` on html, body and the clip, and `scroll-marker-group`, pinned to none. | `cfb5b89` |
+| M-191 | A document's own `data-ed-unwrap` was unwrapped. The holder's attribute holds the session token, checked on write-back. | `cfb5b89` |
+| M-192 | Marks around math wasn't checked in Settings. Checked as in reader-config.json, refused with its reason, saved in its normal form. | `cfb5b89` |
+| L-409 | A `<pre>` holding its code wasn't coloured. The colours apply to it. | `cfb5b89` |
+| L-410 | E-37 ran on plain text. Not any more. | `cfb5b89` |
+| L-411 | An E-37 library that never answered kept a chapter from showing. Waited for at most 8 s, then not again. | `cfb5b89` |
+| L-412 | A click on a display formula and typing. Alone: a new paragraph after it. (Within a line, the space after it can still be lost as Chromium collapses it.) | `cfb5b89` |
+| L-413 | `#noticeLive` kept a long notice's start. Cut in the middle as the notice is. | `cfb5b89` |
+| L-414 | marked 18 left out the line break after an HTML block. Put back. | `cfb5b89` |
+| L-415 | All 32 noncharacters made the marker collide. Then every `$` is escaped, with no marker. | `cfb5b89` |
+| L-416 | A `\ref` alone lost its TeX. Shown, and written back, as written. | `cfb5b89` |
+| D-35 | README and `fetch-libs.sh` on Temml and highlight.js beyond Markdown; Settings' list. | `cfb5b89` |
 | E-37 | Math and code highlighting in HTML pages and EPUB chapters: TeX between `\(` `\)` and `\[` `\]` as MathML by Temml (not MathJax: no script runs in the book's frame, the browser draws MathML, one engine with Markdown's), code blocks naming their language coloured by highlight.js, each library loaded only for a page that needs it; not while editing (the source is saved as written), in fixed-layout pages or comics; a book's own highlighting keeps its colours. Which marks count (`\(`, `\[`, `$$`, `$`) is the setting `MATH_DELIMITERS`, `\( \[` by default. | `1004c3c`, `966c3e7` |
 | T-47 | `NCACHE_SEC` had no test. Left as it is, by your decision: it acts only after minutes of audio played, which streamed audio can't be sped through in a test, and the cache never goes below about a minute of audio; a test would need a hook in the reader for tests alone. The setting only decides how much finished audio is kept in memory for replay (more memory, or audio made again sooner, if wrong); its eviction is one line, and `LOOKAHEAD_SEC` has a test (`3d1deb1`). | Left as it is, by your decision |
 | H-47 | marked 15.0.12 took time with the square of emphasis delimiters. marked 18.1.3, which doesn't (`'a _'` × 20,000: under a second). | `56f3a4e` |
