@@ -564,8 +564,13 @@ site as the reader.
   be turned off under
   Keyboard in the Aa menu or in Settings if they clash with a screen reader;
   arrow keys, Page Up/Down, Space and Ctrl+F keep working.
-- Themes: System, Light, Sepia, Dark and Black (for OLED screens), in
-  Settings. The moon/sun button in the top bar (or T) switches between the
+- Themes: System, Light, Sepia, Dark, Black (for OLED screens), E-ink
+  (black on white, without shadows or motion), High contrast and Night (warm,
+  with little blue light), in Settings. System follows the device's light or
+  dark setting, and its high contrast when it asks for more. E-ink and High
+  contrast, like the dark themes, show a book's text in their own colours.
+  Highlighted code and Markdown's alerts take colours that are readable on
+  the theme (in E-ink and High contrast, the text's colour, in bold). The moon/sun button in the top bar (or T) switches between the
   light and dark themes you last chose (Light or Sepia, Dark or Black). Until
   you pick one, the page uses the folder's default theme if its
   `reader-config.json` sets one, otherwise your system setting.
@@ -936,11 +941,16 @@ each with its own `default.epub`:
   `"ui"` and `"uiText"` for the interface's background and text if they
   shouldn't be worked out from the page's. Colours as `#rgb` or `#rrggbb`
   only; a theme without a name or with another colour is left out, with a
-  warning in the console. `dark` (default: from the page's colour) decides
+  warning in the console. A theme can also give its own colours for
+  highlighted code, `"code": {"keyword": "#…", …}` (keyword, string, number,
+  comment, title, type, tag, deletion), and for alerts, `"alerts": {"note":
+  "#…", …}` (note, tip, important, warning, caution), used as given; others
+  are worked out to be readable on it. `dark` (default: from the page's colour) decides
   whether a book's own colours are taken off, as in Dark.
 - Starting preferences, used until the reader picks their own: `theme`
-  (`"light"`, `"sepia"`, `"dark"` or `"black"`, or the name of one of
-  `THEMES`; without one the page follows the system), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
+  (`"light"`, `"sepia"`, `"dark"`, `"black"`, `"eink"`, `"contrast"` or
+  `"night"`, or the name of one of `THEMES`; without one the page follows the
+  system), `layout` (`"two"`, `"one"`, `"scroll"`), `width`
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
   such as `"literata"`, or `g-` and the name of a font of `ADDITIONAL_FONTS` in lower case with hyphens, such as
   `"g-merriweather"`), `fontSize` (percent, 70–200), `lineSpacing`

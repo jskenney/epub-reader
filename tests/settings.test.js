@@ -626,10 +626,39 @@ test('a site\'s themes from reader-config.json: offered beside the built-in ones
   assert.ok(warns.some(w => /THEMES: Bad ignored/.test(w)), warns.join(' | '));
   await openSettings(page);
   const names = await page.$$eval('.set-themes .set-theme', ls => ls.map(l => l.textContent.trim()));
-  assert.deepEqual(names.slice(-2), ['AaOcean', 'AaPaper']);
+  assert.deepEqual(names.slice(-3), ['AaOcean', 'AaPaper', 'AaOdd']);
   assert.equal(await page.isVisible('#themeFields'), false, 'a site\'s theme isn\'t edited');
   await page.click('.set-theme:has(input[value="s-paper"])');
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()), '#e9e2d0');
   assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.documentElement).backgroundColor), 'rgb(251, 247, 238)');
   assert.equal(await page.evaluate(() => document.querySelector('#themeBtn').classList.contains('dark')), false);
+});
+
+test('E-ink, High contrast and Night: offered in Settings; e-ink and high contrast show a book\'s text in their own colours, Night is a dark theme (E-41)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/own-colours.epub`, { 'spine:theme': 'eink', 'spine:layout': 'one' });
+  // (A book's own important colours stay its own, as in the dark themes: L-376; its other text is the theme's.)
+  const r = await h.inFrame(page, doc => [getComputedStyle(doc.documentElement).backgroundColor, getComputedStyle(doc.getElementById('hp3')).color]);
+  assert.deepEqual(r, ['rgb(255, 255, 255)', 'rgb(0, 0, 0)']);
+  await openSettings(page);
+  const names = await page.$$eval('.set-themes .set-theme', ls => ls.map(l => l.textContent.trim()));
+  for (const n of ['E-ink', 'High contrast', 'Night']) assert.ok(names.some(x => x.endsWith(n)), JSON.stringify(names));
+  await page.click('.set-theme:has(input[value="night"])');
+  assert.equal(await page.evaluate(() => document.querySelector('#themeBtn').classList.contains('dark')), true);
+  await page.click('.set-theme:has(input[value="contrast"])');
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('hp3')).color), 'rgb(0, 0, 0)');
+});
+
+test('code and alert colours follow the theme: readable on its background whatever it is, and its own where it gives them (E-40)', async () => {
+  const page = await h.newPage();
+  const lum = c => { const [r, g, b] = c.match(/\d+/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  await h.openReader(page, `${h.SITE}/folder-themes/index.html?book=/reader/books/math-page.html`, { 'spine:theme': 's-odd' });
+  const code = await h.inFrame(page, doc => { const c = doc.getElementById('js'), cs = el => getComputedStyle(el); return { bg: cs(c).backgroundColor, kw: cs(c.querySelector('.hljs-keyword')).color, str: cs(c.querySelector('.hljs-comment') || c.querySelector('.hljs-string') || c).color }; });
+  assert.equal(code.kw, 'rgb(255, 0, 255)', 'the theme\'s own keyword colour');
+  assert.ok(contrast(code.str, code.bg) >= 4.4, `readable: ${JSON.stringify(code)}`);
+  await h.openReader(page, `${h.SITE}/folder-themes/index.html?book=/reader/books/gh.md`, { 'spine:theme': 's-odd' });
+  const al = await h.inFrame(page, doc => [...doc.querySelectorAll('[data-alert-title]')].map(t => [t.closest('[data-alert]').getAttribute('data-alert'), getComputedStyle(t).color, getComputedStyle(doc.documentElement).backgroundColor]));
+  assert.equal(al.find(a => a[0] === 'NOTE')[1], 'rgb(0, 255, 255)');
+  for (const [k, c, bg] of al) assert.ok(contrast(c, bg) >= 4.4, `${k}: ${c} on ${bg}`);
 });

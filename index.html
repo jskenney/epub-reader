@@ -11,7 +11,7 @@
 <!-- A folder that locks the theme (its LOCKED list) has its own, whatever the reader chose elsewhere. -->
 <!-- A theme of the reader's own or the site's (E-38, E-39): its colours as last worked out, kept for this. -->
 <script>try { const get = k => JSON.parse(localStorage.getItem(k)), cache = get('spine:themeCache') || {}, dir = location.pathname.replace(/[^/]*$/, '');
-  const ok = t => ['light', 'sepia', 'dark', 'black'].includes(t) || (typeof t === 'string' && !!cache[t]);
+  const ok = t => ['light', 'sepia', 'dark', 'black', 'eink', 'contrast', 'night'].includes(t) || (typeof t === 'string' && !!cache[t]);
   const mine = get('spine:theme'), folder = get('spine:folderTheme:' + dir);
   const set = t => { const el = document.documentElement; el.setAttribute('data-theme', t); for (const [k, v] of Object.entries(cache[t] || {})) if (/^(--[a-z-]+|color-scheme)$/.test(k) && /^[#a-z0-9 .,()%\/-]*$/i.test(v)) el.style.setProperty(k, v); };
   if (get('spine:folderThemeLocked:' + dir)) { if (ok(folder)) set(folder); } else if (ok(mine)) set(mine); else if (mine == null && ok(folder)) set(folder); } catch {}</script>
@@ -48,6 +48,40 @@
   --ribbon:#8E3B2C; --on-ribbon:#FFFFFF; --ribbon-soft:#EBD5C8; --warn-soft:#F1DDB8;
   --page-bg:#F8F1E1; --page-ink:#3A2E20;
   --shadow:0 1px 2px rgb(60 40 20 / .06), 0 10px 30px -14px rgb(60 40 20 / .25);
+}
+/* E-ink: black on white, nothing grey that needn't be, no shadows or motion; high contrast; a warm night theme with little
+   blue light (E-41). System follows a device asking for more contrast. */
+:root[data-theme="eink"]{
+  --field:#000000; --paper:#FFFFFF; --surface:#FFFFFF; --ink:#000000; --muted:#333333; --rule:#000000;
+  --ribbon:#000000; --on-ribbon:#FFFFFF; --ribbon-soft:#E6E6E6; --warn-soft:#E6E6E6;
+  --page-bg:#FFFFFF; --page-ink:#000000;
+  --shadow:none;
+}
+:root[data-theme="eink"] *,:root[data-theme="eink"] *::before,:root[data-theme="eink"] *::after{transition:none !important;animation:none !important;box-shadow:none !important}
+:root[data-theme="contrast"]{
+  --field:#000000; --paper:#FFFFFF; --surface:#FFFFFF; --ink:#000000; --muted:#1A1A1A; --rule:#000000;
+  --ribbon:#0000B8; --on-ribbon:#FFFFFF; --ribbon-soft:#D6D6FF; --warn-soft:#FFE08A;
+  --page-bg:#FFFFFF; --page-ink:#000000;
+  --shadow:none;
+}
+@media (prefers-contrast: more){
+  :root:not([data-theme]){
+    --field:#000000; --paper:#FFFFFF; --surface:#FFFFFF; --ink:#000000; --muted:#1A1A1A; --rule:#000000;
+    --ribbon:#0000B8; --on-ribbon:#FFFFFF; --ribbon-soft:#D6D6FF; --warn-soft:#FFE08A; --page-bg:#FFFFFF; --page-ink:#000000; --shadow:none;
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark){
+  :root:not([data-theme]){
+    --field:#FFFFFF; --paper:#000000; --surface:#000000; --ink:#FFFFFF; --muted:#E6E6E6; --rule:#FFFFFF;
+    --ribbon:#FFE45C; --on-ribbon:#000000; --ribbon-soft:#3D3500; --warn-soft:#3D2A00; --page-bg:#000000; --page-ink:#FFFFFF; --shadow:none;
+  }
+}
+:root[data-theme="night"]{
+  --field:#6E5A44; --paper:#140F0B; --surface:#1B140F; --ink:#E9CFA8; --muted:#A68A68; --rule:#33271C;
+  --ribbon:#D9894A; --on-ribbon:#1A0F06; --ribbon-soft:#3A2414; --warn-soft:#3A2A12;
+  --page-bg:#18120D; --page-ink:#E4C79C;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 30px -14px rgb(0 0 0 / .7);
+  color-scheme:dark;
 }
 :root[data-theme="black"]{
   --field:#6B7570; --paper:#000000; --surface:#0C0D0D; --ink:#E2E4E3; --muted:#8F9592; --rule:#262A28;
@@ -277,6 +311,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 @media (forced-colors: active){.set-theme:has(input:checked){border:3px solid Highlight;padding:6px 2px}}
 .sw{width:100%;max-width:58px;height:34px;box-sizing:border-box;border-radius:5px;border:1px solid var(--rule);display:grid;place-items:center;font:600 14px var(--font-read)}
 .sw-light{background:#FDFDFB;color:#1C2120}.sw-sepia{background:#F8F1E1;color:#3A2E20}.sw-dark{background:#171A19;color:#D6DCD8}.sw-black{background:#000;color:#D2D6D4}
+.sw-eink{background:#fff;color:#000;border-color:#000 !important}.sw-contrast{background:#fff;color:#0000B8;font-weight:700;border-color:#000 !important}.sw-night{background:#18120D;color:#E4C79C}
 .sw-system{background:linear-gradient(135deg,#FDFDFB 50%,#171A19 50%)}
 @media (max-width:520px){.set-themes{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:400px){#setDialog .ab-actions .btn{flex:1 1 auto}}
@@ -651,7 +686,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
     <p class="ab-muted">What the top bar's buttons do, here too (a site can hide those buttons).</p>
     <div class="set-body">
       <div class="set-row"><span><label for="txtFont">Reading font</label></span><select id="txtFont" class="txt-field"></select></div>
-      <div class="set-row"><span><label for="txtTheme">Theme</label><small id="txtThemeNote" hidden>Set by this site.</small></span><select id="txtTheme" class="txt-field"><option value="system">System</option><option value="light">Light</option><option value="sepia">Sepia</option><option value="dark">Dark</option><option value="black">Black</option></select></div>
+      <div class="set-row"><span><label for="txtTheme">Theme</label><small id="txtThemeNote" hidden>Set by this site.</small></span><select id="txtTheme" class="txt-field"><option value="system">System</option><option value="light">Light</option><option value="sepia">Sepia</option><option value="dark">Dark</option><option value="black">Black</option><option value="eink">E-ink</option><option value="contrast">High contrast</option><option value="night">Night</option></select></div>
       <div class="set-row"><span><label for="txtLayout">Layout</label><small>L too.</small></span><select id="txtLayout" class="txt-field"><option value="two">Two columns</option><option value="one">One column</option><option value="scroll">Scrolling</option></select></div>
       <div class="set-row"><span id="txtSizeL">Text size</span><span class="txt-step" role="group" aria-labelledby="txtSizeL"><button type="button" class="btn" id="txtSmaller" aria-label="Smaller text">A−</button><output id="txtSize" aria-live="polite"></output><button type="button" class="btn" id="txtLarger" aria-label="Larger text">A+</button></span></div>
       <div class="set-row"><span id="txtLineL">Line spacing</span><span class="txt-step" role="group" aria-labelledby="txtLineL"><button type="button" class="btn" id="txtTighter" aria-label="Less space between lines">−</button><output id="txtLine" aria-live="polite"></output><button type="button" class="btn" id="txtLooser" aria-label="More space between lines">+</button></span></div>
@@ -680,7 +715,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261113.2202</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261113.2230</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -689,6 +724,9 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <label class="set-theme"><input type="radio" name="theme" value="sepia"><span class="sw sw-sepia" aria-hidden="true">Aa</span>Sepia</label>
           <label class="set-theme"><input type="radio" name="theme" value="dark"><span class="sw sw-dark" aria-hidden="true">Aa</span>Dark</label>
           <label class="set-theme"><input type="radio" name="theme" value="black"><span class="sw sw-black" aria-hidden="true">Aa</span>Black</label>
+          <label class="set-theme"><input type="radio" name="theme" value="eink"><span class="sw sw-eink" aria-hidden="true">Aa</span>E-ink</label>
+          <label class="set-theme"><input type="radio" name="theme" value="contrast"><span class="sw sw-contrast" aria-hidden="true">Aa</span>High contrast</label>
+          <label class="set-theme"><input type="radio" name="theme" value="night"><span class="sw sw-night" aria-hidden="true">Aa</span>Night</label>
         </div>
         <p class="ab-muted set-locked" id="setThemeLocked" hidden>The theme is set by this site.</p>
         <div class="theme-edit" id="themeEdit">
@@ -3096,7 +3134,12 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
 
 /* ---------- building a page ---------- */
 // Themes (E-5): light and sepia, dark and black; with none chosen the page follows the system.
-const THEMES = ['light', 'sepia', 'dark', 'black'], DARK_THEMES = ['dark', 'black'];
+// (E-ink, high contrast and a warm night theme: E-41.)
+const THEMES = ['light', 'sepia', 'dark', 'black', 'eink', 'contrast', 'night'], DARK_THEMES = ['dark', 'black', 'night'];
+// Themes that show a book's text in their own colours, as the dark ones do: e-ink and high contrast (and System when the
+// device asks for more contrast).
+const contrastMq = matchMedia('(prefers-contrast: more)');
+const themeMono = () => { const t = document.documentElement.getAttribute('data-theme'); return t === 'eink' || t === 'contrast' || (!t && contrastMq.matches); };
 /* Themes of the reader's own (E-38) and the site's (E-39, reader-config.json's THEMES), beside the four built in: a
    name, whether it is dark, and its colours, hex only (so a value can't carry CSS): the page's background and text, the
    accent (links, the ribbon), and, if given, the interface's background and text; the rest is worked out from them. */
@@ -3123,6 +3166,12 @@ function themeCheck(o, prefix){
     th[k] = o[k].trim().toLowerCase();
   }
   th.dark = typeof o.dark === 'boolean' ? o.dark : hexLum(th.page) < 0.25;
+  // (Its own colours for code and alerts, if given: E-40. Unknown names and other colours are left out.)
+  for (const [k, keys] of [['code', CODE_KEYS], ['alerts', ALERT_KEYS]]) {
+    if (!o[k] || typeof o[k] !== 'object') continue;
+    const m = Object.fromEntries(keys.filter(n => typeof o[k][n] === 'string' && THEME_HEX.test(o[k][n].trim())).map(n => [n, o[k][n].trim().toLowerCase()]));
+    if (Object.keys(m).length) th[k] = m;
+  }
   return th;
 }
 // Its colours as the reader's variables: the interface's worked out from the page's where not given.
@@ -3208,16 +3257,37 @@ const MD_CODE_COLOURS = [
   [['deletion'], '#82071e', '#ffa198']];
 // The colours of highlighted code, within scope: any code block in Markdown; in an HTML page or a book's chapter only
 // those the reader coloured (E-37), so a book's own highlighting keeps its own colours.
-const hlCss = (dark, scope) => MD_CODE_COLOURS.map(([names, l, d]) => names.map(n => `${scope} .hljs-${n.replace(/\./g, '.')}`).join(',') + `{color:${dark ? d : l} !important}`).join('\n')
-  + `\n${scope} .hljs-comment,${scope} .hljs-quote{font-style:italic}${scope} .hljs-strong{font-weight:600}${scope} .hljs-emphasis{font-style:italic}`;
+// (The colours follow the theme (E-40): a theme's own ("code", "alerts"), as it gives them, else GitHub's light or dark
+// ones, made readable on the background (4.5:1, by mixing them toward the theme's text), so code stays readable on any theme. In e-ink and
+// high contrast, the text's colour, in bold or italic, as on paper.)
+const CODE_KEYS = MD_CODE_COLOURS.map(r => r[0][0]), ALERT_KEYS = ['note', 'tip', 'important', 'warning', 'caution'];
+const asHex = v => THEME_HEX.test(String(v).trim()) ? rgbHex(hexRgb(String(v).trim())) : null;
+function readable(c, bg, ink, min = 4.5){
+  if (!bg || !ink) return c;
+  for (let k = 0; k < 12 && hexContrast(c, bg) < min; k++) c = hexMix(ink, c, 0.2);
+  return c;
+}
+function themeColours(dark, t){
+  const th = themeById(document.documentElement.getAttribute('data-theme')), bg = asHex(t.bg), ink = asHex(t.ink), rule = asHex(t.rule);
+  const codeBg = bg && rule ? hexMix(rule, bg, dark ? 0.7 : 0.35) : null, mono = themeMono();
+  // (A theme's own colours as it gives them; the others made readable.)
+  const code = MD_CODE_COLOURS.map(([names, l, d]) => mono ? ink || '#000000' : th?.code?.[names[0]] || readable(dark ? d : l, codeBg, ink));
+  const alerts = Object.fromEntries(ALERT_KEYS.map(k => [k, mono ? ink || '#000000' : th?.alerts?.[k] || readable(MD_ALERT_COLOURS[k][+dark], bg, ink)]));
+  return { code, alerts, mono };
+}
+const hlCss = (dark, scope, t = tokens()) => { const { code, mono } = themeColours(dark, t);
+  return MD_CODE_COLOURS.map(([names], i) => names.map(n => `${scope} .hljs-${n.replace(/\./g, '.')}`).join(',') + `{color:${code[i]} !important}`).join('\n')
+    + (mono ? `\n${scope} .hljs-keyword,${scope} .hljs-title,${scope} .hljs-built_in,${scope} .hljs-type{font-weight:700}${scope} .hljs-string{text-decoration:underline dotted}` : '')
+  + `\n${scope} .hljs-comment,${scope} .hljs-quote{font-style:italic}${scope} .hljs-strong{font-weight:600}${scope} .hljs-emphasis{font-style:italic}`; };
 // (The blocks the reader coloured in an HTML page or a book: on the reader's background, as a book's dark one made its
 // colours unreadable; the <pre> itself when it holds the code: round 31 review.)
 const hlOwnCss = (dark, t) => { const own = `[data-md-own="${MD_OWN}"]`, scope = `body pre:is(${own}, :has(> code${own}))`;
   // (On the <code> as well, where a book or a page's own .hljs theme can put a dark background: round 32 review, M-199.)
-  return `${scope},${scope} > code${own}{background:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, ${t.bg}) !important;color:${t.ink} !important}\n` + hlCss(dark, scope); };
-const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + hlCss(dark, 'body pre');
+  return `${scope},${scope} > code${own}{background:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, ${t.bg}) !important;color:${t.ink} !important}\n` + hlCss(dark, scope, t); };
+const mdCodeCss = (dark, t) => `body pre:not(.md-none){background-color:color-mix(in srgb, ${t.rule} ${dark ? 70 : 35}%, transparent) !important}\n` + hlCss(dark, 'body pre', t);
 const MD_ALERT_COLOURS = { note: ['#0969da', '#4493f8'], tip: ['#1a7f37', '#3fb950'], important: ['#8250df', '#ab7df8'], warning: ['#9a6700', '#d29922'], caution: ['#d1242f', '#f85149'] };
-const mdAlertCss = dark => Object.entries(MD_ALERT_COLOURS).map(([k, c]) => `body .md-alert-${k}{border-left-color:${c[+dark]} !important}body .md-alert-${k} > .md-alert-title{color:${c[+dark]} !important}`).join('\n');
+const mdAlertCss = (dark, t = tokens()) => { const { alerts } = themeColours(dark, t);
+  return ALERT_KEYS.map(k => `body .md-alert-${k}{border-left-color:${alerts[k]} !important}body .md-alert-${k} > .md-alert-title{color:${alerts[k]} !important}`).join('\n'); };
 const mdTableCss = t => `
 :where(table){border-collapse:collapse;margin:1em 0;max-width:100%;font-size:.9em;line-height:1.35;font-variant-numeric:tabular-nums}
 :where(th,td){border:1px solid ${t.rule};padding:.25em .5em;vertical-align:top}
@@ -3257,7 +3327,7 @@ function overrideCss(fx = null, layoutOnly = false){
   const v = book?.comic ? 12 : 40;
   const common = `body{--v:${v}px !important;--vb:${v + tts.barH}px !important;--m:${book?.comic ? '12px' : m} !important;--g:${book?.comic ? '12px' : 'max(32px,4vw)'} !important;
   margin:0 !important;width:auto !important;max-width:none !important;min-height:0 !important;box-sizing:border-box !important;
-  background:transparent !important;${dark ? `color:${t.ink} !important;` : ''}}`;
+  background:transparent !important;${dark || themeMono() ? `color:${t.ink} !important;` : ''}}`;
   const frameCss = layout === 'scroll'
     ? `html{font-size:${fontPct}% !important;background:${t.bg} !important;color-scheme:${dark ? 'dark' : 'light'};height:auto !important;overflow:auto !important}
 ${common}
@@ -3316,10 +3386,10 @@ pre{white-space:pre-wrap !important}
 ::highlight(search-hit){background-color:${dark ? 'rgb(240 200 80 / .3)' : 'rgb(250 205 70 / .45)'}}
 ::highlight(search-current){background-color:${dark ? '#E0B040' : '#F2B630'};color:#1a1408}
 ${book?.comic ? comicCss() : ''}
-${book?.doc?.kind === 'markdown' ? mdAlertCss(dark) + '\n' + mdCodeCss(dark, t) : hlOwnCss(dark, t)}
+${book?.doc?.kind === 'markdown' ? mdAlertCss(dark, t) + '\n' + mdCodeCss(dark, t) : hlOwnCss(dark, t)}
 ${faceStack() ? `#${RID.flow},#${RID.flow} :not(pre):not(code):not(kbd):not(samp):not(tt):not(svg):not(svg *):not(math):not(math *){font-family:${faceStack()} !important}` : ''}
 ::selection{background:${t.soft}}
-${dark ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
+${dark || themeMono() ? `body *:not(svg):not(svg *){color:inherit !important;background-color:transparent !important;border-color:${t.rule} !important}
 a,a *{color:${t.ribbon} !important}` : ''}`;
 }
 
@@ -4947,6 +5017,7 @@ $('#larger').addEventListener('click', () => setFont(fontPct + 10));
 document.addEventListener('keydown', onKey);
 
 darkMq.addEventListener('change', () => { restyleFrame(); syncThemeBtn(); });
+contrastMq.addEventListener('change', () => restyleFrame());   // (System, a device asking for more contrast: E-41)
 
 /* Font picker */
 // (A font of ADDITIONAL_FONTS is kept by its id until the list is known: then a font no longer on it is let go.)
@@ -10157,7 +10228,7 @@ function configNow(){
   const theme = document.documentElement.getAttribute('data-theme');
   // (The site's themes and the reader's own, as a site's THEMES: E-39. One in use named as the site will call it.)
   const custom = [...siteThemes, ...userThemes];
-  if (custom.length) c.THEMES = custom.map(({ name, dark, page, text, accent, ui, uiText }) => ({ name, dark, page, text, accent, ...(ui ? { ui } : {}), ...(uiText ? { uiText } : {}) }));
+  if (custom.length) c.THEMES = custom.map(({ name, dark, page, text, accent, ui, uiText, code, alerts }) => ({ name, dark, page, text, accent, ...(ui ? { ui } : {}), ...(uiText ? { uiText } : {}), ...(code ? { code } : {}), ...(alerts ? { alerts } : {}) }));
   if (THEMES.includes(theme)) c.theme = theme;
   else if (themeById(theme)) c.theme = 's-' + themeSlug(themeById(theme).name);
   Object.assign(c, { layout: ed.on && ed.prevLayout ? ed.prevLayout : layout, width: WIDTHS[widthStep][0], font: fontFace, fontSize: fontPct, lineSpacing: lineH });
