@@ -625,7 +625,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36
+Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-42 to E-45
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -637,6 +637,10 @@ Most important first.
 |---|---|---|
 | T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. | Tests |
 | T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
+| [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
+| [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
+| [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
+| [E-45](#e-45-narration-on-fixed-layout-spreads) | Publisher narration highlighted on both pages of a fixed-layout spread | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -679,6 +683,24 @@ across, so they can be read (H-33).
 
 ### E-25. Add, remove and reorder EPUB chapters
 Change an EPUB's chapters, keeping its package file and contents in step. The plan is in TODO.md.
+
+### E-42. Skippable parts in publisher narration
+Media Overlays' skippability: footnotes, endnotes, page numbers, sidebars and the like (by `epub:type` on the SMIL's
+`<par>`/`<seq>` or the text they point to) skipped while reading, with a setting for which kinds, as the EPUB 3 Media
+Overlays specification suggests reading systems offer. Escapability (leaving a table or list being read) could follow.
+
+### E-43. Publisher narration as an audiobook
+The audiobook export (E-10) made from the book's own recording when it has Media Overlays: the clips cut and joined
+per chapter (or one file), with the chapters' marks and the book's cover and metadata, in the formats export offers,
+instead of only a natural voice. Chapters without narration read by the natural voice chosen, or left out.
+
+### E-44. Narration across files and without text
+A `<par>` whose text is in a file other than the chapter's own followed (the narration moving on to that chapter), and
+audio-only clips (no text) shown as such in the read-aloud bar, rather than ignored or played with nothing marked.
+
+### E-45. Narration on fixed-layout spreads
+On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
+whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
 
 ## Suggested order
 
