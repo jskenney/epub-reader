@@ -280,6 +280,19 @@ for (const mode of ['headers', 'mid']) {
     assert.ok(log.slice(1).some(e => e.text === log[0].text && !e.stalled), JSON.stringify(log.map(e => [e.text.slice(0, 20), e.stalled])));
   });
 }
+// A refused request's reason is shown, in either server's error format: Breeze's {"detail"} and the Mac
+// server's {"error", "code"} (epub-reader-tts-server, mac/).
+for (const [mode, reason] of [['breeze400', 'cfg_scale must be greater than 0.'], ['gust400', 'cfg_scale must be 1 without an instruction']]) {
+  test(`a refused server voice request shows the server's reason (${mode === 'gust400' ? 'Mac server' : 'Breeze'} format)`, async () => {
+    const page = await h.newPage();
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, serverVoice);
+    await fetch(`${h.SITE}/__breeze?stall=${mode}&n=6`);   // (the paragraph, then its sentences one at a time)
+    await page.keyboard.press('r');
+    const note = await h.waitFor(async () => { const t = await page.textContent('#notice'); return t.includes('answered 400') && t; }, 10000);
+    assert.ok(note && note.includes(`answered 400: ${reason}`), String(note));
+  });
+}
 test.afterEach(() => h.clearBreezeLog());   // (a stall queued by a test that failed early mustn't stall the next one)
 
 // Round 25 review, loop 3 (T-46).

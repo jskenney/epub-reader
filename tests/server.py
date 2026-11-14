@@ -40,7 +40,8 @@ args = ap.parse_args()
 READER_PAGE_PATH = os.path.realpath(os.path.join(args.root, "reader", "index.html"))
 
 seen, breeze_log, busy = [], [], threading.Lock()
-stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing)
+stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing),
+                  # or to refuse with a 400: "breeze400" (Breeze's {"detail"}) or "gust400" (the Mac server's {"error", "code"})
 big_log = []   # the made-up big chapters: whether each was sent whole (GET /__big)
 api_log = []   # reading progress posted to /api-log/... (GET /__api lists, DELETE /__api clears: E-22)
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
@@ -166,7 +167,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.json(404, {"detail": "logged"})
         if args.breeze:
             if path == "/__breeze":
-                m = re.search(r"stall=(headers|mid)(?:&n=(\d+))?", self.path)
+                m = re.search(r"stall=(headers|mid|breeze400|gust400)(?:&n=(\d+))?", self.path)
                 if m:
                     stall_next.extend([m.group(1)] * int(m.group(2) or 1))
                 return self.json(200, breeze_log)
@@ -295,6 +296,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             mode = stall_next.pop(0)   # (a stalled stream: it doesn't hold the server busy, so the reader's next request is answered)
         except IndexError:
             mode = None
+        if mode in ("breeze400", "gust400"):
+            breeze_log.append({"text": f["text"].decode(), "stalled": mode, "path": path})
+            return self.json(400, {"detail": "cfg_scale must be greater than 0."} if mode == "breeze400"
+                             else {"error": "cfg_scale must be 1 without an instruction", "code": "invalid_field"})
         if mode:
             entry = {"text": f["text"].decode(), "stalled": mode, "path": path}
             breeze_log.append(entry)
