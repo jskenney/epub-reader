@@ -625,7 +625,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-42 to E-45
+Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-42 to E-46
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -641,6 +641,7 @@ Most important first.
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
 | [E-45](#e-45-narration-on-fixed-layout-spreads) | Publisher narration highlighted on both pages of a fixed-layout spread | Enhancement |
+| [E-46](#e-46-zonos3-mini-in-the-browser-webgpu) | ZONOS3-Mini as a third natural voice, in the browser on WebGPU (waiting a few days for its repository to settle) | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -702,10 +703,39 @@ audio-only clips (no text) shown as such in the read-aloud bar, rather than igno
 On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
 whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
 
+### E-46. ZONOS3-Mini in the browser (WebGPU)
+[Zyphra/ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini)'s in-browser engine (`servers/web`) as a natural voice
+beside Kokoro and Pocket TTS. Code MIT, weights Apache-2.0; 44 languages; about 30 built-in voices. **Waiting a few
+days** for the repository to settle (it was days old and changing daily when looked at, at `96d9e0e`), then pin a
+commit.
+
+- **Prototype first:** build the engine, run it in a test page and measure on real hardware: speed (no browser figures
+  are published; it must stay faster than real time while the page renders), how it reads a real book's numbers,
+  dates and abbreviations, and which browsers run it. Go on only if that holds up.
+- **Engine:** not on npm or a CDN (the package is private), so build `engine.js`, `worker.js` and `codec-worker.js`
+  (pnpm, Vite) at the pinned commit and ship them with checksums, or have a `fetch-zonos.sh` build them. Not loaded
+  from Zyphra's hosted copy, which isn't pinned.
+- **Models:** about 1 GB on first use (backbone and decoder from the `web/` folder of `Zyphra/ZONOS3-Mini` on the Hub,
+  at a pinned revision), cached by the engine in Cache Storage. `fetch-zonos.sh` self-hosts only those, without the
+  cloning, editing and full-decoder extras (about 3.5 GB more); `engine.init(progress, { base })` points at them.
+- **In the reader:** a `NEURAL` engine like Pocket TTS (`stream: true`), with `zLoad` (progress, the download agreement),
+  `zGenerate` (`localFetch('/v2/generate')` with `text`, `language`, `speaker_embedding_id`, `stream`; abort with the
+  signal), a voice picker from `/v2/speakers`, the book language mapped to its codes (`en` → `en_us`/`en_gb`, `zh` →
+  `cmn`, `pt` → `pt_br`, `fr` → `fr_fr`, …), `SPAN_MAX.zonos` and a cache key. Its audio is 44.1 kHz float (saved
+  audio about twice Kokoro's size); the per-chunk rate is handled already. No cross-origin isolation is needed (it
+  doesn't use `SharedArrayBuffer`), and its workers load from its own files.
+- **Limits:** WebGPU only, no WebAssembly fallback, so the option hides itself without `navigator.gpu` or when
+  `engine.init` fails (desktop Chrome and Edge are fine; Safari, Firefox and phones uncertain). The browser build has
+  **no text normalisation**: if numbers, money, "Dr." or Roman numerals read badly, the reader needs its own
+  normaliser (Zyphra's is Rust, `zyphra-textnorm`, and might build to WebAssembly).
+- **Also:** Settings, README and `fetch-zonos.sh` docs, CREDITS for its NOTICE, and tests with a fake engine in place of
+  WebGPU (as the tests fake the Breeze server).
+
 ## Suggested order
 
 1. E-25, E-22, as laid out in TODO.md.
 2. E-36 and E-30 (small), then the other enhancements, as wanted.
+3. E-46 once ZONOS3-Mini's repository has settled (from about a week after 2026-11-15): the prototype first.
 
 ## Resolved
 
