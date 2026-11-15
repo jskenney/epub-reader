@@ -625,7 +625,7 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 
 ## Summary
 
-Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-42 to E-46
+Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-42 to E-47
 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -642,6 +642,7 @@ Most important first.
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
 | [E-45](#e-45-narration-on-fixed-layout-spreads) | Publisher narration highlighted on both pages of a fixed-layout spread | Enhancement |
 | [E-46](#e-46-zonos3-mini-in-the-browser-webgpu) | ZONOS3-Mini as a third natural voice, in the browser on WebGPU (waiting a few days for its repository to settle) | Enhancement |
+| [E-47](#e-47-server-voice-in-the-books-language-zonos3-mini-server) | Server voice in any language the server speaks, for a ZONOS3-Mini server (epub-reader-tts-server-zonos3); with E-46 | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -731,11 +732,35 @@ commit.
 - **Also:** Settings, README and `fetch-zonos.sh` docs, CREDITS for its NOTICE, and tests with a fake engine in place of
   WebGPU (as the tests fake the Breeze server).
 
+### E-47. Server voice in the book's language (ZONOS3-Mini server)
+The reader's part of a second voice server, `epub-reader-tts-server-zonos3` (a separate repository, so the Breeze
+server, epub-reader-tts-server, stays as it is): ZONOS3-Mini behind an adapter that answers the same API (API.md
+there), on the same proxy paths. ZONOS3-Mini speaks 44 languages, where Breeze speaks English and Chinese, so:
+
+- **Languages from the server:** `/health` lists the languages it speaks (for example `"languages": ["en", "fr",
+  "de", …]`); the reader offers Server voice for a book in one of them, and keeps today's English-and-Chinese rule
+  (`serverFits`) for a server that doesn't say (Breeze, the Mac server).
+- **The book's language sent:** each `/v1/audio/speech` request carries a `language` form field (the book's language,
+  as `bookLang()` gives it); the adapter maps it to ZONOS3's codes (`en` → `en_us`, `zh` → `cmn`, …). Upstream Breeze
+  and Gust appear to ignore fields they don't know; tests confirm that before it ships.
+- **Voices without an instruction:** ZONOS3 clones from a clip (no voice design from a description), and the adapter
+  answers an `instruction` with a 400; a voice list with instruction-only voices shows them failing with that reason,
+  as today. Whether to hide them when the server says it can't use instructions (another `/health` field) is decided
+  with the server.
+- **Also:** the cache key gains the language; tests with the fake server (a languages list, the `language` field, an
+  older server without either); README.
+
+The server repository itself (ZONOS3 pinned, the adapter, the studio with "Pick a built-in voice" in place of
+"Design a voice", the Mac version on ZONOS3's MLX server) is planned there. Like E-46, it waits a few days for
+ZONOS3-Mini's repository to settle, and starts with ZONOS3's server measured on the RTX PRO 4000 (its kernels aren't
+documented for that card; the ggml server is the fallback).
+
 ## Suggested order
 
 1. E-25, E-22, as laid out in TODO.md.
 2. E-36 and E-30 (small), then the other enhancements, as wanted.
-3. E-46 once ZONOS3-Mini's repository has settled (from about a week after 2026-11-15): the prototype first.
+3. E-46 and E-47 once ZONOS3-Mini's repository has settled (from about a week after 2026-11-15): both prototyped
+   first (the browser engine; the server on the RTX PRO 4000), then the reader's parts.
 
 ## Resolved
 
