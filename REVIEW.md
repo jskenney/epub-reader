@@ -744,7 +744,7 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
-| E-47 | Server voice in the book's language: `/health` may list the server's languages (ZONOS3, in the new jskenney/epub-reader-tts-server-zonos3) and say `"instructions": false`; Server voice is then offered for books in those languages, the book's language is sent with each request (and kept in the saved audio's key), and instruction-only voices are left out. A server listing none (Breeze) works as before. | `996bb70` |
+| E-47 | Server voice in the book's language: `/health` may list the server's languages (ZONOS3, in the new jskenney/epub-reader-tts-server-zonos3) and say `"instructions": false`; Server voice is then offered for books in those languages, the book's language is sent with each request (and kept in the saved audio's key), and instruction-only voices are left out. A server listing none (Breeze) works as before. | `c670c10` |
 | E-40 | Code and alert colours follow the theme: a theme's own (`code`, `alerts` in THEMES) as given, else GitHub's made readable (4.5:1) on its background; in e-ink and high contrast the text's colour, in bold. | `b39c8c8` |
 | E-41 | E-ink (no shadows or motion), High contrast (and System when the device asks for more contrast) and Night (warm, dark) themes; e-ink and high contrast show a book's text in their own colours. | `b39c8c8` |
 | E-38 | Themes of the reader's own: made from the theme in use in Settings, named, coloured (page, text, links, interface), dark or not, with a warning under 4.5:1 contrast; kept in the browser and drawn before the first paint; the rest of the interface's colours worked out; hex colours only. | `b70323c` |
