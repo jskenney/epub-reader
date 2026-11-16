@@ -37,13 +37,22 @@ def png(w, h, rgb):
 # asked in window.zonosFake; window.zonosFakeFail makes init fail; text with FAILME is refused (400).
 ZONOS_FAKE = r"""
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// Like the real engine: init starts up once (later calls resolve at once; a failed one can be retried), every
+// onFatal callback is called, and nothing it was doing is ended then. window.zonosFakeCut = n ends the next n
+// streams early as if finished (as the engine does after an error once audio has started); window.zonosFakeHang
+// makes streams wait for good (until aborted).
+let started = null;
+const fatal = [];
+window.zonosFatal = msg => { for (const cb of fatal) cb(msg); };
 export const engine = {
-  async init(progress, opts) {
-    window.zonosFake = { base: opts.base, cache: opts.cache, requests: [], inits: (window.zonosFake?.inits || 0) + 1 };
-    for (let i = 1; i <= 4; i++) { progress({ models: ['backbone', 'zac'], loaded: i * 245e6, total: 980e6, fetched: i * 245e6 }); await wait(30); }
-    if (window.zonosFakeFail) throw new Error(window.zonosFakeFail);
+  init(progress, opts) {
+    return started ??= (async () => {
+      window.zonosFake = { base: opts.base, cache: opts.cache, requests: [], inits: (window.zonosFake?.inits || 0) + 1, cut: 0 };
+      for (let i = 1; i <= 4; i++) { progress({ models: ['backbone', 'zac'], loaded: i * 245e6, total: 980e6, fetched: i * 245e6 }); await wait(30); }
+      if (window.zonosFakeFail) throw new Error(window.zonosFakeFail);
+    })().catch(e => { started = null; throw e; });
   },
-  onFatal(cb) { window.zonosFatal = cb; },
+  onFatal(cb) { fatal.push(cb); window.zonosFatals = fatal.length; },
   onEncoderProgress() {},
 };
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
@@ -61,9 +70,12 @@ export async function localFetch(path, init = {}) {
   const f = new Float32Array(n);
   for (let i = 0; i < n; i++) f[i] = 0.1 * Math.sin(i * 0.05);
   const bytes = new Uint8Array(f.buffer), signal = init.signal;
+  const cut = window.zonosFakeCut > 0 && window.zonosFakeCut--;
+  if (cut) window.zonosFake.cut++;
   return new Response(new ReadableStream({ async start(c) {
+    if (window.zonosFakeHang) { signal?.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError'))); return; }
     // (Chunks of 8,821 bytes: samples split across them, as the real engine's may be.)
-    for (let i = 0; i < bytes.length; i += 8821) {
+    for (let i = 0; i < (cut ? 8821 : bytes.length); i += 8821) {
       if (signal?.aborted) { window.zonosFake.aborted = (window.zonosFake.aborted || 0) + 1; c.error(new DOMException('aborted', 'AbortError')); return; }
       c.enqueue(bytes.slice(i, i + 8821)); await wait(10);
     }
@@ -196,6 +208,19 @@ def main():
     os.symlink(REPO / "zonos" / "engine", reader / "zonos" / "engine")
     (SITE / "zonos-fake").mkdir()
     (SITE / "zonos-fake" / "engine.js").write_text(ZONOS_FAKE)
+    # Self-hosted ZONOS3 models (stand-ins: the fake engine reads none): a finished download, with fetch-zonos.sh's
+    # NOTICE.txt, and one that stopped partway, without it (REVIEW.md E-46 review).
+    for folder, done in (("zonos-local", True), ("zonos-partial", False)):
+        models = SITE / folder / "zonos" / "models"
+        for d in ("backbone", "zac", "voices"):
+            (models / d).mkdir(parents=True)
+        (models / "backbone" / "manifest.json").write_text("{}")
+        (models / "zac" / "manifest.json").write_text("{}")
+        (models / "voices" / "voices.json").write_text("[]")
+        if done:
+            (models / "NOTICE.txt").write_text("fetch-zonos.sh\n")
+        os.symlink(REPO / "index.html", SITE / folder / "index.html")
+        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/"}))
     # Linked copies in two folders, each with its own default book and config (per-folder settings).
     # folder-a and folder-b share the reader's libraries and fonts (LIB_FILES); folder-c has its own linked copies
     # and no config.

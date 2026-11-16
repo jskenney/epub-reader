@@ -91,6 +91,9 @@ else
 fi
 
 say "ZONOS3-Mini models (revision ${REV:0:8}, about 900 MB)"
+# NOTICE.txt is written only once every file is here and checked: the reader uses the folder only then, so a run
+# that stops partway (or finds a bad file) leaves the reader on Hugging Face's copy.
+[ "$LIST" = 1 ] || rm -f "$DEST/NOTICE.txt"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   get "$HF/$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$f")" "$f"

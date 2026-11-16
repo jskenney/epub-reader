@@ -117,12 +117,65 @@ test('zonosText spells out English numbers, money, dates and abbreviations, and 
     'Chapter XII. The 21st of 1,250,000 people; 3.14 and 45% and £1 and $2.01 and €3 million.',
     'In 1066 and 1905 and 2000 and 2024, (etc.) and so on, etc. Then more.',
     'Room 12a, 3D, MP3, version 2.5.1, the 90s, the 1990s, at 10:30 and 9:05 and 12:00.',
+    '$1.5 million, $5.5, US$5, Part C, Section D, Act IV; Genesis 1:1, 24:00, 3:15:20.',
+    'Call 555-1234 or (555) 123-4567 on 1975-03-14; pages 10-20, 1990–1995, 20-10.',
+    'Agent 007, 0800 hours; Elm St. and Oak Dr., not St. Paul or Dr. Who; the 1800\'s, -5 degrees, 1001 nights, in 1066.',
   ].map(t => SPINE_TEST.zonosText(t, 'en_us')).concat(SPINE_TEST.zonosText('Il y a 3 chats.', 'fr_fr')));
   assert.deepEqual(out, [
     'In nineteen eighty-four, Doctor Smith paid five dollars and fifty cents for chapter twelve on May third.',
     'Chapter twelve. The twenty-first of one million two hundred and fifty thousand people; three point one four and forty-five percent and one pound and two dollars and one cent and three million euros.',
     'In ten sixty-six and nineteen oh five and two thousand and twenty twenty-four, (et cetera) and so on, et cetera. Then more.',
     'Room 12a, 3D, MP3, version 2.5.1, the nineties, the nineteen nineties, at ten thirty and nine oh five and twelve o\'clock.',
+    'one point five million dollars, $5.5, US$5, Part C, Section D, Act four; Genesis 1:1, 24:00, 3:15:20.',
+    'Call 555-1234 or (555) 123-4567 on 1975-03-14; pages ten to twenty, nineteen ninety to nineteen ninety-five, 20-10.',
+    'Agent zero zero seven, zero eight zero zero hours; Elm Street and Oak Drive, not Saint Paul or Doctor Who; the eighteen hundreds, minus five degrees, one thousand and one nights, in ten sixty-six.',
     'Il y a 3 chats.',
   ]);
+});
+
+test('ZONOS3: a passage cut off partway is asked for again, not kept (E-46 review)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.evaluate(() => { window.zonosFakeCut = 1; });
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), 'reads on');
+  const f = await fake(p);
+  assert.equal(f.cut, 1);
+  // The cut-off passage was asked for again (one sentence at a time), so its text comes back in a later request.
+  const first = f.requests[0].text;
+  assert.ok(f.requests.slice(1).some(r => first.startsWith(r.text.slice(0, 20))), JSON.stringify(f.requests.map(r => r.text.slice(0, 30))));
+});
+
+test('ZONOS3: a lost GPU stops a passage that would wait for good, and "Try again" says to reload (E-46 review)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.evaluate(() => { window.zonosFakeHang = true; });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => window.zonosFake?.requests.length > 0, null, { timeout: 20000 });
+  await p.evaluate(() => window.zonosFatal('GPU device lost: test'));
+  await p.waitForFunction(() => /reload the page/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 10000 });
+  assert.equal(await p.textContent('#ttsDownload'), 'Try again');
+  await p.click('#ttsDownload');
+  await p.waitForTimeout(500);
+  assert.match(await p.textContent('#ttsStatus'), /stopped working \(GPU device lost: test\); reload the page/);
+  assert.equal((await fake(p)).inits, 1, 'not started again on a lost GPU');
+  assert.equal(await p.evaluate(() => window.zonosFatals), 1, 'one failure callback');
+});
+
+test('ZONOS3 models are used from this site only when fetch-zonos.sh finished (E-46 review)', async () => {
+  for (const [folder, local] of [['zonos-local', true], ['zonos-partial', false]]) {
+    const p = await page();
+    await h.openReader(p, `${h.SITE}/${folder}/index.html?book=/reader/books/long.epub`, { ...zonos, 'spine:agreed:zonos': true });
+    await p.keyboard.press('r');
+    await p.waitForFunction(() => window.zonosFake?.base, null, { timeout: 20000 });
+    assert.equal((await fake(p)).base, local ? `${h.SITE}/${folder}/zonos/models/` : HF, folder);
+    await p.close();
+  }
+});
+
+test('zonosLang maps a book\'s language to ZONOS3\'s, skipping script subtags (E-46 review)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG);
+  assert.deepEqual(await p.evaluate(() => ['en', 'en-US', 'en-GB', 'en-Latn-GB', 'en-AU', 'fr-CA', 'zh-Hans-CN', 'pt', 'nb', 'he', 'iw', 'la', 'xx-YY']
+    .map(t => SPINE_TEST.zonosLang(t))), ['en_us', 'en_us', 'en_gb', 'en_gb', 'en_gb', 'fr_fr', 'cmn', 'pt_br', 'no', 'he', 'he', null, null]);
 });
