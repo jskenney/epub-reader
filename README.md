@@ -446,14 +446,18 @@ site as the reader.
   Download. It has no speed control of
   its own, so the speed setting changes playback instantly with pitch
   preserved. The model is CC BY 4.0 (Kyutai).
-- Server voice ("Server" in the read-aloud bar): Breeze TTS 2 running on your own NVIDIA GPU behind the same
-  website (English and Chinese). It appears in the read-aloud bar when
-  `/tts/health` on the site root answers; voices are reference clips listed
-  in `/tts-voices/voices.json`, created and managed in the server's voice
-  studio at `/tts-studio/`. Setup, Docker Compose,
-  reverse-proxy examples and the voice script are in
-  [jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server).
-  The model and its output are for non-commercial use.
+- Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
+  either of two with the same API:
+  - Breeze TTS 2 ([jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server)):
+    English and Chinese; the model and its output are for non-commercial use.
+  - ZONOS3-Mini ([jskenney/epub-reader-tts-server-zonos3](https://github.com/jskenney/epub-reader-tts-server-zonos3)):
+    43 languages, built-in voices, numbers and dates read properly; MIT and Apache-2.0.
+
+  It appears in the read-aloud bar when `/tts/health` on the site root answers, for books in the languages the
+  server lists there (English and Chinese for a server that lists none, as Breeze); the book's language is sent with
+  each request to a server that lists them. Voices are reference clips listed in `/tts-voices/voices.json`, created
+  and managed in the server's voice studio at `/tts-studio/`. Setup, Docker Compose, reverse-proxy examples and the
+  voice script are in each server's repository.
 - Natural voices read a whole paragraph at a time where they can (up to
   about 350 characters for Kokoro and 600 for Pocket TTS), which phrases
   better than sentence by sentence; the sentence and word highlights move
@@ -713,7 +717,7 @@ Re-runs skip finished files, every file is checked against
 
 French isn't offered: its model bundle at this revision has no built-in
 voices (`voices.bin`), so it can't speak. French books are read by device
-voices (Kokoro reads English, and the server voice English and Chinese).
+voices (Kokoro reads English, and the server voice the languages its server lists: French with ZONOS3).
 
 ## Self-hosting the natural voice
 
@@ -904,7 +908,7 @@ default books and the memory and request sizes stay the site's to set.
 | `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. Whole seconds. |
 | `SAVED_AUDIO_MB` ✓ ⚙ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. Whole MB. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
-| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches its warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail. In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "server": 600}` (any of the three); a value outside 21–5000 is ignored. |
+| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches Breeze's warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail (ZONOS3 has no such limit). In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "server": 600}` (any of the three); a value outside 21–5000 is ignored. |
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
 | `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |

@@ -715,7 +715,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261114.1350</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261116.1314</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -5882,7 +5882,8 @@ function ttsUpdateBar(status){
   po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Pocket' : 'Pocket (en, de, it, pt, es)';
   const so = eng.querySelector('[value="server"]');
   so.hidden = !sv.available && tts.engine !== 'server'; so.disabled = !sv.available || !serverFits();
-  so.textContent = !sv.available ? 'Server (unavailable)' : serverFits() ? 'Server' : 'Server (English and Chinese only)';
+  so.textContent = !sv.available ? 'Server (unavailable)' : serverFits() ? 'Server'
+    : sv.langs ? "Server (not in this book's language)" : 'Server (English and Chinese only)';
   const unusable = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ||
     (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'server' && (!sv.available || !serverFits()));
   const auto = unusable && tts.engine === 'narration';
@@ -6361,16 +6362,20 @@ function pkGenerate(text, opts = {}){
 }
 
 /* ---------- Server voice ----------
-   A text-to-speech API on this same site (https://github.com/jskenney/epub-reader-tts-server): Breeze TTS 2 behind a reverse
+   A text-to-speech API on this same site: Breeze TTS 2 (https://github.com/jskenney/epub-reader-tts-server) or
+   ZONOS3-Mini (https://github.com/jskenney/epub-reader-tts-server-zonos3) behind a reverse
    proxy at /tts/ on the site root, with voices listed in /tts-voices/voices.json (served by the server's
    voice studio). Each voice is a reference clip plus
    its transcript, sent with every request so the voice stays the same from paragraph to paragraph.
-   The API runs one request at a time and answers 409 while busy, so requests are queued here and
-   retried. It has no speed control: speed is applied at playback with pitch preserved. */
+   Breeze runs one request at a time and answers 409 while busy, so requests are queued here and
+   retried. A server whose /health lists its languages (ZONOS3) is offered for books in them and sent the book's
+   language; one that says "instructions": false can't speak instruction-only voices (REVIEW.md E-47). Neither has a
+   speed control: speed is applied at playback with pitch preserved. */
 let TTS_SERVER = { api: new URL('/tts/', location.href).href, voices: new URL('/tts-voices/', location.href).href };   // reader-config.json: {"api": "/tts/", "voices": "/tts-voices/"}
 const sv = { state: 'idle', available: null, checkedAt: 0, voices: [], refs: new Map(), queue: Promise.resolve(), error: '', progressText: '',
-  wantPlay: false, voice: store.get('spine:serverVoice') || '' };
-const serverFits = () => /^(en|zh)\b/i.test(bookLang());
+  wantPlay: false, voice: store.get('spine:serverVoice') || '',
+  langs: null, instructions: true };   // from /health: the languages it lists (none: English and Chinese), instructions usable
+const serverFits = () => sv.langs ? sv.langs.includes(bookLang().toLowerCase().split(/[-_]/)[0]) : /^(en|zh)\b/i.test(bookLang());
 const svVoice = () => sv.voices.find(v => v.id === sv.voice) || sv.voices[0];
 // Is there a voice server? Checked once, when the read-aloud bar first opens.
 // Only a real answer counts: Breeze replies {"status":"ok"} (503 "loading" while starting). A proxy whose
@@ -6390,7 +6395,14 @@ function svProbe(maxAge = 15000){
   sv.checkedAt = Date.now();
   sv.probe = (async () => {
     let ok = false;
-    try { const { r, json } = await svFetchJson(TTS_SERVER.api + 'health'); ok = r.ok && json?.status === 'ok'; } catch { ok = false; }
+    try {
+      const { r, json } = await svFetchJson(TTS_SERVER.api + 'health');
+      ok = r.ok && json?.status === 'ok';
+      if (ok) {
+        sv.langs = Array.isArray(json.languages) ? json.languages.filter(l => typeof l === 'string').map(l => l.toLowerCase()) : null;
+        sv.instructions = json.instructions !== false;
+      }
+    } catch { ok = false; }
     if (!ok && sv.available) svLost(false);
     else if (ok && !sv.available && sv.state !== 'loading') sv.state = 'idle';   // back: load the voices again
     sv.available = ok;
@@ -6423,7 +6435,7 @@ async function svLoad(){
       const { ref_audio, ref_text, ...rest } = v;
       return rest;
     });
-    sv.voices = list.filter(v => v?.id && (v.ref_audio ? v.ref_text : v.instruction));
+    sv.voices = list.filter(v => v?.id && (v.ref_audio ? v.ref_text : v.instruction && sv.instructions));
     // Each clip's version (ETag, or date and size), so saved audio is made again when a clip is re-recorded
     // under the same name. If the server can't say (HEAD refused, a timeout), the last version seen is kept,
     // so saved audio isn't made again for nothing.
@@ -6481,8 +6493,10 @@ async function svRef(v){
 function svVoiceHash(){
   const v = svVoice() || {};
   // (The values as the form sends them, so "1.0" and "1" are told apart just as the server sees them.)
-  return hashText(JSON.stringify([TTS_SERVER.api, v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
-    String(v.cfg_scale ?? 1), String(v.seed ?? 42)]));
+  const key = [TTS_SERVER.api, v.ref_audio || '', v.ref_audio ? v.ref_text || '' : '', v.clipVersion || '', v.instruction || '',
+    String(v.cfg_scale ?? 1), String(v.seed ?? 42)];
+  if (sv.langs) key.push(bookLang().toLowerCase());   // (the language it is sent: only then, so a Breeze server's saved audio keeps its key)
+  return hashText(JSON.stringify(key));
 }
 const SV_REPLY_SEC = Number(window.SPINE_TEST?.svReplySec) || 60;   // how long the server voice may take to start answering a request (tests set less)
 const SV_BUSY_TRIES = Number(window.SPINE_TEST?.svBusyTries) || 40;   // a busy (409) server asked again, about a minute in all (tests set less)
@@ -6496,6 +6510,7 @@ function svGenerate(text, opts = {}){
     if (v.instruction) form.append('instruction', v.instruction);
     form.append('cfg_scale', String(v.cfg_scale ?? 1));
     form.append('seed', String(v.seed ?? 42));
+    if (sv.langs) form.append('language', opts.snap?.svLang ?? bookLang());   // (only to a server that listed its languages)
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now();
       let r;
@@ -6687,7 +6702,7 @@ function textWeights(text){
 function nSynth(ne, text){
   // The settings the audio is made with, taken now, with its key: a speed or voice changed while the passage
   // waits its turn must not make audio saved under the old key (REVIEW.md L-50).
-  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice() };
+  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice(), svLang: bookLang() };
   const key = `${ne.key()}|${text}`;
   let e = n.cache.get(key);
   if (e) { n.cache.delete(key); n.cache.set(key, e); return e; }
@@ -7606,7 +7621,7 @@ async function abRun(units, mode, target, format = 'aac'){
   const fmt = AB_FORMATS[format];
   const ne = neuralEngine(), b = book, rates = await abAacRates();   // (the encoder settings that work)
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
-  const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice() };
+  const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice(), svLang: bookLang() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };

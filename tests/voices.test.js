@@ -98,6 +98,43 @@ test('server voices: clips outside the voices folder are not used (L-12, L-28)',
   assert.deepEqual(await h.remoteLog(), []);
 });
 
+// A server that lists its languages in /health (ZONOS3: epub-reader-tts-server-zonos3) is offered for books in
+// them and sent the book's language; one that can't use instructions has its instruction-only voices left out. A
+// server that lists none (Breeze) is offered for English and Chinese and sent no language, as before (E-47).
+test('server voice: languages and instructions from /health (E-47)', async () => {
+  // Breeze: no language sent; the voice with only an instruction (its clip is on another site) is offered.
+  let page = await h.newPage();
+  await h.clearBreezeLog();
+  await h.openReader(page, LONG, server);
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(page)));
+  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second', 'described']);
+  assert.equal((await h.breezeLog())[0].language, null);
+  await page.close();
+  // ZONOS3, speaking the book's language: it is sent, and the instruction-only voice is left out.
+  await h.clearBreezeLog();
+  await fetch(`${h.SITE}/__breeze?langs=fr,en,de`);
+  page = await h.newPage();
+  await h.openReader(page, LONG, server);
+  const lang = await page.evaluate(() => (document.querySelector('#page').contentDocument.documentElement.getAttribute('lang') || ''));
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(page)));
+  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second']);
+  const sent = (await h.breezeLog())[0].language;
+  assert.ok(sent && sent.toLowerCase().startsWith('en') && (!lang || sent === lang), `language sent: ${sent} (book: ${lang})`);
+  assert.equal(await page.$eval('#ttsEngine option[value=server]', o => o.textContent), 'Server');
+  await page.close();
+  // ZONOS3 without the book's language: Server voice is offered but can't be chosen, and says why.
+  await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' });
+  await fetch(`${h.SITE}/__breeze?langs=fr,de`);
+  page = await h.newPage();
+  await h.openReader(page, LONG, { 'spine:ttsEngine': 'device' });
+  await page.keyboard.press('r');
+  await page.waitForFunction(() => document.querySelector('#ttsEngine option[value=server]')?.textContent.includes('language'));
+  assert.deepEqual(await page.$eval('#ttsEngine option[value=server]', o => [o.textContent, o.disabled]), ["Server (not in this book's language)", true]);
+  await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' });
+});
+
 test('saved server-voice audio survives reordered or added fields in voices.json, not a changed seed or clip (L-15, L-28)', async () => {
   const file = path.join(__dirname, 'site', 'tts-voices', 'voices.json');
   const original = fs.readFileSync(file, 'utf8');

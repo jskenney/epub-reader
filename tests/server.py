@@ -42,6 +42,7 @@ READER_PAGE_PATH = os.path.realpath(os.path.join(args.root, "reader", "index.htm
 seen, breeze_log, busy = [], [], threading.Lock()
 stall_next = []   # Breeze requests to stall, oldest first: "headers" (headers, then nothing) or "mid" (some audio, then nothing),
                   # or to refuse with a 400: "breeze400" (Breeze's {"detail"}) or "gust400" (the Mac server's {"error", "code"})
+health_extra = {}   # extra /tts/health fields, as a ZONOS3 server sends (GET /__breeze?langs=en,fr sets them, DELETE clears: E-47)
 big_log = []   # the made-up big chapters: whether each was sent whole (GET /__big)
 api_log = []   # reading progress posted to /api-log/... (GET /__api lists, DELETE /__api clears: E-22)
 sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
@@ -170,9 +171,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 m = re.search(r"stall=(headers|mid|breeze400|gust400)(?:&n=(\d+))?", self.path)
                 if m:
                     stall_next.extend([m.group(1)] * int(m.group(2) or 1))
+                m = re.search(r"langs=([a-z,]*)", self.path)
+                if m:
+                    health_extra.update({"languages": [x for x in m.group(1).split(",") if x], "instructions": False})
                 return self.json(200, breeze_log)
             if path in ("/tts/health", "/alt-tts/health"):   # (/alt-tts/: a folder whose config moves TTS_SERVER)
-                return self.json(200, {"status": "ok"})
+                return self.json(200, {"status": "ok", **health_extra})
             if path.startswith("/tts/"):
                 return self.json(404, {"detail": "Not Found"})
         # A folder book's chapters made here, too large to show: one of 20 MB with its length, and one of 200 MB sent
@@ -279,6 +283,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         (seen if self.path.startswith("/__log") else breeze_log).clear()
         if not self.path.startswith("/__log"):
             stall_next.clear()
+            health_extra.clear()
         self.json(200, {"ok": True})
 
     def do_POST(self):
@@ -319,7 +324,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.json(409, {"detail": "An inference request is already running."})
         try:
             text = f["text"].decode()
-            entry = {"text": text, "ref_text": (f.get("ref_text") or b"").decode(), "ref_bytes": len(f.get("ref_audio") or b""), "path": path}
+            entry = {"text": text, "ref_text": (f.get("ref_text") or b"").decode(), "ref_bytes": len(f.get("ref_audio") or b""), "path": path,
+                     "language": f["language"].decode() if "language" in f else None}
             breeze_log.append(entry)
             seconds = 0.3 * len(text.split()) + 0.3
             n, step = int(24000 * seconds), 1920
