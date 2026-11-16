@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Write checksums/libs.sha256, kokoro.sha256 and pocket.sha256: the SHA-256 of every file the fetch scripts can
+"""Write checksums/libs.sha256, kokoro.sha256, pocket.sha256 and zonos.sha256: the SHA-256 of every file the fetch scripts can
 download, which they then check after downloading. Run it after changing a version or revision pinned in
 a fetch script (and index.html); see "Upgrading a pinned version" in the README.
 
-    python3 tools/make-checksums.py            # all three
+    python3 tools/make-checksums.py            # all four
     python3 tools/make-checksums.py pocket     # one
 
 For libs it also prints the Subresource Integrity hash (sha384) of each library script and stylesheet, for LIBS
@@ -18,12 +18,14 @@ import json
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 JOBS = {"libs": [["./fetch-libs.sh", "--list"]],
         "kokoro": [["./fetch-kokoro.sh", "--list"]],
-        "pocket": [["./fetch-pocket.sh", "--list", "all"], ["./fetch-pocket.sh", "--list", "--int8", "all"]]}
+        "pocket": [["./fetch-pocket.sh", "--list", "all"], ["./fetch-pocket.sh", "--list", "--int8", "all"]],
+        "zonos": [["./fetch-zonos.sh", "--list"]]}
 HF = re.compile(r"^https://huggingface\.co/([^/]+/[^/]+)/resolve/([^/]+)/(.+)$")
 trees = {}
 
@@ -52,7 +54,7 @@ def main(names):
         lines = []
         for path, url in sorted(files.items()):
             m = HF.match(url)
-            digest = lfs_sha256(*m.groups()) if m else None
+            digest = lfs_sha256(m[1], m[2], urllib.parse.unquote(m[3])) if m else None   # (paths with spaces are quoted in URLs)
             how = "lfs"
             if not digest:
                 data = curl(url)
