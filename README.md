@@ -453,7 +453,13 @@ site as the reader.
   French, German, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Russian,
   Arabic, Hindi, …) with about 30 built-in voices, those in the book's language
   listed first; any voice reads any language, with its own accent. A one-time
-  download of about 900 MB after pressing Download, kept by the browser. English
+  download of about 900 MB after pressing Download, kept by the browser in its
+  Cache Storage: later visits load it from there ("Loading ZONOS3 from this
+  browser's copy"), still a few seconds' work, since the model goes to the GPU
+  each time. The reader asks the browser once to keep the site's storage, and
+  says so if the browser didn't keep the copy or has dropped it since (a private
+  window, site data cleared when the browser closes, storage full), with the
+  storage figures. English
   numbers, money, dates, times, decimals and common abbreviations are spelled out
   before reading ("1984" as "nineteen eighty-four", "$5.50", "Dr."), since the
   browser engine doesn't do that itself; other languages are read as written. Like

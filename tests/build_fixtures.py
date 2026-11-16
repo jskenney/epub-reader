@@ -48,8 +48,14 @@ export const engine = {
   init(progress, opts) {
     return started ??= (async () => {
       window.zonosFake = { base: opts.base, cache: opts.cache, requests: [], inits: (window.zonosFake?.inits || 0) + 1, cut: 0 };
-      for (let i = 1; i <= 4; i++) { progress({ models: ['backbone', 'zac'], loaded: i * 245e6, total: 980e6, fetched: i * 245e6 }); await wait(30); }
+      // Downloaded the first time, then read from Cache Storage (as the engine keeps them there), unless the test says
+      // the browser didn't keep it (window.zonosFakeNoKeep) or dropped it (window.zonosFakeDropped).
+      const cache = await caches.open('zonos3-web-models-v6');
+      if (window.zonosFakeDropped) for (const k of await cache.keys()) await cache.delete(k);
+      const fromCache = (await cache.keys()).length > 0;
+      for (let i = 1; i <= 4; i++) { progress({ models: ['backbone', 'zac'], loaded: i * 245e6, total: 980e6, fetched: fromCache ? 0 : i * 245e6 }); await wait(30); }
       if (window.zonosFakeFail) throw new Error(window.zonosFakeFail);
+      if (!fromCache && !window.zonosFakeNoKeep) await cache.put(opts.base + 'backbone/shard-000.bin', new Response('x'));
     })().catch(e => { started = null; throw e; });
   },
   onFatal(cb) { fatal.push(cb); window.zonosFatals = fatal.length; },

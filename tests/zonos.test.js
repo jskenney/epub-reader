@@ -200,3 +200,46 @@ test('ZONOS3: a site that answers missing files with a page and status 200 isn\'
   await p.waitForFunction(() => window.zonosFake?.base, null, { timeout: 20000 });
   assert.equal((await fake(p)).base, HF);
 });
+
+test('ZONOS3: a second visit reads the browser\'s copy; a copy not kept or dropped is explained, and storage is asked to persist', async () => {
+  const p = await page();
+  await p.addInitScript(() => {
+    window.persistAsked = 0;
+    navigator.storage.persisted = async () => false;
+    navigator.storage.persist = async () => { window.persistAsked++; return false; };
+  });
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.evaluate(async () => { for (const k of await caches.keys()) await caches.delete(k); });
+  await p.reload(); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  assert.equal(await p.evaluate(() => window.persistAsked), 1, 'asked once to keep the storage');
+  assert.equal((await p.textContent('#notice')).includes('downloaded again'), false, 'nothing to say after a first download that was kept');
+  // Second visit: from the browser's copy, nothing said, not asked again.
+  await p.reload(); await h.waitForBook(p);
+  const statuses = [];
+  await p.exposeFunction('noteStatus', s => statuses.push(s)).catch(() => {});
+  await p.evaluate(() => new MutationObserver(() => window.noteStatus(document.querySelector('#ttsStatus').textContent)).observe(document.querySelector('#ttsStatus'), { childList: true, characterData: true, subtree: true }));
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  assert.ok(statuses.some(s => /Loading ZONOS3 from this browser's copy/.test(s)), JSON.stringify(statuses));
+  assert.ok(!statuses.some(s => /Downloading/.test(s)), JSON.stringify(statuses));
+  assert.equal(await p.evaluate(() => window.persistAsked), 0, 'not asked again');
+  // The browser dropped its copy: said so, with the storage figures.
+  await p.evaluate(() => sessionStorage.setItem('x', '1'));
+  await p.addInitScript(() => { window.zonosFakeDropped = true; });
+  await p.reload(); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /downloaded again: this browser didn't keep its copy since last time/.test(document.querySelector('#notice').textContent), null, { timeout: 20000 });
+  assert.match(await p.textContent('#notice'), /This site uses \d+ MB of the \d+ MB the browser allows it, and the browser may clear it/);
+});
+
+test('ZONOS3: a browser that doesn\'t keep the downloaded models says so at once', async () => {
+  const p = await page();
+  await p.addInitScript(() => { window.zonosFakeNoKeep = true; });
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.evaluate(async () => { for (const k of await caches.keys()) await caches.delete(k); });
+  await p.reload(); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /didn't keep a copy of ZONOS3's models, so they will be downloaded again next time/.test(document.querySelector('#notice').textContent), null, { timeout: 20000 });
+});
