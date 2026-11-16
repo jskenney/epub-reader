@@ -745,7 +745,9 @@ voices (Kokoro reads English, and the server voice the languages its server list
 This fills `./zonos/models/` with the parts of ZONOS3-Mini's browser export that reading aloud uses, at a
 pinned revision of `Zyphra/ZONOS3-Mini`: the backbone, the audio decoder, the steering file, the alignment
 heads and the built-in voices (not the voice-cloning encoders or speech editing, about 4.7 GB more), with a
-`NOTICE.txt`. The reader uses them when all are there, and otherwise loads the models from Hugging Face. Re-runs
+`NOTICE.txt`. It also fetches the manifests of three models it leaves out (speech editing, its aligner, the
+full-size decoder), which the engine reads when it starts and treats a missing one only as "not here" when the server
+answers 404; a server that answers missing files with a page and status 200 would otherwise stop it starting. The reader uses them when all are there, and otherwise loads the models from Hugging Face. Re-runs
 skip finished files, every file is checked against `checksums/zonos.sha256`, and `zonos/models/` is git-ignored.
 
 The engine itself (`zonos/engine/`: `engine.js` and its two workers, about 1 MB) is part of the reader, not

@@ -3,7 +3,8 @@
 # loads them from this site instead of huggingface.co (REVIEW.md E-46).
 #
 #   ./fetch-zonos.sh               the backbone, the audio decoder, the steering file, the alignment heads and the
-#                                  built-in voices (about 900 MB): everything reading aloud uses
+#                                  built-in voices (about 900 MB): everything reading aloud uses, and the manifests
+#                                  the engine reads when it starts
 #
 # The engine itself (zonos/engine/: engine.js and its two workers) is part of the reader, built from ZONOS3-Mini's
 # source by tools/build-zonos-engine.sh. It must be on the same site as index.html (browsers start workers only from
@@ -17,6 +18,10 @@ cd "$(dirname "$0")"
 REPO=Zyphra/ZONOS3-Mini
 REV=d2d142a86b1e6aeb4252679673c86ecd86177bf8           # must match ZONOS.model in index.html
 DIRS="backbone zac companions laci voices"              # web/ folders reading aloud uses (not cloning or editing)
+# ... and the manifests of three it doesn't, which the engine reads when it starts (each model's weights load only when
+# used: speech editing, its aligner, the full-size decoder). Without them it asks for files that aren't here, and a
+# server that answers a missing file with a page and status 200, not 404, makes it fail to start.
+MANIFESTS="edit/manifest.json aligner/manifest.json zac-full_mr/manifest.json"
 DEST=zonos/models
 HF=https://huggingface.co/$REPO/resolve/$REV/web
 GOT=()
@@ -81,10 +86,11 @@ if [ "$LIST" = 1 ]; then
   files=$(curl -fsS "https://huggingface.co/api/models/$REPO/tree/$REV/web?recursive=true" | python3 -c '
 import json, sys
 dirs = sys.argv[1].split()
+manifests = sys.argv[2].split()
 for f in json.load(sys.stdin):
     parts = f["path"].split("/")
-    if f["type"] == "file" and len(parts) > 2 and parts[1] in dirs:
-        print("/".join(parts[1:]))' "$DIRS")
+    if f["type"] == "file" and len(parts) > 2 and (parts[1] in dirs or "/".join(parts[1:]) in manifests):
+        print("/".join(parts[1:]))' "$DIRS" "$MANIFESTS")
 else
   [ -f checksums/zonos.sha256 ] || { echo "Missing checksums/zonos.sha256" >&2; exit 1; }
   files=$(sed -n "s|^[0-9a-f]\{64\}  $DEST/||p" checksums/zonos.sha256)

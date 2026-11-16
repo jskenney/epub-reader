@@ -15,14 +15,14 @@ const LATIN = `${h.READER}?book=books/latin.epub`;
 const zonos = { 'spine:ttsEngine': 'zonos' };
 const HF = 'https://huggingface.co/Zyphra/ZONOS3-Mini/resolve/d2d142a86b1e6aeb4252679673c86ecd86177bf8/web/';
 
-async function page({ gpu = true, fail = '' } = {}) {
+async function page({ gpu = true, fail = '', origin = h.SITE } = {}) {
   const p = await h.newPage();
   await p.addInitScript(([gpu, fail, fake]) => {
     window.SPINE_TEST = { zonosEngine: fake };
     if (fail) window.zonosFakeFail = fail;
     // (Headless Chromium may or may not have WebGPU: decided here, either way.)
     Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => gpu ? {} : undefined });
-  }, [gpu, fail, `${h.SITE}/zonos-fake/engine.js`]);
+  }, [gpu, fail, `${origin}/zonos-fake/engine.js`]);   // (from the page's own site, as the real engine must be)
   return p;
 }
 const optionOf = p => p.$eval('#ttsEngine option[value=zonos]', o => [o.textContent, o.disabled]);
@@ -190,4 +190,13 @@ test('ZONOS3: an engine that can\'t be found names the address it tried', async 
   await p.keyboard.press('r');
   await p.waitForFunction(() => /couldn't be loaded from/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
   assert.match(await p.textContent('#ttsStatus'), new RegExp(`from ${h.SITE}/zonos-partial/zonos/engine/engine\\.js \\(zonos/engine/ in this page's folder\\)`));
+});
+
+test('ZONOS3: a site that answers missing files with a page and status 200 isn\'t taken to have the models', async () => {
+  // zonos-partial has the manifests but no NOTICE.txt; this site answers its NOTICE.txt with a "not found" page.
+  const p = await page({ origin: h.SOFT });
+  await h.openReader(p, `${h.SOFT}/zonos-partial/index.html?book=/reader/books/long.epub`, { ...zonos, 'spine:agreed:zonos': true });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => window.zonosFake?.base, null, { timeout: 20000 });
+  assert.equal((await fake(p)).base, HF);
 });
