@@ -136,14 +136,17 @@ test('zonosText spells out English numbers, money, dates and abbreviations, and 
 test('ZONOS3: a passage cut off partway is asked for again, not kept (E-46 review)', async () => {
   const p = await page();
   await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
-  await p.evaluate(() => { window.zonosFakeCut = 1; });
+  // (The second request: a paragraph. The first piece read is a single sentence, so speech starts quickly; a single
+  // sentence that fails stops reading with a notice, as with every engine.)
+  await p.evaluate(() => { window.zonosFakeCutAt = 2; });
   await p.keyboard.press('r');
+  const f = await h.waitFor(async () => { const f = await fake(p); return f?.cut === 1 && f.requests.length >= 4 && f; }, 20000);
+  assert.ok(f, 'the cut-off passage was followed by more requests');
+  // It was asked for again one sentence at a time: its first sentence comes back as a request of its own.
+  const cutText = f.requests[1].text, firstSentence = cutText.split(/(?<=[.!?])\s/)[0];
+  assert.ok(cutText.length > firstSentence.length, 'the cut passage had several sentences');
+  assert.ok(f.requests.slice(2).some(r => r.text === firstSentence), JSON.stringify(f.requests.map(r => r.text.slice(0, 40))));
   assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), 'reads on');
-  const f = await fake(p);
-  assert.equal(f.cut, 1);
-  // The cut-off passage was asked for again (one sentence at a time), so its text comes back in a later request.
-  const first = f.requests[0].text;
-  assert.ok(f.requests.slice(1).some(r => first.startsWith(r.text.slice(0, 20))), JSON.stringify(f.requests.map(r => r.text.slice(0, 30))));
 });
 
 test('ZONOS3: a lost GPU stops a passage that would wait for good, and "Try again" says to reload (E-46 review)', async () => {

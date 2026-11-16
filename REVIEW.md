@@ -623,10 +623,42 @@ by reading only: L-46, L-47 and L-50 to L-53, and the smaller parts of L-55.
 | **D** | Documentation. |
 | **E** | Enhancement: a new feature or improvement. |
 
+### Round 33
+
+E-46, ZONOS3-Mini in the browser, built in `6ef2a33` (the engine, `fetch-zonos.sh`, checksums), `d66077e` (the voice in
+the reader, `zonosText`, tests) and `d432b4c`, then reviewed at `d432b4c` by one reviewer reading the code against the
+engine's own source, with `zonosText` tried on about 150 inputs. Its findings are fixed in `31be1bc` (and the test
+for H-54 in the commit after it); each fix's test fails on the code before it.
+
+**The engine, checked for real.** Headless Chromium has WebGPU through SwiftShader (`--enable-unsafe-webgpu
+--use-webgpu-adapter=swiftshader`), so the real engine was run, not only the stand-in: on its own it started in
+6 minutes and spoke "Hello there." in 138 s (a CPU pretending to be a GPU: a real one is far faster); in the reader,
+with the models from the same site, it listed its 27 voices and was reading the long book after 506 s. The build of
+`zonos/engine/` is reproducible (two builds, the same SHA-256s), and `checksums/zonos.sha256` matches the downloaded
+files hashed independently. Whisper heard the engine read "In 1984, Dr. Smith paid $5.50…" correctly even unspelled,
+but writes numbers as digits whatever was said, so it can't tell how they were read: the text is spelled out first, as
+ZONOS3's servers do.
+
+**What it found.** The engine ends a stream as if finished when it fails once audio has started, and the reader kept
+the cut-off clip for good (H-54). After a lost GPU, "Try again" reported the engine ready, though it was dead (H-55),
+and passages in flight could wait for good, blocking the queue (M-201). `zonosText` made some correct English worse
+(M-202); a download that stopped partway was used, with no fallback (M-203); smaller items L-423 to L-426; the
+stand-in engine was kinder than the real one, so tests couldn't see H-54, H-55 or M-201 (T-61).
+
+**What held up.** Samples split across chunks; cancelling (the engine's own abort); two loads at once; the
+audiobook's snapshot of voice and language; the language mapping against the engine's 44 codes; paths with spaces in
+`fetch-zonos.sh` and `make-checksums.py`; the other engines.
+
+Findings (all fixed): **High** H-54, H-55. **Medium** M-201 to M-203. **Low** L-423 to L-426. **Tests** T-61.
+
+**Tests.** 512 tests at `d432b4c`, before the fixes: all pass but the three new ones for this round's fixes (their
+fixtures came after the suite's site was built; they pass with them), and six need `SLOW=1` or `NETWORK=1`. The ten
+ZONOS3 tests pass after the fixes, and the five for this round fail on the code before them.
+
 ## Summary
 
-Round 32's findings are fixed (see Resolved) but T-60, left open as a test item. Open (below): T-60, T-59 and the enhancements E-29, E-30, E-36, E-42 to E-46
-and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
+Round 33 reviewed E-46 (ZONOS3-Mini in the browser), and its findings are fixed (see Resolved). Open (below): T-60, T-59
+and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
 ## Open items
@@ -641,7 +673,6 @@ Most important first.
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
 | [E-45](#e-45-narration-on-fixed-layout-spreads) | Publisher narration highlighted on both pages of a fixed-layout spread | Enhancement |
-| [E-46](#e-46-zonos3-mini-in-the-browser-webgpu) | ZONOS3-Mini as a third natural voice, in the browser on WebGPU (waiting a few days for its repository to settle) | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -703,40 +734,10 @@ audio-only clips (no text) shown as such in the read-aloud bar, rather than igno
 On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
 whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
 
-### E-46. ZONOS3-Mini in the browser (WebGPU)
-[Zyphra/ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini)'s in-browser engine (`servers/web`) as a natural voice
-beside Kokoro and Pocket TTS. Code MIT, weights Apache-2.0; 44 languages; about 30 built-in voices. **Waiting a few
-days** for the repository to settle (it was days old and changing daily when looked at, at `96d9e0e`), then pin a
-commit.
-
-- **Prototype first:** build the engine, run it in a test page and measure on real hardware: speed (no browser figures
-  are published; it must stay faster than real time while the page renders), how it reads a real book's numbers,
-  dates and abbreviations, and which browsers run it. Go on only if that holds up.
-- **Engine:** not on npm or a CDN (the package is private), so build `engine.js`, `worker.js` and `codec-worker.js`
-  (pnpm, Vite) at the pinned commit and ship them with checksums, or have a `fetch-zonos.sh` build them. Not loaded
-  from Zyphra's hosted copy, which isn't pinned.
-- **Models:** about 1 GB on first use (backbone and decoder from the `web/` folder of `Zyphra/ZONOS3-Mini` on the Hub,
-  at a pinned revision), cached by the engine in Cache Storage. `fetch-zonos.sh` self-hosts only those, without the
-  cloning, editing and full-decoder extras (about 3.5 GB more); `engine.init(progress, { base })` points at them.
-- **In the reader:** a `NEURAL` engine like Pocket TTS (`stream: true`), with `zLoad` (progress, the download agreement),
-  `zGenerate` (`localFetch('/v2/generate')` with `text`, `language`, `speaker_embedding_id`, `stream`; abort with the
-  signal), a voice picker from `/v2/speakers`, the book language mapped to its codes (`en` → `en_us`/`en_gb`, `zh` →
-  `cmn`, `pt` → `pt_br`, `fr` → `fr_fr`, …), `SPAN_MAX.zonos` and a cache key. Its audio is 44.1 kHz float (saved
-  audio about twice Kokoro's size); the per-chunk rate is handled already. No cross-origin isolation is needed (it
-  doesn't use `SharedArrayBuffer`), and its workers load from its own files.
-- **Limits:** WebGPU only, no WebAssembly fallback, so the option hides itself without `navigator.gpu` or when
-  `engine.init` fails (desktop Chrome and Edge are fine; Safari, Firefox and phones uncertain). The browser build has
-  **no text normalisation**: if numbers, money, "Dr." or Roman numerals read badly, the reader needs its own
-  normaliser (Zyphra's is Rust, `zyphra-textnorm`, and might build to WebAssembly).
-- **Also:** Settings, README and `fetch-zonos.sh` docs, CREDITS for its NOTICE, and tests with a fake engine in place of
-  WebGPU (as the tests fake the Breeze server).
-
 ## Suggested order
 
 1. E-25, E-22, as laid out in TODO.md.
 2. E-36 and E-30 (small), then the other enhancements, as wanted.
-3. E-46 when wanted: ZONOS3-Mini has settled (no changes from 2026-11-13 to 2026-11-16), and its server runs in
-   epub-reader-tts-server-zonos3 (E-47); the browser engine is prototyped first.
 
 ## Resolved
 
@@ -744,6 +745,17 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| E-46 | ZONOS3-Mini in the browser: a "ZONOS3" natural voice on WebGPU (43 languages, ~30 built-in voices, the book's language first), with its engine built from source into `zonos/engine/` (reproducible; `tools/build-zonos-engine.sh`), the models self-hosted by `fetch-zonos.sh` or from Hugging Face, and English numbers, money, dates and abbreviations spelled out first (`zonosText`). | `6ef2a33`, `d66077e` |
+| H-54 | A ZONOS3 passage cut off partway (the engine ends the stream as if finished when it fails once audio has started) was kept and played cut short on every reread. An answer much shorter than its text fails, and is asked for again one sentence at a time. | `31be1bc` |
+| H-55 | After a lost GPU, "Try again" reported ZONOS3 ready on the dead engine (it starts up once and keeps its workers), and each retry added a failure callback. The engine is marked dead, says to reload, and has one callback. | `31be1bc` |
+| M-201 | Passages in flight when ZONOS3's engine died could wait for good (it doesn't end them), blocking every later one. They are aborted, and the queue starts afresh. | `31be1bc` |
+| M-202 | `zonosText` made correct English worse: "$1.5 million" as "one dollar.5 million", "Part C" as "one hundred", "1:1" half converted, phone numbers and dates read as sums, "007" as "seven", "Elm St." as "Saint". Each left as written or read right; ranges ("10-20") read "ten to twenty". | `31be1bc` |
+| M-203 | A ZONOS3 download that stopped partway (or lost a bad file to the check) was used, with no fallback. Only a finished one is (fetch-zonos.sh's NOTICE.txt, removed at the start of each run). | `31be1bc` |
+| L-423 | The saved audio's key had no version for `zonosText`'s rules, so clips with old readings stayed. It has one. | `31be1bc` |
+| L-424 | `zonosLang` read a script subtag as the region ("en-Latn-GB" as US English). Skipped. | `31be1bc` |
+| L-425 | The audiobook dialog didn't name ZONOS3 among the natural voices. | `31be1bc` |
+| L-426 | ZONOS3's download size was ~940 MB (decimal, every file) in the offer and ~878 MB (binary, the tensors) in the progress. One unit: about 900 MB. | `d432b4c` |
+| T-61 | The stand-in engine started afresh on every call, kept one failure callback and never cut or held a stream, so tests couldn't see H-54, H-55 or M-201. It behaves like the real one now, with tests for each. | `31be1bc` |
 | E-47 | Server voice in the book's language: `/health` may list the server's languages (ZONOS3, in the new jskenney/epub-reader-tts-server-zonos3) and say `"instructions": false`; Server voice is then offered for books in those languages, the book's language is sent with each request (and kept in the saved audio's key), and instruction-only voices are left out. A server listing none (Breeze) works as before. | `c670c10` |
 | E-40 | Code and alert colours follow the theme: a theme's own (`code`, `alerts` in THEMES) as given, else GitHub's made readable (4.5:1) on its background; in e-ink and high contrast the text's colour, in bold. | `b39c8c8` |
 | E-41 | E-ink (no shadows or motion), High contrast (and System when the device asks for more contrast) and Night (warm, dark) themes; e-ink and high contrast show a book's text in their own colours. | `b39c8c8` |

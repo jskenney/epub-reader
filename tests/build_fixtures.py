@@ -38,8 +38,8 @@ def png(w, h, rgb):
 ZONOS_FAKE = r"""
 const wait = ms => new Promise(r => setTimeout(r, ms));
 // Like the real engine: init starts up once (later calls resolve at once; a failed one can be retried), every
-// onFatal callback is called, and nothing it was doing is ended then. window.zonosFakeCut = n ends the next n
-// streams early as if finished (as the engine does after an error once audio has started); window.zonosFakeHang
+// onFatal callback is called, and nothing it was doing is ended then. window.zonosFakeCutAt = n ends the nth
+// request's stream early as if finished (as the engine does after an error once audio has started); window.zonosFakeHang
 // makes streams wait for good (until aborted).
 let started = null;
 const fatal = [];
@@ -70,7 +70,7 @@ export async function localFetch(path, init = {}) {
   const f = new Float32Array(n);
   for (let i = 0; i < n; i++) f[i] = 0.1 * Math.sin(i * 0.05);
   const bytes = new Uint8Array(f.buffer), signal = init.signal;
-  const cut = window.zonosFakeCut > 0 && window.zonosFakeCut--;
+  const cut = window.zonosFakeCutAt === window.zonosFake.requests.length;
   if (cut) window.zonosFake.cut++;
   return new Response(new ReadableStream({ async start(c) {
     if (window.zonosFakeHang) { signal?.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError'))); return; }
