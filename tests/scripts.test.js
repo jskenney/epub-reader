@@ -193,6 +193,15 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
   assert.equal(block('POCKET').match(/lib: '[^']*pocket-tts-js@([^/]+)\//)?.[1], v(pocket, 'POCKET_JS'), 'POCKET_JS');
   assert.equal(block('POCKET').match(/ort: '[^']*onnxruntime-web@([^/]+)\//)?.[1], v(pocket, 'ORT'), 'ORT');
   assert.equal(block('POCKET').match(/model: '[^']*pocket-tts-onnx\/resolve\/([^/]+)\//)?.[1], v(pocket, 'REV'), 'Pocket REV');
+  // ZONOS3: the models' revision, and the commit the committed engine (zonos/engine/) was built from (E-46).
+  const zonos = read('fetch-zonos.sh'), engine = read('tools/build-zonos-engine.sh');
+  assert.equal(block('ZONOS').match(/model: '[^']*ZONOS3-Mini\/resolve\/([^/]+)\/web\/'/)?.[1], v(zonos, 'REV'), 'ZONOS3 REV');
+  assert.equal(block('ZONOS').match(/commit: '([^']+)'/)?.[1], v(engine, 'ZONOS3_COMMIT'), 'ZONOS3_COMMIT');
+  // ... and the engine is the one that commit builds to (tools/build-zonos-engine.sh checks a fresh build against this).
+  for (const line of read('checksums/zonos-engine.sha256').trim().split('\n')) {
+    const [hash, file] = line.split(/\s+/);
+    assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(REPO, file))).digest('hex'), hash, file);
+  }
   // TRANSFORMERS is the transformers.js inside kokoro-js: its runtime files must come from the same version.
   const bundle = path.join(__dirname, '..', 'kokoro', 'kokoro.web.js');
   if (fs.existsSync(bundle)) assert.ok(fs.readFileSync(bundle, 'utf8').includes(`"${v(kokoro, 'TRANSFORMERS')}"`), `TRANSFORMERS ${v(kokoro, 'TRANSFORMERS')} isn't the version kokoro.web.js bundles`);
@@ -227,7 +236,7 @@ test("the Kokoro worker's source, written inside a template string in index.html
 });
 
 test('no GNU-only sed escapes (a tab written as \\t) in the scripts (M-4)', () => {
-  for (const f of ['fetch-libs.sh', 'fetch-kokoro.sh', 'fetch-pocket.sh', 'fetch-fonts.sh']) {
+  for (const f of ['fetch-libs.sh', 'fetch-kokoro.sh', 'fetch-pocket.sh', 'fetch-zonos.sh', 'fetch-fonts.sh']) {
     const sedCalls = fs.readFileSync(path.join(REPO, f), 'utf8').split('\n').filter(l => /\bsed\b/.test(l) && !l.trim().startsWith('#'));
     for (const l of sedCalls) assert.doesNotMatch(l, /\\t/, `${f}: ${l}`);
   }

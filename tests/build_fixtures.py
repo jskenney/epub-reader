@@ -33,6 +33,46 @@ def png(w, h, rgb):
         chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
+# A stand-in for ZONOS3's browser engine (zonos/engine/engine.js): the same exports, no WebGPU. It records what it was
+# asked in window.zonosFake; window.zonosFakeFail makes init fail; text with FAILME is refused (400).
+ZONOS_FAKE = r"""
+const wait = ms => new Promise(r => setTimeout(r, ms));
+export const engine = {
+  async init(progress, opts) {
+    window.zonosFake = { base: opts.base, cache: opts.cache, requests: [], inits: (window.zonosFake?.inits || 0) + 1 };
+    for (let i = 1; i <= 4; i++) { progress({ models: ['backbone', 'zac'], loaded: i * 245e6, total: 980e6, fetched: i * 245e6 }); await wait(30); }
+    if (window.zonosFakeFail) throw new Error(window.zonosFakeFail);
+  },
+  onFatal(cb) { window.zonosFatal = cb; },
+  onEncoderProgress() {},
+};
+const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
+export async function localFetch(path, init = {}) {
+  if (path === '/v2/speakers') return json({ speakers: [
+    { id: 'default_gaspard', label: 'Gaspard fr M 1', original_name: 'Gaspard_fr_M_1.mp3', is_default: true },
+    { id: 'default_savannah', label: 'Savannah en American F 1', original_name: 'Savannah_en-American_F_1.mp3', is_default: true },
+    { id: 'default_willow', label: 'Willow en asrm F 1', original_name: 'Willow_en-asrm_F_1.wav', is_default: true },
+    { id: 'session_voice', label: 'x', original_name: null, is_default: false }] });
+  if (path !== '/v2/generate') return json({ detail: 'Not Found' }, 404);
+  const body = JSON.parse(init.body);
+  window.zonosFake.requests.push(body);
+  if (body.text.includes('FAILME')) return json({ detail: 'Unknown cached speaker id' }, 400);
+  const n = Math.round(44100 * (0.3 * body.text.split(/\s+/).length + 0.3));
+  const f = new Float32Array(n);
+  for (let i = 0; i < n; i++) f[i] = 0.1 * Math.sin(i * 0.05);
+  const bytes = new Uint8Array(f.buffer), signal = init.signal;
+  return new Response(new ReadableStream({ async start(c) {
+    // (Chunks of 8,821 bytes: samples split across them, as the real engine's may be.)
+    for (let i = 0; i < bytes.length; i += 8821) {
+      if (signal?.aborted) { window.zonosFake.aborted = (window.zonosFake.aborted || 0) + 1; c.error(new DOMException('aborted', 'AbortError')); return; }
+      c.enqueue(bytes.slice(i, i + 8821)); await wait(10);
+    }
+    c.close();
+  } }), { headers: { 'x-audio-sample-rate': '44100' } });
+}
+"""
+
+
 def xhtml(title, body, head="", lang="en"):
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="{lang}">
@@ -150,6 +190,12 @@ def main():
     for name in ("libs", "fonts", "kokoro", "pocket"):
         if (REPO / name).is_dir():
             os.symlink(REPO / name, reader / name)
+    # ZONOS3's engine (part of the reader), without any self-hosted models, and a stand-in engine for the tests,
+    # which can't run WebGPU (SPINE_TEST.zonosEngine; E-46).
+    (reader / "zonos").mkdir()
+    os.symlink(REPO / "zonos" / "engine", reader / "zonos" / "engine")
+    (SITE / "zonos-fake").mkdir()
+    (SITE / "zonos-fake" / "engine.js").write_text(ZONOS_FAKE)
     # Linked copies in two folders, each with its own default book and config (per-folder settings).
     # folder-a and folder-b share the reader's libraries and fonts (LIB_FILES); folder-c has its own linked copies
     # and no config.
@@ -450,6 +496,7 @@ def main():
     epub(books / "text-then-pictures.epub", "Text Then Pictures", [("c1.xhtml", "Words", "<h1>Words</h1><p>Only a few words here.</p>")]
          + [(f"p{i}.xhtml", f"Plate {i}", f'<p><img src="p{i}.png" alt=""/></p>') for i in (2, 3)],
          uid="urn:text-then-pictures", extra={f"OEBPS/p{i}.png": png(40, 30, (90, 60 * i, 120)) for i in (2, 3)})
+    epub(books / "latin.epub", "Liber", [("c1.xhtml", "Unum", "<h1>Unum</h1><p>Gallia est omnis divisa in partes tres.</p>")], uid="urn:latin", lang="la")
     epub(books / "french.epub", "Le Livre", [("c1.xhtml", "Un", "<h1>Un</h1><p>Il était une fois.</p>")], uid="urn:french", lang="fr")
     # A large book: about 5 MB, mostly a file it never shows, and a picture in chapter 3 (REVIEW.md L-16).
     epub(books / "big.epub", "The Big Book", [

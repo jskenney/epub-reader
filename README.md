@@ -446,6 +446,21 @@ site as the reader.
   Download. It has no speed control of
   its own, so the speed setting changes playback instantly with pitch
   preserved. The model is CC BY 4.0 (Kyutai).
+- Natural voice (ZONOS3-Mini, "ZONOS3" in the read-aloud bar): Zyphra's
+  [ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini) running in the browser on
+  the GPU with **WebGPU** (recent Chrome or Edge; there is no CPU fallback, so the
+  option says "needs WebGPU" elsewhere). It reads books in 43 languages (English,
+  French, German, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Russian,
+  Arabic, Hindi, …) with about 30 built-in voices, those in the book's language
+  listed first; any voice reads any language, with its own accent. A one-time
+  download of about 940 MB after pressing Download, kept by the browser. English
+  numbers, money, dates, times, decimals and common abbreviations are spelled out
+  before reading ("1984" as "nineteen eighty-four", "$5.50", "Dr."), since the
+  browser engine doesn't do that itself; other languages are read as written. Like
+  Pocket TTS it has no speed control, so speed is applied at playback. Its engine is
+  part of the reader (`zonos/engine/`, built from ZONOS3-Mini's source by
+  `tools/build-zonos-engine.sh`); code MIT, model Apache-2.0. On a slow GPU it can
+  generate slower than it speaks, which causes pauses between paragraphs.
 - Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
   either of two with the same API:
   - Breeze TTS 2 ([jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server)):
@@ -459,13 +474,13 @@ site as the reader.
   and managed in the server's voice studio at `/tts-studio/`. Setup, Docker Compose, reverse-proxy examples and the
   voice script are in each server's repository.
 - Natural voices read a whole paragraph at a time where they can (up to
-  about 350 characters for Kokoro and 600 for Pocket TTS), which phrases
+  about 350 characters for Kokoro and 600 for Pocket TTS and ZONOS3), which phrases
   better than sentence by sentence; the sentence and word highlights move
   through the paragraph as it plays. Device voices are listed with the
   vendors' higher tiers (Natural, Neural, Premium, Enhanced, Online) first.
   When you start reading or jump to a new spot, the first piece is a single
   sentence so speech begins quickly, and work for the old position is
-  cancelled. The server voice and Pocket TTS play audio as it arrives at
+  cancelled. The server voice, Pocket TTS and ZONOS3 play audio as it arrives at
   1x speed; at other speeds the whole piece is made first so the pitch
   stays natural.
   While one passage plays, the next ones are made in the background until
@@ -677,11 +692,13 @@ Library versions and model revisions are pinned in two places each, which must a
 | pocket-tts-js | `POCKET.lib` | `POCKET_JS` in `fetch-pocket.sh` |
 | ONNX Runtime (Pocket) | `POCKET.ort` | `ORT` in `fetch-pocket.sh` |
 | Pocket model | `POCKET.model` | `REV` in `fetch-pocket.sh` |
+| ZONOS3 models | `ZONOS.model` | `REV` in `fetch-zonos.sh` |
+| ZONOS3 engine (`zonos/engine/`) | `ZONOS.commit` | `ZONOS3_COMMIT` in `tools/build-zonos-engine.sh`; rebuild with `tools/build-zonos-engine.sh --write` (git, Node and pnpm), which also rewrites `checksums/zonos-engine.sha256` |
 
 To upgrade one:
 
 1. Change the version or revision in both places.
-2. Run `python3 tools/make-checksums.py libs` (or `kokoro`, `pocket`) to rewrite its list in
+2. Run `python3 tools/make-checksums.py libs` (or `kokoro`, `pocket`, `zonos`) to rewrite its list in
    `checksums/`. For a library, it also prints the new `sha384-…` hash: put it in `integrity` in `LIBS`
    (for CodeMirror, each file's in `CM_FILES`), or the browser refuses the new file.
 3. Run the fetch script twice (`./fetch-libs.sh`, …): the first run finds the old files, which fail the
@@ -719,6 +736,24 @@ French isn't offered: its model bundle at this revision has no built-in
 voices (`voices.bin`), so it can't speak. French books are read by device
 voices (Kokoro reads English, and the server voice the languages its server lists: French with ZONOS3).
 
+## Self-hosting ZONOS3
+
+```bash
+./fetch-zonos.sh             # about 940 MB
+```
+
+This fills `./zonos/models/` with the parts of ZONOS3-Mini's browser export that reading aloud uses, at a
+pinned revision of `Zyphra/ZONOS3-Mini`: the backbone, the audio decoder, the steering file, the alignment
+heads and the built-in voices (not the voice-cloning encoders or speech editing, about 4.7 GB more), with a
+`NOTICE.txt`. The reader uses them when all are there, and otherwise loads the models from Hugging Face. Re-runs
+skip finished files, every file is checked against `checksums/zonos.sha256`, and `zonos/models/` is git-ignored.
+
+The engine itself (`zonos/engine/`: `engine.js` and its two workers, about 1 MB) is part of the reader, not
+downloaded: it isn't published anywhere to load from, and browsers start its workers only from the page's own
+site, so it must be served from the same site as `index.html` (under `VOICE_FILES`, like the other voice files).
+`tools/build-zonos-engine.sh` rebuilds it from ZONOS3-Mini's source at the pinned commit and checks it against
+`checksums/zonos-engine.sha256` (the build is reproducible).
+
 ## Self-hosting the natural voice
 
 Run the download script once, next to `index.html` on your web server:
@@ -749,7 +784,7 @@ is larger than GitHub's 100 MB file limit. Serve `.wasm` files as
 
 ### One copy of the voice files for several folders
 
-By default the reader looks for `kokoro/` and `pocket/` next to the page it
+By default the reader looks for `kokoro/`, `pocket/` and `zonos/` next to the page it
 was opened from. If `index.html` is linked (or copied) into several folders,
 for example one per book with its own `default.epub`, set `VOICE_FILES` near
 the top of `index.html` to the site path that holds them:
@@ -1033,7 +1068,7 @@ repository) is under the [MIT licence](LICENSE).
 
 The parts the fetch scripts download aren't part of this repository and keep
 their own licences, which the scripts save beside them (a `LICENSES/` folder
-with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/` and `pocket/`;
+with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/`, `pocket/` and `zonos/`;
 a `NOTICE.txt` in `fonts/`):
 
 - JSZip: MIT or GPLv3 (your choice); marked: MIT; Temml: MIT; highlight.js: BSD-3-Clause; gemoji: MIT; lamejs: LGPL-3.0 (a port of
@@ -1045,3 +1080,4 @@ a `NOTICE.txt` in `fonts/`):
   from eSpeak NG, which is GPL-3.0); ONNX Runtime: MIT.
 - Pocket TTS's model: CC-BY-4.0 (credit its authors when redistributing it);
   pocket-tts-js: MIT.
+- ZONOS3-Mini: its engine (`zonos/engine/`, with its `LICENSE` and `NOTICE`) MIT; its model Apache-2.0.

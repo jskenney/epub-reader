@@ -595,6 +595,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <option value="device">Device</option>
           <option value="kokoro">Kokoro</option>
           <option value="pocket">Pocket</option>
+          <option value="zonos">ZONOS3</option>
           <option value="server" hidden>Server</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
@@ -715,7 +716,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261116.1314</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261116.1615</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -816,7 +817,8 @@ const FONTS = [
   { id: 'system-sans', name: 'System sans-serif', note: 'device', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' }
 ];
 const OPS = 'http://www.idpf.org/2007/ops';
-// Where the self-hosted voice files (kokoro/ and pocket/, from fetch-kokoro.sh and fetch-pocket.sh) live.
+// Where the self-hosted voice files (kokoro/, pocket/ and zonos/, from fetch-kokoro.sh, fetch-pocket.sh and
+// fetch-zonos.sh) live. ZONOS3's engine (zonos/engine/) must be on the reader's own site.
 // '' = the folder this page is in. Set a site path such as '/reader/' when index.html is linked into several
 // folders, so every copy shares one set of files (and the browser downloads and caches them once).
 let VOICE_FILES = '';
@@ -2646,7 +2648,7 @@ async function startBook(next){
   // the bar) rather than carry on into the new book (REVIEW.md M-23, L-72).
   if (ab.running) { ab.cancel = true; ab.ctl?.abort(); ab.resume?.(); }   // (an export belongs to its book)
   else if ($('#abDialog').open) $('#abDialog').close();   // (its chapter list was the other book's: round 13 review)
-  for (const st of [k, pk, sv]) st.wantPlay = false;   // (a voice still loading doesn't start reading the new book: round 13 review)
+  for (const st of [k, pk, zn, sv]) st.wantPlay = false;   // (a voice still loading doesn't start reading the new book: round 13 review)
   if (tts.open) { if (book.comic) ttsClose(); else { tts.playing = false; tts.awaitChapter = false; ttsStopAudio(); setSleep('off'); ttsUpdateBar(); } }
   pace.lastTurn = null; pace.samples = [];   // reading pace: nothing carries over from the previous book
   const spine = book.spine;
@@ -5333,7 +5335,7 @@ ${chapters.map(([id]) => `  <itemref idref="${id}"/>`).join('\n')}
 const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
-  barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
+  barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
 const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[data-fn-ref],[data-footnotes],[hidden],[aria-hidden="true"],[data-spine-note],[data-ed-keep],#' + RID.end + ',' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
@@ -5880,12 +5882,16 @@ function ttsUpdateBar(status){
   ko.disabled = !kokoroFits(); ko.textContent = kokoroFits() ? 'Kokoro' : 'Kokoro (English only)';
   const po = eng.querySelector('[value="pocket"]');
   po.disabled = !pocketLang(); po.textContent = pocketLang() ? 'Pocket' : 'Pocket (en, de, it, pt, es)';
+  const zo = eng.querySelector('[value="zonos"]');
+  zo.disabled = !zonosFits();
+  zo.textContent = !zonosGpu() ? 'ZONOS3 (needs WebGPU)' : zonosFits() ? 'ZONOS3' : "ZONOS3 (not in this book's language)";
   const so = eng.querySelector('[value="server"]');
   so.hidden = !sv.available && tts.engine !== 'server'; so.disabled = !sv.available || !serverFits();
   so.textContent = !sv.available ? 'Server (unavailable)' : serverFits() ? 'Server'
     : sv.langs ? "Server (not in this book's language)" : 'Server (English and Chinese only)';
   const unusable = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ||
-    (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'server' && (!sv.available || !serverFits()));
+    (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'zonos' && !zonosFits()) ||
+    (tts.engine === 'server' && (!sv.available || !serverFits()));
   const auto = unusable && tts.engine === 'narration';
   eng.value = auto ? 'device' : tts.engine;
   eng.title = unusable && !auto ? 'Not available for this book or right now: the device voice reads instead' : '';
@@ -5912,7 +5918,8 @@ function ttsUpdateBar(status){
   $('#ttsVoice').hidden = !!tts.mo;
   $('#ttsSaved').hidden = !(!tts.mo && neuralEngine());
   const ne = !tts.mo && neuralEngine();
-  const want = !ne ? 'device' : ne === NEURAL.kokoro ? 'kokoro' : ne === NEURAL.pocket ? 'pocket:' + (pkReady() ? pk.lang : '') : 'server:' + sv.voices.length;
+  const want = !ne ? 'device' : ne === NEURAL.kokoro ? 'kokoro' : ne === NEURAL.pocket ? 'pocket:' + (pkReady() ? pk.lang : '')
+    : ne === NEURAL.zonos ? 'zonos:' + (znReady() ? zn.voices.length + ':' + bookLang() : '') : 'server:' + sv.voices.length;
   if ($('#ttsVoice').dataset.kind !== want) ttsFillVoices();
 }
 function ttsMeasureBar(){
@@ -5948,6 +5955,18 @@ function ttsFillVoices(){
     if (!pkReady()) { sel.replaceChildren(new Option('Voices load with the model', '')); sel.disabled = true; return; }
     sel.disabled = false;
     sel.replaceChildren(...pk.voices.map(v => { const o = new Option(v[0].toUpperCase() + v.slice(1), v); o.selected = v === pkVoice(); return o; }));
+    return;
+  }
+  if (!tts.mo && neuralEngine() === NEURAL.zonos) {
+    sel.dataset.kind = 'zonos:' + (znReady() ? zn.voices.length + ':' + bookLang() : '');
+    if (!znReady()) { sel.replaceChildren(new Option('Voices load with the model', '')); sel.disabled = true; return; }
+    sel.disabled = false;
+    // The book's language first, then the rest (any voice can read any language, with its own accent).
+    const lang = bookLang().toLowerCase().split(/[-_]/)[0], chosen = znVoice();
+    const vs = [...zn.voices].sort((a, b) => (b.lang === lang) - (a.lang === lang) || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name));
+    sel.replaceChildren(...vs.map(v => {
+      const o = new Option(`${v.name} (${[v.lang, v.style, v.gender].filter(Boolean).join(', ')})`, v.id); o.selected = v === chosen; return o;
+    }));
     return;
   }
   if (tts.engine === 'kokoro' && kokoroFits() && !tts.mo) {
@@ -5994,6 +6013,7 @@ document.fonts?.ready.then(() => fitSelect($('#ttsEngine')));
 $('#ttsVoice').addEventListener('change', e => {
   if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
   else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
+  else if (e.target.dataset.kind.startsWith('zonos')) { zn.voice = e.target.value; store.set('spine:zonosVoice', zn.voice); }
   else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); svClipVersion(svVoice()); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
   if (tts.playing) ttsGo(tts.ci, tts.pos); else ttsDropPaused();
@@ -6215,6 +6235,7 @@ function kSpeedCheck(ratio, ne){
   if (med > 1.15) {
     st.slowWarned = true;
     if (ne === NEURAL.server) showNotice('The voice server is generating speech slower than it plays, so there will be pauses between paragraphs.', 'error');
+    else if (ne === NEURAL.zonos) showNotice('ZONOS3 is generating speech slower than it speaks on this device\'s GPU, so there will be pauses between paragraphs. Device voice has no pauses.', 'error');
     else if (ne === NEURAL.pocket) showNotice('Pocket TTS runs on this device\'s CPU and is generating speech slower than it speaks, so there will be pauses between sentences. Device voice has no pauses.', 'error');
     else showNotice(k.device === 'wasm'
       ? 'The natural voice is running on this device\'s CPU and generates speech slower than it speaks, so there will be pauses between sentences. A browser with WebGPU (recent Chrome or Edge) runs it much faster; Device voice has no pauses.'
@@ -6358,6 +6379,196 @@ function pkGenerate(text, opts = {}){
   };
   const job = pk.queue.then(run, run);
   pk.queue = job.catch(() => {});
+  return job;
+}
+
+/* ---------- ZONOS3-Mini (REVIEW.md E-46) ----------
+   Zyphra's ZONOS3-Mini in the browser: its own engine (zonos/engine/, built from its source by
+   tools/build-zonos-engine.sh; MIT) runs the model on the GPU with WebGPU in two workers, behind a fetch-like API
+   (localFetch: /v2/speakers, /v2/generate) that streams 32-bit float audio at 44.1 kHz. The engine must be on this
+   site (browsers start workers only from the page's own site); the models (about 940 MB; Apache-2.0) come from
+   zonos/models/ (fetch-zonos.sh) or Hugging Face, and the engine keeps them in Cache Storage. 43 languages, about
+   30 built-in voices. WebGPU only: no WebAssembly fallback. Numbers and abbreviations aren't spelled out by the
+   browser engine (its servers do that), so English text is spelled out here first (zonosText). */
+const ZONOS = {
+  commit: '96d9e0ec1e39083ed336ac78f24e3dbc93721c0f',   // the engine's source (tools/build-zonos-engine.sh)
+  model: 'https://huggingface.co/Zyphra/ZONOS3-Mini/resolve/d2d142a86b1e6aeb4252679673c86ecd86177bf8/web/',
+  mb: 940,
+  // Under VOICE_FILES: zonos/engine/ (part of the reader) and zonos/models/ (fetched by fetch-zonos.sh)
+  local: new URL('zonos/', voiceFilesBase()).href
+};
+// ZONOS3's languages, by the code its engine takes; a book's language maps to one (zonosLang).
+const ZONOS_LANGS = ['en_us', 'en_gb', 'fr_fr', 'de', 'es', 'it', 'pt_br', 'ja', 'cmn', 'ko', 'ar', 'bn', 'bg', 'cs', 'da',
+  'nl', 'fi', 'ka', 'el', 'gu', 'he', 'hi', 'hu', 'id', 'kn', 'ms', 'ml', 'mr', 'no', 'or', 'pl', 'pa', 'ro', 'ru', 'sk',
+  'sv', 'tl', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi'];
+function zonosLang(tag = bookLang()){
+  const [primary, region = ''] = tag.toLowerCase().split(/[-_]/);
+  const code = primary === 'en' ? (/^(gb|uk|ie|au|nz|za|in)$/.test(region) ? 'en_gb' : 'en_us')
+    : ({ fr: 'fr_fr', pt: 'pt_br', zh: 'cmn', nb: 'no', nn: 'no', fil: 'tl', iw: 'he', in: 'id' })[primary] || primary;
+  return ZONOS_LANGS.includes(code) ? code : null;
+}
+const zonosGpu = () => !!navigator.gpu;
+const zonosFits = () => zonosGpu() && !!zonosLang();
+const zn = { state: 'idle', engine: null, localFetch: null, voices: [], queue: Promise.resolve(), local: false,
+  progressText: '', error: '', wantPlay: false, voice: store.get('spine:zonosVoice') || '' };
+const znReady = () => zn.state === 'ready';
+// The chosen voice, else the first in the book's language, else the first.
+function znVoice(){
+  const lang = bookLang().toLowerCase().split(/[-_]/)[0];
+  return zn.voices.find(v => v.id === zn.voice) || zn.voices.find(v => v.lang === lang) || zn.voices[0];
+}
+// A built-in voice's label, from its file name: "Savannah_en-American_F_1" (name, language, style, gender).
+function znVoiceOf(s){
+  const stem = String(s.original_name || s.label || s.id).replace(/^.*\//, '').replace(/\.[a-z0-9]+$/i, '');
+  const m = /^([^_]+)_([a-z]{2,3})(?:-([^_]+))?_([MF])_\d+$/.exec(stem);
+  const style = m?.[3] ? ({ announcervoice: 'announcer', asrm: 'ASMR' })[m[3]] || m[3] : '';
+  return { id: s.id, name: m ? m[1] : stem, lang: m ? m[2] : '', style, gender: m ? (m[4] === 'F' ? 'female' : 'male') : '' };
+}
+function znProgress(p, local){
+  const mb = n => Math.round(n / 1048576);
+  zn.progressText = p.fetched > 2e6 ? `Downloading ZONOS3${local ? ' from this site' : ''}… ${mb(p.loaded)} of ~${p.total ? mb(p.total) : ZONOS.mb} MB`
+    : p.total ? `Loading ZONOS3… ${Math.round(100 * p.loaded / p.total)}%` : 'Loading ZONOS3…';
+  if (tts.open) ttsUpdateBar();
+}
+async function znLoad(){
+  if (zn.state === 'loading' || znReady() || !zonosFits()) return;
+  zn.state = 'loading'; zn.progressText = 'Loading ZONOS3…'; ttsUpdateBar();
+  try {
+    // The engine is part of the reader; the models from this site when all are there, else from Hugging Face.
+    const engineUrl = window.SPINE_TEST?.zonosEngine || ZONOS.local + 'engine/engine.js';
+    zn.local = await allReal(ZONOS.local + 'models/', ['backbone/manifest.json', 'zac/manifest.json', 'voices/voices.json']);
+    if (!zn.local && !ALLOW_CDN) throw new Error('the self-hosted ZONOS3 models are missing (run fetch-zonos.sh); ALLOW_CDN is off');
+    if (!zn.engine) {
+      let mod;
+      try { mod = await import(engineUrl); }
+      catch (e) { throw new Error(`the ZONOS3 engine (zonos/engine/ under VOICE_FILES) couldn't be loaded: ${e.message}`); }
+      mod.engine.onFatal(msg => {   // (the GPU was lost, or a worker failed: only a reload brings it back)
+        zn.state = 'error'; zn.error = `the voice stopped working (${msg})`; zn.engine = null;
+        if (tts.open) ttsUpdateBar();
+      });
+      zn.engine = mod.engine; zn.localFetch = mod.localFetch;
+    }
+    await zn.engine.init(p => znProgress(p, zn.local), { base: zn.local ? ZONOS.local + 'models/' : ZONOS.model, cache: true });
+    const r = await zn.localFetch('/v2/speakers');
+    if (!r.ok) throw new Error(`the voices couldn't be listed (${r.status})`);
+    zn.voices = ((await r.json()).speakers || []).filter(s => s.is_default).map(znVoiceOf);
+    if (!zn.voices.length) throw new Error('the models have no built-in voices');
+    zn.state = 'ready';
+    store.set('spine:agreed:zonos', true);   // the reader agreed to this download once
+  } catch (e) {
+    zn.state = 'error';
+    zn.error = /webgpu|adapter/i.test(e.message) ? `WebGPU isn't usable in this browser (${e.message})` : e.message;
+  }
+  ttsFillVoices(); nLoaded(zn);
+}
+// The browser engine reads digits and abbreviations as they are written ("1984", "$5.50", "Dr."), so English text is
+// spelled out first, as ZONOS3's servers do: numbers (with years, ordinals, decimals, money and percentages),
+// common abbreviations, and Roman numerals after "Chapter", "Book", "Part" and the like. Other languages are sent
+// as written.
+const ZN_ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const ZN_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+function znWords(n){   // a whole number from 0 to 999,999,999,999,999 in words
+  if (n < 20) return ZN_ONES[n];
+  if (n < 100) return ZN_TENS[Math.floor(n / 10)] + (n % 10 ? '-' + ZN_ONES[n % 10] : '');
+  if (n < 1000) return ZN_ONES[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' and ' + znWords(n % 100) : '');
+  for (const [size, name] of [[1e12, 'trillion'], [1e9, 'billion'], [1e6, 'million'], [1e3, 'thousand']]) {
+    if (n >= size) {
+      const rest = n % size;
+      return znWords(Math.floor(n / size)) + ' ' + name + (rest ? (rest < 100 ? ' and ' : ' ') + znWords(rest) : '');
+    }
+  }
+}
+function znOrdinal(n){
+  const w = znWords(n), irregular = { one: 'first', two: 'second', three: 'third', five: 'fifth', eight: 'eighth', nine: 'ninth', twelve: 'twelfth' };
+  return w.replace(/(\w+)$/, last => irregular[last] || (last.endsWith('y') ? last.slice(0, -1) + 'ieth' : last + 'th'));
+}
+function znYear(n){   // 1984: nineteen eighty-four; 1905: nineteen oh five; 2000, 2005: two thousand (and five); 2024: twenty twenty-four
+  const hi = Math.floor(n / 100), lo = n % 100;
+  if (n % 1000 < 10 && n >= 2000 || n % 1000 === 0) return znWords(n);
+  return znWords(hi) + (lo === 0 ? ' hundred' : lo < 10 ? ' oh ' + ZN_ONES[lo] : ' ' + znWords(lo));
+}
+function znRoman(r){
+  const v = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+  let n = 0;
+  for (let i = 0; i < r.length; i++) { const a = v[r[i]], b = v[r[i + 1]] || 0; n += a < b ? -a : a; }
+  return n;
+}
+const ZN_ABBR = { 'Mr.': 'Mister', 'Mrs.': 'Missus', 'Ms.': 'Miz', 'Dr.': 'Doctor', 'Prof.': 'Professor', 'St.': 'Saint',
+  'Jr.': 'Junior', 'Sr.': 'Senior', 'vs.': 'versus', 'etc.': 'et cetera', 'e.g.': 'for example', 'i.e.': 'that is' };
+function zonosText(text, lang){
+  if (!lang.startsWith('en')) return text;
+  const num = s => Number(s.replace(/,/g, ''));
+  return text
+    // ("etc." that ends a sentence keeps its full stop.)
+    .replace(/(^|[\s(“"‘'])(Mrs?\.|Ms\.|Dr\.|Prof\.|St\.|Jr\.|Sr\.|vs\.|etc\.|e\.g\.|i\.e\.)(?=\s|$|[,;:)”"’'])/g,
+      (m, pre, a, at, all) => pre + ZN_ABBR[a] + (a === 'etc.' && /^(\s*$|\s+[A-Z])/.test(all.slice(at + m.length)) ? '.' : ''))
+    .replace(/\b(Chapter|Book|Part|Volume|Act|Scene|Section|Canto)\s+([IVXLCDM]+)\b/g, (m, w, r) => /^M*(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/.test(r) ? `${w} ${znWords(znRoman(r.toLowerCase()))}` : m)
+    .replace(/([$£€])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?\b(\s+(?:million|billion|trillion))?/g, (m, sym, whole, cents, big) => {
+      const [one, many, sub, subs] = { $: ['dollar', 'dollars', 'cent', 'cents'], '£': ['pound', 'pounds', 'penny', 'pence'], '€': ['euro', 'euros', 'cent', 'cents'] }[sym];
+      if (big) return `${znWords(num(whole))}${cents ? ' point ' + [...cents].map(d => ZN_ONES[d]).join(' ') : ''}${big} ${many}`;
+      const n = num(whole), c = cents ? Number(cents) : 0;
+      return `${znWords(n)} ${n === 1 ? one : many}${c ? ` and ${znWords(c)} ${c === 1 ? sub : subs}` : ''}`;
+    })
+    .replace(/\b(\d+)(st|nd|rd|th)\b/gi, (m, d) => znOrdinal(Number(d)))
+    // Decades: the 90s, the 1990s ("nineties", "nineteen nineties").
+    .replace(/\b(\d{2})?([1-9])0[’']?s\b/g, (m, century, d) =>
+      (century ? znWords(Number(century)) + ' ' : '') + (d === '1' ? 'tens' : ZN_TENS[d].replace(/y$/, 'ies')))
+    // Times: 10:30, 9:05, 12:00 ("ten thirty", "nine oh five", "twelve o'clock").
+    .replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b(?!:\d)/g, (m, h, mm) =>
+      `${znWords(Number(h))} ${mm === '00' ? "o'clock" : mm[0] === '0' ? 'oh ' + ZN_ONES[mm[1]] : znWords(Number(mm))}`)
+    // (Not numbers written into words or codes, "12a", "3D", "MP3", or version numbers, "2.5.1".)
+    .replace(/(?<![\p{L}\d.,])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?(\s?%)?(?![\p{L}\d]|[.,:]\d)/gu, (m, whole, frac, pct, at, all) => {
+      const n = num(whole);
+      if (!Number.isSafeInteger(n) || n >= 1e15) return m;
+      // A four-digit number from 1000 to 2099 is read as a year ("in 1984", "in 1066"), except with a decimal or %.
+      const year = !frac && !pct && /^\d{4}$/.test(whole) && n >= 1000 && n <= 2099;
+      return (year ? znYear(n) : znWords(n)) + (frac ? ' point ' + [...frac].map(d => ZN_ONES[d]).join(' ') : '') + (pct ? ' percent' : '');
+    });
+}
+if (window.SPINE_TEST) SPINE_TEST.zonosText = zonosText;   // (tests)
+// ZONOS3: generate one piece of text with the chosen built-in voice (one request at a time), streaming its audio.
+function znGenerate(text, opts = {}){
+  const run = async () => {
+    if (opts.signal?.aborted) throw staleError();
+    if (!znReady()) throw transientError(zn.error || 'the voice stopped working');
+    const v = opts.snap?.znVoice ?? znVoice(), lang = zonosLang(opts.snap?.lang ?? bookLang()) || 'en_us';
+    const t0 = performance.now();
+    let r;
+    try {
+      r = await zn.localFetch('/v2/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: opts.signal,
+        body: JSON.stringify({ text: zonosText(text, lang), language: lang, speaker_embedding_id: v?.id, stream: true, seed: 42 }) });
+    } catch (e) { if (opts.signal?.aborted) throw staleError(); throw transientError(e.message); }
+    if (!r.ok) {
+      let detail = ''; try { detail = (await r.json()).detail; } catch {}
+      throw new Error(`ZONOS3 answered ${r.status}${detail ? ': ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)) : ''}`);
+    }
+    const rate = Number(r.headers.get('x-audio-sample-rate')) || 44100;
+    const parts = [];
+    let carry = null, total = 0;
+    try {
+      const reader = r.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        // (32-bit samples, which can be split across chunks: the odd bytes wait for the next one.)
+        let bytes = value;
+        if (carry) { bytes = new Uint8Array(carry.length + value.length); bytes.set(carry); bytes.set(value, carry.length); }
+        const whole = bytes.length & ~3;
+        carry = whole < bytes.length ? bytes.slice(whole) : null;
+        if (!whole) continue;
+        const f = new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + whole));
+        parts.push(f); total += f.length;
+        opts.onChunk?.(f, rate);
+      }
+    } catch (e) { if (opts.signal?.aborted) throw staleError(); throw transientError('the voice stopped partway through'); }
+    if (opts.signal?.aborted) throw staleError();
+    const data = new Float32Array(total);
+    let at = 0; for (const f of parts) { data.set(f, at); at += f.length; }
+    return { data, rate, genSec: (performance.now() - t0) / 1000 };
+  };
+  const job = zn.queue.then(run, run);
+  zn.queue = job.catch(() => {});
   return job;
 }
 
@@ -6510,7 +6721,7 @@ function svGenerate(text, opts = {}){
     if (v.instruction) form.append('instruction', v.instruction);
     form.append('cfg_scale', String(v.cfg_scale ?? 1));
     form.append('seed', String(v.seed ?? 42));
-    if (sv.langs) form.append('language', opts.snap?.svLang ?? bookLang());   // (only to a server that listed its languages)
+    if (sv.langs) form.append('language', opts.snap?.lang ?? bookLang());   // (only to a server that listed its languages)
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now();
       let r;
@@ -6591,12 +6802,16 @@ const NEURAL = {
   pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`, playbackSpeed: true, stream: true,
     agreed: () => !!store.get(`spine:agreed:pocket:${pocketLang()}:${FULL_PRECISION ? 'fp32' : 'int8'}`),
     generate: pkGenerate, key: () => `pocket|${FULL_PRECISION ? 'fp32' : 'int8'}|${pk.lang}|${pkVoice()}` },
+  zonos: { name: 'ZONOS3', st: zn, ready: znReady, load: () => znLoad(), size: () => `~${ZONOS.mb} MB`, playbackSpeed: true, stream: true,
+    agreed: () => !!store.get('spine:agreed:zonos'),
+    generate: znGenerate, key: () => `zonos|${ZONOS.commit.slice(0, 7)}|${zonosLang()}|${znVoice()?.id}` },
   server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
     generate: svGenerate, key: () => `server|${svVoice()?.id}|${svVoiceHash()}` }
 };
 function neuralEngine(){
   if (tts.engine === 'kokoro' && kokoroFits()) return NEURAL.kokoro;
   if (tts.engine === 'pocket' && pocketLang()) return NEURAL.pocket;
+  if (tts.engine === 'zonos' && zonosFits()) return NEURAL.zonos;
   if (tts.engine === 'server' && sv.available && serverFits()) return NEURAL.server;
   return null;
 }
@@ -6702,7 +6917,7 @@ function textWeights(text){
 function nSynth(ne, text){
   // The settings the audio is made with, taken now, with its key: a speed or voice changed while the passage
   // waits its turn must not make audio saved under the old key (REVIEW.md L-50).
-  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice(), svLang: bookLang() };
+  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice(), lang: bookLang() };
   const key = `${ne.key()}|${text}`;
   let e = n.cache.get(key);
   if (e) { n.cache.delete(key); n.cache.set(key, e); return e; }
@@ -6763,9 +6978,10 @@ function nCancelStale(keepKey){
 // Natural voices read whole paragraphs where possible (better phrasing than sentence by sentence):
 // a span runs from (ci, pos) through the following sentences of the same block, up to a length the
 // model handles in one go. Sentences stay the unit for highlighting, skipping and resuming.
-let SPAN_MAX = { kokoro: 350, pocket: 600, server: 600 };
+let SPAN_MAX = { kokoro: 350, pocket: 600, zonos: 600, server: 600 };
 function nSpan(ne, ci, pos, single = false, chunks = ttsChunks()){
-  const c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket : SPAN_MAX.server;
+  const c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket
+    : ne === NEURAL.zonos ? SPAN_MAX.zonos : SPAN_MAX.server;
   let cj = ci;
   while (!single && chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
   return { ci, cj, pos, b: c.b, e: chunks[cj].e, ...speakable(c.b.text.slice(pos, chunks[cj].e)) };
@@ -6952,7 +7168,7 @@ function nStop(){
 }
 
 /* ---------- audiobook export (REVIEW.md E-10) ----------
-   Chosen chapters read by a natural voice (Kokoro, Pocket TTS or the server voice) into .m4b files: AAC
+   Chosen chapters read by a natural voice (Kokoro, Pocket TTS, ZONOS3 or the server voice) into .m4b files: AAC
    from the browser's WebCodecs encoder, in an MP4 file with chapter markers (Nero "chpl"), title, author,
    track and cover tags. One file for all of them, or one per chapter. Passages come from the saved-audio
    cache when they are there and are saved to it when made, so a cancelled export picks up where it stopped.
@@ -7621,7 +7837,7 @@ async function abRun(units, mode, target, format = 'aac'){
   const fmt = AB_FORMATS[format];
   const ne = neuralEngine(), b = book, rates = await abAacRates();   // (the encoder settings that work)
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
-  const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), svVoice: svVoice(), svLang: bookLang() };
+  const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice(), lang: bookLang() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
@@ -8394,7 +8610,7 @@ const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
   font: ['spine:face', v => FONTS.some(f => f.id === v) || /^g-[a-z0-9-]+$/.test(v), v => { fontFace = v; }],   // (g-: a font of ADDITIONAL_FONTS)
   fontSize: ['spine:font', v => typeof v === 'number' && v >= 70 && v <= 200, v => { fontPct = v; }],   // (the A−/A+ range)
   lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 2.6, v => { lineH = v; }],
-  readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'server'].includes(v), v => { tts.engine = v; }],
+  readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(v), v => { tts.engine = v; }],
   shortcuts: ['spine:shortcuts', v => typeof v === 'boolean', v => { singleKeys = v; }],
 };
 async function loadConfig(){
@@ -8449,6 +8665,7 @@ async function loadConfig(){
   // Settings other values are worked out from.
   KOKORO.local = new URL('kokoro/', voiceFilesBase()).href;
   POCKET.local = new URL('pocket/', voiceFilesBase()).href;
+  ZONOS.local = new URL('zonos/', voiceFilesBase()).href;
 }
 
 /* ---------- editing (E-21) ----------
@@ -10248,7 +10465,7 @@ function configNow(){
   if (THEMES.includes(theme)) c.theme = theme;
   else if (themeById(theme)) c.theme = 's-' + themeSlug(themeById(theme).name);
   Object.assign(c, { layout: ed.on && ed.prevLayout ? ed.prevLayout : layout, width: WIDTHS[widthStep][0], font: fontFace, fontSize: fontPct, lineSpacing: lineH });
-  if (['device', 'kokoro', 'pocket', 'server'].includes(tts.engine)) c.readAloud = tts.engine;
+  if (['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(tts.engine)) c.readAloud = tts.engine;
   c.shortcuts = singleKeys;
   c.LOCKED = [...LOCKED];
   return JSON.stringify(c, null, 2) + '\n';
