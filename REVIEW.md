@@ -658,7 +658,7 @@ ZONOS3 tests pass after the fixes, and the five for this round fail on the code 
 ## Summary
 
 Round 33 reviewed E-46 (ZONOS3-Mini in the browser), and its findings are fixed (see Resolved). Open (below): T-60, T-59
-and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
+and the enhancements E-29, E-30, E-36, E-42 to E-45, E-48 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
 ## Open items
@@ -673,6 +673,7 @@ Most important first.
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
 | [E-45](#e-45-narration-on-fixed-layout-spreads) | Publisher narration highlighted on both pages of a fixed-layout spread | Enhancement |
+| [E-48](#e-48-custom-voices-for-zonos3-in-the-browser) | Custom voices for ZONOS3 in the browser: from a URL (a setting, also in reader-config.json), an uploaded file, or a recording made in Settings | Enhancement |
 | E-36 | Read math and emoji aloud (the TeX or "formula"; an emoji's name). | Enhancement |
 | E-30 | The raw editor shows right-to-left documents left to right (CodeMirror isn't given the direction). | Enhancement |
 | [E-29](#e-29-vertical-text) | Vertical text (Japanese, Chinese) laid out vertically, pages turning right to left | Enhancement |
@@ -734,10 +735,41 @@ audio-only clips (no text) shown as such in the read-aloud bar, rather than igno
 On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
 whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
 
+### E-48. Custom voices for ZONOS3 in the browser
+ZONOS3's browser voice (E-46) offers only the engine's built-in voices. Three ways to add your own, each ending in the
+same place, listed at the top of the ZONOS3 voice list:
+
+- **From a URL:** a setting, `ZONOS_VOICES`, also in reader-config.json (lockable, in Generate config): a list of
+  `{"name": "Narrator", "url": "/voices/narrator.mp3"}`, a site path or an `https://` address of any recording the
+  browser can play (MP3, WAV, M4A, OGG, …). A URL on another site must allow cross-origin reads (CORS), as a book from
+  another site must. URL voices reach every reader of the site, on any device.
+- **Upload:** "Upload a voice…" in Settings: a file and a name, kept in the browser (IndexedDB, as saved speech is),
+  with rename, delete and a short preview.
+- **Record:** "Record a voice" in Settings, with the microphone (MediaRecorder): a level meter, a running timer, a
+  passage to read aloud, an automatic stop at 30 s, play back, then save with a name or record again. HTTPS only (the
+  button says so on an http: page); Chrome records WebM/Opus and Safari MP4/AAC, which the engine decodes through the
+  browser, so nothing is converted.
+
+How a clip becomes a voice: when the voice is first used, the reader hands the clip to the engine (`/v2/speakers`),
+which decodes it (the first 60 s), downloads its speaker encoder the first time (the `spk/` folder, about 45 MB, with a
+one-time prompt and progress; `fetch-zonos.sh` fetches it too) and works out a 192-number speaker embedding on the
+GPU. The reader keeps the embedding (under 1 KB): later visits send it with each passage (`speaker_embedding_base64`),
+with no fetch, no encoding and no encoder download. A URL voice's embedding is keyed by its URL and version (ETag or
+date), so a replaced file makes a new voice; the saved speech's key includes the embedding's hash. Recordings and
+uploads never leave the browser; only the embedding is computed, on the reader's own GPU.
+
+Limits: embedding-only voices (cloning from the clip itself needs about 2.8 GB more, too much for a browser) catch the
+speaker's sound but less of the exact recording than ZONOS3's server cloning; 5-15 s of clean speech from one speaker
+works best, which the settings text says. Uploads and recordings stay in one browser (an export and import of the
+small embedding could follow, and with an "Export for the browser" button in epub-reader-tts-server-zonos3's studio,
+voices made there would work here too). Errors (a file that can't be decoded, a fetch refused) show in Settings, not
+only when reading starts. Tests with the stand-in engine (its speaker routes) and Chromium's fake microphone.
+
 ## Suggested order
 
 1. E-25, E-22, as laid out in TODO.md.
 2. E-36 and E-30 (small), then the other enhancements, as wanted.
+3. E-48 when wanted: custom ZONOS3 voices in the browser (URL, upload, record).
 
 ## Resolved
 
