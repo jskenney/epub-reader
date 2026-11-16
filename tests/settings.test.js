@@ -701,3 +701,12 @@ test('a site theme chosen in one folder: another folder without it follows the d
   await page.goto(`${h.SITE}/folder-themes/index.html?book=/reader/books/long.epub`, { waitUntil: 'domcontentloaded' });
   assert.deepEqual(await page.evaluate(() => [document.documentElement.getAttribute('data-theme'), document.documentElement.style.getPropertyValue('--page-bg')]), ['s-paper', '#fbf7ee'], 'drawn by the script in <head>');
 });
+
+test('System chosen stays System in a folder with a default theme (round 35 review)', async () => {
+  const page = await h.newPage();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await h.openReader(page, `${h.SITE}/folder-sepia/index.html`, { 'spine:theme': 'system' });
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), null);
+  await page.goto(`${h.SITE}/folder-sepia/index.html`, { waitUntil: 'domcontentloaded' });
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), null, 'nor by the script in <head>');
+});

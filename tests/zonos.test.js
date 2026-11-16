@@ -348,18 +348,23 @@ test('ZONOS3: a voice recorded in Settings with the microphone is kept and liste
   assert.equal(await p.isHidden('#znRec'), true);
 });
 
-test('ZONOS3: Settings closed while the browser asks for the microphone records nothing; a second Record meanwhile is ignored (round 34 review, H-56, H-57)', async () => {
+test('ZONOS3: Settings closed while the browser asks for the microphone records nothing; Record again meanwhile leaves one microphone on; a question never answered doesn\'t stop Record (round 34 review, H-56, H-57; round 35)', async () => {
   const p = await page();
-  // (The browser's question answered after 1.5 s; every stream it gives kept, to see none is left on.)
+  // (The browser's question answered after 1.5 s, or (micNever) never; every stream it gives kept, to see none is
+  // left on.)
   await p.addInitScript(() => {
     window.micStreams = [];
     const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia = async c => { const s = await real(c); window.micStreams.push(s); await new Promise(r => setTimeout(r, window.micDelay ?? 1500)); return s; };
+    navigator.mediaDevices.getUserMedia = async c => {
+      if (window.micNever) { window.micNever = false; return new Promise(() => {}); }
+      const s = await real(c); window.micStreams.push(s); await new Promise(r => setTimeout(r, window.micDelay ?? 1500)); return s;
+    };
   });
   await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
   const live = () => p.evaluate(() => window.micStreams.filter(s => s.getTracks().some(t => t.readyState === 'live')).length);
   await p.click('#setBtn');
   await p.click('#znRecord');
+  assert.match(await p.textContent('#znMsg'), /Waiting for the microphone/);
   await p.click('#setClose');
   await p.waitForTimeout(2500);
   assert.equal(await live(), 0, 'the microphone is off');
@@ -368,20 +373,30 @@ test('ZONOS3: Settings closed while the browser asks for the microphone records 
   await p.click('#znRecord');
   await p.click('#znRecord');
   await p.waitForSelector('#znRec:not([hidden])', { timeout: 5000 });
-  await p.waitForTimeout(500);
-  assert.equal(await p.evaluate(() => window.micStreams.length), 2, 'the second click asked for nothing more');
+  await p.waitForTimeout(2000);
+  assert.equal(await live(), 1, 'one microphone on, the first answer dropped');
+  await p.click('#znStop');
+  await p.waitForSelector('.zn-save:not([hidden])');
   await p.click('#znCancel');
   assert.equal(await live(), 0);
-  // A take after these is whole, and saved.
-  await p.evaluate(() => { window.micDelay = 0; });
+  // A question never answered: Record asks again.
+  await p.evaluate(() => { window.micNever = true; window.micDelay = 0; });
   await p.click('#znRecord');
+  await p.waitForTimeout(300);
+  await p.click('#znRecord');
+  await p.waitForSelector('#znRec:not([hidden])', { timeout: 5000 });
+  // A take after these is whole, and saved; Record again during the save keeps the new take.
   await p.waitForFunction(() => document.querySelector('#znTime').textContent === '0:01', null, { timeout: 10000 });
   await p.click('#znStop');
   await p.waitForSelector('.zn-save:not([hidden])');
   await p.fill('#znName', 'After');
-  await p.click('#znKeep');
+  await p.evaluate(() => { document.querySelector('#znKeep').click(); document.querySelector('#znKeep').click(); document.querySelector('#znAgain').click(); });
   await p.waitForFunction(() => /Added After/.test(document.querySelector('#znMsg').textContent), null, { timeout: 10000 });
-  assert.equal(await live(), 0);
+  await p.waitForTimeout(1000);
+  assert.equal(await p.isVisible('#znStop'), true, 'the new take is recording');
+  assert.equal(await live(), 1);
+  assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['After'], 'saved once');
+  await p.click('#znStop');
 });
 
 test('ZONOS3: a lost GPU while a voice is being made from a recording stops reading with the reason (round 34 review, M-204)', async () => {
@@ -392,6 +407,8 @@ test('ZONOS3: a lost GPU while a voice is being made from a recording stops read
   await p.waitForFunction(() => window.zonosFake?.speakerHangs > 0, null, { timeout: 20000 });
   await p.evaluate(() => window.zonosFatal('GPU device lost: test'));
   await p.waitForFunction(() => /reload the page/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 10000 });
+  // (Reading stopped, not waiting on "Preparing voice…".)
+  await p.waitForFunction(() => document.querySelector('#ttsPlay').getAttribute('aria-label') === 'Play', null, { timeout: 10000 });
 });
 
 test('ZONOS3: reading starts without waiting for the check of site voices not chosen (round 34 review, M-205)', async () => {
@@ -435,4 +452,43 @@ test('ZONOS3: a copy of the models from an older fetch-zonos.sh says to run it a
   await h.openReader(p, LOCAL, { ...zonos, 'spine:agreed:zonos': true });
   await p.keyboard.press('r');
   await p.waitForFunction(() => /older fetch-zonos\.sh: run it again/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
+});
+
+test('ZONOS3: a lost GPU while a site voice\'s recording is fetched stops reading with the reason (round 35 review)', async () => {
+  const p = await page();
+  let held = false;
+  await p.route('**/tts-voices/narrator.wav', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    held = true; await new Promise(r => setTimeout(r, 4000)); await route.continue().catch(() => {});
+  });
+  await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true, 'spine:zonosVoice': `url:${h.SITE}/tts-voices/narrator.wav` });
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => held, 20000), 'the recording asked for');
+  await p.evaluate(() => window.zonosFatal('GPU device lost: test'));
+  await p.waitForFunction(() => /reload the page/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 10000 });
+  // (Reading stopped, not waiting on "Preparing voice…".)
+  await p.waitForFunction(() => document.querySelector('#ttsPlay').getAttribute('aria-label') === 'Play', null, { timeout: 10000 });
+});
+
+test('ZONOS3: a site voice chosen while its version is checked is made once; an old choice of its address is carried over (round 35 review)', async () => {
+  await fetch(`${h.SITE}/__head?delay=4&path=narrator.wav`);
+  try {
+    const p = await page();
+    await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true });
+    await p.keyboard.press('r');
+    await p.waitForFunction(() => window.zonosFake?.requests.length > 0, null, { timeout: 20000 });
+    await p.selectOption('#ttsVoice', { label: 'Site narrator (this site)' });
+    await p.waitForFunction(() => window.zonosFake.requests.filter(r => r.speaker_mode === 'embedding').length >= 2, null, { timeout: 20000 });
+    await p.waitForTimeout(2000);
+    assert.equal((await fake(p)).speakers, 1);
+  } finally { await fetch(`${h.SITE}/__head?delay=0`); }
+  // Chosen before ids were full addresses, written as given (here relative, and with a "./").
+  for (const old of ['url:/tts-voices/narrator.wav', `url:${h.SITE.replace('localhost', 'LOCALHOST')}/tts-voices/./narrator.wav`]) {
+    const p = await page();
+    await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true, 'spine:zonosVoice': old });
+    await p.keyboard.press('r');
+    await p.waitForFunction(() => window.zonosFake?.requests.length > 0, null, { timeout: 20000 });
+    assert.equal((await fake(p)).requests[0].speaker_mode, 'embedding', old);
+    await p.close();
+  }
 });

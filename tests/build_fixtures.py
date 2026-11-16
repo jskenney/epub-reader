@@ -1196,6 +1196,11 @@ def main():
     epub(books / "hostile-spanloop.epub", "Hostile spanloop", [("c1.xhtml", "One", '<div class="m">' + hp + '</div>', "<style>.m{columns:2}.m[data-span-box]{display:contents}</style>"),
          ("c2.xhtml", "Two", "<p id='two'>Chapter two.</p>", "")], uid="urn:hostile-spanloop")
     epub(books / "hostile-spanloop2.epub", "Hostile spanloop2", [("c1.xhtml", "One", '<div class="m">' + hp + '</div>', "<style>.m{columns:2}.m:has(> [data-span-own]){display:inline}</style>")], uid="urn:hostile-spanloop2")
+    # (round 35 review: an escaped inline span on a page whose styles don't seem to name columns; boxes that stop being
+    # boxes on a timer, out of step)
+    epub(books / "hostile-inlinespan-esc.epub", "Hostile inlinespan esc", [("c1.xhtml", "One", hp.replace("<p id='hp5'>", "<p id='hp5' style='colu\\6dn-span:all !important'>"), "")], uid="urn:hostile-inlinespan-esc")
+    (books / "anim-boxes.html").write_text("<!DOCTYPE html><html><head><title>Anim boxes</title><style>.box{columns:2;animation:flip 1s infinite} @keyframes flip{0%,49%{column-count:2} 50%,100%{column-count:auto}} .box h2{column-span:all}</style></head><body>"
+        + "".join(f'<div class="box" style="animation-delay:-{(i % 10) / 10}s"><h2>H{i}</h2><p>a {i}</p><p>b</p><p>c</p></div>' for i in range(1500)) + "</body></html>")
     epub(books / "own-inlinespan.epub", "Own inlinespan", [("c1.xhtml", "One", '<div class="m" id="m"><p id="s" style="column-span:all">Spanning heading</p>' + "".join(f"<p>Entry {i}.</p>" for i in range(20)) + "</div>" + hp, "<style>.m{columns:2;column-gap:10px}</style>")], uid="urn:own-inlinespan")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")

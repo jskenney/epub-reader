@@ -637,3 +637,19 @@ test('a book\'s rules on the marks of the multi-column check can\'t make it call
   assert.equal(span, 'all');
   assert.ok(w > box * 0.9, `spans the box: ${w} of ${box}`);
 });
+
+test('an escaped inline span on a page whose styles don\'t name columns stays in its column; boxes that stop being boxes on a timer don\'t make turns jump (round 35 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1400, height: 900 } });
+  await h.openReader(page, `${h.READER}?book=books/hostile-inlinespan-esc.epub`, { 'spine:layout': 'two' });
+  const [span, w, flowW] = await h.inFrame(page, doc => { const p = doc.getElementById('hp5'); return [getComputedStyle(p).columnSpan, p.getBoundingClientRect().width, p.parentElement.closest('div').getBoundingClientRect().width]; });
+  assert.equal(span, 'none');
+  assert.ok(w < flowW * 0.6, `one column: ${w} of ${flowW}`);
+  await h.openReader(page, `${h.READER}?book=books/anim-boxes.html`, { 'spine:layout': 'two' });
+  const pos = [];
+  for (let k = 0; k < 6; k++) {
+    const t0 = Date.now();
+    await page.keyboard.press('ArrowRight'); await page.waitForTimeout(150);
+    pos.push([Number(/page (\d+)/.exec(await page.textContent('#spinePos'))[1]), Date.now() - t0]);
+  }
+  assert.deepEqual(pos.map(p => p[0]), [2, 3, 4, 5, 6, 7], JSON.stringify(pos));
+});
