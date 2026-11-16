@@ -182,3 +182,12 @@ test('zonosLang maps a book\'s language to ZONOS3\'s, skipping script subtags (E
   assert.deepEqual(await p.evaluate(() => ['en', 'en-US', 'en-GB', 'en-Latn-GB', 'en-AU', 'fr-CA', 'zh-Hans-CN', 'pt', 'nb', 'he', 'iw', 'la', 'xx-YY']
     .map(t => SPINE_TEST.zonosLang(t))), ['en_us', 'en_us', 'en_gb', 'en_gb', 'en_gb', 'fr_fr', 'cmn', 'pt_br', 'no', 'he', 'he', null, null]);
 });
+
+test('ZONOS3: an engine that can\'t be found names the address it tried', async () => {
+  const p = await h.newPage();
+  await p.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => ({}) }); });
+  await h.openReader(p, `${h.SITE}/zonos-partial/index.html?book=/reader/books/long.epub`, { ...zonos, 'spine:agreed:zonos': true });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /couldn't be loaded from/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
+  assert.match(await p.textContent('#ttsStatus'), new RegExp(`from ${h.SITE}/zonos-partial/zonos/engine/engine\\.js \\(zonos/engine/ in this page's folder\\)`));
+});
