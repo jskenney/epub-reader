@@ -453,7 +453,7 @@ site as the reader.
   French, German, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Russian,
   Arabic, Hindi, …) with about 30 built-in voices, those in the book's language
   listed first; any voice reads any language, with its own accent. A one-time
-  download of about 940 MB after pressing Download, kept by the browser. English
+  download of about 900 MB after pressing Download, kept by the browser. English
   numbers, money, dates, times, decimals and common abbreviations are spelled out
   before reading ("1984" as "nineteen eighty-four", "$5.50", "Dr."), since the
   browser engine doesn't do that itself; other languages are read as written. Like
@@ -739,7 +739,7 @@ voices (Kokoro reads English, and the server voice the languages its server list
 ## Self-hosting ZONOS3
 
 ```bash
-./fetch-zonos.sh             # about 940 MB
+./fetch-zonos.sh             # about 900 MB
 ```
 
 This fills `./zonos/models/` with the parts of ZONOS3-Mini's browser export that reading aloud uses, at a

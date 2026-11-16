@@ -45,7 +45,7 @@ test('ZONOS3: agreeing to the download loads it, lists its voices, and reads the
   await h.openReader(p, LONG, zonos);
   await p.keyboard.press('r');
   // Asked first, with the size.
-  await p.waitForFunction(() => /ZONOS3: one-time ~940 MB download/.test(document.querySelector('#ttsStatus').textContent));
+  await p.waitForFunction(() => /ZONOS3: one-time ~900 MB download/.test(document.querySelector('#ttsStatus').textContent));
   assert.equal(await p.textContent('#ttsDownload'), 'Download');
   assert.equal(await fake(p), null, 'nothing loaded before agreeing');
   await p.click('#ttsDownload');

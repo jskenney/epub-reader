@@ -3,7 +3,7 @@
 # loads them from this site instead of huggingface.co (REVIEW.md E-46).
 #
 #   ./fetch-zonos.sh               the backbone, the audio decoder, the steering file, the alignment heads and the
-#                                  built-in voices (about 940 MB): everything reading aloud uses
+#                                  built-in voices (about 900 MB): everything reading aloud uses
 #
 # The engine itself (zonos/engine/: engine.js and its two workers) is part of the reader, built from ZONOS3-Mini's
 # source by tools/build-zonos-engine.sh. It must be on the same site as index.html (browsers start workers only from
@@ -90,7 +90,7 @@ else
   files=$(sed -n "s|^[0-9a-f]\{64\}  $DEST/||p" checksums/zonos.sha256)
 fi
 
-say "ZONOS3-Mini models (revision ${REV:0:8}, about 940 MB)"
+say "ZONOS3-Mini models (revision ${REV:0:8}, about 900 MB)"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   get "$HF/$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$f")" "$f"
