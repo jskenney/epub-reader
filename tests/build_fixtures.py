@@ -55,7 +55,9 @@ export const engine = {
       const fromCache = (await cache.keys()).length > 0;
       for (let i = 1; i <= 4; i++) { progress({ models: ['backbone', 'zac'], loaded: i * 245e6, total: 980e6, fetched: fromCache ? 0 : i * 245e6 }); await wait(30); }
       if (window.zonosFakeFail) throw new Error(window.zonosFakeFail);
-      if (!fromCache && !window.zonosFakeNoKeep) await cache.put(opts.base + 'backbone/shard-000.bin', new Response('x'));
+      // All 16 model files kept, or (window.zonosFakeNoKeep: out of room) only the first 3, as Chrome does when
+      // a save runs into the site's quota.
+      if (!fromCache) for (let i = 0; i < (window.zonosFakeNoKeep ? 3 : 16); i++) await cache.put(opts.base + `shard-${i}.bin`, new Response('x'));
     })().catch(e => { started = null; throw e; });
   },
   onFatal(cb) { fatal.push(cb); window.zonosFatals = fatal.length; },

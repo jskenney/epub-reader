@@ -243,3 +243,15 @@ test('ZONOS3: a browser that doesn\'t keep the downloaded models says so at once
   await p.keyboard.press('r');
   await p.waitForFunction(() => /didn't keep a copy of ZONOS3's models, so they will be downloaded again next time/.test(document.querySelector('#notice').textContent), null, { timeout: 20000 });
 });
+
+test('ZONOS3: without room in the site\'s storage quota for the models, says so before downloading', async () => {
+  const p = await page();
+  await p.addInitScript(() => { window.zonosFakeNoKeep = true; navigator.storage.estimate = async () => ({ usage: 600 * 1048576, quota: 1000 * 1048576 }); });
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.evaluate(async () => { for (const k of await caches.keys()) await caches.delete(k); });
+  await p.reload(); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /allows this site only 400 MB more storage, less than ZONOS3's 900 MB/.test(document.querySelector('#notice').textContent), null, { timeout: 20000 });
+  assert.match(await p.textContent('#notice'), /this site uses 600 of its 1000 MB\)\. Free some space on the computer's disk, or lower \(or clear\) "Saved speech kept in this browser" in Settings/);
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), 'reads all the same');
+});

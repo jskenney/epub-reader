@@ -459,7 +459,11 @@ site as the reader.
   each time. The reader asks the browser once to keep the site's storage, and
   says so if the browser didn't keep the copy or has dropped it since (a private
   window, site data cleared when the browser closes, storage full), with the
-  storage figures. English
+  storage figures. Browsers give each site a storage quota, smaller as the disk
+  fills, and the reader's saved speech and the other voices' models count towards
+  it: when there isn't room for the models the reader says so before downloading
+  (Chrome's console shows "QuotaExceededError" then); free disk space, or lower
+  "Saved speech kept in this browser" in Settings. English
   numbers, money, dates, times, decimals and common abbreviations are spelled out
   before reading ("1984" as "nineteen eighty-four", "$5.50", "Dr."), since the
   browser engine doesn't do that itself; other languages are read as written. Like

@@ -197,6 +197,8 @@ test('versions pinned in index.html and in the fetch scripts agree, read from th
   const zonos = read('fetch-zonos.sh'), engine = read('tools/build-zonos-engine.sh');
   assert.equal(block('ZONOS').match(/model: '[^']*ZONOS3-Mini\/resolve\/([^/]+)\/web\/'/)?.[1], v(zonos, 'REV'), 'ZONOS3 REV');
   assert.equal(block('ZONOS').match(/commit: '([^']+)'/)?.[1], v(engine, 'ZONOS3_COMMIT'), 'ZONOS3_COMMIT');
+  // The model files the engine keeps: every shard fetch-zonos.sh fetches.
+  assert.equal(Number(block('ZONOS').match(/shards: (\d+)/)?.[1]), read('checksums/zonos.sha256').split('\n').filter(l => /\/shard-\d+\.bin$/.test(l)).length, 'ZONOS.shards');
   // The Cache Storage the reader checks is the one the engine keeps its models in.
   const cacheName = block('ZONOS').match(/cache: '([^']+)'/)?.[1];
   assert.ok(cacheName && ['"', "'", '`'].some(q => read('zonos/engine/worker.js').includes(q + cacheName + q)), `ZONOS.cache ${cacheName} isn't the engine's`);
