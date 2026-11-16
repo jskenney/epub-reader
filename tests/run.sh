@@ -6,6 +6,7 @@
 #   tests/run.sh tests/urls.test.js one file
 #   SLOW=1 tests/run.sh             also load the real Kokoro and Pocket TTS models
 #   NETWORK=1 tests/run.sh          also check the CDN version of the reader policy (needs internet access)
+#   TEST_PATTERN="round 34" tests/run.sh tests/zonos.test.js   only the tests whose names match
 #
 # Needs Python 3, Node 20.10+, unzip, Playwright with Chromium, and for the export tests ffmpeg (cd tests && npm install && npx playwright install chromium).
 # Everything runs against local servers on ports 8790-8795; the browser is blocked from reaching other sites.
@@ -52,4 +53,4 @@ for k in "${!ports[@]}"; do
 done
 
 if [ $# -gt 0 ]; then files=("$@"); else files=(tests/*.test.js); fi
-NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 node --test --test-concurrency=1 "${files[@]}"
+NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 node --test --test-concurrency=1 ${TEST_PATTERN:+--test-name-pattern="$TEST_PATTERN"} "${files[@]}"

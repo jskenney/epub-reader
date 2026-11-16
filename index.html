@@ -10,11 +10,13 @@
 <!-- Without one, this folder's default theme (from its reader-config.json, as last seen) until the config arrives. -->
 <!-- A folder that locks the theme (its LOCKED list) has its own, whatever the reader chose elsewhere. -->
 <!-- A theme of the reader's own or the site's (E-38, E-39): its colours as last worked out, kept for this. -->
-<script>try { const get = k => JSON.parse(localStorage.getItem(k)), cache = get('spine:themeCache') || {}, dir = location.pathname.replace(/[^/]*$/, '');
+<!-- (The site's themes are kept per folder, as each folder's config has its own; a theme chosen in another folder and -->
+<!-- not known here gives way to this folder's default: round 34 review, M-208.) -->
+<script>try { const get = k => JSON.parse(localStorage.getItem(k)), dir = location.pathname.replace(/[^/]*$/, ''), cache = { ...get('spine:themeCache'), ...get('spine:themeCache:' + dir) };
   const ok = t => ['light', 'sepia', 'dark', 'black', 'eink', 'contrast', 'night'].includes(t) || (typeof t === 'string' && !!cache[t]);
   const mine = get('spine:theme'), folder = get('spine:folderTheme:' + dir);
   const set = t => { const el = document.documentElement; el.setAttribute('data-theme', t); for (const [k, v] of Object.entries(cache[t] || {})) if (/^(--[a-z-]+|color-scheme)$/.test(k) && /^[#a-z0-9 .,()%\/-]*$/i.test(v)) el.style.setProperty(k, v); };
-  if (get('spine:folderThemeLocked:' + dir)) { if (ok(folder)) set(folder); } else if (ok(mine)) set(mine); else if (mine == null && ok(folder)) set(folder); } catch {}</script>
+  if (get('spine:folderThemeLocked:' + dir)) { if (ok(folder)) set(folder); } else if (ok(mine)) set(mine); else if (ok(folder)) set(folder); } catch {}</script>
 <style>
 /* Layout: one-screen reading app. Top bar, contents rail on the left, the page as the one framed object, a segmented spine ribbon along the bottom. */
 :root{
@@ -722,7 +724,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261116.2227</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261116.2336</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -3174,7 +3176,12 @@ const rgbHex = c => '#' + c.map(x => Math.round(Math.min(255, Math.max(0, x))).t
 const hexMix = (a, b, w) => { const x = hexRgb(a), y = hexRgb(b); return rgbHex(x.map((v, i) => v * w + y[i] * (1 - w))); };   // (w of a)
 const hexLum = h => { const [r, g, b] = hexRgb(h).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const hexContrast = (a, b) => { const [x, y] = [hexLum(a), hexLum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
-const themeSlug = name => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'theme';
+// (A name with no Latin letters or digits ("Ночь", "夜") gets one made from the whole name, not one for all: round 34
+// review, M-209.)
+const themeSlug = name => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30)
+  || 't' + [...name].reduce((h, c) => Math.imul(h ^ c.codePointAt(0), 16777619) >>> 0, 2166136261).toString(36);
+// An id not yet taken: -2, -3… after one that is (two names alike as ids, "C" and "C++").
+const themeFree = (id, taken) => { let out = id, k = 2; while (taken(out)) out = `${id}-${k++}`; return out; };
 // A theme as given (by a site's config or the reader's own list) checked: its name and colours; throws with the reason.
 function themeCheck(o, prefix){
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('should be an object');
@@ -3216,14 +3223,16 @@ function applyThemeVars(){
   for (const k of THEME_VARS) { if (vars) el.style.setProperty(k, vars[k]); else el.style.removeProperty(k); }
 }
 // The custom themes' colours kept for the script that draws the theme before anything else.
+// (The reader's own for every folder; the site's for this folder only, as another folder's config has its own: M-208.)
 function themeCacheSave(){
-  const all = [...siteThemes, ...userThemes];
-  if (all.length) store.set('spine:themeCache', Object.fromEntries(all.map(th => [th.id, themeVars(th)]))); else store.del('spine:themeCache');
+  const put = (key, list) => { if (list.length) store.set(key, Object.fromEntries(list.map(th => [th.id, themeVars(th)]))); else store.del(key); };
+  put('spine:themeCache', userThemes);
+  put('spine:themeCache:' + location.pathname.replace(/[^/]*$/, ''), siteThemes);
 }
 function userThemesLoad(){
   const list = store.get('spine:themes');
   userThemes = [];
-  for (const o of Array.isArray(list) ? list.slice(0, 50) : []) { try { const th = themeCheck(o, 'u-'); if (!themeById(th.id)) userThemes.push(th); } catch {} }
+  for (const o of Array.isArray(list) ? list.slice(0, 50) : []) { try { const th = themeCheck(o, 'u-'); th.id = themeFree(th.id, themeById); userThemes.push(th); } catch {} }
 }
 const userThemesSave = () => { if (userThemes.length) store.set('spine:themes', userThemes); else store.del('spine:themes'); themeCacheSave(); };
 function isDark(){
@@ -3372,7 +3381,7 @@ html{display:block !important}
 head{display:none !important}
 html::marker,body::marker,#${RID.clip}::marker,#${RID.flow}::marker{content:none !important}   /* (nor a marker, nor the head, pushing it: M-200) */
 #${RID.flow} *{content-visibility:visible !important}
-#${RID.flow} *:not([data-span-own="${MD_OWN}"]),#${RID.flow}::before,#${RID.flow}::after,#${RID.flow} ::before,#${RID.flow} ::after{column-span:none !important}
+#${RID.flow} *:not([${SPAN_OWN}]),#${RID.flow}::before,#${RID.flow}::after,#${RID.flow} ::before,#${RID.flow} ::after{column-span:none !important}
 #${RID.flow} ::details-content{column-span:none !important}
 @media (max-width:640px){#${RID.flow}{column-count:1 !important}}
 @supports (width:round(down,10.5px,1px)){#${RID.flow}{width:round(down,100%,1px) !important;column-gap:round(down,var(--g),1px) !important}}`;
@@ -4349,13 +4358,16 @@ function onWheel(e){
 // they carry the session's token, which the pin leaves out (L-400), and that box's columns are fixed as they are, so
 // it can't stop being one later and let them span the reader's (round 31 review, M-189: reading a book's styles for
 // "column-span" could be passed by an escape, or a style applying later).
+// (The marks are out of a book's reach: the spanners' attribute has the session token in its name, and the boxes are
+// kept in a WeakSet, not marked in the page. A book rule on a fixed name could make a box stop being one as soon as it
+// was marked, and the check below call itself until the stack ran out: round 34 review, H-58.)
+const SPAN_OWN = 'data-so-' + MD_OWN;
+let spanBoxes = new WeakSet(), spanList = [];
 const SPAN_BOX_DISPLAY = /^(block|flow-root|list-item|inline-block|table-cell|table-caption)\b|\b(flow-root|block)$/;
 function unspan(doc){
   const flow = doc.getElementById(RID.flow);
+  spanBoxes = new WeakSet(); spanList = [];
   if (!flow) return;
-  // (A book's inline column-span, important or not, beats a stylesheet's important rule: overridden in place, but in a
-  // box of its own: round 32 review, M-194.)
-  for (const el of flow.querySelectorAll('[style]')) if (el.style.getPropertyValue('column-span') && el.getAttribute('data-span-own') !== MD_OWN) el.style.setProperty('column-span', 'none', 'important');
   // (A page whose own styles never name columns has no box of its own: missing one only keeps its spanners to a
   // column. The reader's own styles aren't looked at: they always name them: L-421.)
   const mine = new Set([RID.override, RID.override + '-pin', RID.base]);
@@ -4365,27 +4377,32 @@ function unspan(doc){
   // inline, whose blocks then spanned the reader's columns: M-195. Its columns aren't fixed, so its own media queries and
   // em widths still work (M-196); boxes are checked again as the page is laid out and turned: spanCheck.)
   const isBox = el => { const cs = win.getComputedStyle(el); return (cs.columnCount !== 'auto' || cs.columnWidth !== 'auto') && SPAN_BOX_DISPLAY.test(cs.display); };
-  for (const el of flow.querySelectorAll('[data-span-own]')) el.removeAttribute('data-span-own');
-  for (const el of flow.querySelectorAll('[data-span-box]')) el.removeAttribute('data-span-box');
+  for (const el of flow.querySelectorAll(`[${SPAN_OWN}]`)) el.removeAttribute(SPAN_OWN);
   const visit = (n, depth) => {
     for (const c of n.children) {
       if (!isBox(c)) { visit(c, depth); continue; }
       // (Boxes within boxes, past three deep, laid out as one column: the browser takes time exponential in their
       // depth, a 1 KB page 50 deep never opened: L-422.)
       if (depth >= 3) { c.style.setProperty('columns', 'auto', 'important'); visit(c, depth); continue; }
-      c.setAttribute('data-span-box', '');
-      const mark = m => { for (const k of m.children) { k.setAttribute('data-span-own', MD_OWN); if (!isBox(k)) mark(k); } };
+      spanBoxes.add(c); spanList.push(new WeakRef(c));
+      const mark = m => { for (const k of m.children) { k.setAttribute(SPAN_OWN, ''); if (!isBox(k)) mark(k); } };
       mark(c);
       visit(c, depth + 1);
     }
   };
   visit(flow, 0);
+  // (A book's inline column-span, important or not, beats a stylesheet's important rule: overridden in place, but in a
+  // box of its own, so after the spanners are marked: round 32 review, M-194; round 34, L-430.)
+  for (const el of flow.querySelectorAll('[style]')) if (el.style.getPropertyValue('column-span') && !el.hasAttribute(SPAN_OWN)) el.style.setProperty('column-span', 'none', 'important');
 }
 // Still the boxes they were? (A style that applies later, a media query or :hover, can make one stop being one; its
 // blocks then lose the leave to span.)
+let spanFixing = false;
 function spanCheck(doc){
   const win = doc?.defaultView; if (!win) return false;
-  for (const el of doc.querySelectorAll('[data-span-box]')) {
+  for (const ref of spanList) {
+    const el = ref.deref();
+    if (!el || !spanBoxes.has(el) || el.ownerDocument !== doc) continue;
     const cs = win.getComputedStyle(el);
     if ((cs.columnCount === 'auto' && cs.columnWidth === 'auto') || !SPAN_BOX_DISPLAY.test(cs.display)) { unspan(doc); return true; }
   }
@@ -4759,7 +4776,9 @@ function setSpinePos(where, n){
   $('#spinePos').replaceChildren(where, sp);
 }
 function updateProgress(){
-  if (!scrolling() && spanCheck(frame.contentDocument)) { relayout(); return; }   // (a box that stopped being one: M-196)
+  // (A box that stopped being one: M-196. Once per layout: a relayout it starts doesn't check again, so nothing a book
+  // does can make it call itself: round 34 review, H-58.)
+  if (!scrolling() && !spanFixing && spanCheck(frame.contentDocument)) { spanFixing = true; try { relayout(); } finally { spanFixing = false; } return; }
   if (!book) return;
   updateSection();
   turnedPage();
@@ -6435,6 +6454,8 @@ const zonosFits = () => zonosGpu() && !!zonosLang();
 const zn = { state: 'idle', engine: null, localFetch: null, voices: [], queue: Promise.resolve(), local: false, dead: '',
   own: [], emb: new Map(), versions: new Map(Object.entries(store.get('spine:zonosVersions') || {})),
   jobs: new Set(), progressText: '', error: '', wantPlay: false, voice: store.get('spine:zonosVoice') || '' };
+// (A site voice chosen before its id was its full address: round 34 review, M-206.)
+if (/^url:(?!https?:)/.test(zn.voice)) try { zn.voice = 'url:' + new URL(zn.voice.slice(4), location.href).href; } catch {}
 const znReady = () => zn.state === 'ready';
 // Every voice: the reader's own (uploaded or recorded in Settings) and the site's (ZONOS_VOICES), then the
 // built-in ones (E-48).
@@ -6501,10 +6522,14 @@ async function znLoad(){
     zn.state = 'ready';
     store.set('spine:agreed:zonos', true);   // the reader agreed to this download once
     znKept();
-    await znCheckVersions();
+    await znCheckVersions(true);
   } catch (e) {
     zn.state = 'error';
     zn.error = zn.dead || (/webgpu|adapter/i.test(e.message) ? `WebGPU isn't usable in this browser (${e.message})` : e.message);
+    // (A copy from an older fetch-zonos.sh lacks the manifests the engine reads when it starts, which fails on a site
+    // that answers missing files with a page: round 34 review, M-207.)
+    if (zn.local && !zn.dead && !await allReal(ZONOS.local + 'models/', ['edit/manifest.json', 'aligner/manifest.json', 'zac-full_mr/manifest.json']))
+      zn.error += ` (this site's copy of the ZONOS3 models is from an older fetch-zonos.sh: run it again)`;
   }
   ttsFillVoices(); nLoaded(zn);
 }
@@ -6653,7 +6678,7 @@ function znVoiceList(text){
     try { u = new URL(url, location.href); } catch { throw new Error(`${url} isn't an address`); }
     if (!/^https?:$/.test(u.protocol)) throw new Error(`${url} isn't a web address`);
     const name = (m?.[1].trim() || decodeURIComponent(u.pathname.split('/').pop()).replace(/\.[a-z0-9]+$/i, '') || 'Voice').slice(0, 60);
-    return { name, url };
+    return { name, url, abs: u.href };
   });
 }
 const znSiteVoices = () => { try { return znVoiceList(ZONOS_VOICES); } catch { return []; } };
@@ -6665,7 +6690,7 @@ function znVoicesConfig(value){
 }
 function znCustom(){
   return [...zn.own.map(o => ({ id: 'own:' + o.id, name: o.name, lang: '', style: 'yours', gender: '', own: o.id })),
-    ...znSiteVoices().map(v => ({ id: 'url:' + v.url, name: v.name, lang: '', style: 'this site', gender: '', url: v.url, version: zn.versions.get(v.url) || '' }))];
+    ...znSiteVoices().map(v => ({ id: 'url:' + v.abs, name: v.name, lang: '', style: 'this site', gender: '', url: v.abs, shown: v.url, version: zn.versions.get(v.abs) || '' }))];
 }
 // The reader's own recordings, and the embeddings made from any custom voice.
 const znDb = (() => {
@@ -6694,17 +6719,25 @@ async function znOwnLoad(){
   znOwnRender();
 }
 // A site voice's version (its ETag, or its date and size), so a recording replaced at the same address makes a new
-// voice; the last seen is kept when the site can't say.
-async function znCheckVersions(){
-  const seen = store.get('spine:zonosVersions') || {};
-  await Promise.all(znSiteVoices().map(async v => {
+// voice; the last seen is kept when the site can't say. Keyed by the full address: a relative one is another file
+// in each folder (round 34 review, M-206). Only the chosen voice is waited for; the others are checked meanwhile,
+// and the list refreshed after (M-205).
+async function znCheckVersions(only){
+  const check = async v => {
     try {
-      const r = await fetch(new URL(v.url, location.href), { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
+      const r = await fetch(v.abs, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
       const h = r.headers, version = r.ok && !looksHtml(r) ? h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '') : '';
-      if (version) { seen[v.url] = version; zn.versions.set(v.url, version); }
+      if (version) {
+        zn.versions.set(v.abs, version);
+        const seen = store.get('spine:zonosVersions') || {};
+        seen[v.abs] = version; store.set('spine:zonosVersions', seen);
+      }
     } catch {}
-  }));
-  store.set('spine:zonosVersions', seen);
+  };
+  const all = znSiteVoices(), chosen = all.filter(v => 'url:' + v.abs === zn.voice);
+  const rest = Promise.all(all.filter(v => !chosen.includes(v)).map(check)).then(() => { if (tts.open) ttsFillVoices(); });
+  await Promise.all(chosen.map(check));
+  if (!only) await rest;
 }
 // A voice's speaker embedding: kept from before, or made now from its recording by the engine.
 async function znEmbedding(v, signal){
@@ -6712,6 +6745,12 @@ async function znEmbedding(v, signal){
   if (zn.emb.has(key)) return zn.emb.get(key);
   let e = await znDb.emb(key).catch(() => null);
   if (!e) {
+    // (A copy of the models from before E-48 has no speaker encoder; the engine would say only that the embedding
+    // failed: round 34 review, M-207.)
+    if (zn.local) {
+      zn.spk ??= realFile(ZONOS.local + 'models/spk/manifest.json', 'json', true);
+      if (!await zn.spk) { zn.spk = null; throw new Error(`this site's copy of the ZONOS3 models has no speaker encoder, which voices of your own need (run fetch-zonos.sh again)`); }
+    }
     let clip, name;
     if (v.own) {
       const o = await znDb.get(v.own);
@@ -6719,17 +6758,26 @@ async function znEmbedding(v, signal){
       clip = o.blob; name = o.file || 'recording';
     } else {
       let r;
-      try { r = await fetch(new URL(v.url, location.href), { signal }); } catch (err) { if (signal?.aborted) throw staleError(); throw new Error(`the recording for ${v.name} couldn't be fetched from ${v.url} (${err.message})`); }
-      if (!r.ok || looksHtml(r)) throw new Error(`the recording for ${v.name} isn't at ${v.url}${r.ok ? '' : ` (${r.status})`}`);
+      try { r = await fetch(new URL(v.url, location.href), { signal }); } catch (err) { if (signal?.aborted) throw staleError(); throw new Error(`the recording for ${v.name} couldn't be fetched from ${v.shown || v.url} (${err.message})`); }
+      if (!r.ok || looksHtml(r)) throw new Error(`the recording for ${v.name} isn't at ${v.shown || v.url}${r.ok ? '' : ` (${r.status})`}`);
       clip = await r.blob(); name = decodeURIComponent(new URL(v.url, location.href).pathname.split('/').pop()) || 'recording';
     }
     zn.encoding = v.name;
     const head = { 'content-type': 'application/json', ...ZN_SESSION };
     const why = async r => { try { const d = (await r.json()).detail; return typeof d === 'string' ? d : JSON.stringify(d); } catch { return String(r.status); } };
-    const c = await zn.localFetch('/v2/speakers', { method: 'POST', headers: head,
-      body: JSON.stringify({ label: v.name, speaker_audio_base64: abBase64(new Uint8Array(await clip.arrayBuffer())), speaker_audio_name: name }) });
-    if (!c.ok) throw new Error(`${v.name} couldn't be made into a voice: ${await why(c)}`);
-    const made = await zn.localFetch(`/v2/speakers/${(await c.json()).id}/embedding`, { headers: head });
+    // (With the reader's signal, which a failed engine aborts (onFatal): its calls in flight never answer then, and
+    // reading waited for good on "Preparing voice…": round 34 review, M-204.)
+    const engine = async (path, init) => {
+      try { return await zn.localFetch(path, { ...init, headers: head, signal }); }
+      catch (err) { if (zn.dead) throw transientError(zn.dead); if (signal?.aborted) throw staleError(); throw err; }
+    };
+    let c, made;
+    try {
+      c = await engine('/v2/speakers', { method: 'POST',
+        body: JSON.stringify({ label: v.name, speaker_audio_base64: abBase64(new Uint8Array(await clip.arrayBuffer())), speaker_audio_name: name }) });
+      if (!c.ok) throw new Error(`${v.name} couldn't be made into a voice: ${await why(c)}`);
+      made = await engine(`/v2/speakers/${(await c.json()).id}/embedding`, {});
+    } finally { zn.encoding = ''; }
     if (!made.ok) throw new Error(`${v.name} couldn't be made into a voice: ${await why(made)}`);
     e = (await made.json()).embedding;
     if (!Array.isArray(e) || !e.length) throw new Error(`${v.name} couldn't be made into a voice`);
@@ -8867,10 +8915,14 @@ async function loadConfig(){
   siteThemes = [];
   if (cfg && typeof cfg === 'object' && Array.isArray(cfg.THEMES)) {
     for (const o of cfg.THEMES.slice(0, 50)) {
-      try { const th = themeCheck(o, 's-'); if (siteThemes.some(x => x.id === th.id)) throw new Error('another has that name'); siteThemes.push(th); }
+      try {
+        const th = themeCheck(o, 's-');
+        if (siteThemes.some(x => x.id === th.id)) { if (typeof o.id === 'string' && o.id === th.id) throw new Error('another has that id'); th.id = themeFree(th.id, id => siteThemes.some(x => x.id === id)); }
+        siteThemes.push(th);
+      }
       catch (e) { console.warn(`${CONFIG_FILE}: THEMES: ${o?.name ?? JSON.stringify(o)} ignored (${e.message})`); }
     }
-    if (typeof cfg.theme === 'string' && !knownTheme(cfg.theme)) { const byName = siteThemes.find(th => th.name.toLowerCase() === cfg.theme.toLowerCase() || th.id === 's-' + themeSlug(cfg.theme)); if (byName) cfg.theme = byName.id; }
+    if (typeof cfg.theme === 'string' && !knownTheme(cfg.theme)) { const byName = siteThemes.find(th => th.name.toLowerCase() === cfg.theme.toLowerCase()) || siteThemes.find(th => th.id === 's-' + themeSlug(cfg.theme)); if (byName) cfg.theme = byName.id; }
   } else if (cfg && typeof cfg === 'object' && 'THEMES' in cfg) console.warn(`${CONFIG_FILE}: THEMES should be a list of themes`);
   themeCacheSave();
   // Settings readers can't change here (E-18): read first, as the folder's defaults then apply whatever they chose.
@@ -10744,8 +10796,12 @@ $('#znFile').addEventListener('change', async e => {
 });
 // Recording with the microphone: a level meter, a running time, a stop at 30 seconds; then play it back, and save
 // it with a name or record again.
-const znRec = { stream: null, rec: null, chunks: [], ctx: null, timer: 0, t0: 0, blob: null };
+// (gen: a recording asked for and then stopped, or the dialog closed, while the browser still asks for the microphone
+// is dropped when the answer comes, not started unseen; one start at a time, each recorder with its own chunks:
+// round 34 review, H-56, H-57.)
+const znRec = { stream: null, rec: null, ctx: null, timer: 0, t0: 0, blob: null, gen: 0, starting: false };
 function znRecStop(discard){
+  znRec.gen++;
   clearInterval(znRec.timer);
   if (znRec.rec?.state === 'recording') { if (discard) znRec.rec.ondataavailable = znRec.rec.onstop = null; znRec.rec.stop(); }
   znRec.stream?.getTracks().forEach(t => t.stop()); znRec.stream = null;
@@ -10756,14 +10812,22 @@ async function znRecStart(){
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
     znMsg('Recording needs the microphone, which browsers allow only on secure (https:) pages.'); return;
   }
-  try { znRec.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true } }); }
-  catch (e) { znMsg(`The microphone couldn't be used: ${e.message}`); return; }
+  if (znRec.starting) return;
+  const gen = ++znRec.gen;
+  znRec.starting = true;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true } }); }
+  catch (e) { if (gen === znRec.gen) znMsg(`The microphone couldn't be used: ${e.message}`); return; }
+  finally { znRec.starting = false; }
+  if (gen !== znRec.gen || !$('#setDialog').open) { stream.getTracks().forEach(t => t.stop()); return; }
+  znRec.stream = stream;
   $('#znRec').hidden = false; $('#znTake').hidden = true; $('.zn-save').hidden = true; $('#znStop').hidden = false; znMsg('');
-  znRec.chunks = []; znRec.blob = null;
-  znRec.rec = new MediaRecorder(znRec.stream);
-  znRec.rec.ondataavailable = e => { if (e.data.size) znRec.chunks.push(e.data); };
-  znRec.rec.onstop = () => {
-    znRec.blob = new Blob(znRec.chunks, { type: znRec.rec.mimeType || 'audio/webm' });
+  znRec.blob = null;
+  const chunks = [], rec = znRec.rec = new MediaRecorder(stream);
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    if (znRec.rec !== rec) return;
+    znRec.blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
     $('#znTake').src = URL.createObjectURL(znRec.blob); $('#znTake').hidden = false;
     $('.zn-save').hidden = false; $('#znStop').hidden = true; $('#znName').focus();
   };
@@ -10782,9 +10846,9 @@ async function znRecStart(){
     if (t >= 30) znRecStop(false);
   }, 200);
 }
-$('#znRecord').addEventListener('click', () => { znRecStop(true); znRecStart(); });
+$('#znRecord').addEventListener('click', () => { if (znRec.starting) return; znRecStop(true); znRecStart(); });
 $('#znStop').addEventListener('click', () => znRecStop(false));
-$('#znAgain').addEventListener('click', () => { znRecStop(true); znRecStart(); });
+$('#znAgain').addEventListener('click', () => { if (znRec.starting) return; znRecStop(true); znRecStart(); });
 $('#znCancel').addEventListener('click', () => znRecStop(true));
 $('#znKeep').addEventListener('click', async () => {
   if (!znRec.blob) return;
@@ -10806,7 +10870,7 @@ function configNow(){
     API_START: v('API_START'), API_PROGRESS: v('API_PROGRESS'), API_COMPLETE: v('API_COMPLETE'),
     ADDITIONAL_FONTS: v('ADDITIONAL_FONTS') ? parseFontList(v('ADDITIONAL_FONTS')).map(f => f.name + (f.axes ? ':' + f.axes : '')) : [],
     MATH_DELIMITERS: v('MATH_DELIMITERS'),
-    ZONOS_VOICES: v('ZONOS_VOICES') ? znVoiceList(v('ZONOS_VOICES')) : [],
+    ZONOS_VOICES: v('ZONOS_VOICES') ? znVoiceList(v('ZONOS_VOICES')).map(({ name, url }) => ({ name, url })) : [],
     KEEP_POSITIONS_DAYS: v('KEEP_POSITIONS_DAYS'), SEARCH_MAX: v('SEARCH_MAX'), COMIC_PART: v('COMIC_PART'),
     TTS_SERVER: { api: here(TTS_SERVER.api), voices: here(TTS_SERVER.voices) }, FULL_PRECISION: v('FULL_PRECISION'),
     LOOKAHEAD_SEC: v('LOOKAHEAD_SEC'), SAVED_AUDIO_MB: v('SAVED_AUDIO_MB'), NCACHE_SEC, SPAN_MAX: { ...SPAN_MAX },
@@ -10816,9 +10880,13 @@ function configNow(){
   const theme = document.documentElement.getAttribute('data-theme');
   // (The site's themes and the reader's own, as a site's THEMES: E-39. One in use named as the site will call it.)
   const custom = [...siteThemes, ...userThemes];
-  if (custom.length) c.THEMES = custom.map(({ name, dark, page, text, accent, ui, uiText, code, alerts }) => ({ name, dark, page, text, accent, ...(ui ? { ui } : {}), ...(uiText ? { uiText } : {}), ...(code ? { code } : {}), ...(alerts ? { alerts } : {}) }));
+  // (Each with its id, as the site will call it, so names alike as ids, or the same name twice, stay apart: M-209.)
+  const siteIds = new Map();
+  for (const th of custom) siteIds.set(th, themeFree(th.id[0] === 's' ? th.id : 's-' + themeSlug(th.name), id => [...siteIds.values()].includes(id)));
+  const asSite = th => siteIds.get(th);
+  if (custom.length) c.THEMES = custom.map(th => ({ ...th, id: asSite(th) })).map(({ id, name, dark, page, text, accent, ui, uiText, code, alerts }) => ({ id, name, dark, page, text, accent, ...(ui ? { ui } : {}), ...(uiText ? { uiText } : {}), ...(code ? { code } : {}), ...(alerts ? { alerts } : {}) }));
   if (THEMES.includes(theme)) c.theme = theme;
-  else if (themeById(theme)) c.theme = 's-' + themeSlug(themeById(theme).name);
+  else if (themeById(theme)) c.theme = asSite(themeById(theme));
   Object.assign(c, { layout: ed.on && ed.prevLayout ? ed.prevLayout : layout, width: WIDTHS[widthStep][0], font: fontFace, fontSize: fontPct, lineSpacing: lineH });
   if (['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(tts.engine)) c.readAloud = tts.engine;
   c.shortcuts = singleKeys;
@@ -10919,7 +10987,12 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   setWidth(widthStep, false);
   setLayout(layout, false);
   syncFontMenu();
-  { const t = store.get('spine:theme'); if (knownTheme(t) && !LOCKED.has('theme')) document.documentElement.setAttribute('data-theme', t); }
+  // (A theme chosen in another folder that this one doesn't have: this folder's default, or the device's: M-208.)
+  if (!LOCKED.has('theme')) {
+    const t = store.get('spine:theme'), f = store.get('spine:folderTheme:' + location.pathname.replace(/[^/]*$/, '')), el = document.documentElement;
+    if (knownTheme(t)) el.setAttribute('data-theme', t);
+    else if (t != null) { if (knownTheme(f)) el.setAttribute('data-theme', f); else el.removeAttribute('data-theme'); }
+  }
   applyThemeVars(); renderThemeChoices();
   syncThemeBtn();
   setToc(!narrow.matches && SHOW_CONTENTS);

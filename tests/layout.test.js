@@ -621,3 +621,19 @@ test('a book\'s own responsive multi-column box follows its media queries after 
   await h.openReader(page, `${h.READER}?book=books/nested-cols.html`);
   assert.ok(Date.now() - t0 < 15000, `${Date.now() - t0} ms`);
 });
+
+test('a book\'s rules on the marks of the multi-column check can\'t make it call itself; its inline span in its own box is kept (round 34 review, H-58, L-430)', async () => {
+  const page = await h.newPage();
+  for (const b of ['hostile-spanloop', 'hostile-spanloop2']) {
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${b}.epub`);
+    assert.ok(Date.now() - t0 < 8000, `${b}: ${Date.now() - t0} ms`);
+    assert.doesNotMatch(await h.notice(page), /Couldn't display|call stack/, b);
+    assert.ok(await h.inFrame(page, doc => doc.getElementById('hp5')?.getBoundingClientRect().height > 0), `${b}: the chapter is shown`);
+    assert.deepEqual(page.errors, []);
+  }
+  await h.openReader(page, `${h.READER}?book=books/own-inlinespan.epub`, { 'spine:layout': 'one' });
+  const [span, w, box] = await h.inFrame(page, doc => { const s = doc.getElementById('s'); return [getComputedStyle(s).columnSpan, s.getBoundingClientRect().width, doc.getElementById('m').getBoundingClientRect().width]; });
+  assert.equal(span, 'all');
+  assert.ok(w > box * 0.9, `spans the box: ${w} of ${box}`);
+});

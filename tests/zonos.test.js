@@ -347,3 +347,92 @@ test('ZONOS3: a voice recorded in Settings with the microphone is kept and liste
   assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['Recorded']);
   assert.equal(await p.isHidden('#znRec'), true);
 });
+
+test('ZONOS3: Settings closed while the browser asks for the microphone records nothing; a second Record meanwhile is ignored (round 34 review, H-56, H-57)', async () => {
+  const p = await page();
+  // (The browser's question answered after 1.5 s; every stream it gives kept, to see none is left on.)
+  await p.addInitScript(() => {
+    window.micStreams = [];
+    const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async c => { const s = await real(c); window.micStreams.push(s); await new Promise(r => setTimeout(r, window.micDelay ?? 1500)); return s; };
+  });
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  const live = () => p.evaluate(() => window.micStreams.filter(s => s.getTracks().some(t => t.readyState === 'live')).length);
+  await p.click('#setBtn');
+  await p.click('#znRecord');
+  await p.click('#setClose');
+  await p.waitForTimeout(2500);
+  assert.equal(await live(), 0, 'the microphone is off');
+  assert.equal(await p.isHidden('#znRec'), true);
+  await p.click('#setBtn');
+  await p.click('#znRecord');
+  await p.click('#znRecord');
+  await p.waitForSelector('#znRec:not([hidden])', { timeout: 5000 });
+  await p.waitForTimeout(500);
+  assert.equal(await p.evaluate(() => window.micStreams.length), 2, 'the second click asked for nothing more');
+  await p.click('#znCancel');
+  assert.equal(await live(), 0);
+  // A take after these is whole, and saved.
+  await p.evaluate(() => { window.micDelay = 0; });
+  await p.click('#znRecord');
+  await p.waitForFunction(() => document.querySelector('#znTime').textContent === '0:01', null, { timeout: 10000 });
+  await p.click('#znStop');
+  await p.waitForSelector('.zn-save:not([hidden])');
+  await p.fill('#znName', 'After');
+  await p.click('#znKeep');
+  await p.waitForFunction(() => /Added After/.test(document.querySelector('#znMsg').textContent), null, { timeout: 10000 });
+  assert.equal(await live(), 0);
+});
+
+test('ZONOS3: a lost GPU while a voice is being made from a recording stops reading with the reason (round 34 review, M-204)', async () => {
+  const p = await page();
+  await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true, 'spine:zonosVoice': `url:${h.SITE}/tts-voices/narrator.wav` });
+  await p.evaluate(() => { window.zonosFakeHangSpeakers = true; });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => window.zonosFake?.speakerHangs > 0, null, { timeout: 20000 });
+  await p.evaluate(() => window.zonosFatal('GPU device lost: test'));
+  await p.waitForFunction(() => /reload the page/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 10000 });
+});
+
+test('ZONOS3: reading starts without waiting for the check of site voices not chosen (round 34 review, M-205)', async () => {
+  await fetch(`${h.SITE}/__head?delay=6&path=no-such.wav`);
+  try {
+    const p = await page();
+    await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true });
+    const t0 = Date.now();
+    await p.keyboard.press('r');
+    await p.waitForFunction(() => window.zonosFake?.requests.length > 0, null, { timeout: 20000 });
+    assert.ok(Date.now() - t0 < 4000, `first passage asked for after ${Date.now() - t0} ms`);
+  } finally { await fetch(`${h.SITE}/__head?delay=0`); }
+});
+
+test('ZONOS3: a site voice\'s relative address is another voice in each folder (round 34 review, M-206)', async () => {
+  const p = await page();
+  const url = f => `${h.SITE}/${f}/index.html?book=/reader/books/long.epub`, id = f => `url:${h.SITE}/${f}/voice.wav`;
+  await h.openReader(p, url('zonos-rel-a'), { ...zonos, 'spine:agreed:zonos': true, 'spine:zonosVoice': id('zonos-rel-a') });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => window.zonosFake?.requests.some(r => r.speaker_mode === 'embedding'), null, { timeout: 20000 });
+  const a = (await fake(p)).requests.find(r => r.speaker_mode === 'embedding').embedding0;
+  // The same browser (its storage kept) in the other folder, its voice chosen.
+  await p.evaluate(v => localStorage.setItem('spine:zonosVoice', JSON.stringify(v)), id('zonos-rel-b'));
+  await p.goto(url('zonos-rel-b')); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => window.zonosFake?.requests.some(r => r.speaker_mode === 'embedding'), null, { timeout: 20000 });
+  const f = await fake(p);
+  assert.equal(f.speakers, 1, 'made from this folder\'s recording');
+  assert.notEqual(f.requests.find(r => r.speaker_mode === 'embedding').embedding0, a);
+});
+
+test('ZONOS3: a copy of the models from an older fetch-zonos.sh says to run it again (round 34 review, M-207)', async () => {
+  const LOCAL = `${h.SITE}/zonos-local/index.html?book=/reader/books/long.epub`;
+  let p = await page();
+  await h.openReader(p, LOCAL, { ...zonos, 'spine:agreed:zonos': true, 'spine:zonosVoice': `url:${h.SITE}/tts-voices/narrator.wav` });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /no speaker encoder.*run fetch-zonos\.sh again/.test(document.querySelector('#notice').textContent), null, { timeout: 20000 });
+  assert.equal((await fake(p)).speakers || 0, 0, 'not handed to the engine');
+  await p.close();
+  p = await page({ fail: 'the edit manifest is a page' });
+  await h.openReader(p, LOCAL, { ...zonos, 'spine:agreed:zonos': true });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /older fetch-zonos\.sh: run it again/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
+});

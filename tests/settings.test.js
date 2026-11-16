@@ -662,3 +662,42 @@ test('code and alert colours follow the theme: readable on its background whatev
   assert.equal(al.find(a => a[0] === 'NOTE')[1], 'rgb(0, 255, 255)');
   for (const [k, c, bg] of al) assert.ok(contrast(c, bg) >= 4.4, `${k}: ${c} on ${bg}`);
 });
+
+test('site themes whose names have no Latin letters, or are alike as ids, are all kept, and "theme" names the right one; Generate config keeps the reader\'s own apart (round 34 review, M-209)', async () => {
+  const page = await h.newPage();
+  const warns = []; page.on('console', m => { if (m.type() === 'warning') warns.push(m.text()); });
+  await h.openReader(page, `${h.SITE}/folder-themes-cyr/index.html?book=/reader/books/long.epub`);
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.documentElement).backgroundColor), 'rgb(250, 250, 240)', 'Светлая, as the config says');
+  assert.ok(!warns.some(w => /THEMES/.test(w)), warns.join(' | '));
+  await openSettings(page);
+  const names = await page.$$eval('.set-themes .set-theme', ls => ls.map(l => l.textContent.trim()));
+  assert.deepEqual(names.slice(-4), ['AaТёмная', 'AaСветлая', 'AaC', 'AaC++']);
+  const ids = await page.$$eval('.set-themes .set-theme input', is => is.map(i => i.value).filter(v => v.startsWith('s-')));
+  assert.equal(new Set(ids).size, 4, ids.join(' '));
+  // The reader's own two, named in Cyrillic, one in use: Generate config gives each its id, and names the one in use.
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:themes': [
+    { id: 'u-n', name: 'Ночь', dark: true, page: '#000000', text: '#ffffff', accent: '#888888' },
+    { name: 'День', page: '#ffffee', text: '#000000', accent: '#884400' }] });
+  const day = await page.evaluate(() => [...document.querySelectorAll('.set-themes .set-theme input')].map(i => i.value).find(v => v.startsWith('u-') && v !== 'u-n'));
+  await page.evaluate(id => { localStorage.setItem('spine:theme', JSON.stringify(id)); }, day);
+  await page.reload(); await h.waitForBook(page);
+  await openSettings(page);
+  await page.click('#setGenerate');
+  const cfg = await h.waitFor(async () => { const t = await page.$eval('#cfgText', el => el.value).catch(() => ''); return t && JSON.parse(t); }, 5000);
+  assert.deepEqual(cfg.THEMES.map(t => t.name), ['Ночь', 'День']);
+  assert.equal(new Set(cfg.THEMES.map(t => t.id)).size, 2);
+  assert.equal(cfg.theme, cfg.THEMES[1].id);
+});
+
+test('a site theme chosen in one folder: another folder without it follows the device; back in the first, it is drawn at once (round 34 review, M-208)', async () => {
+  const page = await h.newPage();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await h.openReader(page, `${h.SITE}/folder-themes/index.html?book=/reader/books/long.epub`, { 'spine:theme': 's-paper' });
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), 's-paper');
+  await page.goto(`${h.SITE}/folder-a/index.html`); await h.waitForBook(page);
+  assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), null, 'not Paper, which this folder hasn\'t');
+  assert.equal(await page.evaluate(() => document.querySelector('#themeBtn').classList.contains('dark')), true, 'the device\'s dark theme');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--page-bg').trim().toLowerCase()) === '#fdfdfb', false);
+  await page.goto(`${h.SITE}/folder-themes/index.html?book=/reader/books/long.epub`, { waitUntil: 'domcontentloaded' });
+  assert.deepEqual(await page.evaluate(() => [document.documentElement.getAttribute('data-theme'), document.documentElement.style.getPropertyValue('--page-bg')]), ['s-paper', '#fbf7ee'], 'drawn by the script in <head>');
+});

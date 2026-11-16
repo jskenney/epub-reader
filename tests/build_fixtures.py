@@ -73,13 +73,18 @@ export async function localFetch(path, init = {}) {
   // Custom voices (E-48): a clip cached in a session (the engine wants the header), and its embedding, made with
   // the speaker encoder (downloaded the first time). A clip starting "NOTAUDIO" can't be decoded.
   const session = new Headers(init.headers).get('x-tts-session-id');
+  if (path === '/v2/speakers' && init.method === 'POST' && window.zonosFakeHangSpeakers) {
+    window.zonosFake.speakerHangs = (window.zonosFake.speakerHangs || 0) + 1;
+    return new Promise((_, rej) => init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))));
+  }
   if (path === '/v2/speakers' && init.method === 'POST') {
     if (!session) return json({ detail: 'X-TTS-Session-ID header is required' }, 400);
     const body = JSON.parse(init.body), clip = atob(body.speaker_audio_base64 || '');
     window.zonosFake.speakers = (window.zonosFake.speakers || 0) + 1;
     if (!clip.length || clip.startsWith('NOTAUDIO')) return json({ detail: 'Provide an audio file to cache as the speaker reference.' }, 400);
     const id = 'spk_' + made.size;
-    made.set(id, clip.length);
+    let sum = 0; for (let i = 0; i < clip.length; i++) sum = (sum * 31 + clip.charCodeAt(i)) % 9973;
+    made.set(id, sum);
     return json({ id, label: body.label });
   }
   const m = /^\/v2\/speakers\/([^/]+)\/embedding$/.exec(path);
@@ -261,7 +266,8 @@ def main():
         if done:
             (models / "NOTICE.txt").write_text("fetch-zonos.sh\n")
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
-        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/"}))
+        # (A site voice: zonos-local is a copy from before E-48, with no speaker encoder: round 34 review, M-207.)
+        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": "Narrator = /tts-voices/narrator.wav"}))
     # Linked copies in two folders, each with its own default book and config (per-folder settings).
     # folder-a and folder-b share the reader's libraries and fonts (LIB_FILES); folder-c has its own linked copies
     # and no config.
@@ -348,6 +354,14 @@ def main():
         {"name": "Bad", "page": "red;background:url(x)", "text": "#000", "accent": "#000"},
         # (E-40: light by its flag on a dark page, with colours of its own for keywords and notes)
         {"name": "Odd", "dark": False, "page": "#202020", "text": "#f0f0f0", "accent": "#ffcc00", "code": {"keyword": "#ff00ff"}, "alerts": {"note": "#00ffff"}}]}))
+    # Site themes whose names have no Latin letters, or are alike as ids (round 34 review, M-209).
+    (SITE / "folder-themes-cyr").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-themes-cyr" / "index.html")
+    (SITE / "folder-themes-cyr" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "theme": "Светлая", "THEMES": [
+        {"name": "Тёмная", "dark": True, "page": "#000000", "text": "#eeeeee", "accent": "#88aaff"},
+        {"name": "Светлая", "page": "#fafaf0", "text": "#111111", "accent": "#aa3300"},
+        {"name": "C", "page": "#ffffff", "text": "#000000", "accent": "#0000aa"},
+        {"name": "C++", "page": "#eeeeff", "text": "#000000", "accent": "#0000aa"}]}, ensure_ascii=False))
     (SITE / "folder-brand" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand3" / "logo.png").write_bytes(png(300, 50, (30, 90, 160)))
     (SITE / "folder-brand2" / "tall.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="80"><rect width="20" height="80" fill="purple"/></svg>')
@@ -1177,6 +1191,12 @@ def main():
     # (round 32 review, M-194, M-195: a book's inline important span; a "multi-column box" shown as contents)
     epub(books / "hostile-inlinespan.epub", "Hostile inlinespan", [("c1.xhtml", "One", hp.replace("<p id='hp5'>", "<p id='hp5' style='column-span:all !important'>"), "")], uid="urn:hostile-inlinespan")
     epub(books / "hostile-contents.epub", "Hostile contents", [("c1.xhtml", "One", '<div class="m">' + hp + '</div>', "<style>.m{columns:2;display:contents}.m p:nth-child(5){column-span:all}</style>")], uid="urn:hostile-contents")
+    # (round 34 review, H-58: rules on the attributes the multi-column check marks with, which made it call itself; L-430:
+    # a book's inline span in its own box)
+    epub(books / "hostile-spanloop.epub", "Hostile spanloop", [("c1.xhtml", "One", '<div class="m">' + hp + '</div>', "<style>.m{columns:2}.m[data-span-box]{display:contents}</style>"),
+         ("c2.xhtml", "Two", "<p id='two'>Chapter two.</p>", "")], uid="urn:hostile-spanloop")
+    epub(books / "hostile-spanloop2.epub", "Hostile spanloop2", [("c1.xhtml", "One", '<div class="m">' + hp + '</div>', "<style>.m{columns:2}.m:has(> [data-span-own]){display:inline}</style>")], uid="urn:hostile-spanloop2")
+    epub(books / "own-inlinespan.epub", "Own inlinespan", [("c1.xhtml", "One", '<div class="m" id="m"><p id="s" style="column-span:all">Spanning heading</p>' + "".join(f"<p>Entry {i}.</p>" for i in range(20)) + "</div>" + hp, "<style>.m{columns:2;column-gap:10px}</style>")], uid="urn:own-inlinespan")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")
     # A folder book whose second and third chapters the test server makes, far too large (round 27 review, L-359), and a
@@ -1442,6 +1462,15 @@ def main():
 
     # A server voice for the mock Breeze API.
     wav(SITE / "tts-voices" / "narrator.wav", 2.0)
+    # Two folders whose config names a voice by the same relative address, a different recording in each, the same
+    # size and date (so the same version), for ZONOS3 (round 34 review, M-206).
+    clip = (SITE / "tts-voices" / "narrator.wav").read_bytes()
+    for folder, b in (("zonos-rel-a", clip), ("zonos-rel-b", clip[:-2] + bytes([(clip[-2] + 7) % 256, clip[-1]]))):
+        (SITE / folder).mkdir()
+        os.symlink(REPO / "index.html", SITE / folder / "index.html")
+        (SITE / folder / "voice.wav").write_bytes(b)
+        os.utime(SITE / folder / "voice.wav", (1700000000, 1700000000))
+        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": "Here = voice.wav"}))
     wav(SITE / "tts-voices" / "second.wav", 1.5)
     (SITE / "tts-voices" / "voices.json").write_text(json.dumps({"voices": [
         {"id": "narrator", "name": "Test narrator", "ref_audio": "narrator.wav", "ref_text": "A test clip.", "seed": 42, "cfg_scale": 1.0},

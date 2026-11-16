@@ -771,6 +771,11 @@ full-size decoder), which the engine reads when it starts and treats a missing o
 answers 404; a server that answers missing files with a page and status 200 would otherwise stop it starting. The reader uses them when all are there, and otherwise loads the models from Hugging Face. Re-runs
 skip finished files, every file is checked against `checksums/zonos.sha256`, and `zonos/models/` is git-ignored.
 
+**After updating the reader, run `./fetch-zonos.sh` again**: a newer reader can need files an older script didn't
+fetch (the speaker encoder for voices of your own, the start-up manifests), and only the missing ones are downloaded.
+Without them, voices of your own say the site's copy has no speaker encoder, and the voice may not start on a server
+that answers missing files with a page.
+
 The engine itself (`zonos/engine/`: `engine.js` and its two workers, about 1 MB) is part of the reader, not
 downloaded: it isn't published anywhere to load from, and browsers start its workers only from the page's own
 site, so it must be served from the same site as `index.html` (under `VOICE_FILES`, like the other voice files).
