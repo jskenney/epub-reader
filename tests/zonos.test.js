@@ -255,3 +255,95 @@ test('ZONOS3: without room in the site\'s storage quota for the models, says so 
   assert.match(await p.textContent('#notice'), /this site uses 600 of its 1000 MB\)\. Free some space on the computer's disk, or lower \(or clear\) "Saved speech kept in this browser" in Settings/);
   assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), 'reads all the same');
 });
+
+// --- Custom voices (E-48) ---
+const VOICES = `${h.SITE}/zonos-voices/index.html?book=/reader/books/long.epub`;
+const voiceList = p => p.$$eval('#ttsVoice option', os => os.map(o => o.textContent));
+
+test('ZONOS3 voices from recordings in reader-config.json: listed first, made once into an embedding, kept for later visits', async () => {
+  const p = await page();
+  await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true });
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  // The bad entry (not a web address) is left out; the missing one is listed (it fails only when used).
+  const names = await voiceList(p);
+  assert.deepEqual(names.slice(0, 2), ['Site narrator (this site)', 'Missing (this site)']);
+  assert.ok(!names.some(n => n.startsWith('Bad')));
+  assert.equal(names[2], 'Savannah (en, American, female)', 'then the built-in voices');
+  // Chosen: the recording is made into a voice once, then sent as its embedding with each passage.
+  await p.selectOption('#ttsVoice', { label: 'Site narrator (this site)' });
+  await p.waitForFunction(() => window.zonosFake.requests.filter(r => r.speaker_mode === 'embedding').length >= 2, null, { timeout: 20000 });
+  let f = await fake(p);
+  const custom = f.requests.filter(r => r.speaker_mode === 'embedding');
+  assert.equal(f.speakers, 1, 'the recording made into a voice once');
+  assert.ok(custom.every(r => r.embedding0 === custom[0].embedding0 && r.speaker_embedding_id === undefined));
+  // Next visit: the embedding is kept in the browser, so nothing is made again.
+  await p.reload(); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => window.zonosFake?.requests.some(r => r.speaker_mode === 'embedding'), null, { timeout: 20000 });
+  f = await fake(p);
+  assert.equal(f.speakers || 0, 0, 'not made again on a later visit');
+  // The missing one, chosen: reading stops with the reason.
+  await p.selectOption('#ttsVoice', { label: 'Missing (this site)' });
+  await p.waitForFunction(() => /recording for Missing isn't at \/tts-voices\/no-such\.wav \(404\)/.test(document.querySelector('#notice').textContent), null, { timeout: 20000 });
+});
+
+test('ZONOS3 voices from recordings in Settings: a bad entry is refused with the reason; Generate config lists them', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.click('#setBtn');
+  await p.fill('#set-ZONOS_VOICES', 'Narrator = mailto:x');
+  await p.locator('#set-ZONOS_VOICES').dispatchEvent('change');
+  assert.match(await p.$eval('#set-ZONOS_VOICES', el => el.closest('.set-row').querySelector('.set-def').textContent), /Not changed: mailto:x isn't a web address/);
+  await p.fill('#set-ZONOS_VOICES', 'Narrator = /tts-voices/narrator.wav | /tts-voices/second.wav');
+  await p.locator('#set-ZONOS_VOICES').dispatchEvent('change');
+  await p.click('#setGenerate');
+  const cfg = await h.waitFor(async () => { const t = await p.$eval('#cfgText', el => el.value).catch(() => ''); return t && JSON.parse(t); }, 5000);
+  assert.deepEqual(cfg.ZONOS_VOICES, [{ name: 'Narrator', url: '/tts-voices/narrator.wav' }, { name: 'second', url: '/tts-voices/second.wav' }]);
+});
+
+test('ZONOS3: a voice uploaded in Settings is kept, listed first and used; a file that isn\'t audio is refused', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.click('#setBtn');
+  await p.setInputFiles('#znFile', { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('NOTAUDIO not a recording') });
+  await p.waitForFunction(() => /notes\.txt isn't a recording this browser can play/.test(document.querySelector('#znMsg').textContent));
+  await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
+  await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
+  assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['narrator']);
+  // Renamed in Settings, then chosen in the read-aloud bar.
+  await p.fill('#znOwnList input', 'Me reading'); await p.locator('#znOwnList input').dispatchEvent('change');
+  await p.waitForFunction(() => /Renamed to Me reading/.test(document.querySelector('#znMsg').textContent));
+  await p.click('#setClose');
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  assert.equal((await voiceList(p))[0], 'Me reading (yours)');
+  await p.selectOption('#ttsVoice', { label: 'Me reading (yours)' });
+  await p.waitForFunction(() => window.zonosFake.requests.some(r => r.speaker_mode === 'embedding'), null, { timeout: 20000 });
+  assert.equal((await fake(p)).speakers, 1);
+  // Kept after a reload; deleted, it's gone from both lists.
+  await p.reload(); await h.waitForBook(p);
+  await p.click('#setBtn');
+  await p.waitForFunction(() => document.querySelectorAll('#znOwnList li').length === 1);
+  p.once('dialog', d => d.accept());
+  await p.click('#znOwnList button:has-text("Delete")');
+  await p.waitForFunction(() => /Deleted Me reading/.test(document.querySelector('#znMsg').textContent));
+  assert.equal(await p.$$eval('#znOwnList li', l => l.length), 0);
+});
+
+test('ZONOS3: a voice recorded in Settings with the microphone is kept and listed', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.click('#setBtn');
+  await p.click('#znRecord');
+  await p.waitForSelector('#znRec:not([hidden])');
+  await p.waitForFunction(() => document.querySelector('#znTime').textContent === '0:02', null, { timeout: 10000 });
+  await p.click('#znStop');
+  await p.waitForSelector('.zn-save:not([hidden])');
+  assert.equal(await p.isVisible('#znTake'), true, 'played back before saving');
+  await p.fill('#znName', 'Recorded');
+  await p.click('#znKeep');
+  await p.waitForFunction(() => /Added Recorded/.test(document.querySelector('#znMsg').textContent), null, { timeout: 10000 });
+  assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['Recorded']);
+  assert.equal(await p.isHidden('#znRec'), true);
+});

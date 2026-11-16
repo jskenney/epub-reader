@@ -12,7 +12,8 @@ const READER = `${SITE}/reader/index.html`;
 let browser;
 const contexts = [];
 async function launch() {
-  browser ??= await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  // (A fake microphone, allowed without asking, for recording a voice: E-48.)
+  browser ??= await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   return browser;
 }
 async function close() { await browser?.close(); browser = null; }

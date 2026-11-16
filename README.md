@@ -471,6 +471,16 @@ site as the reader.
   part of the reader (`zonos/engine/`, built from ZONOS3-Mini's source by
   `tools/build-zonos-engine.sh`); code MIT, model Apache-2.0. On a slow GPU it can
   generate slower than it speaks, which causes pauses between paragraphs.
+  **Custom voices** (listed first among ZONOS3's voices): from recordings named in
+  `ZONOS_VOICES` (Settings, or a list in `reader-config.json`: a name and the address of
+  any recording the browser can play), or uploaded or recorded with the microphone in
+  Settings ("Your ZONOS3 voices", kept in this browser). The first time a voice is
+  used, ZONOS3's speaker encoder (about 45 MB, once) turns its recording into a speaker
+  embedding on the GPU, which the reader keeps, so later visits need neither the
+  recording nor the encoder. 5–15 seconds of clean speech from one speaker works best.
+  Such voices catch a speaker's sound, but less of the exact recording than ZONOS3's
+  server cloning; recordings stay in the browser; a recording on another site must
+  allow cross-origin reads; recording needs an https: page.
 - Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
   either of two with the same API:
   - Breeze TTS 2 ([jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server)):
@@ -754,7 +764,8 @@ voices (Kokoro reads English, and the server voice the languages its server list
 
 This fills `./zonos/models/` with the parts of ZONOS3-Mini's browser export that reading aloud uses, at a
 pinned revision of `Zyphra/ZONOS3-Mini`: the backbone, the audio decoder, the steering file, the alignment
-heads and the built-in voices (not the voice-cloning encoders or speech editing, about 4.7 GB more), with a
+heads, the built-in voices and the speaker encoder custom voices are made with (not the reference-cloning encoders
+or speech editing, about 4.7 GB more), with a
 `NOTICE.txt`. It also fetches the manifests of three models it leaves out (speech editing, its aligner, the
 full-size decoder), which the engine reads when it starts and treats a missing one only as "not here" when the server
 answers 404; a server that answers missing files with a page and status 200 would otherwise stop it starting. The reader uses them when all are there, and otherwise loads the models from Hugging Face. Re-runs
@@ -939,6 +950,7 @@ default books and the memory and request sizes stay the site's to set.
 | `NAVBAR_ALT` ✓ | `''` | What the logo is called, for screen readers: the link's name when `NAVBAR_LINK` is set, the picture's description otherwise (`'Example Press'`). `''`: the link is named by where it goes. |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
+| `ZONOS_VOICES` ✓ ⚙ | `''` | ZONOS3 voices from recordings, listed first among ZONOS3's voices (custom voices): in `reader-config.json` a list (`[{"name": "Narrator", "url": "/voices/narrator.mp3"}]`, or `"Narrator = /voices/narrator.mp3"` strings); in Settings, `Name = address` entries separated by `\|`. An address on this site, or on another that allows cross-origin reads; any recording the browser can play. A recording replaced at the same address (a new ETag or date) makes a new voice. A bad entry is left out (with a warning in the console) or, in Settings, refused with the reason. |
 | `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lora", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
 | `MATH_DELIMITERS` ✓ ⚙ | `"\\( \\["` | The marks around TeX that is drawn as math in HTML pages and EPUB chapters, separated by spaces (in `reader-config.json` a list too): any of `\(` for `\(…\)`, `\[` for `\[…\]`, `$$` for `$$…$$` (display) and `$` for `$…$`, which is read as GitHub reads it, so "$5 and $10" stays text. `""` reads none. Markdown always reads its own (`$…$`, `$$…$$`, ` ```math `). Applies when the page is reloaded. |
 | `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |

@@ -42,7 +42,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 // request's stream early as if finished (as the engine does after an error once audio has started); window.zonosFakeHang
 // makes streams wait for good (until aborted).
 let started = null;
-const fatal = [];
+const fatal = [], encoder = [], made = new Map();
 window.zonosFatal = msg => { for (const cb of fatal) cb(msg); };
 export const engine = {
   init(progress, opts) {
@@ -61,17 +61,45 @@ export const engine = {
     })().catch(e => { started = null; throw e; });
   },
   onFatal(cb) { fatal.push(cb); window.zonosFatals = fatal.length; },
-  onEncoderProgress() {},
+  onEncoderProgress(cb) { encoder.push(cb); },
 };
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
 export async function localFetch(path, init = {}) {
-  if (path === '/v2/speakers') return json({ speakers: [
+  if (path === '/v2/speakers' && (init.method || 'GET') === 'GET') return json({ speakers: [
     { id: 'default_gaspard', label: 'Gaspard fr M 1', original_name: 'Gaspard_fr_M_1.mp3', is_default: true },
     { id: 'default_savannah', label: 'Savannah en American F 1', original_name: 'Savannah_en-American_F_1.mp3', is_default: true },
     { id: 'default_willow', label: 'Willow en asrm F 1', original_name: 'Willow_en-asrm_F_1.wav', is_default: true },
     { id: 'session_voice', label: 'x', original_name: null, is_default: false }] });
+  // Custom voices (E-48): a clip cached in a session (the engine wants the header), and its embedding, made with
+  // the speaker encoder (downloaded the first time). A clip starting "NOTAUDIO" can't be decoded.
+  const session = new Headers(init.headers).get('x-tts-session-id');
+  if (path === '/v2/speakers' && init.method === 'POST') {
+    if (!session) return json({ detail: 'X-TTS-Session-ID header is required' }, 400);
+    const body = JSON.parse(init.body), clip = atob(body.speaker_audio_base64 || '');
+    window.zonosFake.speakers = (window.zonosFake.speakers || 0) + 1;
+    if (!clip.length || clip.startsWith('NOTAUDIO')) return json({ detail: 'Provide an audio file to cache as the speaker reference.' }, 400);
+    const id = 'spk_' + made.size;
+    made.set(id, clip.length);
+    return json({ id, label: body.label });
+  }
+  const m = /^\/v2\/speakers\/([^/]+)\/embedding$/.exec(path);
+  if (m) {
+    if (!made.has(m[1])) return json({ detail: 'unknown voice' }, 400);
+    for (const cb of encoder) cb({ models: ['spk'], loaded: 45e6, total: 45e6, fetched: window.zonosFake.encoded ? 0 : 45e6 });
+    window.zonosFake.encoded = (window.zonosFake.encoded || 0) + 1;
+    return json({ id: m[1], embedding: Array.from({ length: 192 }, (_, i) => ((made.get(m[1]) + i) % 97) / 97) });
+  }
   if (path !== '/v2/generate') return json({ detail: 'Not Found' }, 404);
   const body = JSON.parse(init.body);
+  // (An embedding file: its NPY header checked, and its first value kept, to tell voices apart.)
+  if (body.speaker_embedding_base64) {
+    const npy = Uint8Array.from(atob(body.speaker_embedding_base64), c => c.charCodeAt(0));
+    const hlen = npy[8] | npy[9] << 8, header = String.fromCharCode(...npy.slice(10, 10 + hlen));
+    if (String.fromCharCode(...npy.slice(1, 6)) !== 'NUMPY' || !/'descr': '<f4'/.test(header) || !/\(192,\)/.test(header) || (10 + hlen) % 64)
+      return json({ detail: 'bad embedding file' }, 400);
+    body.embedding0 = new Float32Array(npy.buffer.slice(10 + hlen, 14 + hlen))[0];
+    delete body.speaker_embedding_base64;
+  }
   window.zonosFake.requests.push(body);
   if (body.text.includes('FAILME')) return json({ detail: 'Unknown cached speaker id' }, 400);
   const n = Math.round(44100 * (0.3 * body.text.split(/\s+/).length + 0.3));
@@ -216,6 +244,11 @@ def main():
     os.symlink(REPO / "zonos" / "engine", reader / "zonos" / "engine")
     (SITE / "zonos-fake").mkdir()
     (SITE / "zonos-fake" / "engine.js").write_text(ZONOS_FAKE)
+    # A folder whose config gives ZONOS3 voices from recordings: one there, one missing (E-48).
+    (SITE / "zonos-voices").mkdir()
+    os.symlink(REPO / "index.html", SITE / "zonos-voices" / "index.html")
+    (SITE / "zonos-voices" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": [
+        {"name": "Site narrator", "url": "/tts-voices/narrator.wav"}, "Missing = /tts-voices/no-such.wav", {"name": "Bad", "url": "ftp://x/y.wav"}]}))
     # Self-hosted ZONOS3 models (stand-ins: the fake engine reads none): a finished download, with fetch-zonos.sh's
     # NOTICE.txt, and one that stopped partway, without it (REVIEW.md E-46 review).
     for folder, done in (("zonos-local", True), ("zonos-partial", False)):
