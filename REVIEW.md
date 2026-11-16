@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-13, round 32): `index.html` (about 10,400 lines), the fetch scripts,
+Review of the repository (2026-11-16, round 34): `index.html` (about 11,100 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -655,9 +655,50 @@ Findings (all fixed): **High** H-54, H-55. **Medium** M-201 to M-203. **Low** L-
 fixtures came after the suite's site was built; they pass with them), and six need `SLOW=1` or `NETWORK=1`. The ten
 ZONOS3 tests pass after the fixes, and the five for this round fail on the code before them.
 
+### Round 34
+
+A full review at `a955cc8` (after E-46 to E-48 and L-427 to L-429), by three reviewers each on a copy of their own and
+given the code and the areas to cover, not the author's conclusions: one adversarial on ZONOS3 and E-46 to E-48 (the
+reader against the engine's own source, with a stand-in engine that can hang and Chromium's fake microphone); one on
+opening and building books, security, the editor and themes (hostile books, round 32's fixes re-checked); one on the
+reader as its readers and site owners use it (read aloud, Settings, the scripts, the README, the tests). Findings are
+recorded, not fixed. Where two reviewers found the same thing it is one item; I re-read the code of each High item.
+
+**What it found.**
+- *The microphone.* Closing Settings while the browser is still asking for the microphone leaves it recording, for up
+  to 30 s, with no controls in sight (H-56); a second Record before the first is allowed leaves a microphone stream
+  open until the page closes and mixes its sound into later takes (H-57).
+- *A book that freezes the reader.* The multi-column check (M-196's fix) can be made to call itself until the stack
+  runs out, by a book rule on the attribute it marks boxes with (`[data-span-box]{display:contents}`): 12-15 s frozen
+  and the chapter not shown (H-58). The M-194 fix also strips a book's inline `column-span` inside its own box (L-430).
+- *Custom voices.* M-201 is back for them: if the engine dies while a voice is being made, reading waits for good
+  (M-204). ZONOS3 waits for a HEAD request to every site voice before reading starts (M-205). A relative address shares
+  its keys across folders, so one folder can be read in another's recording (M-206). A site that ran `fetch-zonos.sh`
+  before E-48 has no speaker encoder, and every custom voice fails with a misleading 60-second message (M-207).
+- *Themes across folders.* A site theme chosen in one folder leaves the page in light colours, with no theme checked,
+  in a folder without it, and the one theme cache for the site is overwritten by each folder (M-208); themes whose
+  names have no Latin letters or digits all get the same id and all but one are dropped, also from Generate config
+  (M-209).
+- Smaller items L-430 to L-439, tests T-62 and T-63, docs D-37 and D-38.
+
+**What held up.** No way found for a book to run script, reach another site or leak data (the frame sandbox and
+policy, `sanitize`, Temml with `trust:false`, escaped highlight.js output, the editor's paste allowlist, the nginx
+example's sandbox header); H-52 is linear and H-53 stays within the page budget; ZONOS3's `.npy` embeddings, its
+session header and `speaker_mode`, and the encoder progress match the engine's source; one encoding per voice,
+serialized; saved-speech keys snapshot voice and language together, and renaming a voice keeps them; E-47 matches the
+server's API.md; every setting with a variable has a row, the README's marks match the code, and Generate config
+round-trips (but themes, M-209); `fetch-zonos.sh` writes NOTICE.txt last and pins `spk/`; the nginx policy covers the
+engine's workers, WebAssembly and the microphone, and E-48 needed no change to it.
+
+Findings: **High** H-56 to H-58. **Medium** M-204 to M-209. **Low** L-430 to L-439. **Tests** T-62, T-63. **Docs**
+D-37, D-38.
+
+**Tests.** 521 tests at `a955cc8`: 515 pass, none fail, and six need `SLOW=1` or `NETWORK=1`. The custom voice was also
+read with the real engine (WebGPU through SwiftShader) before this round.
+
 ## Summary
 
-Round 33 reviewed E-46 (ZONOS3-Mini in the browser), and its findings are fixed (see Resolved). E-48 (custom ZONOS3 voices) is built (see Resolved). Open (below): T-60, T-59
+Round 34 is a full review at `a955cc8`, after E-46 to E-48; its findings are open (below), most important first: H-56 to H-58, M-204 to M-209, L-430 to L-439, T-62, T-63, D-37 and D-38. Also open: T-60, T-59
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -667,6 +708,29 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-58 | A book can freeze the reader and keep a chapter from showing: a rule on the attribute the multi-column check marks boxes with (`[data-span-box]{display:contents}`, or a `:has()` on `data-span-own`) makes `spanCheck` → `unspan` → `relayout` call itself until the stack runs out (12-15 s; "Maximum call stack size exceeded"). Regression from M-196's fix. *Reproduced.* Fix: keep box state out of the book's reach (a WeakSet, or the token in the attribute's name) and allow one check-driven relayout per turn. | High |
+| H-56 | Closing Settings while the browser asks for the microphone leaves it recording (up to 30 s) with no controls in sight: `znRecStop(true)` runs before `getUserMedia` resolves, then recording starts in the closed dialog. *Reproduced.* Fix: a generation token checked after `getUserMedia` (and the dialog open), stopping the tracks if it changed. | High |
+| H-57 | A second "Record a voice" (or Record again) while the microphone permission is pending leaves the first stream, recorder, AudioContext and timer running until the page closes, and the first recorder's chunks are mixed into later takes (a save then fails as "isn't a recording"). *Reproduced.* Fix: the token of H-56, ignore Record while a start is pending, chunks per recorder. | High |
+| M-204 | M-201 is back for custom voices: if the engine dies while a voice is being made (a likely time: the encoder is loading onto the GPU), reading stays on "Preparing voice…" for good; `znEmbedding`'s two engine calls take no signal. *Reproduced* with a stand-in that hangs. Fix: pass the signal; on abort throw stale or the engine's failure, as `zonosSpeak` does. | Medium |
+| M-205 | ZONOS3 waits for a HEAD request to every site voice (up to 8 s each) before reading starts, on every visit, chosen or not (6.3 s with a 6 s HEAD). *Reproduced.* Fix: wait only for the chosen voice's check, the rest in the background, as the server voice does. | Medium |
+| M-206 | A relative site-voice address (`voices/n.mp3`) is one voice id, embedding key, saved-speech key and version entry in every folder of the site, though it's a different file in each: without differing validators a folder is read in another folder's recording. *Reproduced.* Fix: key by the absolute URL. | Medium |
+| M-207 | A site that ran `fetch-zonos.sh` before E-48 has no `spk/` but still counts as complete, so every custom voice fails with "speaker embedding computation failed (maximum 60 seconds)" for a 10 s clip; the README doesn't say to run it again (likewise an older copy without L-427's manifests). *Read* (traced in `worker.js`). Fix: check `spk/manifest.json` before encoding and say to re-run the script; a version line in NOTICE.txt; an upgrade note. | Medium |
+| M-208 | A site theme chosen in one folder breaks the theme in folders without it: `data-theme` stays, its colours are gone, so the page is light whatever the device, no theme is checked and the theme button is wrong; the colour cache is one for the site, rewritten by each folder, so going back flashes the wrong theme. *Reproduced* (two reviewers). Fix: fall back to the folder's default or the system theme when the saved one isn't known here; merge or key the cache per folder. | Medium |
+| M-209 | Themes whose names have no Latin letters or digits ("Ночь", "День", CJK…), or that slug alike ("C", "C++"), all get one id (`s-theme`): all but the first are dropped, `"theme"` can pick the wrong one, and Generate config of your own themes makes such a config (renaming isn't checked for duplicates either). *Reproduced* (two reviewers). Fix: number colliding ids, resolve `theme` by exact name or id, write ids in Generate config. | Medium |
+| L-430 | A book's inline `column-span: all` inside its own multi-column box is always removed (the override runs before its spanners are marked). Regression from M-194's fix. *Reproduced.* | Low |
+| L-431 | With `$` among MATH_DELIMITERS, text full of "$`" takes time of its length × 8000 (about 3.4 s frozen per MB, again for search): each "$`" scans up to 4000 characters. *Reproduced.* Fix: keep the next "`$" and newline found, as H-52's fix does. | Low |
+| L-432 | The page's math pass and search's (`chapterDoc`) share one budget, so a search starting between them can leave raw `\(…\)` on the page. *Read* (not reproduced). Fix: a budget per pass. | Low |
+| L-433 | The server voice prepares the next chapter in the shown page's language, so a chapter in another (`en-GB` after `en`) is made twice and pauses at the break; the audiobook export uses one language for the book. *Reproduced.* Fix: the language of the chapter being prepared. | Low |
+| L-434 | `ZONOS_VOICES` parsing: an unnamed address with a query (`/v/n.wav?v=2`) splits at `=`; a bad `%` is refused as "URI malformed", or, named, throws when used; a config address with `|` becomes two voices. *Reproduced.* | Low |
+| L-435 | A value refused in Settings puts the old value back, so a long `ZONOS_VOICES` list must be typed again, and the reason isn't announced to screen readers. *Reproduced.* | Low |
+| L-436 | Deleting your voice leaves its embedding in IndexedDB and in memory (queued passages still use it); embeddings of replaced site recordings pile up. *Reproduced.* | Low |
+| L-437 | "Your ZONOS3 voices": without WebGPU each message ("Added…", "Deleted…", errors) is overwritten at once by the WebGPU note; focus falls to the page after save, rename and delete; every rename field has the same label. *Reproduced.* | Low |
+| L-438 | Custom voices, smaller: the take's object URL is never revoked; each encoding leaves a session speaker (up to 60 s of audio) in the worker; no size limit before decoding an upload; a double click on Save adds the voice twice; `zn.encoding` isn't cleared on failure; the recording is fetched without `cache: 'no-cache'` (not reproduced in Chromium). *Read.* | Low |
+| L-439 | `tools/build-zonos-engine.sh` needs `sha256sum` (fails on macOS after the whole build) and ignores options other than `--write`. *Read.* | Low |
+| T-62 | The E-47 test clears the shared mock server's ZONOS3 mode only on its last line, so a failure in it breaks the server-voice tests after it. Fix: `try/finally` or `t.after`. | Tests |
+| T-63 | No tests of H-56, H-57, M-204 (the stand-in engine can't hang its speaker routes), a deleted voice's embedding, a slow HEAD with ZONOS3, folder-relative site voices, a missing `spk/`; or of E-47's language in the saved-speech key and the export, and an `"instructions": false` server dropping a saved voice. | Tests |
+| D-37 | README: the `readAloud` values leave out `"zonos"`; `SPAN_MAX` names three keys (there are four, with `zonos: 600`), and "(ZONOS3 has no such limit)" doesn't say which ZONOS3; French books: doesn't say ZONOS3 in the browser reads French. | Docs |
+| D-38 | README: "a bad entry is left out" of `ZONOS_VOICES` holds for a list, but one bad entry in a single string makes the whole setting ignored; nothing tells a site to re-run `fetch-zonos.sh` for `spk/` (M-207). | Docs |
 | T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. | Tests |
 | T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
@@ -736,8 +800,9 @@ whichever page holds it, the facing page too, and the spread turned when the nar
 
 ## Suggested order
 
-1. E-25, E-22, as laid out in TODO.md.
-2. E-36 and E-30 (small), then the other enhancements, as wanted.
+1. Round 34's High items (H-58, H-56, H-57), then its Medium items.
+2. E-25, E-22, as laid out in TODO.md.
+3. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
