@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-16, round 34): `index.html` (about 11,100 lines), the fetch scripts,
+Review of the repository (2026-11-17, rounds 34 to 36): `index.html` (about 11,100 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -696,9 +696,38 @@ D-37, D-38.
 **Tests.** 521 tests at `a955cc8`: 515 pass, none fail, and six need `SLOW=1` or `NETWORK=1`. The custom voice was also
 read with the real engine (WebGPU through SwiftShader) before this round.
 
+### Round 35
+
+Round 34's High and Medium items fixed in `e50e041` (and L-430 with them), each with a test that fails on the code
+before it; then a review of those fixes by two reviewers on copies of their own (one on ZONOS3 and the microphone,
+one on the multi-column check and themes). It found that some fixes didn't hold or broke something else, and these
+were fixed in `62de5b1`, again each with a test that fails on the code before it:
+- L-430's move let an escaped inline `column-span` (`colu\6dn-span`) on a page whose styles don't seem to name columns
+  span the reader's columns again (High): the override now runs on every page.
+- Choosing System was overridden by a folder's default theme (M-208's change).
+- A box that stops being a box on a timer (an animation) made page turns jump to the end of the chapter, a second or
+  more each: boxes are marked again before a page is measured, keeping the page, not the fraction.
+- M-204 held for the engine calls but not for fetching a site voice's recording; a voice is now made once per key by
+  a job only a failed engine ends, which a reader that moves on stops waiting for without cancelling.
+- H-57's one-start gate left Record doing nothing after a microphone question never answered: dropped, the
+  generation token alone drops a superseded answer, and the wait is shown. Record again during a save keeps the new
+  take; a double click on Save adds once.
+- A site voice chosen while its version was being checked (M-205) was made twice: its check is awaited before its
+  key is made, as the server voice's is. An old choice of an absolute address is carried over as the browser writes
+  it (M-206).
+- Explicit theme ids are taken before generated ones are numbered (M-209), in the config's order.
+
+### Round 36
+
+A review of `62de5b1` by one reviewer: no regression, and the round 35 fixes hold (no recursion; animated boxes
+turn page by page in about 200 ms; one job per voice, always cleared, no unhandled rejection; the version check
+awaited before the key; System kept; the config's order). Three Low items, open: L-440 to L-442.
+
+**Tests.** 533 tests at `62de5b1`: 527 pass, none fail, and six need `SLOW=1` or `NETWORK=1`.
+
 ## Summary
 
-Round 34 is a full review at `a955cc8`, after E-46 to E-48; its findings are open (below), most important first: H-56 to H-58, M-204 to M-209, L-430 to L-439, T-62, T-63, D-37 and D-38. Also open: T-60, T-59
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. Open (below), most important first: L-431 to L-442, T-62, T-63, D-37, D-38. Also open: T-60, T-59
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -708,22 +737,15 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-58 | A book can freeze the reader and keep a chapter from showing: a rule on the attribute the multi-column check marks boxes with (`[data-span-box]{display:contents}`, or a `:has()` on `data-span-own`) makes `spanCheck` → `unspan` → `relayout` call itself until the stack runs out (12-15 s; "Maximum call stack size exceeded"). Regression from M-196's fix. *Reproduced.* Fix: keep box state out of the book's reach (a WeakSet, or the token in the attribute's name) and allow one check-driven relayout per turn. | High |
-| H-56 | Closing Settings while the browser asks for the microphone leaves it recording (up to 30 s) with no controls in sight: `znRecStop(true)` runs before `getUserMedia` resolves, then recording starts in the closed dialog. *Reproduced.* Fix: a generation token checked after `getUserMedia` (and the dialog open), stopping the tracks if it changed. | High |
-| H-57 | A second "Record a voice" (or Record again) while the microphone permission is pending leaves the first stream, recorder, AudioContext and timer running until the page closes, and the first recorder's chunks are mixed into later takes (a save then fails as "isn't a recording"). *Reproduced.* Fix: the token of H-56, ignore Record while a start is pending, chunks per recorder. | High |
-| M-204 | M-201 is back for custom voices: if the engine dies while a voice is being made (a likely time: the encoder is loading onto the GPU), reading stays on "Preparing voice…" for good; `znEmbedding`'s two engine calls take no signal. *Reproduced* with a stand-in that hangs. Fix: pass the signal; on abort throw stale or the engine's failure, as `zonosSpeak` does. | Medium |
-| M-205 | ZONOS3 waits for a HEAD request to every site voice (up to 8 s each) before reading starts, on every visit, chosen or not (6.3 s with a 6 s HEAD). *Reproduced.* Fix: wait only for the chosen voice's check, the rest in the background, as the server voice does. | Medium |
-| M-206 | A relative site-voice address (`voices/n.mp3`) is one voice id, embedding key, saved-speech key and version entry in every folder of the site, though it's a different file in each: without differing validators a folder is read in another folder's recording. *Reproduced.* Fix: key by the absolute URL. | Medium |
-| M-207 | A site that ran `fetch-zonos.sh` before E-48 has no `spk/` but still counts as complete, so every custom voice fails with "speaker embedding computation failed (maximum 60 seconds)" for a 10 s clip; the README doesn't say to run it again (likewise an older copy without L-427's manifests). *Read* (traced in `worker.js`). Fix: check `spk/manifest.json` before encoding and say to re-run the script; a version line in NOTICE.txt; an upgrade note. | Medium |
-| M-208 | A site theme chosen in one folder breaks the theme in folders without it: `data-theme` stays, its colours are gone, so the page is light whatever the device, no theme is checked and the theme button is wrong; the colour cache is one for the site, rewritten by each folder, so going back flashes the wrong theme. *Reproduced* (two reviewers). Fix: fall back to the folder's default or the system theme when the saved one isn't known here; merge or key the cache per folder. | Medium |
-| M-209 | Themes whose names have no Latin letters or digits ("Ночь", "День", CJK…), or that slug alike ("C", "C++"), all get one id (`s-theme`): all but the first are dropped, `"theme"` can pick the wrong one, and Generate config of your own themes makes such a config (renaming isn't checked for duplicates either). *Reproduced* (two reviewers). Fix: number colliding ids, resolve `theme` by exact name or id, write ids in Generate config. | Medium |
-| L-430 | A book's inline `column-span: all` inside its own multi-column box is always removed (the override runs before its spanners are marked). Regression from M-194's fix. *Reproduced.* | Low |
+| L-440 | With a box of a book's that has stopped being one (animated, or a style applying later), following a link, a search hit, read-aloud follow or focus still lands on the wrong page: `position` measures before `showPage` marks the boxes again (round 36; turns are right). *Reproduced.* Fix: mark them again in `geom()` itself. | Low |
+| L-441 | A site theme with an id that's a string but not valid (`"paper"`) is still taken before generated ids, so a valid explicit id it then takes from its name is refused on the theme that gave it (round 36). *Read.* Fix: order by a valid explicit id. | Low |
+| L-442 | A site voice's recording download that never finishes leaves ZONOS3 on "Preparing voice…" until reload (no timeout; the job ends only on a failed engine) (round 36). *Reproduced.* Fix: a timeout on that fetch. | Low |
 | L-431 | With `$` among MATH_DELIMITERS, text full of "$`" takes time of its length × 8000 (about 3.4 s frozen per MB, again for search): each "$`" scans up to 4000 characters. *Reproduced.* Fix: keep the next "`$" and newline found, as H-52's fix does. | Low |
 | L-432 | The page's math pass and search's (`chapterDoc`) share one budget, so a search starting between them can leave raw `\(…\)` on the page. *Read* (not reproduced). Fix: a budget per pass. | Low |
 | L-433 | The server voice prepares the next chapter in the shown page's language, so a chapter in another (`en-GB` after `en`) is made twice and pauses at the break; the audiobook export uses one language for the book. *Reproduced.* Fix: the language of the chapter being prepared. | Low |
 | L-434 | `ZONOS_VOICES` parsing: an unnamed address with a query (`/v/n.wav?v=2`) splits at `=`; a bad `%` is refused as "URI malformed", or, named, throws when used; a config address with `|` becomes two voices. *Reproduced.* | Low |
 | L-435 | A value refused in Settings puts the old value back, so a long `ZONOS_VOICES` list must be typed again, and the reason isn't announced to screen readers. *Reproduced.* | Low |
-| L-436 | Deleting your voice leaves its embedding in IndexedDB and in memory (queued passages still use it); embeddings of replaced site recordings pile up. *Reproduced.* | Low |
+| L-436 | Deleting your voice leaves its embedding in IndexedDB and in memory (queued passages still use it); embeddings of replaced site recordings pile up, and since M-206's fix so do those kept under a site voice's old relative key. *Reproduced.* | Low |
 | L-437 | "Your ZONOS3 voices": without WebGPU each message ("Added…", "Deleted…", errors) is overwritten at once by the WebGPU note; focus falls to the page after save, rename and delete; every rename field has the same label. *Reproduced.* | Low |
 | L-438 | Custom voices, smaller: the take's object URL is never revoked; each encoding leaves a session speaker (up to 60 s of audio) in the worker; no size limit before decoding an upload; a double click on Save adds the voice twice; `zn.encoding` isn't cleared on failure; the recording is fetched without `cache: 'no-cache'` (not reproduced in Chromium). *Read.* | Low |
 | L-439 | `tools/build-zonos-engine.sh` needs `sha256sum` (fails on macOS after the whole build) and ignores options other than `--write`. *Read.* | Low |
@@ -800,7 +822,7 @@ whichever page holds it, the facing page too, and the spread turned when the nar
 
 ## Suggested order
 
-1. Round 34's High items (H-58, H-56, H-57), then its Medium items.
+1. The Low items L-431 to L-442, as wanted.
 2. E-25, E-22, as laid out in TODO.md.
 3. E-36 and E-30 (small), then the other enhancements, as wanted.
 
@@ -810,6 +832,16 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-58 | A book can freeze the reader and keep a chapter from showing: a rule on the attribute the multi-column check marks boxes with (`[data-span-box]{display:contents}`, or a `:has()` on `data-span-own`) makes `spanCheck` → `unspan` → `relayout` call itself until the stack runs out (12-15 s; "Maximum call stack size exceeded"). Regression from M-196's fix. | `e50e041`, `62de5b1` |
+| H-56 | Closing Settings while the browser asks for the microphone leaves it recording (up to 30 s) with no controls in sight: `znRecStop(true)` runs before `getUserMedia` resolves, then recording starts in the closed dialog. | `e50e041`, `62de5b1` |
+| H-57 | A second "Record a voice" (or Record again) while the microphone permission is pending leaves the first stream, recorder, AudioContext and timer running until the page closes, and the first recorder's chunks are mixed into later takes (a save then fails as "isn't a recording"). | `e50e041`, `62de5b1` |
+| M-204 | M-201 is back for custom voices: if the engine dies while a voice is being made (a likely time: the encoder is loading onto the GPU), reading stays on "Preparing voice…" for good; `znEmbedding`'s two engine calls take no signal. | `e50e041`, `62de5b1` |
+| M-205 | ZONOS3 waits for a HEAD request to every site voice (up to 8 s each) before reading starts, on every visit, chosen or not (6.3 s with a 6 s HEAD). | `e50e041`, `62de5b1` |
+| M-206 | A relative site-voice address (`voices/n.mp3`) is one voice id, embedding key, saved-speech key and version entry in every folder of the site, though it's a different file in each: without differing validators a folder is read in another folder's recording. | `e50e041`, `62de5b1` |
+| M-207 | A site that ran `fetch-zonos.sh` before E-48 has no `spk/` but still counts as complete, so every custom voice fails with "speaker embedding computation failed (maximum 60 seconds)" for a 10 s clip; the README doesn't say to run it again (likewise an older copy without L-427's manifests). | `e50e041` |
+| M-208 | A site theme chosen in one folder breaks the theme in folders without it: `data-theme` stays, its colours are gone, so the page is light whatever the device, no theme is checked and the theme button is wrong; the colour cache is one for the site, rewritten by each folder, so going back flashes the wrong theme. | `e50e041`, `62de5b1` |
+| M-209 | Themes whose names have no Latin letters or digits ("Ночь", "День", CJK…), or that slug alike ("C", "C++"), all get one id (`s-theme`): all but the first are dropped, `"theme"` can pick the wrong one, and Generate config of your own themes makes such a config (renaming isn't checked for duplicates either). | `e50e041`, `62de5b1` |
+| L-430 | A book's inline `column-span: all` inside its own multi-column box is always removed (the override runs before its spanners are marked). Regression from M-194's fix. | `e50e041`, `62de5b1` |
 | E-48 | Custom voices for ZONOS3 in the browser, listed first among its voices: recordings by address (`ZONOS_VOICES`, a setting and in reader-config.json, checked as settings are, in Generate config), uploaded files and recordings made with the microphone in Settings (meter, timer, a stop at 30 s, play back, then save or record again), kept in the browser (IndexedDB) with play, rename and delete. On first use the engine's speaker encoder (`spk/`, 45 MB once, with progress; now fetched by `fetch-zonos.sh`) makes a speaker embedding from the clip, which the reader keeps and sends with each passage, so later visits need neither the clip nor the encoder; a site recording's version (ETag or date) is part of its key. Limits as written up: embedding-only voices, and uploads and recordings stay in one browser. | `f49f85c` |
 | E-46 | ZONOS3-Mini in the browser: a "ZONOS3" natural voice on WebGPU (43 languages, ~30 built-in voices, the book's language first), with its engine built from source into `zonos/engine/` (reproducible; `tools/build-zonos-engine.sh`), the models self-hosted by `fetch-zonos.sh` or from Hugging Face, and English numbers, money, dates and abbreviations spelled out first (`zonosText`). | `6ef2a33`, `d66077e` |
 | H-54 | A ZONOS3 passage cut off partway (the engine ends the stream as if finished when it fails once audio has started) was kept and played cut short on every reread. An answer much shorter than its text fails, and is asked for again one sentence at a time. | `31be1bc` |
