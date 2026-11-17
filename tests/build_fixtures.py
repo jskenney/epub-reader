@@ -155,7 +155,7 @@ def epub(path, title, chapters, uid="urn:uuid:test", extra=None, lang="en"):
         z.writestr("OEBPS/content.opf", opf)
         z.writestr("OEBPS/nav.xhtml", nav)
         for f, t, body, *head in chapters:
-            z.writestr(f"OEBPS/{f}", xhtml(t, body, head[0] if head else "", lang))
+            z.writestr(f"OEBPS/{f}", xhtml(t, body, head[0] if head else "", head[1] if len(head) > 1 else lang))   # (a chapter's own language: L-433)
         for name, data in (extra or {}).items():
             z.writestr(zipfile.ZipInfo(name) if data == b"" else name, data)   # empty files stored (0 bytes), as tools do
 
@@ -354,6 +354,15 @@ def main():
         {"name": "Bad", "page": "red;background:url(x)", "text": "#000", "accent": "#000"},
         # (E-40: light by its flag on a dark page, with colours of its own for keywords and notes)
         {"name": "Odd", "dark": False, "page": "#202020", "text": "#f0f0f0", "accent": "#ffcc00", "code": {"keyword": "#ff00ff"}, "alerts": {"note": "#00ffff"}}]}))
+    (SITE / "folder-dollar").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-dollar" / "index.html")
+    (SITE / "folder-dollar" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "MATH_DELIMITERS": ["$"]}))
+    # (round 36, L-441: an id that won't be used as given, before one that will)
+    (SITE / "folder-themes-ids").mkdir()
+    os.symlink(REPO / "index.html", SITE / "folder-themes-ids" / "index.html")
+    (SITE / "folder-themes-ids" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "THEMES": [
+        {"name": "Paper", "id": "paper", "page": "#fbf7ee", "text": "#222222", "accent": "#aa3333"},
+        {"name": "Ink", "id": "s-paper", "page": "#101010", "text": "#eeeeee", "accent": "#3388ff"}]}))
     # Site themes whose names have no Latin letters, or are alike as ids (round 34 review, M-209).
     (SITE / "folder-themes-cyr").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-themes-cyr" / "index.html")
@@ -1201,6 +1210,15 @@ def main():
     epub(books / "hostile-inlinespan-esc.epub", "Hostile inlinespan esc", [("c1.xhtml", "One", hp.replace("<p id='hp5'>", "<p id='hp5' style='colu\\6dn-span:all !important'>"), "")], uid="urn:hostile-inlinespan-esc")
     (books / "anim-boxes.html").write_text("<!DOCTYPE html><html><head><title>Anim boxes</title><style>.box{columns:2;animation:flip 1s infinite} @keyframes flip{0%,49%{column-count:2} 50%,100%{column-count:auto}} .box h2{column-span:all}</style></head><body>"
         + "".join(f'<div class="box" style="animation-delay:-{(i % 10) / 10}s"><h2>H{i}</h2><p>a {i}</p><p>b</p><p>c</p></div>' for i in range(1500)) + "</body></html>")
+    # (round 34 review, L-433: a chapter in another language than the one before it; round 36, L-440: links to boxes
+    # far into a page whose boxes stop being boxes on a timer)
+    epub(books / "two-langs.epub", "Two langs", [("c1.xhtml", "One", "<p>Chapter one is short.</p>"),
+         ("c2.xhtml", "Two", "<p>Chapter two speaks British English.</p><p>Its second paragraph too.</p>", "", "en-GB")], uid="urn:two-langs")
+    (books / "anim-links.html").write_text("<!DOCTYPE html><html><head><title>Anim links</title><style>.box{columns:2} body:has(#go:focus) .box{column-count:auto} .box h2{column-span:all}</style></head><body>"
+        + '<p><a id="go" href="#h800">To 800</a></p>'
+        + "".join(f'<div class="box"><h2 id="h{i}">H{i}</h2><p>a {i}</p><p>b</p><p>c</p></div>' for i in range(1200)) + "</body></html>")
+    # (round 34 review, L-431: text full of "$`" with $ among the marks)
+    (books / "dollar-ticks.html").write_text("<!DOCTYPE html><html><head><title>Dollar ticks</title></head><body><p>" + "$`x" * 300000 + " and $a+b$ after.</p></body></html>")
     epub(books / "own-inlinespan.epub", "Own inlinespan", [("c1.xhtml", "One", '<div class="m" id="m"><p id="s" style="column-span:all">Spanning heading</p>' + "".join(f"<p>Entry {i}.</p>" for i in range(20)) + "</div>" + hp, "<style>.m{columns:2;column-gap:10px}</style>")], uid="urn:own-inlinespan")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")

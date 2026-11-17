@@ -724,7 +724,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261116.2353</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261117.0045</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -796,6 +796,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
             <audio id="znTake" controls hidden></audio>
             <p class="zn-save" hidden><label>Name <input type="text" id="znName" maxlength="60" value="My voice" autocomplete="off"></label> <button type="button" class="btn primary" id="znKeep">Save</button> <button type="button" class="btn" id="znAgain">Record again</button> <button type="button" class="btn" id="znCancel">Cancel</button></p>
           </div>
+          <p class="ab-muted" id="znGpu" hidden>ZONOS3 needs WebGPU, which this browser doesn't have: these voices are used where it does.</p>
           <p class="ab-muted" id="znMsg" aria-live="polite"></p>
         </div>
         <div class="set-row"><span><label for="set-FULL_PRECISION">Full-precision voice models</label><small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-FULL_PRECISION" type="checkbox" data-set="FULL_PRECISION"></div>
@@ -1909,6 +1910,9 @@ function texSpans(s, marks){
       if (marks.has('$$')) { const end = close(i + 2, '$$'); if (end > i + 2 && s.slice(i + 2, end).trim()) { out.push({ at: i, len: end + 2 - i, tex: s.slice(i + 2, end), display: true }); i = end + 1; continue; } }
       i++; continue;
     }
+    // ($`…`$ only when its closing mark is ahead in the line, found once and kept: each "$`" looked 4000 characters ahead,
+    // and text full of them froze the page: round 34 review, L-431.)
+    if (marks.has('$') && s[i + 1] === '`') { const e = close(i + 2, '`$'), nl = close(i, '\n'); if (e < 0 || (nl >= 0 && nl < e)) continue; }
     if (marks.has('$')) { const m = mdInlineMath(s.slice(i, i + win + 2)); if (m?.text && !m.display) { out.push({ at: i, len: m.raw.length, tex: m.text, display: false }); i += m.raw.length - 1; } }
   }
   return out;
@@ -1959,10 +1963,13 @@ async function enhanceMath(root, doc, forText){
     mdMathBudget.ms = Math.min(mdMathBudget.ms, textMath.ms);
   }
   const before = mdMathBudget.ms;
+  // (This pass's budget kept while it lets go of the thread: another pass (search's, the page's) started meanwhile
+  // resets the shared one: round 34 review, L-432.)
+  const mine = { ...mdMathBudget };
   let slice = performance.now();
   for (const n of nodes) {
     // (The thread let go every 50 ms, so the reader doesn't freeze while a long chapter's math is made.)
-    if (performance.now() - slice > 50) { await new Promise(r => setTimeout(r)); slice = performance.now(); }
+    if (performance.now() - slice > 50) { Object.assign(mine, mdMathBudget); await new Promise(r => setTimeout(r)); Object.assign(mdMathBudget, mine); slice = performance.now(); }
     const s = n.data, frag = doc.createDocumentFragment();
     let at = 0, changed = false;
     for (const m of texSpans(s, marks)) {
@@ -3909,6 +3916,9 @@ async function chapterDoc(i){
   const out = document.implementation.createHTMLDocument('');
   const fx = fixedSize(src, src.readerPath, book.spine[i]);   // (built like the page: a fixed-layout page has no wrapper)
   if (fx) out.documentElement.setAttribute('data-spine-fxl', `${fx.w} ${fx.h}`);
+  // (Its language, as the page has it: reading aloud ahead and the audiobook speak it in that: round 34 review, L-433.)
+  const sHtml = src.documentElement;
+  for (const a of ['lang', 'xml:lang', 'dir']) { const v = sHtml?.getAttribute(a); if (v) out.documentElement.setAttribute(a === 'xml:lang' ? 'lang' : a, v); }
   const flow = out.createElement('div'); flow.id = RID.flow;
   const into = fx ? out.body : flow;
   const body = src.getElementsByTagNameNS('*', 'body')[0];
@@ -4000,6 +4010,9 @@ function geom(){
   const doc = frame.contentDocument, win = frame.contentWindow;
   const flow = doc?.getElementById(RID.flow), end = doc?.getElementById(RID.end);
   if (!flow || !end) return null;
+  // (Boxes that stopped being boxes (a style applying later, or animated) marked again before anything is measured:
+  // a turn, a link, a search hit, read-aloud follow, focus: round 35 review; round 36, L-440.)
+  if (!spanFixing && !scrolling() && spanCheck(doc)) unspan(doc);
   // (The flow's exact width, in its own pixels: clientWidth is rounded to a whole pixel, and a text width's margin is
   // often a fraction of one, so each page turn was off by up to half a pixel and the text crept past an edge, a
   // character or more after some dozens of pages.)
@@ -4031,9 +4044,6 @@ function scrollTo(y){
   cur.f = fraction(); updateProgress(); savePos();
 }
 function showPage(n){
-  // (Boxes that stopped being boxes (a style applying later, or animated) marked again before the page is measured, so
-  // the turn lands on the page asked for: round 35 review.)
-  if (!spanFixing && !scrolling() && spanCheck(frame.contentDocument)) unspan(frame.contentDocument);
   const g = geom(); if (!g) return;
   cur.pages = g.pages;
   cur.page = Math.max(0, Math.min(g.pages - 1, n));
@@ -5384,7 +5394,12 @@ const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[data-fn-ref],[d
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
 const hasWords = t => /[\p{L}\p{N}]/u.test(t);
 const isWordChar = c => /[\p{L}\p{N}'’\-]/u.test(c || '');
-const bookLang = () => (frame.contentDocument?.documentElement.getAttribute('lang') || book?.language || navigator.language || 'en');
+// (langFor: another chapter's language while passages of it are keyed and made ahead, or exported, so they aren't
+// made in the shown page's: round 34 review, L-433.)
+let langFor = null;
+const docLang = doc => doc?.documentElement?.getAttribute('lang') || book?.language || navigator.language || 'en';
+const bookLang = () => langFor || docLang(frame.contentDocument);
+const inLang = (lang, fn) => { const was = langFor; langFor = lang || null; try { return fn(); } finally { langFor = was; } };
 
 function ttsBuild(){
   const doc = frame.contentDocument;
@@ -6677,12 +6692,13 @@ const ZN_SESSION = { 'x-tts-session-id': 'epub-reader' };
 // The site's voices: [{name, url}]; a bad entry is refused with the reason (Settings shows it).
 function znVoiceList(text){
   return String(text).split('|').map(x => x.trim()).filter(Boolean).map(x => {
-    const m = /^([^=]*?)\s*=\s*(\S+)$/.exec(x), url = m ? m[2] : x;
+    // (A name has no / or ?, so an address with a query ("/v/n.wav?v=2") isn't split at its "=": round 34 review, L-434.)
+    const m = /^([^=/?]*?)\s*=\s*(\S+)$/.exec(x), url = m ? m[2] : x;
     if (/\s/.test(url)) throw new Error(`"${x}" should be a name = the address of a recording`);
     let u;
     try { u = new URL(url, location.href); } catch { throw new Error(`${url} isn't an address`); }
     if (!/^https?:$/.test(u.protocol)) throw new Error(`${url} isn't a web address`);
-    const name = (m?.[1].trim() || decodeURIComponent(u.pathname.split('/').pop()).replace(/\.[a-z0-9]+$/i, '') || 'Voice').slice(0, 60);
+    const name = (m?.[1].trim() || safeDecode(u.pathname.split('/').pop()).replace(/\.[a-z0-9]+$/i, '') || 'Voice').slice(0, 60);
     return { name, url, abs: u.href };
   });
 }
@@ -6690,8 +6706,8 @@ const znSiteVoices = () => { try { return znVoiceList(ZONOS_VOICES); } catch { r
 // (reader-config.json may give a list: {"name", "url"} objects or "name = url" strings; a bad one is left out.)
 function znVoicesConfig(value){
   if (!Array.isArray(value)) return value;
-  return value.map(x => typeof x === 'string' ? x : `${String(x?.name ?? '').replace(/[|=]/g, ' ').trim()} = ${x?.url ?? ''}`)
-    .filter(x => { try { znVoiceList(x); return true; } catch (e) { console.warn(`${CONFIG_FILE}: ZONOS_VOICES: ${e.message} (left out)`); return false; } }).join(' | ');
+  return value.map(x => typeof x === 'string' ? x : `${String(x?.name ?? '').replace(/[|=/?]/g, ' ').trim()} = ${x?.url ?? ''}`)
+    .filter(x => { try { if (x.includes("|")) throw new Error(`"${x}" has a | in it, which separates voices`); znVoiceList(x); return true; } catch (e) { console.warn(`${CONFIG_FILE}: ZONOS_VOICES: ${e.message} (left out)`); return false; } }).join(' | ');
 }
 function znCustom(){
   return [...zn.own.map(o => ({ id: 'own:' + o.id, name: o.name, lang: '', style: 'yours', gender: '', own: o.id })),
@@ -6715,7 +6731,8 @@ const znDb = (() => {
   };
   return { all: () => run('own', 'readonly', st => st.getAll()), get: id => run('own', 'readonly', st => st.get(id)),
     put: v => run('own', 'readwrite', st => st.put(v)), del: id => run('own', 'readwrite', st => st.delete(id)),
-    emb: k => run('emb', 'readonly', st => st.get(k)), putEmb: (k, v) => run('emb', 'readwrite', st => st.put(v, k)) };
+    emb: k => run('emb', 'readonly', st => st.get(k)), putEmb: (k, v) => run('emb', 'readwrite', st => st.put(v, k)),
+    embKeys: () => run('emb', 'readonly', st => st.getAllKeys()), delEmb: k => run('emb', 'readwrite', st => st.delete(k)) };
 })();
 async function znOwnLoad(){
   try { zn.own = (await znDb.all()).map(({ id, name, file, seconds, created }) => ({ id, name, file, seconds, created })).sort((a, b) => a.created - b.created); }
@@ -6743,7 +6760,21 @@ async function znCheckVersions(only){
   const all = znSiteVoices(), chosen = all.filter(v => 'url:' + v.abs === zn.voice);
   const rest = Promise.all(all.filter(v => !chosen.includes(v)).map(check)).then(() => { if (tts.open) ttsFillVoices(); });
   await Promise.all(chosen.map(check));
+  rest.then(znPrune);
   if (!only) await rest;
+}
+// Embeddings no voice will use again: a site recording's older versions, once its current one is known, and those
+// kept under a relative address before ids were full addresses (round 34 review, L-436). (Other folders' voices are
+// left: the store is the whole site's.)
+async function znPrune(){
+  try {
+    const current = new Map(znSiteVoices().filter(v => zn.versions.get(v.abs)).map(v => [`url|${v.abs}|`, `url|${v.abs}|${zn.versions.get(v.abs)}`]));
+    for (const k of await znDb.embKeys()) {
+      if (typeof k !== 'string' || !k.startsWith('url|')) continue;
+      const stale = !/^url\|https?:/.test(k) || [...current].some(([pre, keep]) => k.startsWith(pre) && k !== keep);
+      if (stale) { zn.emb.delete(k); await znDb.delEmb(k); }
+    }
+  } catch {}
 }
 // A voice's speaker embedding: kept from before, or made now from its recording by the engine.
 // (Made once per voice, whoever asks: a reader that moves on stops waiting but doesn't cancel it, so the next passage
@@ -6785,7 +6816,8 @@ async function znMake(v, key, signal){
       clip = o.blob; name = o.file || 'recording';
     } else {
       try {
-        const r = await fetch(new URL(v.url, location.href), { signal, cache: 'no-cache' });
+        // (Not waited for for good: a server that never answers left ZONOS3 preparing until a reload: round 36, L-442.)
+        const r = await fetch(new URL(v.url, location.href), { signal: AbortSignal.any ? AbortSignal.any([signal, AbortSignal.timeout(ZN_CLIP_WAIT)]) : signal, cache: 'no-cache' });
         if (!r.ok || looksHtml(r)) throw new Error(`the recording for ${v.name} isn't at ${v.shown || v.url}${r.ok ? '' : ` (${r.status})`}`);
         clip = await r.blob();
       } catch (err) {
@@ -7317,7 +7349,7 @@ async function chapterChunks(i){
   // (A chapter that couldn't be read is null, and not kept, so it is tried again: round 11 review.)
   const map = n.chap;
   if (!map.has(i)) {
-    map.set(i, chapterDoc(i).then(d => chunksOf(d).chunks).catch(() => { map.delete(i); return null; }));
+    map.set(i, chapterDoc(i).then(d => { const lang = docLang(d); return Object.assign(inLang(lang, () => chunksOf(d).chunks), { lang }); }).catch(() => { map.delete(i); return null; }));
     // (Only the chapters used most recently are kept, with their detached pages: REVIEW.md L-98.)
     for (const key of map.keys()) { if (map.size <= 8) break; if (key !== i) map.delete(key); }
   } else { const v = map.get(i); map.delete(i); map.set(i, v); }
@@ -7343,9 +7375,11 @@ async function nLookAhead(ne, span, current){
       continue;
     }
     const c = at.chunks[at.ci];
-    let nx = nSpan(ne, at.ci, chunkStart(c), false, at.chunks);
-    if (nx.cj > nx.ci && n.failed.has(`${ne.key()}|${nx.out}`)) nx = nSpan(ne, at.ci, chunkStart(c), true, at.chunks);
-    const e = nSynth(ne, nx.out);
+    const [nx, e] = inLang(at.chunks.lang, () => {
+      let nx = nSpan(ne, at.ci, chunkStart(c), false, at.chunks);
+      if (nx.cj > nx.ci && n.failed.has(`${ne.key()}|${nx.out}`)) nx = nSpan(ne, at.ci, chunkStart(c), true, at.chunks);
+      return [nx, nSynth(ne, nx.out)];
+    });
     try { await e.job; } catch { return; }   // a failure (or the server going away) stops preparing ahead
     ready += e.dur; at.ci = nx.cj + 1;
   }
@@ -8010,9 +8044,11 @@ async function abUnitChunks(u){
     if (j > u.i && book.spine[j].linear === false) continue;   // (notes and the like outside the reading order)
     let ch = await chapterChunks(j);
     if (ch === null) throw new Error(`${book.spine[j].href} couldn't be read`);
+    const lang = ch.lang;
     if (j === u.i && u.frag) ch = ch.filter(c => abAfter(c, u.frag) !== false);
     // (An end heading that isn't there: the next unit starts with the file, so this one doesn't take it.)
     if (j === u.end.i && u.end.frag) ch = ch.filter(c => abAfter(c, u.end.frag) === false);
+    ch.lang = lang;   // (its language, for its passages: L-433)
     if (ch.length) out.push(ch);
   }
   return out;
@@ -8167,6 +8203,14 @@ async function abRun(units, mode, target, format = 'aac'){
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
   const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice(), lang: bookLang() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
+  // (Each file's passages in its own language, keyed and sent so, the rest of the snapshot as it was when the export
+  // began: round 34 review, L-433.)
+  const langKeys = new Map([[snap.lang, keyBase]]);
+  const abInLang = lang => {
+    if (!lang || ne === NEURAL.kokoro) return [keyBase, snap];
+    if (!langKeys.has(lang)) langKeys.set(lang, inLang(lang, () => ne.key()));
+    return [langKeys.get(lang), { ...snap, lang }];
+  };
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
   const lengths = await chapterLengths();
@@ -8242,7 +8286,7 @@ async function abRun(units, mode, target, format = 'aac'){
               await abWaitIfPaused();
               if (ab.cancel || book !== b) throw abCancelled();
               let said;
-              try { said = await abSay(ne, chunks, ci, keyBase, snap); }
+              try { said = await abSay(ne, chunks, ci, ...abInLang(chunks.lang)); }
               catch (e) { if (e?.gone) await keepPart(); throw e; }
               const { span, pieces } = said;
               for (const r of pieces) {
@@ -8951,8 +8995,10 @@ async function loadConfig(){
   // (The site's themes, before the folder's default theme is looked at: E-39. Its "theme" may name one.)
   siteThemes = [];
   if (cfg && typeof cfg === 'object' && Array.isArray(cfg.THEMES)) {
-    // (Ids given first, then the ones made from names numbered around them: round 35 review.)
-    const given = cfg.THEMES.slice(0, 50), order = [...given.filter(o => typeof o?.id === 'string'), ...given.filter(o => typeof o?.id !== 'string')];
+    // (Ids given first, then the ones made from names numbered around them: round 35 review. Only ids that will be
+    // used as given: one that isn't (no "s-") is made from its name too: round 36, L-441.)
+    const given = cfg.THEMES.slice(0, 50), own = o => typeof o?.id === 'string' && /^s-[a-z0-9-]{1,40}$/.test(o.id);
+    const order = [...given.filter(own), ...given.filter(o => !own(o))];
     for (const o of order) {
       try {
         const th = themeCheck(o, 's-');
@@ -10765,7 +10811,7 @@ $('#setClose').addEventListener('click', () => $('#setDialog').close());
 $('#setReset').addEventListener('click', setReset);
 $('#setReload').addEventListener('click', () => location.reload());
 $('#setForm').addEventListener('change', e => {
-  const el = e.target, typed = el.value?.trim();
+  const el = e.target, typed = el.value?.trim(), raw = el.value;
   let refused = false;
   if (el.name === 'theme') setTheme(el.value);
   else if (el.dataset.set) {
@@ -10774,7 +10820,14 @@ $('#setForm').addEventListener('change', e => {
     else if (el.value.trim() !== '' && Number.isFinite(Number(el.value))) setChange(el.dataset.set, Number(el.value));
   }
   setSync();
-  if (refused) el.closest('.set-row').querySelector('.set-def').textContent = /^API_/.test(el.dataset.set) ? `Not changed: ${typed} isn't on this site.` : `Not changed: ${setVar.why}.`;
+  if (refused) {
+    // (What was typed kept, to be corrected rather than typed again, and the reason said aloud too: round 34 review,
+    // L-435.)
+    const why = /^API_/.test(el.dataset.set) ? `Not changed: ${typed} isn't on this site.` : `Not changed: ${setVar.why}.`;
+    el.closest('.set-row').querySelector('.set-def').textContent = why;
+    el.value = raw;
+    $('#setStatus').textContent = why;
+  }
 });
 $('#setDialog').addEventListener('close', () => { $('#setBtn').focus(); znRecStop(true); });
 
@@ -10785,11 +10838,11 @@ function znOwnRender(){
   if (!ul) return;
   ul.replaceChildren(...zn.own.map(o => {
     const li = document.createElement('li'), name = document.createElement('input');
-    name.type = 'text'; name.value = o.name; name.maxLength = 60; name.setAttribute('aria-label', 'Name of this voice');
+    name.type = 'text'; name.value = o.name; name.maxLength = 60; name.setAttribute('aria-label', `Name of ${o.name}`);
     name.addEventListener('change', async () => {
       const n = name.value.trim() || o.name;
       const rec = await znDb.get(o.id).catch(() => null);
-      if (rec) { await znDb.put({ ...rec, name: n }).catch(() => {}); znMsg(`Renamed to ${n}.`); await znOwnLoad(); }
+      if (rec) { await znDb.put({ ...rec, name: n }).catch(() => {}); znMsg(`Renamed to ${n}.`); zn.focusAfter = [o.id, 'input']; await znOwnLoad(); }
     });
     const play = document.createElement('button'); play.type = 'button'; play.className = 'btn'; play.textContent = 'Play';
     play.setAttribute('aria-label', `Play ${o.name}`);
@@ -10800,22 +10853,32 @@ function znOwnRender(){
       a.onended = a.onerror = () => URL.revokeObjectURL(a.src);
       a.play().catch(() => {});
     });
-    const del = document.createElement('button'); del.type = 'button'; del.className = 'btn'; del.textContent = 'Delete';
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'btn zn-del'; del.textContent = 'Delete';
     del.setAttribute('aria-label', `Delete ${o.name}`);
     del.addEventListener('click', async () => {
       if (!confirm(`Delete the voice ${o.name} from this browser?`)) return;
       await znDb.del(o.id).catch(() => {});
+      // (Its embedding too: round 34 review, L-436.)
+      zn.emb.delete('own|' + o.id); await znDb.delEmb('own|' + o.id).catch(() => {});
       if (zn.voice === 'own:' + o.id) { zn.voice = ''; store.set('spine:zonosVoice', ''); }
-      znMsg(`Deleted ${o.name}.`); await znOwnLoad();
+      const i = zn.own.findIndex(x => x.id === o.id), next = zn.own[i + 1] || zn.own[i - 1];
+      znMsg(`Deleted ${o.name}.`); zn.focusAfter = next ? [next.id, '.zn-del'] : [null, '#znUpload']; await znOwnLoad();
     });
     li.append(name, `${o.seconds ? Math.round(o.seconds) + ' s' : ''}`, play, del);
+    li.dataset.id = o.id;
     return li;
   }));
-  if (!zonosGpu()) znMsg("ZONOS3 needs WebGPU, which this browser doesn't have: these voices are used where it does.");
+  // (The WebGPU note in a place of its own, not over each message; focus kept on the list after a change, not lost
+  // to the page: round 34 review, L-437.)
+  $('#znGpu').hidden = zonosGpu();
+  const f = zn.focusAfter; zn.focusAfter = null;
+  if (f) (f[0] ? ul.querySelector(`li[data-id="${f[0]}"] ${f[1]}`) : $(f[1]))?.focus();
 }
 // A recording kept as a voice, after checking the browser can decode it (and how long it is).
 async function znOwnAdd(blob, file, name){
   let seconds = 0;
+  // (Not decoded whole when far longer than a voice needs: an hour's audiobook would be: round 34 review, L-438.)
+  if (blob.size > ZN_CLIP_MAX) { znMsg(`${file} is too large (${Math.round(blob.size / 1048576)} MB): a recording of 5–15 seconds is all a voice needs.`); return false; }
   try {
     const ctx = new OfflineAudioContext(1, 1, 44100);
     seconds = (await ctx.decodeAudioData(await blob.arrayBuffer())).duration;
@@ -10824,10 +10887,12 @@ async function znOwnAdd(blob, file, name){
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   try { await znDb.put({ id, name: (name || 'My voice').slice(0, 60), file, blob, type: blob.type, seconds, created: Date.now() }); }
   catch (e) { znMsg(`The voice couldn't be kept in this browser: ${e.message}`); return false; }
+  zn.focusAfter = [id, 'input'];
   znMsg(`Added ${name}${seconds > 60 ? ' (only its first 60 seconds are used)' : seconds > 20 ? ' (5–15 seconds works best)' : ''}. Choose it among ZONOS3's voices.`);
   await znOwnLoad();
   return true;
 }
+const ZN_CLIP_MAX = 25 * 1048576, ZN_CLIP_WAIT = Number(window.SPINE_TEST?.znClipWait) || 30000;
 $('#znUpload').addEventListener('click', () => $('#znFile').click());
 $('#znFile').addEventListener('change', async e => {
   const f = e.target.files[0];
@@ -10867,6 +10932,7 @@ async function znRecStart(){
   rec.onstop = () => {
     if (znRec.rec !== rec) return;
     znRec.blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    if ($('#znTake').src.startsWith('blob:')) URL.revokeObjectURL($('#znTake').src);   // (the last take's: L-438)
     $('#znTake').src = URL.createObjectURL(znRec.blob); $('#znTake').hidden = false;
     $('.zn-save').hidden = false; $('#znStop').hidden = true; $('#znName').focus();
   };

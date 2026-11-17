@@ -763,3 +763,12 @@ test('unclosed \\(, a C# block, many code blocks open in good time; search over 
   await time('own-hljs.html');
   assert.notEqual(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('oh')).backgroundColor), 'rgb(40, 44, 52)');
 });
+
+test('text full of "$`" with $ among the math marks doesn\'t freeze the page; its math is still drawn (round 34 review, L-431)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { window.longest = 0; new PerformanceObserver(l => { for (const e of l.getEntries()) window.longest = Math.max(window.longest, e.duration); }).observe({ type: 'longtask', buffered: true }); });
+  await h.openReader(page, `${h.SITE}/folder-dollar/index.html?book=/reader/books/dollar-ticks.html`);
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => !!doc.querySelector('math')), 15000), 'the formula after them is drawn');
+  const longest = await page.evaluate(() => window.longest);
+  assert.ok(longest < 1500, `longest stretch: ${Math.round(longest)} ms`);
+});

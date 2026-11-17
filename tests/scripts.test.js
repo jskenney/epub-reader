@@ -328,3 +328,9 @@ test('fetch-fonts.sh: --config as typed from another folder; a family starting w
     'g-42dot-sans https://fonts.googleapis.com/css2?family=42dot+Sans&display=swap',
     'g-merriweather https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;1,400&display=swap']);
 });
+
+test('build-zonos-engine.sh refuses an option it doesn\'t know before building anything (round 34 review, L-439)', () => {
+  const r = run(REPO, 'tools/build-zonos-engine.sh', ['--wirte']);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Unknown option: --wirte/);
+});

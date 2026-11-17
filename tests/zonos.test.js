@@ -492,3 +492,48 @@ test('ZONOS3: a site voice chosen while its version is checked is made once; an 
     await p.close();
   }
 });
+
+test('ZONOS3, your voices: messages stay without WebGPU, focus stays in the list, each name field says whose it is; a deleted voice\'s embedding goes too; a file far too large is refused (round 34 review, L-436, L-437, L-438)', async () => {
+  let p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.click('#setBtn');
+  await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
+  await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
+  await p.setInputFiles('#znFile', { name: 'book.m4b', mimeType: 'audio/mp4', buffer: Buffer.alloc(26 * 1048576) });
+  await p.waitForFunction(() => /book\.m4b is too large/.test(document.querySelector('#znMsg').textContent));
+  await p.click('#setClose');
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  await p.selectOption('#ttsVoice', { label: 'narrator (yours)' });
+  await p.waitForFunction(() => window.zonosFake.requests.some(r => r.speaker_mode === 'embedding'), null, { timeout: 20000 });
+  const embKeys = () => p.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-zonos-voices'); rq.onsuccess = () => { const g = rq.result.transaction('emb').objectStore('emb').getAllKeys(); g.onsuccess = () => { res(g.result); rq.result.close(); }; }; }));
+  assert.equal((await embKeys()).filter(k => k.startsWith('own|')).length, 1);
+  await p.keyboard.press('Escape');
+  await p.click('#setBtn');
+  p.once('dialog', d => d.accept());
+  await p.click('#znOwnList button:has-text("Delete")');
+  await p.waitForFunction(() => /Deleted narrator/.test(document.querySelector('#znMsg').textContent));
+  assert.deepEqual((await embKeys()).filter(k => k.startsWith('own|')), [], 'its embedding gone');
+  assert.equal(await p.evaluate(() => document.activeElement?.id), 'znUpload', 'focus on Upload, the list empty');
+  await p.close();
+  // Without WebGPU: the note in its own place; "Added" and "Renamed" stay; focus on the renamed voice.
+  p = await page({ gpu: false });
+  await h.openReader(p, LONG);
+  await p.click('#setBtn');
+  assert.equal(await p.isVisible('#znGpu'), true);
+  await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
+  await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
+  assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Name of narrator');
+  await p.fill('#znOwnList input', 'Me'); await p.locator('#znOwnList input').dispatchEvent('change');
+  await p.waitForFunction(() => /Renamed to Me/.test(document.querySelector('#znMsg').textContent));
+  assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Name of Me');
+});
+
+test('ZONOS3: a site voice\'s recording that never comes stops reading with the reason, not for good (round 36 review, L-442)', async () => {
+  const p = await page();
+  await p.addInitScript(() => { window.SPINE_TEST.znClipWait = 1500; });
+  await p.route('**/tts-voices/narrator.wav', route => { if (route.request().method() !== 'GET') return route.continue(); });   // (never answered)
+  await h.openReader(p, VOICES, { ...zonos, 'spine:agreed:zonos': true, 'spine:zonosVoice': `url:${h.SITE}/tts-voices/narrator.wav` });
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /recording for Site narrator couldn't be fetched/.test(document.querySelector('#notice').textContent), null, { timeout: 15000 });
+});

@@ -13,9 +13,17 @@ cd "$(dirname "$0")/.."
 
 ZONOS3_COMMIT=96d9e0ec1e39083ed336ac78f24e3dbc93721c0f   # must match ZONOS.commit in index.html
 WRITE=0
-[ "${1:-}" = --write ] && WRITE=1
+for arg in "$@"; do
+  case "$arg" in
+    --write) WRITE=1 ;;
+    *) echo "Unknown option: $arg (options: --write)" >&2; exit 2 ;;
+  esac
+done
 
 for tool in git node pnpm; do command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }; done
+# sha256sum, or shasum on macOS (checked before the build, not after it).
+if command -v sha256sum >/dev/null; then SHA=(sha256sum); elif command -v shasum >/dev/null; then SHA=(shasum -a 256)
+else echo "sha256sum or shasum is required" >&2; exit 1; fi
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 echo "ZONOS3-Mini at ${ZONOS3_COMMIT:0:7}"
 git init -q "$tmp/src"
@@ -28,14 +36,14 @@ if [ "$WRITE" = 1 ]; then
   mkdir -p zonos/engine
   cp "$dist"/engine.js "$dist"/worker.js "$dist"/codec-worker.js zonos/engine/
   cp "$tmp/src/LICENSE" zonos/engine/LICENSE; cp "$tmp/src/NOTICE" zonos/engine/NOTICE
-  (cd zonos/engine && sha256sum engine.js worker.js codec-worker.js | sed 's|  |  zonos/engine/|') > checksums/zonos-engine.sha256
+  (cd zonos/engine && "${SHA[@]}" engine.js worker.js codec-worker.js | sed 's|  |  zonos/engine/|') > checksums/zonos-engine.sha256
   echo "Wrote zonos/engine/ and checksums/zonos-engine.sha256."
 else
   mkdir -p "$tmp/check/zonos/engine"
   cp "$dist"/engine.js "$dist"/worker.js "$dist"/codec-worker.js "$tmp/check/zonos/engine/"
-  (cd "$tmp/check" && sha256sum -c --quiet "$OLDPWD/checksums/zonos-engine.sha256") \
+  (cd "$tmp/check" && "${SHA[@]}" -c --quiet "$OLDPWD/checksums/zonos-engine.sha256") \
     && echo "The build matches checksums/zonos-engine.sha256." \
     || { echo "The build doesn't match checksums/zonos-engine.sha256." >&2; exit 1; }
-  (sha256sum -c --quiet checksums/zonos-engine.sha256) \
+  ("${SHA[@]}" -c --quiet checksums/zonos-engine.sha256) \
     && echo "zonos/engine/ matches it too." || { echo "zonos/engine/ doesn't match it." >&2; exit 1; }
 fi

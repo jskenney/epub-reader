@@ -246,3 +246,18 @@ for (const [engine, folder] of [['kokoro', 'kokoro'], ['pocket', 'pocket']]) {
     assert.deepEqual(page.cspViolations, [], 'the reader policy in nginx.conf.example must allow the voice to run');
   });
 }
+
+test('server voice: a chapter in another language is made ahead in its own, once (round 34 review, L-433)', async () => {
+  await h.clearBreezeLog();
+  await fetch(`${h.SITE}/__breeze?langs=en,fr`);
+  try {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/two-langs.epub`, server);
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => /second paragraph/.test(e.text)), 20000));
+    await page.waitForTimeout(8000);   // (chapter two read through)
+    const two = (await h.breezeLog()).filter(e => /British|second paragraph/.test(e.text));
+    assert.ok(two.length > 0 && two.every(e => e.language === 'en-GB'), JSON.stringify(two.map(e => [e.text, e.language])));
+    assert.equal(new Set(two.map(e => e.text)).size, two.length, 'each made once');
+  } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
+});

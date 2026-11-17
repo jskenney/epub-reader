@@ -710,3 +710,30 @@ test('System chosen stays System in a folder with a default theme (round 35 revi
   await page.goto(`${h.SITE}/folder-sepia/index.html`, { waitUntil: 'domcontentloaded' });
   assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), null, 'nor by the script in <head>');
 });
+
+test('ZONOS_VOICES in Settings: an address with a query isn\'t split at its "="; a bad % is kept as written; a refused value stays to be corrected, and is announced (round 34 review, L-434, L-435)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  await openSettings(page);
+  const set = async v => { await page.fill('#set-ZONOS_VOICES', v); await page.locator('#set-ZONOS_VOICES').dispatchEvent('change'); };
+  const def = () => page.$eval('#set-ZONOS_VOICES', el => el.closest('.set-row').querySelector('.set-def').textContent);
+  await set('Narrator = mailto:x');
+  assert.match(await def(), /Not changed: mailto:x isn't a web address/);
+  assert.equal(await page.inputValue('#set-ZONOS_VOICES'), 'Narrator = mailto:x', 'kept to be corrected');
+  assert.match(await page.textContent('#setStatus'), /Not changed/);
+  await set('/v/n.wav?v=2 | /v/caf%E9.wav');
+  assert.doesNotMatch(await def(), /Not changed/);
+  await page.click('#setGenerate');
+  const cfg = await h.waitFor(async () => { const t = await page.$eval('#cfgText', el => el.value).catch(() => ''); return t && JSON.parse(t); }, 5000);
+  assert.deepEqual(cfg.ZONOS_VOICES, [{ name: 'n', url: '/v/n.wav?v=2' }, { name: 'caf%E9', url: '/v/caf%E9.wav' }]);
+});
+
+test('a site theme\'s id that won\'t be used as given doesn\'t take the place of one that will (round 36 review, L-441)', async () => {
+  const page = await h.newPage();
+  const warns = []; page.on('console', m => { if (m.type() === 'warning') warns.push(m.text()); });
+  await h.openReader(page, `${h.SITE}/folder-themes-ids/index.html?book=/reader/books/long.epub`, { 'spine:theme': 's-paper' });
+  assert.ok(!warns.some(w => /THEMES/.test(w)), warns.join(' | '));
+  assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.documentElement).backgroundColor), 'rgb(16, 16, 16)', 's-paper is Ink, which gave it');
+  await openSettings(page);
+  assert.deepEqual((await page.$$eval('.set-themes .set-theme', ls => ls.map(l => l.textContent.trim()))).slice(-2), ['AaPaper', 'AaInk'], 'in the config\'s order');
+});

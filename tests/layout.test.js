@@ -653,3 +653,13 @@ test('an escaped inline span on a page whose styles don\'t name columns stays in
   }
   assert.deepEqual(pos.map(p => p[0]), [2, 3, 4, 5, 6, 7], JSON.stringify(pos));
 });
+
+test('a link to a place past boxes that have stopped being boxes since the page was laid out lands on its page (round 36 review, L-440)', async () => {
+  const page = await h.newPage({ viewport: { width: 1400, height: 900 } });
+  await h.openReader(page, `${h.READER}?book=books/anim-links.html`, { 'spine:layout': 'two' });
+  // (The link focused, and so the boxes no longer boxes, in the same moment it is followed.)
+  await h.inFrame(page, doc => { const a = doc.getElementById('go'); a.focus(); a.click(); });
+  await page.waitForTimeout(500);
+  const [l, r, w] = await h.inFrame(page, doc => { const b = doc.getElementById('h800').getBoundingClientRect(); return [b.left, b.right, doc.defaultView.innerWidth]; });
+  assert.ok(l >= -2 && r <= w + 2, `on the page shown: ${Math.round(l)}..${Math.round(r)} of ${w}`);
+});
