@@ -341,7 +341,7 @@ def main():
     os.symlink(REPO / "index.html", SITE / "folder-notools" / "index.html")
     (SITE / "folder-notools" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", **{k: False for k in (
         "SHOW_READ_ALOUD", "SHOW_FONT_MENU", "SHOW_THEME_BUTTON", "SHOW_LAYOUT_BUTTON", "SHOW_FULLSCREEN_BUTTON", "SHOW_TEXT_SIZE",
-        "SHOW_LINE_SPACING", "SHOW_TEXT_WIDTH", "SHOW_OPEN_BUTTON", "SHOW_SETTINGS_BUTTON")}}))
+        "SHOW_LINE_SPACING", "SHOW_TEXT_WIDTH", "SHOW_OPEN_BUTTON", "SHOW_REFRESH_BUTTON", "SHOW_SETTINGS_BUTTON")}}))
     # Settings not shown: line spacing stays in the bar on phones (round 28 review, L-378).
     (SITE / "folder-noset").mkdir()
     os.symlink(REPO / "index.html", SITE / "folder-noset" / "index.html")

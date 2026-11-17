@@ -49,6 +49,7 @@ sent = {}   # bytes of each file sent (GET /__bytes, DELETE /__bytes clears)
 ranges_on = [True]   # GET /__ranges?on=0 makes the server stop answering range requests (and ?on=1 again)
 head_on = [True]     # GET /__head?on=0 makes HEAD requests answer 405 (and ?on=1 again)
 head_delay = {}      # GET /__head?delay=2&path=x.wav makes HEAD requests for paths ending in x.wav wait 2 s (?delay=0 clears)
+cache_on = [False]   # GET /__cache?on=1 lets the browser keep files for an hour (Cache-Control: max-age), ?on=0 back to no-store (E-49)
 
 
 def validators(file, path=""):
@@ -108,7 +109,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # another folder is that folder's own block's business: round 25 review, D-24.)
             self.send_header("Content-Security-Policy", "sandbox" if book_page else POLICY)
             self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "max-age=3600" if cache_on[0] and not self.path.startswith("/__") else "no-store")
         if not self.path.startswith("/nocors/"):   # (E-24: a site that doesn't let other sites read its files)
             self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
@@ -152,6 +153,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/__ranges":
             ranges_on[0] = "on=0" not in self.path
             return self.json(200, {"ranges": ranges_on[0]})
+        if path == "/__cache":
+            cache_on[0] = "on=1" in self.path
+            return self.json(200, {"cache": cache_on[0]})
         if path == "/__head":
             m = re.search(r"delay=([\d.]+)", self.path)
             if m:

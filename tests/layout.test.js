@@ -199,9 +199,9 @@ test('the contents show the book\'s title and authors only while the top bar is 
   assert.ok(Math.abs(tops[0] - tops[1]) <= 1, `search ${tops[0]}, page ${tops[1]}`);
 });
 
-const BAR_TOOLS = ['#ttsBtn', '#fontPick', '#themeBtn', '#layoutBtn', '#fsBtn', '#sizeGroup', '#lineGroup', '#widthGroup', '#openBtn', '#setBtn'];
+const BAR_TOOLS = ['#ttsBtn', '#fontPick', '#themeBtn', '#layoutBtn', '#fsBtn', '#sizeGroup', '#lineGroup', '#widthGroup', '#refreshBtn', '#openBtn', '#setBtn'];
 
-test('SHOW_READ_ALOUD, SHOW_FONT_MENU, SHOW_THEME_BUTTON, SHOW_LAYOUT_BUTTON, SHOW_FULLSCREEN_BUTTON, SHOW_TEXT_SIZE, SHOW_LINE_SPACING, SHOW_TEXT_WIDTH, SHOW_OPEN_BUTTON and SHOW_SETTINGS_BUTTON hide the top bar\'s buttons; all shown by default, with Text settings in Settings', async () => {
+test('SHOW_READ_ALOUD, SHOW_FONT_MENU, SHOW_THEME_BUTTON, SHOW_LAYOUT_BUTTON, SHOW_FULLSCREEN_BUTTON, SHOW_TEXT_SIZE, SHOW_LINE_SPACING, SHOW_TEXT_WIDTH, SHOW_OPEN_BUTTON, SHOW_REFRESH_BUTTON and SHOW_SETTINGS_BUTTON hide the top bar\'s buttons; all shown by default, with Text settings in Settings', async () => {
   const page = await h.newPage({ viewport: { width: 1400, height: 800 } });
   await h.openReader(page, `${h.READER}?book=books/long.epub`);
   for (const sel of BAR_TOOLS) assert.equal(await page.isVisible(sel), true, sel);
