@@ -770,6 +770,9 @@ that fails on the code before it. Left open as needing your decision: L-446 (Ref
 audiobook and chapters in languages the voice doesn't speak), and the parts of L-443 (pictures by address) and L-448
 (a deleted voice's saved speech) noted in Resolved.
 
+**Tests.** 549 tests at `8af8b21`, before the review: 543 pass, none fail. 557 at `e533c90`, after the fixes: 551 pass,
+none fail. Six need `SLOW=1` or `NETWORK=1` each time.
+
 ## Summary
 
 Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed but L-446 and L-449, which need your decision (below).
