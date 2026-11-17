@@ -42,7 +42,7 @@ test('the Edit button sits between Settings and Open; its menu edits a document 
   await h.openReader(page, doc('notes.md'), RAW);
   const order = await page.evaluate(() => [...document.querySelector('.tools').children].map(e => e.id));
   assert.equal(order[order.indexOf('setBtn') + 1], 'editPick');
-  assert.equal(order[order.indexOf('editPick') + 1], 'openBtn');
+  assert.deepEqual(order.slice(order.indexOf('editPick') + 1, order.indexOf('editPick') + 3), ['refreshBtn', 'openBtn'], 'then Refresh (E-49), then Open');
   await page.click('#editBtn');
   assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#editMenu .opt')].map(o => [o.textContent, o.disabled])),
     [['Edit this document', false], ['New Markdown document', false], ['New HTML document', false]]);
