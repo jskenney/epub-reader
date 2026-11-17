@@ -569,3 +569,24 @@ test('ZONOS3: a voice of your own deleted while it is being made isn\'t kept (ro
   const keys = await p.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-zonos-voices'); rq.onsuccess = () => { const g = rq.result.transaction('emb').objectStore('emb').getAllKeys(); g.onsuccess = () => { res(g.result); rq.result.close(); }; }; }));
   assert.deepEqual(keys.filter(k => k.startsWith('own|')), []);
 });
+
+test('ZONOS3: deleting a voice of your own also deletes the speech saved in it (your decision, round 39 review, L-448)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.click('#setBtn');
+  await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
+  await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
+  await p.click('#setClose');
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  await p.selectOption('#ttsVoice', { label: 'narrator (yours)' });
+  const clips = () => p.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-voice-audio'); rq.onsuccess = () => { const g = rq.result.transaction('clips').objectStore('clips').getAllKeys(); g.onsuccess = () => { res(g.result.filter(k => /\|own:/.test(k))); rq.result.close(); }; }; }));
+  assert.ok(await h.waitFor(async () => (await clips()).length > 0, 20000), 'speech saved in the voice');
+  await p.keyboard.press('Escape');
+  await p.click('#setBtn');
+  p.once('dialog', d => d.accept());
+  await p.click('#znOwnList button:has-text("Delete")');
+  await p.waitForFunction(() => /Deleted narrator/.test(document.querySelector('#znMsg').textContent));
+  await p.waitForTimeout(500);
+  assert.deepEqual(await clips(), []);
+});

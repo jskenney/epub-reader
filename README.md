@@ -519,8 +519,10 @@ site as the reader.
   silent clip plays alongside read-aloud. (iPhones and iPads stop device
   voices when the screen locks, whatever the page does.)
 - Audiobook export: the headphones button in the read-aloud bar makes
-  audiobooks with the natural voice chosen (Kokoro, Pocket or Server; the
-  device voice can't be recorded). Tick the chapters you want (All / None,
+  audiobooks with the natural voice chosen (Kokoro, Pocket, ZONOS3 or Server; the
+  device voice can't be recorded). Each chapter is read in its own language; one
+  in a language the voice doesn't speak is read in the book's language, or, if
+  the voice can't do that either, left out with a note. Tick the chapters you want (All / None,
   shift-click for a range; the cover and contents pages start unticked), then
   choose one file with a chapter marker at each, or a file per chapter
   (`01 - Title.m4b`, with track numbers, so audiobook apps group them). Three
@@ -582,7 +584,8 @@ site as the reader.
   opens it at the same place (for `?get=`, the address asked for, even if the site sent it on elsewhere; the site's
   API_START isn't asked again), for when the file has been changed. The text, a document's stylesheets and a folder
   book's files come fresh; pictures and fonts the page loads by their address can still come from the browser's cache.
-  Not shown for a file opened from this computer or the sample, nor while editing; unsaved changes are asked about and
+  Not shown for a file opened from this computer or the sample, nor while editing, nor once the document has been
+  saved to this computer from the editor (the site's copy would replace it); unsaved changes are asked about and
   let go only once the book is read again: if it can't be read now, the one shown stays, with them. Also in Settings →
   Text settings.
 - Full-screen reading: the corner button or F hides the top bar, sidebar and

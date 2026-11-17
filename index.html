@@ -736,7 +736,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261117.0359</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261117.1225</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -7277,7 +7277,9 @@ const clipStore = (() => {
     // Down to the limit now (as the page starts, the setting changes, or an export ends), not only when audio is
     // saved; 0 keeps nothing, unless an export is keeping room (round 25 review, L-305).
     trim(){ const mb = SAVED_AUDIO_MB + Math.max(api.extraMB, exportRoom()); return mb > 0 ? sweep(mb * 1048576) : api.clear(); },
-    clear: () => run('readwrite', st => st.clear())
+    clear: () => run('readwrite', st => st.clear()),
+    // (Every clip whose key passes test: a deleted voice's saved speech: your decision, round 39 review, L-448.)
+    removeWhere: test => run('readwrite', st => { const rq = st.openCursor(); rq.onsuccess = () => { const c = rq.result; if (!c) return; if (test(c.key)) c.delete(); c.continue(); }; })
   };
   return api;
 })();
@@ -7382,6 +7384,15 @@ async function chapterChunks(i){
    chapters so chapter breaks don't pause. Started again with every passage; finished passages are found in
    the cache at once, so it quickly picks up where it left off. nStop() ends it. */
 let LOOKAHEAD_SEC = 120;
+// Does this natural voice speak lang? (As reading aloud decides for the page shown; for the chapters read ahead and
+// the audiobook's: round 39 review, L-449.)
+function voiceSpeaks(ne, lang){
+  const base = String(lang || '').toLowerCase().split(/[-_]/)[0];
+  return ne === NEURAL.server ? (sv.langs ? sv.langs.includes(base) : /^(en|zh)$/.test(base))
+    : ne === NEURAL.zonos ? !!zonosLang(lang)
+    : ne === NEURAL.kokoro ? base === 'en'
+    : ne === NEURAL.pocket ? POCKET_LANGS[base]?.[0] === pk.lang : true;
+}
 async function nLookAhead(ne, span, current){
   const id = ++n.ahead;
   const live = () => id === n.ahead && tts.open && neuralEngine() === ne;
@@ -7393,6 +7404,8 @@ async function nLookAhead(ne, span, current){
       if (!book || i >= book.spine.length || book.spine[i].overlay || ++hops > 5) return;
       const chunks = await chapterChunks(i);
       if (!chunks) return;
+      // (Not a chapter the voice doesn't speak: reading aloud uses the device's voice there: L-449.)
+      if (chunks.lang && !voiceSpeaks(ne, chunks.lang)) return;
       at = { chunks, ci: 0, chap: i };
       continue;
     }
@@ -8229,6 +8242,10 @@ async function abRun(units, mode, target, format = 'aac'){
   // began: round 34 review, L-433.)
   // (The key and the voices it names taken together, in that language: the voice for a language is worked out in it,
   // and the audio must be made with the voice its key names: round 39 review, M-211.)
+  // (A chapter in a language the voice doesn't speak: read in the book's language if it speaks that, else left out with
+  // a note, as reading aloud doesn't read it either: your decision, round 39 review, L-449.)
+  const fits = lang => voiceSpeaks(ne, lang);
+  const speakable = lists => lists.flatMap(l => !l.lang || fits(l.lang) ? [l] : fits(snap.lang) ? [Object.assign(l, { lang: snap.lang })] : []);
   const langKeys = new Map([[snap.lang, [keyBase, snap]]]);
   const abInLang = lang => {
     if (!lang || ne === NEURAL.kokoro) return [keyBase, snap];
@@ -8238,7 +8255,7 @@ async function abRun(units, mode, target, format = 'aac'){
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
   const lengths = await chapterLengths();
-  Object.assign(ab, { files: [], skipped: [], unreadable: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
+  Object.assign(ab, { files: [], skipped: [], unreadable: [], otherLang: [], done: 0, total: units.reduce((a, u) => a + Math.max(1, abChars(u, lengths)), 0), startedAt: performance.now(), doneSecs: 0 });
   // Room in the saved audio for this export as well as what's already there, so stopping and starting again
   // finds it (WAV at 24 kHz: about 173 MB an hour). Back to the usual limit afterwards.
   clipStore.extraMB = Math.ceil(abSecs(ab.total) * 48000 / 1048576 * 1.2);
@@ -8260,7 +8277,10 @@ async function abRun(units, mode, target, format = 'aac'){
           if (u.chars === 0) { ab.skipped.push(u.title); ab.done += 1; continue; }
           let lists;
           try { lists = await abUnitChunks(u); } catch { ab.unreadable.push(u.title); ab.done += Math.max(1, abChars(u, lengths)); continue; }
+          const had = lists.length;
+          lists = speakable(lists);
           if (lists.length) return { u, lists };
+          if (had) { ab.otherLang.push(u.title); ab.done += Math.max(1, abChars(u, lengths)); continue; }   // (L-449)
           ab.skipped.push(u.title); ab.done += Math.max(1, abChars(u, lengths));
         }
         return null;
@@ -8338,7 +8358,8 @@ async function abRun(units, mode, target, format = 'aac'){
         if (!made) { enc.abort(); await sink.abort?.(); }
       }
     }
-    if (!ab.files.length) throw new Error(ab.unreadable.length && !ab.skipped.length ? `the chosen chapters couldn't be read: ${ab.unreadable.join(', ')}` : 'the chosen chapters have no text to read');
+    if (!ab.files.length) throw new Error(ab.unreadable.length && !ab.skipped.length ? `the chosen chapters couldn't be read: ${ab.unreadable.join(', ')}`
+      : ab.otherLang.length && !ab.skipped.length ? `the chosen chapters are in a language the voice doesn't speak` : 'the chosen chapters have no text to read');
     store.del('spine:exportRoom');   // (finished: the extra room in the saved audio isn't needed now)
   } finally {
     clipStore.extraMB = 0; clipStore.trim();   // (L-305)
@@ -8507,6 +8528,7 @@ async function abStart(){
     msg = (mode === 'one' ? 'The audiobook is ready.' : `${plural(ab.files.length, 'file')} ready.`)
       + (ab.skipped.length ? ` Left out, with no text to read: ${ab.skipped.join(', ')}.` : '')
       + (ab.unreadable.length ? ` Left out, as they couldn't be read: ${ab.unreadable.join(', ')}.` : '')
+      + (ab.otherLang?.length ? ` Left out, in a language the voice doesn't speak: ${ab.otherLang.join(', ')}.` : '')
       + (ab.missed ? ` ${plural(ab.missed, 'sentence')} the voice couldn't say ${ab.missed === 1 ? 'is' : 'are'} silent.` : '');
   } catch (e) {
     msg = e?.cancelled || e?.stale ? 'Export cancelled.' : `Export stopped: ${e?.message || e}.`;
@@ -9622,6 +9644,7 @@ async function editSave(as = false){
   else editDraftSoon();
   editSyncBar();
   $('#editNote').textContent = how === 'saved' ? `Saved to ${ed.name}.` : `Downloaded ${ed.name}.`;
+  b.savedHere = true; syncRefresh();   // (no Refresh from the site after this: L-446)
 }
 
 // Leaving the editor: the page made again from the text saved (what isn't saved is let go, after asking).
@@ -9721,6 +9744,7 @@ async function editSaveBook(as = false){
   if (ed.on && ed.epub?.path === p) { ed.saved = text; if (ed.text === text) { clearTimeout(ed.draftTimer); draftDel(draftKey()); } else editDraftSoon(); }
   editSyncBar();
   $('#editNote').textContent = how === 'saved' ? `Saved the book to ${b.fileName}.` : `Downloaded the book as ${name}.`;
+  b.savedHere = true; if (book === b) syncRefresh();   // (no Refresh from the site after this: L-446)
 }
 // Just the chapter, downloaded as its own file (E-23).
 function editSaveChapter(){
@@ -10884,6 +10908,10 @@ function znOwnRender(){
       await znDb.del(o.id).catch(() => {});
       // (Its embedding too: round 34 review, L-436.)
       zn.emb.delete('own|' + o.id); await znDb.delEmb('own|' + o.id).catch(() => {});
+      // (And the speech saved in it: your decision, round 39 review, L-448.)
+      const mine = k => typeof k === 'string' && k.includes(`|own:${o.id}|`);
+      for (const k of [...n.cache.keys()]) if (mine(k)) n.cache.delete(k);
+      await clipStore.removeWhere(mine);
       if (zn.voice === 'own:' + o.id) { zn.voice = ''; store.set('spine:zonosVoice', ''); }
       const i = zn.own.findIndex(x => x.id === o.id), next = zn.own[i + 1] || zn.own[i - 1];
       znMsg(`Deleted ${o.name}.`); zn.focusAfter = next ? [next.id, '.zn-del'] : [null, '#znUpload']; await znOwnLoad();
@@ -11241,9 +11269,11 @@ async function openForEdit(ref){
 // where it came from, past the browser's cache, without reloading the page; it opens at the place it was at (kept as
 // it is read). Not for a file from this computer or the sample, which have nowhere to be read from again, nor while
 // editing (the button is hidden then). If it can't be read now, the book shown stays.
-const canRefresh = () => !!(book?.from && !book.sample && !ed.on);
+// (Not once it has been saved to this computer from the editor: the site's copy would replace what was saved: your
+// decision, round 39 review, L-446.)
+const canRefresh = () => !!(book?.from && !book.sample && !book.savedHere && !ed.on);
 function syncRefresh(){
-  const can = !!(book?.from && !book.sample);
+  const can = !!(book?.from && !book.sample && !book.savedHere);
   $('#refreshBtn').hidden = !can || !toolbarShown.SHOW_REFRESH_BUTTON;
   $('#txtRefreshRow').hidden = !can;
 }

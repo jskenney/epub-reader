@@ -746,3 +746,17 @@ test('the audiobook with ZONOS3 and no voice chosen: a French chapter is made wi
   assert.ok(fr.length && fr.every(r => r.speaker_embedding_id === 'default_gaspard' && r.language === 'fr_fr'), JSON.stringify(fr));
   assert.ok(en.length && en.every(r => r.speaker_embedding_id === 'default_savannah'), JSON.stringify(en));
 });
+
+test('the audiobook: a chapter in a language the server doesn\'t list is read in the book\'s language (your decision, round 39 review, L-449)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  await h.clearBreezeLog();
+  await fetch(`${h.SITE}/__breeze?langs=en,de`);
+  try {
+    const page = await h.newPage();
+    await page.addInitScript(fakeAac, FRAMES);
+    await openExport(page, `${h.READER}?book=books/en-fr.epub`);
+    await exportAll(page, 'one', 1);
+    const fr = (await h.breezeLog()).filter(e => /francais/.test(e.text));
+    assert.ok(fr.length && fr.every(e => e.language === 'en'), JSON.stringify(fr));
+  } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
+});

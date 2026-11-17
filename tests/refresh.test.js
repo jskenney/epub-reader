@@ -157,3 +157,20 @@ test('Refresh reaches a document\'s stylesheet past the cache; unsaved changes a
     assert.equal(asked.length, 2, 'still asked: the changes are kept');
   } finally { fs.rmSync(html, { force: true }); fs.rmSync(css, { force: true }); }
 });
+
+test('Refresh is hidden once the document has been saved to this computer from the editor (your decision, round 39 review, L-446)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => { delete window.showSaveFilePicker; window.showSaveFilePicker = undefined; });   // (saved as a download)
+  await h.openReader(page, `${h.READER}?book=books/notes.md`, { 'spine:editMode': 'raw' });
+  assert.equal(await page.isVisible('#refreshBtn'), true);
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  const dl = page.waitForEvent('download');
+  await page.click('#editSave');
+  await dl;
+  await page.click('#editDone');
+  await page.waitForSelector('#editBar', { state: 'hidden' });
+  assert.equal(await page.isHidden('#refreshBtn'), true);
+  await page.click('#setBtn'); await page.click('#setText');
+  assert.equal(await page.isHidden('#txtRefreshRow'), true);
+});
