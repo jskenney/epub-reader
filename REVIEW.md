@@ -776,7 +776,7 @@ note (L-449), and reading aloud doesn't prepare such a chapter ahead; a deleted 
 (L-448); pictures and fonts not forced past the cache (L-443); the top bar left as it is (M-212).
 
 **Tests.** 549 tests at `8af8b21`, before the review: 543 pass, none fail. 557 at `e533c90`, after the fixes: 551 pass,
-none fail. Six need `SLOW=1` or `NETWORK=1` each time.
+none fail. 560 at `e67e6f6`, after your decisions: 554 pass, none fail. Six need `SLOW=1` or `NETWORK=1` each time.
 
 ## Summary
 
