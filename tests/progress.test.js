@@ -178,7 +178,9 @@ test('API_PROGRESS set in Settings, and in Generate config; an address on anothe
   assert.equal(await page.inputValue('#set-API_PROGRESS'), '/elsewhere/progress');
   assert.match(await page.textContent('#set-API_PROGRESS >> xpath=ancestor::div[1]'), /this site's default is \/api\/progress/);
   await page.fill('#set-API_PROGRESS', 'https://example.com/progress'); await page.press('#set-API_PROGRESS', 'Tab');
-  assert.equal(await page.inputValue('#set-API_PROGRESS'), '/elsewhere/progress');
+  // (Refused: what was typed stays to be corrected, the setting as it was: round 34 review, L-435.)
+  assert.equal(await page.inputValue('#set-API_PROGRESS'), 'https://example.com/progress');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('spine:set:API_PROGRESS'))), '/elsewhere/progress');
   assert.match(await page.textContent('#set-API_PROGRESS >> xpath=ancestor::div[1]'), /Not changed: https:\/\/example\.com\/progress isn't on this site/);
   await page.fill('#set-API_PROGRESS', ''); await page.press('#set-API_PROGRESS', 'Tab');
   assert.equal(await page.evaluate(() => localStorage.getItem('spine:set:API_PROGRESS')), '""');

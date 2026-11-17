@@ -555,7 +555,7 @@ test('ADDITIONAL_FONTS in Settings: names added to the menu at once, a bad name 
   assert.deepEqual(await extra(), [['g-lora', 'Lora'], ['g-merriweather', 'Merriweather']]);
   await page.fill('#set-ADDITIONAL_FONTS', 'Lora, x"><b>'); await page.press('#set-ADDITIONAL_FONTS', 'Tab');
   assert.match(await page.textContent('#set-ADDITIONAL_FONTS >> xpath=ancestor::div[1]'), /Not changed: .*isn't a Google Fonts family name/);
-  assert.equal(await page.inputValue('#set-ADDITIONAL_FONTS'), 'Lora, Merriweather:wght@400;700');
+  assert.equal(await page.inputValue('#set-ADDITIONAL_FONTS'), 'Lora, x"><b>', 'kept to be corrected (L-435)');
   await page.click('#setGenerate');
   assert.deepEqual(JSON.parse(await page.inputValue('#cfgText')).ADDITIONAL_FONTS, ['Lora', 'Merriweather:wght@400;700']);
 });
