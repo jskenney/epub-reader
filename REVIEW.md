@@ -730,6 +730,10 @@ awaited before the key; System kept; the config's order). Three Low items, open:
 The Low items L-431 to L-442 fixed in `daa3a1a`, each with a test that fails on the code before it but L-432 (checked
 by reading: a search and the page's math pass meeting midway couldn't be made to happen in a test).
 
+**Tests.** 541 tests: the full run found two older tests expecting a refused Settings value to be put back, which
+L-435 now keeps; changed to expect it kept (`d49d76c`), they pass, and the run passes but six that need `SLOW=1` or
+`NETWORK=1`.
+
 ## Summary
 
 Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37). Open (below): T-62, T-63, D-37, D-38. Also open: T-60, T-59
