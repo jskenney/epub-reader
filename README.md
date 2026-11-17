@@ -577,6 +577,10 @@ site as the reader.
 - Press C (or the Contents button) to collapse or expand the contents sidebar
 - Press I to show or hide the book's information (publisher, language,
   format, file…) below the contents; it is hidden when the page opens
+- Refresh (the circular arrow between Edit and Open, for a book from the site: `?book=`, the default book, `?get=`,
+  or a link): reads the book again from the site, skipping the browser's cache, without reloading the page, and
+  opens it at the same place, for when the file has been changed. Not shown for a file opened from this computer or
+  the sample, nor while editing; if the book can't be read now, the one shown stays. Also in Settings → Text settings.
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
   Exit button that appears when you move the mouse brings them back.
@@ -950,7 +954,7 @@ default books and the memory and request sizes stay the site's to set.
 | `CONTENTS_TITLE` ✓ | `'Contents'` | The word on the contents button at the top left: any text, or `''` for the icon alone (screen readers still hear "Contents"). |
 | `NAVBAR_ICON` ✓ | `''` | A picture shown just left of the contents button, for a site's logo: its address relative to the page (`'logo.png'`, `'design.svg'`) or a full one. It is shown as tall as the button and at most twice as wide (smaller pictures aren't enlarged). The reader's policy in `nginx.conf.example` allows pictures from this site only. |
 | `NAVBAR_LINK` ✓ | `''` | Where clicking that picture goes: an address on this site or a full web address (`'https://example.com/'`). `''`: the picture links nowhere. Only web addresses are taken (not `javascript:` and the like). |
-| `SHOW_READ_ALOUD`, `SHOW_FONT_MENU`, `SHOW_THEME_BUTTON`, `SHOW_LAYOUT_BUTTON`, `SHOW_FULLSCREEN_BUTTON`, `SHOW_TEXT_SIZE`, `SHOW_LINE_SPACING`, `SHOW_TEXT_WIDTH`, `SHOW_OPEN_BUTTON` ✓ | `true` | `false` hides that control in the top bar: Read aloud, the reading-font (Aa) menu, the theme switcher, Layout, Full screen, text size, line spacing, text width, Open. Each one is still in Settings → **Text settings** (next to Generate config), and the single-key shortcuts still work for those that have one (R read aloud, T theme, L layout, F full screen). The Aa menu's single-key shortcuts switch is in Settings too. |
+| `SHOW_READ_ALOUD`, `SHOW_FONT_MENU`, `SHOW_THEME_BUTTON`, `SHOW_LAYOUT_BUTTON`, `SHOW_FULLSCREEN_BUTTON`, `SHOW_TEXT_SIZE`, `SHOW_LINE_SPACING`, `SHOW_TEXT_WIDTH`, `SHOW_OPEN_BUTTON`, `SHOW_REFRESH_BUTTON` ✓ | `true` | `false` hides that control in the top bar: Read aloud, the reading-font (Aa) menu, the theme switcher, Layout, Full screen, text size, line spacing, text width, Open, Refresh (shown only for a book from the site). Each one is still in Settings → **Text settings** (next to Generate config), and the single-key shortcuts still work for those that have one (R read aloud, T theme, L layout, F full screen). The Aa menu's single-key shortcuts switch is in Settings too. |
 | `SHOW_SETTINGS_BUTTON` ✓ | `true` | `false` hides the Settings (gear) button, so readers can't open Settings or Text settings. Fix what they would have chosen with the folder's other settings (and `LOCKED`). |
 | `NAVBAR_ALT` ✓ | `''` | What the logo is called, for screen readers: the link's name when `NAVBAR_LINK` is set, the picture's description otherwise (`'Example Press'`). `''`: the link is named by where it goes. |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
