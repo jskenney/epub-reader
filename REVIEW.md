@@ -770,12 +770,17 @@ that fails on the code before it. Left open as needing your decision: L-446 (Ref
 audiobook and chapters in languages the voice doesn't speak), and the parts of L-443 (pictures by address) and L-448
 (a deleted voice's saved speech) noted in Resolved.
 
+**Your decisions** (`e67e6f6`, each with a test that fails on the code before it): Refresh hidden once saved to this
+computer (L-446); a chapter in a language the voice doesn't speak read in the book's language, else left out with a
+note (L-449), and reading aloud doesn't prepare such a chapter ahead; a deleted voice's saved speech deleted with it
+(L-448); pictures and fonts not forced past the cache (L-443); the top bar left as it is (M-212).
+
 **Tests.** 549 tests at `8af8b21`, before the review: 543 pass, none fail. 557 at `e533c90`, after the fixes: 551 pass,
 none fail. Six need `SLOW=1` or `NETWORK=1` each time.
 
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed but L-446 and L-449, which need your decision (below).
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. Open (below): only enhancements
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -785,8 +790,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| L-446 | After a Save as to this computer, Refresh brings back the site's copy, not the file saved. Needs your decision: what Refresh means then (hide it, or keep the site's). *Read.* | Low |
-| L-449 | The audiobook reads chapters in languages the voice doesn't speak (sent anyway, or read by the book's model), which reading aloud doesn't. Needs your decision: skip them, read them in the book's language, or refuse. *Read.* | Low |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
@@ -893,16 +896,18 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | L-430 | A book's inline `column-span: all` inside its own multi-column box is always removed (the override runs before its spanners are marked). Regression from M-194's fix. | `e50e041`, `62de5b1` |
 | M-210 | Refresh of a `?get=` book that was redirected asks for the address it was sent to (`book.from`), not the one asked for, so it opens at the start and its place is kept under a second key. Refresh asks for what was asked for, kept on the book (and its `?get=` or not), not the address a redirect sent it to. | `e533c90` |
 | M-211 | The audiobook makes a chapter in another language with the voice it began with (its snapshot) but keys it with the voice worked out for that language (or one changed since), so reading aloud later plays that audio as another voice's. Each language's key and the voices it names are taken together, in that language. | `e533c90` |
-| M-212 | The top bar runs past the window between 821 and about 915 px wide: the title shrinks to nothing and Open is off-screen (E-49's button widened a gap from before). The bar's compact spacing goes up to 1100 px, so it fits from 821 px up with the title showing; no control is hidden (a control giving way for more title room would be your decision). | `e533c90` |
-| L-443 | Refresh doesn't reach a document's linked stylesheets and SVGs, nor a folder book's files read as blobs (no `no-cache` there); pictures the page loads by address stay cached too. A document's stylesheets and SVGs and a folder book's files are fetched past the cache on Refresh. Pictures and fonts the page loads by their address can still come from the cache: forcing those (a query added to each address) would be your decision; the README says so. | `e533c90` |
+| M-212 | The top bar runs past the window between 821 and about 915 px wide: the title shrinks to nothing and Open is off-screen (E-49's button widened a gap from before). The bar's compact spacing goes up to 1100 px, so it fits from 821 px up with the title showing; no control is hidden (left so, by your decision). | `e533c90` |
+| L-443 | Refresh doesn't reach a document's linked stylesheets and SVGs, nor a folder book's files read as blobs (no `no-cache` there); pictures the page loads by address stay cached too. A document's stylesheets and SVGs and a folder book's files are fetched past the cache on Refresh. Pictures and fonts the page loads by their address can still come from the cache: not forced, by your decision; the README says so. | `e533c90` |
 | L-444 | Refresh with unsaved edits lets them go when confirmed, before it's known the refresh works; if it fails the edits are gone though the book stays; the question speaks of another book. Unsaved changes are let go only once the book is read again; the question speaks of a refresh. | `e533c90` |
 | L-445 | A folder book's name (download name, title fallback) comes back percent-encoded after Refresh. Refresh asks for the address as it was asked for (M-210's fix). | `e533c90` |
 | L-447 | A server voice's clip re-recorded while the page is open: its new version is in the key, but the clip kept from before is still sent, so old-clip audio is saved under the new key. The clip is kept by its version too. | `e533c90` |
-| L-448 | A voice of your own deleted while its embedding is being made comes back (the job saves it after); speech saved in that voice stays until it ages out, which needs your decision. A voice deleted while it is made isn't kept or used. (Its saved speech still ages out as before: clearing it is your decision.) | `e533c90` |
+| L-448 | A voice of your own deleted while its embedding is being made comes back (the job saves it after); speech saved in that voice stays until it ages out, which needs your decision. A voice deleted while it is made isn't kept or used. Your decision: its saved speech is deleted with it. | `e533c90`, `e67e6f6` |
 | L-450 | After Refresh, the site's place (API_START) is asked for again, and an older one (the last progress not yet written) can move the reader back. Refresh doesn't ask API_START. | `e533c90` |
 | L-451 | The note for a book changed on the server mid-read says to reload the page; Refresh now does it in place. The note names Refresh. | `e533c90` |
 | T-64 | Refresh's tests don't cover a redirected `?get=` book, a folder book, or an EPUB served whole (where the cache matters); the EPUB test passes without the fix. Tests for each, with an EPUB served whole and a page whose cache is really used. | `e533c90` |
 | D-39 | README and REVIEW say Refresh opens at the same place for `?get=`, untrue with a redirect (M-210) or a site's API (L-450). README: what Refresh keeps and what can still come from the cache. | `e533c90` |
+| L-446 | After a Save as to this computer, Refresh brings back the site's copy, not the file saved. Your decision: Refresh is hidden once it has been saved to this computer from the editor. | `e67e6f6` |
+| L-449 | The audiobook reads chapters in languages the voice doesn't speak (sent anyway, or read by the book's model), which reading aloud doesn't. Your decision: such a chapter is read in the book's language, or left out with a note if the voice can't do that either; reading aloud no longer prepares ahead a chapter it won't read with the natural voice. | `e67e6f6` |
 | E-49 | Refresh: a button between Edit and Open for a book from the site (`?book=`, the default book, `?get=`, a link between documents) that reads it again from the site, past the browser's cache, without reloading the page, at the same place; hidden for a file from this computer, the sample and while editing; the book shown stays if it can't be read; in Text settings too; `SHOW_REFRESH_BUTTON`. No keyboard shortcut. | `1c0de7b`, `0ce6c28` |
 | E-48 | Custom voices for ZONOS3 in the browser, listed first among its voices: recordings by address (`ZONOS_VOICES`, a setting and in reader-config.json, checked as settings are, in Generate config), uploaded files and recordings made with the microphone in Settings (meter, timer, a stop at 30 s, play back, then save or record again), kept in the browser (IndexedDB) with play, rename and delete. On first use the engine's speaker encoder (`spk/`, 45 MB once, with progress; now fetched by `fetch-zonos.sh`) makes a speaker embedding from the clip, which the reader keeps and sends with each passage, so later visits need neither the clip nor the encoder; a site recording's version (ETag or date) is part of its key. Limits as written up: embedding-only voices, and uploads and recordings stay in one browser. | `f49f85c` |
 | E-46 | ZONOS3-Mini in the browser: a "ZONOS3" natural voice on WebGPU (43 languages, ~30 built-in voices, the book's language first), with its engine built from source into `zonos/engine/` (reproducible; `tools/build-zonos-engine.sh`), the models self-hosted by `fetch-zonos.sh` or from Hugging Face, and English numbers, money, dates and abbreviations spelled out first (`zonosText`). | `6ef2a33`, `d66077e` |
