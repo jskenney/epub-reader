@@ -1,6 +1,6 @@
 # Code and security review
 
-Review of the repository (2026-11-17, rounds 34 to 37): `index.html` (about 11,100 lines), the fetch scripts,
+Review of the repository (2026-11-17, rounds 34 to 38): `index.html` (about 11,100 lines), the fetch scripts,
 `tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
@@ -734,9 +734,14 @@ by reading: a search and the page's math pass meeting midway couldn't be made to
 L-435 now keeps; changed to expect it kept (`d49d76c`), they pass, and the run passes but six that need `SLOW=1` or
 `NETWORK=1`.
 
+### Round 38
+
+The tests and docs items T-59, T-60, T-62, T-63, D-37 and D-38 done in `4af6c6d`. D-38 changed the reader too: a
+single string of `ZONOS_VOICES` in `reader-config.json` is taken entry by entry (its test fails on the code before).
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37). Open (below): T-62, T-63, D-37, D-38. Also open: T-60, T-59
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). Open (below): only enhancements
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -746,12 +751,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| T-62 | The E-47 test clears the shared mock server's ZONOS3 mode only on its last line, so a failure in it breaks the server-voice tests after it. Fix: `try/finally` or `t.after`. | Tests |
-| T-63 | No tests of H-56, H-57, M-204 (the stand-in engine can't hang its speaker routes), a deleted voice's embedding, a slow HEAD with ZONOS3, folder-relative site voices, a missing `spk/`; or of E-47's language in the saved-speech key and the export, and an `"instructions": false` server dropping a saved voice. | Tests |
-| D-37 | README: the `readAloud` values leave out `"zonos"`; `SPAN_MAX` names three keys (there are four, with `zonos: 600`), and "(ZONOS3 has no such limit)" doesn't say which ZONOS3; French books: doesn't say ZONOS3 in the browser reads French. | Docs |
-| D-38 | README: "a bad entry is left out" of `ZONOS_VOICES` holds for a list, but one bad entry in a single string makes the whole setting ignored; nothing tells a site to re-run `fetch-zonos.sh` for `spk/` (M-207). | Docs |
-| T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. | Tests |
-| T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) | Tests |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
@@ -819,9 +818,8 @@ whichever page holds it, the facing page too, and the spread turned when the nar
 
 ## Suggested order
 
-1. The tests and docs items T-62, T-63, D-37, D-38, T-59, T-60.
-2. E-25, E-22, as laid out in TODO.md.
-3. E-36 and E-30 (small), then the other enhancements, as wanted.
+1. E-25, E-22, as laid out in TODO.md.
+2. E-36 and E-30 (small), then the other enhancements, as wanted.
 
 ## Resolved
 
@@ -829,6 +827,12 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| T-59 | No tests of: search, the audiobook or read-aloud ahead on pages with TeX; Settings' check of MATH_DELIMITERS; a resize across a spanning media query; text files; a `<pre>`-only `language-x` block. (Most came with the fixes in `cfb5b89`; left open by your instruction, as tests.) The rest now has tests: a chapter with TeX read ahead and exported is asked for without the TeX (search beside formulas, Settings' check of the marks, a resize across a spanning media query, text files and a `<pre>`-only block had them already). | `4af6c6d` |
+| T-60 | No test of H-49; M-187's test checks the overflow rule, not that the formula can be scrolled. H-49 is tested by H-52's test (unclosed `\(` opens in good time); the wide formula is now scrolled in two columns and the scroll layout, as well as one column. | `4af6c6d` |
+| T-62 | The E-47 test clears the shared mock server's ZONOS3 mode only on its last line, so a failure in it breaks the server-voice tests after it. Fix: `try/finally` or `t.after`. The test clears the server's ZONOS3 mode in `finally`. | `4af6c6d` |
+| T-63 | No tests of H-56, H-57, M-204 (the stand-in engine can't hang its speaker routes), a deleted voice's embedding, a slow HEAD with ZONOS3, folder-relative site voices, a missing `spk/`; or of E-47's language in the saved-speech key and the export, and an `"instructions": false` server dropping a saved voice. Tested: the language in saved audio's key (a French book's same words made again; with Breeze, not), each chapter's language in the export, and a voice that needs instructions dropped for one of a clip. (The ZONOS3 items came with their fixes in rounds 34 and 35.) | `4af6c6d` |
+| D-37 | README: the `readAloud` values leave out `"zonos"`; `SPAN_MAX` names three keys (there are four, with `zonos: 600`), and "(ZONOS3 has no such limit)" doesn't say which ZONOS3; French books: doesn't say ZONOS3 in the browser reads French. README: `"zonos"` among `readAloud`'s values; `SPAN_MAX`'s four keys, and which ZONOS3 has no limit; French books read by ZONOS3 in the browser too. | `4af6c6d` |
+| D-38 | README: "a bad entry is left out" of `ZONOS_VOICES` holds for a list, but one bad entry in a single string makes the whole setting ignored; nothing tells a site to re-run `fetch-zonos.sh` for `spk/` (M-207). A single string in `reader-config.json` is now taken entry by entry, a bad one left out, as the README says (tested); the README says so, and to run `fetch-zonos.sh` again after updating. | `4af6c6d` |
 | L-431 | With `$` among MATH_DELIMITERS, text full of "$`" takes time of its length × 8000 (about 3.4 s frozen per MB, again for search): each "$`" scans up to 4000 characters. `$`…`$` looked for only when its closing mark is ahead in the line, found once and kept, as H-52's fix does. | `daa3a1a` |
 | L-432 | The page's math pass and search's (`chapterDoc`) share one budget, so a search starting between them can leave raw `\(…\)` on the page. Each math pass keeps its own budget while it lets go of the thread (checked by reading: not reproduced). | `daa3a1a` |
 | L-433 | The server voice prepares the next chapter in the shown page's language, so a chapter in another (`en-GB` after `en`) is made twice and pauses at the break; the audiobook export uses one language for the book. Passages made ahead, and the audiobook's, in their own chapter's language (kept on its detached copy too), keyed and sent so. | `daa3a1a` |
