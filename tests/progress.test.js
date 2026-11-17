@@ -398,3 +398,14 @@ test('?get= of a site archive sent on to another site tells the API the address 
   assert.equal(got[0].path, null);
   assert.equal(got[0].url, `${h.SOFT}/reader/books/long.epub`);
 });
+
+test('Refresh doesn\'t ask the site where the reader is again, which could move them back (round 39 review, L-450)', async () => {
+  const page = await apiPage();
+  const asked = await api(page, '**/api/position', { status: 200, type: 'application/json', body: '{"section":null,"section_percentage":null,"book_percentage":null}' });
+  await h.openReader(page, LONG, { 'spine:layout': 'one' });
+  await h.waitFor(() => asked.length === 1);
+  await page.click('#refreshBtn');
+  await h.waitForBook(page);
+  await page.waitForTimeout(500);
+  assert.equal(asked.length, 1);
+});

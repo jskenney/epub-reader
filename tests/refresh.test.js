@@ -85,3 +85,75 @@ test('Refresh reads an EPUB again past the browser\'s cache; it is in Text setti
   await h.openReader(page, `${h.SITE}/folder-notools/index.html?book=/reader/books/long.epub`);
   assert.equal(await page.isHidden('#refreshBtn'), true, 'SHOW_REFRESH_BUTTON: false');
 });
+
+test('Refresh of a ?get= book that was redirected keeps its place and its one record of it (round 39 review, M-210)', async () => {
+  const page = await h.newPage();
+  const url = `${h.PLAIN}/reader/index.html?get=/redirect/${new URL(h.SITE).port}/reader/books/long.epub`;
+  await h.openReader(page, url, { 'spine:layout': 'one' });
+  await page.click('#nextBtn'); await page.waitForTimeout(300);
+  const before = await page.textContent('#spinePos');
+  await page.click('#refreshBtn');
+  await h.waitForBook(page);
+  assert.equal(await page.textContent('#spinePos'), before);
+  const keys = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('spine:pos:get:')));
+  assert.equal(keys.length, 1, keys.join(' '));
+});
+
+test('Refresh of a folder book reads it again and keeps its name as written; an EPUB served whole comes past the cache (round 39 review, L-445, T-64)', async () => {
+  const opf = path.join(BOOKS, 'folder book', 'OEBPS', 'content.opf'), was = fs.readFileSync(opf, 'utf8');
+  try {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=${encodeURIComponent('books/folder book/')}`);
+    assert.equal(await page.textContent('#bookTitle'), 'ABC');
+    fs.writeFileSync(opf, was.replace('<dc:title>ABC</dc:title>', '<dc:title>ABC again</dc:title>'));
+    await page.click('#refreshBtn');
+    await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'ABC again', null, { timeout: 10000 });
+    await page.click('#editBtn'); await page.click('#editThis');
+    await page.waitForFunction(() => /folder book\.epub/.test(document.querySelector('#editName').textContent), null, { timeout: 10000 });
+  } finally { fs.writeFileSync(opf, was); }
+  const file = path.join(BOOKS, 'refresh-whole.epub');
+  fs.copyFileSync(path.join(BOOKS, 'abc.epub'), file); old(file, 2020);
+  await cached(true);
+  try {
+    const page = await cachingPage();
+    await h.openReader(page, `${h.NORANGE}/reader/index.html?book=books/refresh-whole.epub`);
+    fs.copyFileSync(path.join(BOOKS, 'two-langs.epub'), file); old(file, 2021);
+    await page.click('#refreshBtn');
+    await page.waitForFunction(() => document.querySelector('#bookTitle').textContent === 'Two langs', null, { timeout: 10000 });
+  } finally { await cached(false); fs.rmSync(file, { force: true }); }
+});
+
+test('Refresh reaches a document\'s stylesheet past the cache; unsaved changes are kept if the book can\'t be read again (round 39 review, L-443, L-444)', async () => {
+  const html = path.join(BOOKS, 'refresh-style.html'), css = path.join(BOOKS, 'refresh-style.css');
+  fs.writeFileSync(html, '<!DOCTYPE html><html><head><title>Styled</title><link rel="stylesheet" href="refresh-style.css"></head><body><p id="p">Styled text.</p></body></html>');
+  fs.writeFileSync(css, '#p{color:rgb(200, 0, 0)}'); old(html, 2020); old(css, 2020);
+  await cached(true);
+  try {
+    const page = await cachingPage();
+    await h.openReader(page, `${h.READER}?book=books/refresh-style.html`);
+    assert.equal(await h.inFrame(page, doc => getComputedStyle(doc.getElementById('p')).color), 'rgb(200, 0, 0)');
+    fs.writeFileSync(css, '#p{color:rgb(0, 0, 200)}'); old(css, 2021);
+    await page.click('#refreshBtn');
+    assert.ok(await h.waitFor(() => h.inFrame(page, doc => getComputedStyle(doc.getElementById('p')).color === 'rgb(0, 0, 200)'), 10000), 'the new stylesheet');
+  } finally { await cached(false); }
+  // Changes kept by Done, unsaved; the file gone from the site: Refresh asks, can't read it, and the changes stay.
+  try {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/refresh-style.html`, { 'spine:editMode': 'raw' });
+    await page.click('#editBtn'); await page.click('#editThis');
+    await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+    await page.evaluate(() => { const c = document.querySelector('.CodeMirror'); if (c) c.CodeMirror.replaceRange(' More.', c.CodeMirror.posFromIndex(c.CodeMirror.getValue().indexOf('</p>'))); else { const t = document.querySelector('.edit-plain'); t.value = t.value.replace('</p>', ' More.</p>'); t.dispatchEvent(new Event('input')); } });
+    await page.waitForTimeout(500);
+    await page.click('#editDone');
+    await page.waitForSelector('#editBar', { state: 'hidden' });
+    fs.rmSync(html);
+    const asked = [];
+    page.on('dialog', d => { asked.push(d.message()); d.accept(); });
+    await page.click('#refreshBtn');
+    assert.match(await h.noticeLike(page, /Nothing was found/), /Nothing was found/);
+    assert.match(asked[0] || '', /unsaved changes\. Refresh the book and lose them\?/);
+    await page.click('#refreshBtn');
+    await page.waitForTimeout(500);
+    assert.equal(asked.length, 2, 'still asked: the changes are kept');
+  } finally { fs.rmSync(html, { force: true }); fs.rmSync(css, { force: true }); }
+});

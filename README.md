@@ -579,8 +579,12 @@ site as the reader.
   format, file…) below the contents; it is hidden when the page opens
 - Refresh (the circular arrow between Edit and Open, for a book from the site: `?book=`, the default book, `?get=`,
   or a link): reads the book again from the site, skipping the browser's cache, without reloading the page, and
-  opens it at the same place, for when the file has been changed. Not shown for a file opened from this computer or
-  the sample, nor while editing; if the book can't be read now, the one shown stays. Also in Settings → Text settings.
+  opens it at the same place (for `?get=`, the address asked for, even if the site sent it on elsewhere; the site's
+  API_START isn't asked again), for when the file has been changed. The text, a document's stylesheets and a folder
+  book's files come fresh; pictures and fonts the page loads by their address can still come from the browser's cache.
+  Not shown for a file opened from this computer or the sample, nor while editing; unsaved changes are asked about and
+  let go only once the book is read again: if it can't be read now, the one shown stays, with them. Also in Settings →
+  Text settings.
 - Full-screen reading: the corner button or F hides the top bar, sidebar and
   footer (and uses the browser's full screen where allowed). Esc, F, or the
   Exit button that appears when you move the mouse brings them back.

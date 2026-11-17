@@ -73,6 +73,7 @@ export async function localFetch(path, init = {}) {
   // Custom voices (E-48): a clip cached in a session (the engine wants the header), and its embedding, made with
   // the speaker encoder (downloaded the first time). A clip starting "NOTAUDIO" can't be decoded.
   const session = new Headers(init.headers).get('x-tts-session-id');
+  if (path === '/v2/speakers' && init.method === 'POST' && window.zonosFakeSlowSpeakers) await wait(window.zonosFakeSlowSpeakers);
   if (path === '/v2/speakers' && init.method === 'POST' && window.zonosFakeHangSpeakers) {
     window.zonosFake.speakerHangs = (window.zonosFake.speakerHangs || 0) + 1;
     return new Promise((_, rej) => init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))));
@@ -764,6 +765,9 @@ def main():
     # An extracted book in a folder whose name has ";" and "," (REVIEW.md L-81): its pictures must still load.
     with zipfile.ZipFile(books / "pictures.epub") as z:
         z.extractall(books / "semi;colon,comma")
+    # (round 39 review, L-445: a folder book whose name has a space, for Refresh)
+    with zipfile.ZipFile(books / "abc.epub") as z:
+        z.extractall(books / "folder book")
     # A stylesheet that imports itself 30 times, linked 50 times (REVIEW.md H-6): must open quickly.
     epub(books / "css-fanout.epub", "CSS Fanout", [("c1.xhtml", "One", "<h1>Fanout</h1><p class='f'>Text.</p>",
          '<link rel="stylesheet" href="self.css"/>' * 50)], uid="urn:css-fanout",
@@ -1231,6 +1235,9 @@ def main():
          ("c2.xhtml", "Bravo", "<p>Bravo words here.</p>", "", "en-GB")], uid="urn:tex-langs")
     for code in ("en", "fr"):
         epub(books / f"same-{code}.epub", f"Same {code}", [("c1.xhtml", "One", "<p>The same words, le même texte.</p>")], uid=f"urn:same-{code}", lang=code)
+    # (round 39 review, M-211: chapters in English and French, for the audiobook with ZONOS3)
+    epub(books / "en-fr.epub", "En Fr", [("c1.xhtml", "English", "<p>English words here.</p>"),
+         ("c2.xhtml", "Francais", "<p>Des mots en francais.</p>", "", "fr")], uid="urn:en-fr")
     epub(books / "own-inlinespan.epub", "Own inlinespan", [("c1.xhtml", "One", '<div class="m" id="m"><p id="s" style="column-span:all">Spanning heading</p>' + "".join(f"<p>Entry {i}.</p>" for i in range(20)) + "</div>" + hp, "<style>.m{columns:2;column-gap:10px}</style>")], uid="urn:own-inlinespan")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")

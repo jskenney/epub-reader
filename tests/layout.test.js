@@ -663,3 +663,15 @@ test('a link to a place past boxes that have stopped being boxes since the page 
   const [l, r, w] = await h.inFrame(page, doc => { const b = doc.getElementById('h800').getBoundingClientRect(); return [b.left, b.right, doc.defaultView.innerWidth]; });
   assert.ok(l >= -2 && r <= w + 2, `on the page shown: ${Math.round(l)}..${Math.round(r)} of ${w}`);
 });
+
+test('the top bar fits the window from 821 to 1100 px, the title showing, every button on screen (round 39 review, M-212)', async () => {
+  const page = await h.newPage({ viewport: { width: 1100, height: 800 } });
+  await h.openReader(page, `${h.READER}?book=books/long.epub`);
+  for (const w of [821, 834, 880, 920, 1000, 1100]) {
+    await page.setViewportSize({ width: w, height: 800 }); await page.waitForTimeout(150);
+    const [sw, title, open] = await page.evaluate(() => [document.documentElement.scrollWidth, document.querySelector('.book-id').getBoundingClientRect().width, document.querySelector('#openBtn').getBoundingClientRect().right]);
+    assert.equal(sw, w, `${w} px: no sideways scrolling`);
+    assert.ok(title > 30, `${w} px: the title ${title} px wide`);
+    assert.ok(open <= w, `${w} px: Open on screen`);
+  }
+});

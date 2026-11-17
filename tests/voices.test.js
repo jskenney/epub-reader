@@ -314,3 +314,24 @@ test('server voice: a chapter with TeX read ahead is asked for without the TeX (
   const euler = (await h.breezeLog()).filter(e => /Euler/.test(e.text));
   assert.ok(euler.every(e => !/\\\(|\^\{|\\pi/.test(e.text)), JSON.stringify(euler.map(e => e.text)));
 });
+
+test('server voice: a clip re-recorded while the page is open is sent anew once its new version is seen (round 39 review, L-447)', async () => {
+  const file = path.join(__dirname, 'site', 'tts-voices', 'narrator.wav'), was = fs.readFileSync(file);
+  try {
+    await h.clearBreezeLog();
+    const page = await h.newPage();
+    await h.openReader(page, LONG, server);
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    await page.keyboard.press(' ');
+    fs.writeFileSync(file, Buffer.concat([was, Buffer.alloc(20000)]));
+    await page.selectOption('#ttsVoice', 'second'); await page.waitForTimeout(300);
+    await page.selectOption('#ttsVoice', 'narrator'); await page.waitForTimeout(800);
+    await h.clearBreezeLog();
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+    await page.keyboard.press(' ');
+    assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => e.ref_bytes), 15000));
+    const sizes = [...new Set((await h.breezeLog()).filter(e => e.ref_bytes).map(e => e.ref_bytes))];
+    assert.deepEqual(sizes, [was.length + 20000]);
+  } finally { fs.writeFileSync(file, was); }
+});

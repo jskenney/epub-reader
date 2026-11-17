@@ -733,3 +733,16 @@ test('the audiobook: a chapter\'s TeX isn\'t read out; each chapter is asked for
     assert.ok(bravo.length && bravo.every(e => e.language === 'en-GB'), JSON.stringify(bravo));
   } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
 });
+
+test('the audiobook with ZONOS3 and no voice chosen: a French chapter is made with the French voice its key names (round 39 review, M-211)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  const page = await h.newPage();
+  await page.addInitScript(fakeAac, FRAMES);
+  await page.addInitScript(fake => { window.SPINE_TEST = { zonosEngine: fake }; Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => ({}) }); }, `${h.SITE}/zonos-fake/engine.js`);
+  await openExport(page, `${h.READER}?book=books/en-fr.epub`, { 'spine:ttsEngine': 'zonos', 'spine:agreed:zonos': true });
+  await exportAll(page, 'one', 1);
+  const reqs = await page.evaluate(() => window.zonosFake.requests);
+  const fr = reqs.filter(r => /francais/.test(r.text)), en = reqs.filter(r => /English/.test(r.text));
+  assert.ok(fr.length && fr.every(r => r.speaker_embedding_id === 'default_gaspard' && r.language === 'fr_fr'), JSON.stringify(fr));
+  assert.ok(en.length && en.every(r => r.speaker_embedding_id === 'default_savannah'), JSON.stringify(en));
+});

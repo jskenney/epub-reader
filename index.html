@@ -391,6 +391,13 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .ed-tools{flex-wrap:wrap}
 .ed-tools .btn{min-width:30px;padding:0 7px}
 
+/* (Compact from 1100 px down, not only below 820: between them the bar ran past the window, the title shrunk to
+   nothing and Open off-screen: round 39 review, M-212.) */
+@media (max-width:1100px){
+  .bar{gap:6px}
+  .tools{gap:2px}
+  .btn.ghost{padding:0 7px}
+}
 @media (max-width:820px){
   .hide-sm{display:none}
   .toc,.toc.collapsed{display:flex;position:absolute;z-index:5;top:0;bottom:0;left:0;width:min(320px,88%);box-sizing:border-box;
@@ -729,7 +736,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261117.0256</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261117.0359</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1287,7 +1294,7 @@ async function zipFromUrl(url, init = {}){
     // with these, kind with kind (a weak ETag still changes when the file does).
     const etag = r.headers.get('etag') || '', modified = r.headers.get('last-modified') || '';
     const version = etag && !etag.startsWith('W/') ? etag : modified;
-    const changed = () => new Error('the book changed on the server while it was open; reload the page to open the new version');
+    const changed = () => new Error('the book changed on the server while it was open; Refresh (the circular arrow) or reloading the page opens the new version');   // (round 39 review, L-451)
     // true: another version; false: the same one; null: can't tell (the reply has nothing to compare).
     const differs = res => {
       const t = res.headers.get('etag') || '', m = res.headers.get('last-modified') || '';
@@ -1469,7 +1476,7 @@ function dirSource(base, init = {}){
       // header would show it as a page of this site (round 25 review, M-135).
       if (!key && /\.(png|jpe?g|gif|webp|avif|bmp|ico|mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4|m4v|webm|ogv|mov|woff2?|ttf|otf|eot|css|vtt)$/i.test(p)) return u;
       try {
-        const r = await fetch(u); if (!r.ok) return null;
+        const r = await fetch(u, init); if (!r.ok) return null;
         if (r.redirected && !sameSite(new URL(r.url), new URL(root))) return null;   // (sent on to another site: round 24 review)
         const raw = new Uint8Array(await r.arrayBuffer()), data = key ? unobfuscate(raw, key) : raw;
         if (this.disposed) return null;   // (the book was closed meanwhile)
@@ -2286,12 +2293,12 @@ function splitDocument(doc, { headings = false, maxLen = 200000 } = {}){
 // A document opened on its own (HTML, Markdown, text) larger than this isn't read: one of 29 MB hung the tab (round 27
 // review, M-156).
 const MAX_DOC = 32 << 20;
-async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false, created = false, foreign = '', from = '', forEdit = false } = {}){
+async function openDocument(buffer, name, kind, { base = null, key, seq, charset = '', handle = null, fresh = false, created = false, foreign = '', from = '', forEdit = false, fetchInit = {} } = {}){
   if (!isStale(seq)) showStatus('Opening book…');   // (an overtaken open shows nothing)
   if (buffer.byteLength > MAX_DOC) throw new Error(`${name} is too large to show (${Math.round(buffer.byteLength / 1048576)} MB; the limit is ${MAX_DOC / 1048576} MB)`);
   const text = decodeText(new Uint8Array(buffer), { http: charset, sniff: kind === 'html' });
   const built = await buildDocument(text, name, kind);
-  const fallback = base ? dirSource(base) : null;
+  const fallback = base ? dirSource(base, fetchInit) : null;   // (its stylesheets and pictures past the cache too, on Refresh: round 39 review, L-443)
   const src = {
     kind: 'mem',
     base: fallback?.base,
@@ -2667,8 +2674,10 @@ async function openBook(zip, { sample = false, name = '', seq, from = '', ownKey
 // newer one (REVIEW.md M-15).
 let openSeq = 0;
 const isStale = seq => seq != null && seq !== openSeq;
+let opening = null;
 async function startBook(next){
   if (isStale(next.seq)) { next.src?.dispose?.(); return; }
+  if (opening?.seq === next.seq) Object.assign(next, { asked: opening.asked, refreshing: opening.refresh });
   editQuit(); ed.epub = null;   // (a book opened another way while editing: openFile and the rest have asked about unsaved changes)
   ttsAvail(!next.comic, 'a comic has no text to read');   // (M-159)
   progressFlush();   // (a place in the previous book not yet sent: E-22)
@@ -2691,7 +2700,7 @@ async function startBook(next){
   if (book.sample) showNotice('This is a built-in sample book. Open an EPUB, comic (.cbz), text, Markdown or HTML file, or drop one anywhere on the page, to read your own.', 'info', openAction);
   else hideNotice();
 
-  const asked = positionAsk();   // (the place the site has for this book, if it keeps one: E-22)
+  const asked = book.refreshing ? null : positionAsk();   // (the place the site has for this book, if it keeps one: E-22; not on Refresh: L-450)
   let saved = store.get(book.key);
   const earlier = [...(book.legacyKeys || []).map(k => [k, true]), ...(book.copyKeys || []).map(k => [k, false])];
   for (const [k, move] of saved ? [] : earlier) {
@@ -6854,6 +6863,8 @@ async function znMake(v, key, signal){
       e = made.embedding;
     } finally { zn.encoding = ''; }
     if (!Array.isArray(e) || !e.length) throw new Error(`${v.name} couldn't be made into a voice`);
+    // (Not kept, nor used, if the voice was deleted while it was made: round 39 review, L-448.)
+    if (v.own && !await znDb.get(v.own).catch(() => null)) throw new Error(`your voice ${v.name} was deleted`);
     if (/speaker encoder/.test($('#notice').textContent)) hideNotice();
     znDb.putEmb(key, e).catch(() => {});
   }
@@ -7056,11 +7067,14 @@ async function svRef(v){
   const url = svClipURL(v);
   if (!url) throw new Error(`the voice clip ${v.ref_audio} isn't in the voices folder`);
   // (Not from the HTTP cache: a re-recorded clip must be the one used, as its version is in the key.)
-  if (!sv.refs.has(v.ref_audio)) sv.refs.set(v.ref_audio, fetch(url, { cache: 'no-cache' }).then(r => {
+  // (Kept by its version too: a clip re-recorded while the page is open is fetched again, as its key changes: round 39
+  // review, L-447.)
+  const ref = `${v.ref_audio}|${v.clipVersion || ''}`;
+  if (!sv.refs.has(ref)) sv.refs.set(ref, fetch(url, { cache: 'no-cache' }).then(r => {
     if (!r.ok) throw new Error(`the voice clip ${v.ref_audio} answered ${r.status}`);
     return r.blob();
   }));
-  return sv.refs.get(v.ref_audio).catch(e => { sv.refs.delete(v.ref_audio); throw e; });
+  return sv.refs.get(ref).catch(e => { sv.refs.delete(ref); throw e; });
 }
 // What saved audio is keyed by: only what changes the sound (with the same defaults svGenerate sends), so
 // reordering or adding other fields in voices.json (a name, a note) keeps it.
@@ -8213,11 +8227,13 @@ async function abRun(units, mode, target, format = 'aac'){
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
   // (Each file's passages in its own language, keyed and sent so, the rest of the snapshot as it was when the export
   // began: round 34 review, L-433.)
-  const langKeys = new Map([[snap.lang, keyBase]]);
+  // (The key and the voices it names taken together, in that language: the voice for a language is worked out in it,
+  // and the audio must be made with the voice its key names: round 39 review, M-211.)
+  const langKeys = new Map([[snap.lang, [keyBase, snap]]]);
   const abInLang = lang => {
     if (!lang || ne === NEURAL.kokoro) return [keyBase, snap];
-    if (!langKeys.has(lang)) langKeys.set(lang, inLang(lang, () => ne.key()));
-    return [langKeys.get(lang), { ...snap, lang }];
+    if (!langKeys.has(lang)) langKeys.set(lang, inLang(lang, () => [ne.key(), { ...snap, lang, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice() }]));
+    return langKeys.get(lang);
   };
   const cover = await abCover();
   const meta = { album: b.title, artist: b.authors.join(', '), cover };
@@ -9787,22 +9803,22 @@ function editQuit(){
 // Leaving this book: asked about what would be lost (null: called off), and what letting it go takes, done by the
 // function returned: at once, or only once the other book has opened (a document's link to one that isn't there
 // leaves this one, with its changes still kept: round 27 review, M-154).
-function editLeaveAsk(){
+function editLeaveAsk(lose = 'Open the other book and lose'){
   if (ed.on && editWaitSave()) return null;
   if (ed.on) editFlush();
   const acts = [];
   // (A document left with changes by Done, not saved: asked about too.)
   if (!ed.on && book?.doc?.unsaved) {
-    if (!confirm(`${book.doc.name} has unsaved changes. Open the other book and lose them?`)) return null;
+    if (!confirm(`${book.doc.name} has unsaved changes. ${lose} them?`)) return null;
     const doc = book.doc, key = docDraftKey(doc);
     acts.push(() => { draftDel(key); doc.unsaved = false; });
   }
   // (An EPUB with chapters edited and not saved, this one or others: asked about once: E-23.)
   const waiting = [...(book?.unsaved || [])].filter(p => !(ed.on && ed.epub?.path === p)), count = waiting.length + (editDirty() && ed.epub ? 1 : 0);
-  if (count && !confirm(`${count} edited chapter${count > 1 ? 's' : ''} of this book ${count > 1 ? "aren't" : "isn't"} saved. Open the other book and lose ${count > 1 ? 'them' : 'it'}?`)) return null;
+  if (count && !confirm(`${count} edited chapter${count > 1 ? 's' : ''} of this book ${count > 1 ? "aren't" : "isn't"} saved. ${lose} ${count > 1 ? 'them' : 'it'}?`)) return null;
   const bookKey = book?.key;
   acts.push(() => { for (const p of waiting) draftDel(`epub:${bookKey}:${p}`); });
-  if (editDirty() && !ed.epub && !confirm(`${ed.name} has unsaved changes. Open the other book and lose them?`)) return null;
+  if (editDirty() && !ed.epub && !confirm(`${ed.name} has unsaved changes. ${lose} them?`)) return null;
   if (editDirty()) { const key = draftKey(); acts.push(() => { clearTimeout(ed.draftTimer); draftDel(key); }); }
   acts.push(() => { editQuit(); ed.epub = null; });
   return () => acts.forEach(f => f());
@@ -11232,10 +11248,17 @@ function syncRefresh(){
   $('#txtRefreshRow').hidden = !can;
 }
 async function refreshBook(){
-  if (!canRefresh() || !leaveOk()) return;
-  const u = new URL(book.from), anySite = u.origin !== location.origin;
+  if (!canRefresh()) return;
+  // (Unsaved edits let go only once the book is read again: if it can't be, they stay: round 39 review, L-444.)
+  if (ab.running && !confirm('An audiobook of this book is being made. Stop it and refresh the book?')) return;
+  const letGo = editLeaveAsk('Refresh the book and lose');
+  if (!letGo) return;
+  const u = new URL(book.from);
+  const { ref, anySite } = book.asked || { ref: u.origin !== location.origin ? u.href : safeDecode(u.pathname), anySite: u.origin !== location.origin };
   savePos();
-  return openFromUrl(anySite ? u.href : u.pathname, { anySite, keep: true, fresh: true, forEdit: false });
+  const ok = await openFromUrl(ref, { anySite, keep: true, fresh: true, forEdit: false, refresh: true });
+  if (ok) letGo();   // (else the book shown stays, with its edits)
+  return ok;
 }
 $('#refreshBtn').addEventListener('click', refreshBook);
 // ?get=address (E-24): a book or document on this site or another. Another site has to allow it (CORS).
@@ -11249,8 +11272,12 @@ async function openByAddress(ref, { keep = false } = {}){
 // anySite: ?get= (E-24), which takes addresses on other sites too. keep: a book that can't be opened leaves the one
 // shown open (a document's link), rather than opening the default book. true once opened.
 // fresh: read again from the site, past the browser's cache (Refresh, E-49).
-async function openFromUrl(ref, { anySite = false, forEdit = false, keep = false, fresh = false } = {}){
+// refresh: Refresh itself, which doesn't ask the site where the reader is (it knows: round 39 review, L-450).
+async function openFromUrl(ref, { anySite = false, forEdit = false, keep = false, fresh = false, refresh = false } = {}){
   const seq = ++openSeq, cache = fresh ? { cache: 'no-cache' } : {};
+  // (What was asked for, as it was asked, kept on the book it opens: Refresh asks for the same, not the address a
+  // redirect sent it to, so its place and name are the same: round 39 review, M-210, L-445.)
+  opening = { seq, asked: { ref, anySite }, refresh };
   showStatus(`Loading ${ref}…`);
   // ref is already decoded (URLSearchParams did it): decoding again would turn "50%off" into an error.
   const name = (ref.replace(/\/+$/, '').split('/').pop() || ref).replace(/\.epub$/i, '');
@@ -11277,7 +11304,7 @@ async function openFromUrl(ref, { anySite = false, forEdit = false, keep = false
         await openDocument(got.buf, safeDecode(u.pathname.split('/').pop()), kind,
           // (from: where it really came from, after a redirect to another site, so the site's API isn't told this
           // site's path for another site's file: round 25 review, L-312.)
-          { base: new URL('.', foreign && got.url ? got.url : u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: foreign && got.url ? got.url : u.href });   // (its pictures from where it came from: L-320)
+          { base: new URL('.', foreign && got.url ? got.url : u.href).href, key: foreign ? `spine:pos:get:${u.href}` : `spine:pos:url:${u.pathname}`, seq, charset: got.charset, foreign, from: foreign && got.url ? got.url : u.href, fetchInit: cache });   // (its pictures from where it came from: L-320)
         if (isStale(seq)) return false;
         if (foreign) showFrom(foreign);
         return true;

@@ -548,3 +548,24 @@ test('ZONOS3 voices in reader-config.json as one string: a bad entry is left out
   assert.ok(!(await voiceList(p)).some(n => n.startsWith('Bad')));
   assert.ok(warns.some(w => /ZONOS_VOICES: .*ftp:\/\/x\/y\.wav isn't a web address \(left out\)/.test(w)), warns.join(' | '));
 });
+
+test('ZONOS3: a voice of your own deleted while it is being made isn\'t kept (round 39 review, L-448)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...zonos, 'spine:agreed:zonos': true });
+  await p.click('#setBtn');
+  await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
+  await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
+  await p.click('#setClose');
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  await p.evaluate(() => { window.zonosFakeSlowSpeakers = 1500; });
+  await p.selectOption('#ttsVoice', { label: 'narrator (yours)' });
+  await p.waitForTimeout(400);
+  await p.click('#setBtn');
+  p.once('dialog', d => d.accept());
+  await p.click('#znOwnList button:has-text("Delete")');
+  await p.waitForFunction(() => /Deleted narrator/.test(document.querySelector('#znMsg').textContent));
+  await p.waitForTimeout(2500);
+  const keys = await p.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-zonos-voices'); rq.onsuccess = () => { const g = rq.result.transaction('emb').objectStore('emb').getAllKeys(); g.onsuccess = () => { res(g.result); rq.result.close(); }; }; }));
+  assert.deepEqual(keys.filter(k => k.startsWith('own|')), []);
+});
