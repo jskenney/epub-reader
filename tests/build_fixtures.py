@@ -254,6 +254,10 @@ def main():
     os.symlink(REPO / "index.html", SITE / "zonos-voices" / "index.html")
     (SITE / "zonos-voices" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": [
         {"name": "Site narrator", "url": "/tts-voices/narrator.wav"}, "Missing = /tts-voices/no-such.wav", {"name": "Bad", "url": "ftp://x/y.wav"}]}))
+    # (D-38: one string with a bad entry: the others kept)
+    (SITE / "zonos-voices-str").mkdir()
+    os.symlink(REPO / "index.html", SITE / "zonos-voices-str" / "index.html")
+    (SITE / "zonos-voices-str" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": "Good = /tts-voices/narrator.wav | Bad = ftp://x/y.wav"}))
     # Self-hosted ZONOS3 models (stand-ins: the fake engine reads none): a finished download, with fetch-zonos.sh's
     # NOTICE.txt, and one that stopped partway, without it (REVIEW.md E-46 review).
     for folder, done in (("zonos-local", True), ("zonos-partial", False)):
@@ -1219,6 +1223,14 @@ def main():
         + "".join(f'<div class="box"><h2 id="h{i}">H{i}</h2><p>a {i}</p><p>b</p><p>c</p></div>' for i in range(1200)) + "</body></html>")
     # (round 34 review, L-431: text full of "$`" with $ among the marks)
     (books / "dollar-ticks.html").write_text("<!DOCTYPE html><html><head><title>Dollar ticks</title></head><body><p>" + "$`x" * 300000 + " and $a+b$ after.</p></body></html>")
+    # (T-59, T-63: TeX in a chapter read ahead and exported; chapters in two languages; the same text in two languages;
+    # TeX in a text file, left as written)
+    epub(books / "tex-ahead.epub", "TeX ahead", [("c1.xhtml", "One", "<p>Plain chapter one.</p>"),
+         ("c2.xhtml", "Two", "<p>Euler wrote \\(e^{i\\pi}+1=0\\) once.</p>")], uid="urn:tex-ahead")
+    epub(books / "tex-langs.epub", "TeX langs", [("c1.xhtml", "Alpha", "<p>Alpha words with \\(x^2\\) inside.</p>"),
+         ("c2.xhtml", "Bravo", "<p>Bravo words here.</p>", "", "en-GB")], uid="urn:tex-langs")
+    for code in ("en", "fr"):
+        epub(books / f"same-{code}.epub", f"Same {code}", [("c1.xhtml", "One", "<p>The same words, le même texte.</p>")], uid=f"urn:same-{code}", lang=code)
     epub(books / "own-inlinespan.epub", "Own inlinespan", [("c1.xhtml", "One", '<div class="m" id="m"><p id="s" style="column-span:all">Spanning heading</p>' + "".join(f"<p>Entry {i}.</p>" for i in range(20)) + "</div>" + hp, "<style>.m{columns:2;column-gap:10px}</style>")], uid="urn:own-inlinespan")
     for k, c in hostile.items():
         epub(books / f"hostile-{k}.epub", f"Hostile {k}", [("c1.xhtml", "One", hp, f"<style>{c}</style>" if c else "")], uid=f"urn:hostile-{k}")

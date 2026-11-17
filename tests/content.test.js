@@ -772,3 +772,12 @@ test('text full of "$`" with $ among the math marks doesn\'t freeze the page; it
   const longest = await page.evaluate(() => window.longest);
   assert.ok(longest < 1500, `longest stretch: ${Math.round(longest)} ms`);
 });
+
+test('a wide formula scrolls sideways in two columns and in the scroll layout too (round 30 review, M-187; T-60)', async () => {
+  const page = await h.newPage({ viewport: { width: 1400, height: 900 } });
+  for (const layout of ['two', 'scroll']) {
+    await h.openReader(page, `${h.READER}?book=books/math-page.html`, { 'spine:layout': layout });
+    const scrolled = await h.inFrame(page, doc => { const m = doc.querySelector('#wide math'); m.scrollLeft = 300; return new Promise(r => setTimeout(() => r([m.scrollLeft, m.scrollWidth > m.clientWidth]), 300)); });
+    assert.ok(scrolled[1] && scrolled[0] > 0, `${layout}: ${JSON.stringify(scrolled)}`);
+  }
+});

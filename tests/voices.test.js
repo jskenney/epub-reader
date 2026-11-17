@@ -102,37 +102,39 @@ test('server voices: clips outside the voices folder are not used (L-12, L-28)',
 // them and sent the book's language; one that can't use instructions has its instruction-only voices left out. A
 // server that lists none (Breeze) is offered for English and Chinese and sent no language, as before (E-47).
 test('server voice: languages and instructions from /health (E-47)', async () => {
-  // Breeze: no language sent; the voice with only an instruction (its clip is on another site) is offered.
-  let page = await h.newPage();
-  await h.clearBreezeLog();
-  await h.openReader(page, LONG, server);
-  await page.keyboard.press('r');
-  assert.ok(await h.waitFor(() => h.spokenWord(page)));
-  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second', 'described']);
-  assert.equal((await h.breezeLog())[0].language, null);
-  await page.close();
-  // ZONOS3, speaking the book's language: it is sent, and the instruction-only voice is left out.
-  await h.clearBreezeLog();
-  await fetch(`${h.SITE}/__breeze?langs=fr,en,de`);
-  page = await h.newPage();
-  await h.openReader(page, LONG, server);
-  const lang = await page.evaluate(() => (document.querySelector('#page').contentDocument.documentElement.getAttribute('lang') || ''));
-  await page.keyboard.press('r');
-  assert.ok(await h.waitFor(() => h.spokenWord(page)));
-  assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second']);
-  const sent = (await h.breezeLog())[0].language;
-  assert.ok(sent && sent.toLowerCase().startsWith('en') && (!lang || sent === lang), `language sent: ${sent} (book: ${lang})`);
-  assert.equal(await page.$eval('#ttsEngine option[value=server]', o => o.textContent), 'Server');
-  await page.close();
-  // ZONOS3 without the book's language: Server voice is offered but can't be chosen, and says why.
-  await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' });
-  await fetch(`${h.SITE}/__breeze?langs=fr,de`);
-  page = await h.newPage();
-  await h.openReader(page, LONG, { 'spine:ttsEngine': 'device' });
-  await page.keyboard.press('r');
-  await page.waitForFunction(() => document.querySelector('#ttsEngine option[value=server]')?.textContent.includes('language'));
-  assert.deepEqual(await page.$eval('#ttsEngine option[value=server]', o => [o.textContent, o.disabled]), ["Server (not in this book's language)", true]);
-  await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' });
+  // (The mock server's ZONOS3 mode cleared however the test ends, or the server-voice tests after it would see it:
+  // round 34 review, T-62.)
+  try {
+    // Breeze: no language sent; the voice with only an instruction (its clip is on another site) is offered.
+    let page = await h.newPage();
+    await h.clearBreezeLog();
+    await h.openReader(page, LONG, server);
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second', 'described']);
+    assert.equal((await h.breezeLog())[0].language, null);
+    await page.close();
+    // ZONOS3, speaking the book's language: it is sent, and the instruction-only voice is left out.
+    await h.clearBreezeLog();
+    await fetch(`${h.SITE}/__breeze?langs=fr,en,de`);
+    page = await h.newPage();
+    await h.openReader(page, LONG, server);
+    const lang = await page.evaluate(() => (document.querySelector('#page').contentDocument.documentElement.getAttribute('lang') || ''));
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    assert.deepEqual(await page.$$eval('#ttsVoice option', os => os.map(o => o.value)), ['narrator', 'second']);
+    const sent = (await h.breezeLog())[0].language;
+    assert.ok(sent && sent.toLowerCase().startsWith('en') && (!lang || sent === lang), `language sent: ${sent} (book: ${lang})`);
+    assert.equal(await page.$eval('#ttsEngine option[value=server]', o => o.textContent), 'Server');
+    await page.close();
+    // ZONOS3 without the book's language: Server voice is offered but can't be chosen, and says why.
+    await fetch(`${h.SITE}/__breeze?langs=fr,de`);
+    page = await h.newPage();
+    await h.openReader(page, LONG, { 'spine:ttsEngine': 'device' });
+    await page.keyboard.press('r');
+    await page.waitForFunction(() => document.querySelector('#ttsEngine option[value=server]')?.textContent.includes('language'));
+    assert.deepEqual(await page.$eval('#ttsEngine option[value=server]', o => [o.textContent, o.disabled]), ["Server (not in this book's language)", true]);
+  } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
 });
 
 test('saved server-voice audio survives reordered or added fields in voices.json, not a changed seed or clip (L-15, L-28)', async () => {
@@ -260,4 +262,55 @@ test('server voice: a chapter in another language is made ahead in its own, once
     assert.ok(two.length > 0 && two.every(e => e.language === 'en-GB'), JSON.stringify(two.map(e => [e.text, e.language])));
     assert.equal(new Set(two.map(e => e.text)).size, two.length, 'each made once');
   } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
+});
+
+test('server voice: the language is part of saved audio\'s key for a server that lists languages, not for Breeze; a voice that needs instructions is dropped when the server can\'t use them (round 34 review, T-63)', async () => {
+  const said = async (page, url) => {
+    await page.goto(url); await h.waitForBook(page);
+    await page.keyboard.press('r');
+    await page.waitForTimeout(2500);
+    await page.keyboard.press('Escape');
+  };
+  try {
+    // A server that lists languages: the same words in a French book are made again, in French.
+    await h.clearBreezeLog();   // (which also clears the server's languages: set after)
+    await fetch(`${h.SITE}/__breeze?langs=en,fr`);
+    let page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/same-en.epub`, server);
+    await said(page, `${h.READER}?book=books/same-en.epub`);
+    await said(page, `${h.READER}?book=books/same-fr.epub`);
+    let log = (await h.breezeLog()).filter(e => /same words/.test(e.text));
+    assert.deepEqual([...new Set(log.map(e => e.language))].sort(), ['en', 'fr'], JSON.stringify(log));
+    await page.close();
+    // Breeze (no languages): the language isn't in the key, so the French book's same words come from saved audio.
+    await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' });
+    await h.clearBreezeLog();
+    page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/same-en.epub`, server);
+    await said(page, `${h.READER}?book=books/same-en.epub`);
+    const before = (await h.breezeLog()).filter(e => /same words/.test(e.text)).length;
+    await said(page, `${h.READER}?book=books/same-fr.epub`);
+    assert.ok(before > 0);
+    assert.equal((await h.breezeLog()).filter(e => /same words/.test(e.text)).length, before, 'not made again');
+    await page.close();
+    // A voice with only an instruction, chosen before, on a server that can't use instructions: another is used.
+    await h.clearBreezeLog();
+    await fetch(`${h.SITE}/__breeze?langs=en,fr`);
+    page = await h.newPage();
+    await h.openReader(page, LONG, { ...server, 'spine:serverVoice': 'described' });
+    await page.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(page)));
+    assert.equal(await page.$eval('#ttsVoice', s => s.value), 'narrator');
+    assert.ok((await h.breezeLog()).every(e => e.ref_text), 'asked with a voice of a clip');
+  } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
+});
+
+test('server voice: a chapter with TeX read ahead is asked for without the TeX (round 31 review; T-59)', async () => {
+  await h.clearBreezeLog();
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/tex-ahead.epub`, server);
+  await page.keyboard.press('r');
+  assert.ok(await h.waitFor(async () => (await h.breezeLog()).some(e => /Euler/.test(e.text)), 20000), 'chapter two read ahead');
+  const euler = (await h.breezeLog()).filter(e => /Euler/.test(e.text));
+  assert.ok(euler.every(e => !/\\\(|\^\{|\\pi/.test(e.text)), JSON.stringify(euler.map(e => e.text)));
 });

@@ -717,3 +717,19 @@ test('the export list\'s first shift-click in another book doesn\'t use the prev
   assert.deepEqual(after, before.map((c, i) => i === 0 ? !c : c));
   assert.deepEqual(page.errors, []);
 });
+
+test('the audiobook: a chapter\'s TeX isn\'t read out; each chapter is asked for in its own language from a server that lists languages (round 31 review, round 34 review: T-59, T-63, L-433)', { skip: noFfmpeg, timeout: 120000 }, async () => {
+  FRAMES ??= aacFrames();
+  await h.clearBreezeLog();   // (before: the bar reads the first passage, which the export then takes from saved audio; and it clears the server's languages, set after)
+  await fetch(`${h.SITE}/__breeze?langs=en,fr`);
+  try {
+    const page = await h.newPage();
+    await page.addInitScript(fakeAac, FRAMES);
+    await openExport(page, `${h.READER}?book=books/tex-langs.epub`);
+    await exportAll(page, 'one', 1);
+    const log = await h.breezeLog();
+    const alpha = log.filter(e => /Alpha/.test(e.text)), bravo = log.filter(e => /Bravo/.test(e.text));
+    assert.ok(alpha.length && alpha.every(e => !/x\^2|\\\(/.test(e.text) && e.language === 'en'), JSON.stringify(alpha));
+    assert.ok(bravo.length && bravo.every(e => e.language === 'en-GB'), JSON.stringify(bravo));
+  } finally { await fetch(`${h.SITE}/__breeze`, { method: 'DELETE' }); }
+});

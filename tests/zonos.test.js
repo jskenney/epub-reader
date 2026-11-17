@@ -537,3 +537,14 @@ test('ZONOS3: a site voice\'s recording that never comes stops reading with the 
   await p.keyboard.press('r');
   await p.waitForFunction(() => /recording for Site narrator couldn't be fetched/.test(document.querySelector('#notice').textContent), null, { timeout: 15000 });
 });
+
+test('ZONOS3 voices in reader-config.json as one string: a bad entry is left out, the others kept (round 34 review, D-38)', async () => {
+  const p = await page();
+  const warns = []; p.on('console', m => { if (m.type() === 'warning') warns.push(m.text()); });
+  await h.openReader(p, `${h.SITE}/zonos-voices-str/index.html?book=/reader/books/long.epub`, { ...zonos, 'spine:agreed:zonos': true });
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  assert.equal((await voiceList(p))[0], 'Good (this site)');
+  assert.ok(!(await voiceList(p)).some(n => n.startsWith('Bad')));
+  assert.ok(warns.some(w => /ZONOS_VOICES: .*ftp:\/\/x\/y\.wav isn't a web address \(left out\)/.test(w)), warns.join(' | '));
+});

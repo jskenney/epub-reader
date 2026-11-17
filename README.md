@@ -754,7 +754,7 @@ Re-runs skip finished files, every file is checked against
 
 French isn't offered: its model bundle at this revision has no built-in
 voices (`voices.bin`), so it can't speak. French books are read by device
-voices (Kokoro reads English, and the server voice the languages its server lists: French with ZONOS3).
+voices, ZONOS3 in the browser (with WebGPU), or the server voice when its server lists French (as a ZONOS3 server does); Kokoro reads only English.
 
 ## Self-hosting ZONOS3
 
@@ -955,7 +955,7 @@ default books and the memory and request sizes stay the site's to set.
 | `NAVBAR_ALT` ✓ | `''` | What the logo is called, for screen readers: the link's name when `NAVBAR_LINK` is set, the picture's description otherwise (`'Example Press'`). `''`: the link is named by where it goes. |
 | `GET_URLS` ✓ | `true` | `false` refuses `?get=` addresses (books and documents by their address, on this site or another). |
 | `SLEEP_TIMER` ✓ ⚙ | `false` | `true` shows the sleep timer in the read-aloud bar. |
-| `ZONOS_VOICES` ✓ ⚙ | `''` | ZONOS3 voices from recordings, listed first among ZONOS3's voices (custom voices): in `reader-config.json` a list (`[{"name": "Narrator", "url": "/voices/narrator.mp3"}]`, or `"Narrator = /voices/narrator.mp3"` strings); in Settings, `Name = address` entries separated by `\|`. An address on this site, or on another that allows cross-origin reads; any recording the browser can play. A recording replaced at the same address (a new ETag or date) makes a new voice. A bad entry is left out (with a warning in the console) or, in Settings, refused with the reason. |
+| `ZONOS_VOICES` ✓ ⚙ | `''` | ZONOS3 voices from recordings, listed first among ZONOS3's voices (custom voices): in `reader-config.json` a list (`[{"name": "Narrator", "url": "/voices/narrator.mp3"}]`, or `"Narrator = /voices/narrator.mp3"` strings); in Settings, `Name = address` entries separated by `\|`. An address on this site, or on another that allows cross-origin reads; any recording the browser can play. A recording replaced at the same address (a new ETag or date) makes a new voice. In `reader-config.json`, as a list or a single string, a bad entry is left out (with a warning in the console) and the others kept; in Settings, a value with a bad entry is refused with the reason, and stays to be corrected. After updating the reader, run `fetch-zonos.sh` again on a self-hosting site: custom voices need the speaker encoder (`spk/`) it now fetches. |
 | `ADDITIONAL_FONTS` ✓ ⚙ | `''` | More reading fonts for the Aa menu: any Google Fonts family, by its name as written on fonts.google.com. In `reader-config.json` a name or a list (`["Lora", "Merriweather:ital,wght@0,400;1,400"]`); in Settings, names separated by commas. A name alone loads the regular style (the browser makes bold and italic from it); add the styles to load after a colon, as Google Fonts writes them. Fonts already in the menu are left out. Each is loaded from `fonts/g-<name>.css` when `fetch-fonts.sh` has fetched it (it reads the names from `reader-config.json`), otherwise from Google Fonts, which sees the reader's address (not with `ALLOW_CDN` off, and the self-hosted policy in `nginx.conf.example` blocks Google: use its CDN version for fonts you don't self-host). A font a reader adds in Settings can only come from Google. |
 | `MATH_DELIMITERS` ✓ ⚙ | `"\\( \\["` | The marks around TeX that is drawn as math in HTML pages and EPUB chapters, separated by spaces (in `reader-config.json` a list too): any of `\(` for `\(…\)`, `\[` for `\[…\]`, `$$` for `$$…$$` (display) and `$` for `$…$`, which is read as GitHub reads it, so "$5 and $10" stays text. `""` reads none. Markdown always reads its own (`$…$`, `$$…$$`, ` ```math `). Applies when the page is reloaded. |
 | `API_START` ✓ ⚙ | `'/api/position'` | Asked for the reader's place as a book from the site opens; `''` asks nothing. |
@@ -972,7 +972,7 @@ default books and the memory and request sizes stay the site's to set.
 | `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. Whole seconds. |
 | `SAVED_AUDIO_MB` ✓ ⚙ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. Whole MB. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
-| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches Breeze's warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail (ZONOS3 has no such limit). In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "server": 600}` (any of the three); a value outside 21–5000 is ignored. |
+| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, ZONOS3 in the browser `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches Breeze's warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail (a ZONOS3 server, epub-reader-tts-server-zonos3, has no such limit). In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "zonos": 600, "server": 600}` (any of the four); a value outside 21–5000 is ignored. |
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
 | `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |
@@ -1022,7 +1022,7 @@ each with its own `default.epub`:
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
   such as `"literata"`, or `g-` and the name of a font of `ADDITIONAL_FONTS` in lower case with hyphens, such as
   `"g-merriweather"`), `fontSize` (percent, 70–200), `lineSpacing`
-  (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"server"`) and
+  (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"zonos"`, `"server"`) and
   `shortcuts` (`false` starts with single-key shortcuts off).
 - `LOCKED`: a list of options readers can't change in this folder's
   Settings, such as `["ALLOW_REMOTE_CONTENT", "ALLOW_EXTERNAL_LINKS",
