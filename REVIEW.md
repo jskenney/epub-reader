@@ -739,6 +739,8 @@ L-435 now keeps; changed to expect it kept (`d49d76c`), they pass, and the run p
 The tests and docs items T-59, T-60, T-62, T-63, D-37 and D-38 done in `4af6c6d`. D-38 changed the reader too: a
 single string of `ZONOS_VOICES` in `reader-config.json` is taken entry by entry (its test fails on the code before).
 
+**Tests.** 546 tests: 540 pass, none fail, and six need `SLOW=1` or `NETWORK=1`.
+
 ## Summary
 
 Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). Open (below): only enhancements
