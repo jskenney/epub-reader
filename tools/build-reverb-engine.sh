@@ -31,7 +31,7 @@ cp tools/reverb-engine/package.json tools/reverb-engine/package-lock.json tools/
        --minify --legal-comments=eof --log-level=warning --metafile=meta.json --outfile=reverb.js)
 # The licences of every package it bundles, beside it, taken from esbuild's list of what went in (a fixed list missed
 # five and named one that isn't bundled: round 40 review, M-217). Sorted, so the build stays the same.
-(cd "$tmp" && node -e '
+(cd "$tmp" && LICDIR="$OLDPWD/tools/reverb-engine/licenses" node -e '
   const fs = require("fs"), path = require("path");
   const inputs = Object.keys(JSON.parse(fs.readFileSync("meta.json", "utf8")).inputs);
   const dirs = [...new Set(inputs.map(i => (/^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(i) || [])[1]).filter(Boolean))].sort();
@@ -41,7 +41,11 @@ cp tools/reverb-engine/package.json tools/reverb-engine/package-lock.json tools/
     const lic = fs.readdirSync(d).filter(f => /^(licen[cs]e|copying|notice)/i.test(f) && fs.statSync(path.join(d, f)).isFile()).sort();
     out += `== ${pkg.name} ${pkg.version} (${pkg.license || "see below"})\n`;
     for (const f of lic) out += fs.readFileSync(path.join(d, f), "utf8").trimEnd() + "\n";
-    if (!lic.length) out += "(no licence file in the package; its package.json says " + (pkg.license || "nothing") + ")\n";
+    // (A package that ships no licence file: its upstream one, kept in tools/reverb-engine/licenses/ from the repository
+    // at a fixed commit, named in the README there: round 41.)
+    const vendored = path.join(process.env.LICDIR, pkg.name.replace(/\//g, "__") + ".txt");
+    if (!lic.length && fs.existsSync(vendored)) out += fs.readFileSync(vendored, "utf8").trimEnd() + "\n";
+    else if (!lic.length) out += "(no licence file in the package; its package.json says " + (pkg.license || "nothing") + ")\n";
     out += "\n";
   }
   fs.writeFileSync("LICENSES.txt", out);

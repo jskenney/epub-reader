@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.1352</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.1437</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -809,9 +809,10 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
             <audio id="znTake" controls hidden></audio>
             <p class="zn-save" hidden><label>Name <input type="text" id="znName" maxlength="60" value="My voice" autocomplete="off"></label> <button type="button" class="btn primary" id="znKeep">Save</button> <button type="button" class="btn" id="znAgain">Record again</button> <button type="button" class="btn" id="znCancel">Cancel</button></p>
           </div>
-          <p class="ab-muted" id="znGpu" hidden>These voices need WebGPU, which this browser doesn't have: these voices are used where it does.</p>
+          <p class="ab-muted" id="znGpu" hidden>These voices need WebGPU, which this browser doesn't have: they are used where it does.</p>
           <p class="ab-muted" id="znMsg" aria-live="polite"></p>
         </div>
+        <div class="set-block" id="rvCredits" hidden><span><b>Reverb voice: credits and licences</b><small>Reverb-TTS by Software Mansion: its weights and voices are <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a> (non-commercial use only). Its audio codec: <span id="rvCodecCredit"></span> (<a href="https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/blob/815a03f1b57dcb5ae918db415f22cd0c8a6f0f54/LICENSE" target="_blank" rel="noopener">Boson Higgs Audio 2 Community License</a>, which takes in the <a href="https://github.com/meta-llama/llama3/blob/a0940f9cf7065d45bb6675660f80d305c041a754/LICENSE" target="_blank" rel="noopener">Meta Llama 3 Community License</a>; <a href="https://llama.meta.com/llama3/use-policy" target="_blank" rel="noopener">acceptable use policy</a>).</small></span></div>
         <div class="set-row"><span><label for="set-FULL_PRECISION">Full-precision voice models</label><small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-FULL_PRECISION" type="checkbox" data-set="FULL_PRECISION"></div>
       </fieldset>
       <p class="ab-muted">Saved in this browser. Settings for the whole site go in reader-config.json (see the README).</p>
@@ -858,7 +859,8 @@ const OPS = 'http://www.idpf.org/2007/ops';
 // folders, so every copy shares one set of files (and the browser downloads and caches them once).
 // (The credits Reverb's licences ask for where it is used: its weights' (CC BY-NC 4.0) and its codec's (the Boson
 // Higgs Audio 2 Community License): round 40 review, M-213. Shown as the voice's title in the read-aloud bar.)
-const REVERB_CREDIT = 'Reverb-TTS by Software Mansion (CC BY-NC 4.0, non-commercial). Built with Higgs Materials licensed from Boson AI USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3 Community License, Copyright Meta Platforms, Inc., All Rights Reserved.';
+const REVERB_CODEC_CREDIT = 'Built with Higgs Materials licensed from Boson AI USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3 Community License, Copyright Meta Platforms, Inc., All Rights Reserved, based on Meta Llama 3.';
+const REVERB_CREDIT = 'Reverb-TTS by Software Mansion (CC BY-NC 4.0, non-commercial). ' + REVERB_CODEC_CREDIT;
 let VOICE_FILES = '';
 // Where the self-hosted libraries and fonts (libs/ and fonts/, from fetch-libs.sh and fetch-fonts.sh) live.
 // '' = the folder this page is in; like VOICE_FILES, a site path such as '/reader/' shares one copy.
@@ -1516,8 +1518,20 @@ function pictureSize(b){
   const be16 = i => (b[i] << 8) | b[i + 1], le16 = i => b[i] | (b[i + 1] << 8), le24 = i => le16(i) | (b[i + 2] << 16);
   const be32 = i => be16(i) * 65536 + be16(i + 2), le32 = i => le16(i) + le16(i + 2) * 65536, tag = (i, t) => String.fromCharCode(...b.subarray(i, i + t.length)) === t;
   if (b.length >= 24 && tag(1, 'PNG')) return [be32(16), be32(20)];
-  if (b.length >= 10 && tag(0, 'GIF8')) return [le16(6), le16(8)];
-  if (b.length >= 26 && tag(0, 'BM')) return [le32(18), Math.abs(le32(22) | 0)];
+  if (b.length >= 10 && tag(0, 'GIF8')) {
+    // (Its frames too: the browser draws a frame larger than the "screen" at the frame's size: round 41.)
+    let w = le16(6), h = le16(8), i = 13 + ((b[10] & 0x80) ? 3 << ((b[10] & 7) + 1) : 0);
+    const skipBlocks = () => { while (i < b.length && b[i]) i += b[i] + 1; i++; };
+    while (i < b.length) {
+      if (b[i] === 0x2c && i + 10 <= b.length) {
+        w = Math.max(w, le16(i + 1) + le16(i + 5)); h = Math.max(h, le16(i + 3) + le16(i + 7));
+        const f = b[i + 9]; i += 10 + ((f & 0x80) ? 3 << ((f & 7) + 1) : 0) + 1; skipBlocks();
+      } else if (b[i] === 0x21) { i += 2; skipBlocks(); }
+      else break;
+    }
+    return [w, h];
+  }
+  if (b.length >= 26 && tag(0, 'BM')) return le32(14) === 12 ? [le16(18), le16(20)] : [le32(18), Math.abs(le32(22) | 0)];   // (OS/2 1.x: 16-bit sizes: round 41)
   if (b.length >= 30 && tag(0, 'RIFF') && tag(8, 'WEBP')) {
     if (tag(12, 'VP8 ')) return [le16(26) & 0x3fff, le16(28) & 0x3fff];
     if (tag(12, 'VP8L')) return [1 + (((b[22] & 0x3f) << 8) | b[21]), 1 + (((b[24] & 0xf) << 10) | (b[23] << 2) | ((b[22] & 0xc0) >> 6))];
@@ -1542,10 +1556,13 @@ function pictureSize(b){
   return null;
 }
 // The address, or null (the picture left out, as a missing one is) when its header says it is too large to decode.
+// (Whatever type the book gives it, but for fonts, sound, video, styles and captions: a picture is drawn by its bytes,
+// so "image/x-png" or a name the manifest doesn't list got past a check by type: round 41. A file on a site is asked
+// for by its first 512 KB only, not downloaded twice whole: round 41.)
 async function pictureFits(u, type, path){
-  if (!u || !/^image\/(png|gif|jpe?g|pjpeg|webp|bmp|x-ms-bmp|avif|heic|heif|apng)\b/i.test(String(type))) return u;
+  if (!u || /^(font|audio|video)\/|^text\/(css|vtt)|svg/i.test(String(type)) || /\.(css|vtt|woff2?|ttf|otf|eot|mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4|m4v|webm|ogv|mov|svgz?)$/i.test(path)) return u;
   try {
-    const r = await fetch(u);
+    const r = await fetch(u, u.startsWith('blob:') ? {} : { headers: { Range: 'bytes=0-524287' } });
     const reader = r.body.getReader(), parts = [];
     let n = 0;
     while (n < 1 << 19) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
@@ -1906,22 +1923,35 @@ async function markdownToHtml(md){
 }
 // marked's list items take time with the square of their lines when many follow without a blank one ("- a" then
 // 100,000 lines: 50 s to open a 200 KB file): a blank line is put in after every MD_ITEM_LINES such lines of a list
-// item (not in a fenced code block), which only starts a new paragraph there (round 40 review, H-59). Returns the
-// text and where blank lines were put in (line numbers in the new text), for the editor's line matching.
-const MD_ITEM_LINES = 1000;
+// item, in a block quote too (round 40 review, H-59; round 41), which only starts a new paragraph there. Fences are
+// recognised as CommonMark does (indented 3 spaces at most; no backtick in a backtick fence's info string), and even
+// inside one a blank line goes in after MD_FENCE_LINES lines, so a line taken for a fence that marked doesn't take as
+// one can't hide a list from the count (round 41). A list ends at a heading, an HTML block or $$ math too, which are
+// left whole. Returns the text and where blank lines were put in (line numbers in the new text), for the editor's line
+// matching.
+const MD_ITEM_LINES = 1000, MD_FENCE_LINES = 2000;
 function mdUnstick(md){
   if (md.length < MD_ITEM_LINES * 2) return { text: md, added: [] };
   const lines = md.split('\n'), out = [], added = [];
   let inItem = false, run = 0, fence = null, blank = false;
+  const cut = quote => { added.push(out.length); out.push(quote.replace(/\s+$/, '')); run = 0; };
   for (const l of lines) {
-    const f = /^\s*(`{3,}|~{3,})/.exec(l);
-    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !/\S/.test(l.slice(l.indexOf(f[1]) + f[1].length))) fence = null; out.push(l); continue; }
-    if (f) { fence = f[1]; run = 0; out.push(l); continue; }
-    if (!/\S/.test(l)) { run = 0; blank = true; out.push(l); continue; }
-    // (A list ends at a line after a blank one that isn't indented, nor another item: an HTML block there isn't cut.)
-    if (/^\s{0,3}([-+*]|\d{1,9}[.)])([ \t]|$)/.test(l)) { inItem = true; run = 0; }
-    else if (blank && !/^\s/.test(l)) inItem = false;
-    else if (inItem && ++run >= MD_ITEM_LINES) { added.push(out.length); out.push(''); run = 0; }
+    const quote = /^(?: {0,3}> ?)*/.exec(l)[0], inner = l.slice(quote.length);
+    if (fence) {
+      const f = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(inner);
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) { fence = null; run = 0; }
+      else if (!/\S/.test(inner)) run = 0;
+      else if (++run >= MD_FENCE_LINES) cut(quote);
+      out.push(l); continue;
+    }
+    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(inner);
+    if (f && !(f[1][0] === '`' && f[2].includes('`'))) { fence = f[1]; run = 0; out.push(l); continue; }
+    if (!/\S/.test(inner)) { run = 0; blank = true; out.push(l); continue; }
+    if (/^ {0,3}([-+*]|\d{1,9}[.)])([ \t]|$)/.test(inner)) { inItem = true; run = 0; }
+    // (A list ends at a line after a blank one that isn't indented, nor another item; and at a heading, an HTML block
+    // or $$ math, which aren't cut.)
+    else if ((blank && !/^\s/.test(inner)) || /^ {0,3}(#{1,6}([ \t]|$)|<[a-zA-Z/!?]|\$\$)/.test(inner)) { inItem = false; run = 0; }
+    else if (inItem && ++run >= MD_ITEM_LINES) cut(quote);
     blank = false;
     out.push(l);
   }
@@ -2890,13 +2920,13 @@ async function svgClean(t, path, type, b = book){
   // (Processing instructions, <?xml-stylesheet?> say, and animations that set an address: round 25 review, L-292.)
   for (const n of [...d.childNodes]) if (n.nodeType === 7) n.remove();
   d.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
-  svgUseCap(d, d.documentElement, path);
+  const useSizes = svgUseCap(d, d.documentElement, path);
   const jobs = [], budget = cssBudget(), paint = ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end', 'cursor'];
   for (const el of d.getElementsByTagName('*')) {
     for (const a of [...el.attributes]) {
       const v = urlText(a.value);
       if (/^on/i.test(a.localName) || /^(form)?action$/i.test(a.localName) || /^\s*javascript:/i.test(v)) el.removeAttributeNode(a);
-      else if (/^(href|src)$/i.test(a.localName) && !v.startsWith('#') && !/^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(v)) el.removeAttributeNode(a);
+      else if (/^(href|src)$/i.test(a.localName) && !v.startsWith('#') && !(/^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(v) && dataPictureFits(v))) el.removeAttributeNode(a);
       else if (a.localName === 'style' || (paint.includes(a.localName) && v.includes('('))) jobs.push(rewriteCss(a.value, path, { budget, attr: true, owner: 'svg:' + path }).then(c => el.setAttribute(a.name, c)));
     }
     if (el.localName === 'style') jobs.push(rewriteCss(el.textContent, path, { budget, owner: 'svg:' + path }).then(c => { el.textContent = c; }));
@@ -2906,29 +2936,62 @@ async function svgClean(t, path, type, b = book){
   // (As UTF-8, which it now is, whatever its declaration said: round 25 review, L-291.)
   const u = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(d).replace(/^<\?xml[^>]*\?>\s*/, '')], { type: `${type};charset=utf-8` }));
   (b.svgBlobs ||= []).push(u);
+  (b.svgSizes ||= new Map()).set(u, useSizes);   // (what a page's <use> of it costs: round 41)
   return u;
 }
-// A picture given as a data: SVG (in a page or its styles) is cleaned as an SVG file is, not shown as it came: one
-// of about 1 KB could hold a <use> fan-out that hangs the tab (round 40 review, H-60).
-async function svgDataURL(v, path){
-  const m = /^data:image\/svg\+xml(;[^,]*)?,(.*)$/is.exec(v);
+// A data: address as bytes (base64, or percent-encoded as browsers read it: a stray % kept as written, not an error:
+// round 41) and its type, or null. Whitespace before the type counts for nothing, as browsers read it (round 41).
+const DATA_RE = /^data:\s*([^,;]*)((?:;[^,]*)?),(.*)$/is;
+function dataBytes(v){
+  const m = DATA_RE.exec(v);
   if (!m || v.length > SVG_MAX * 2) return null;
-  let t;
-  try { t = /;base64/i.test(m[1] || '') ? new TextDecoder().decode(Uint8Array.from(atob(m[2].replace(/\s/g, '')), c => c.charCodeAt(0))) : decodeURIComponent(m[2]); }
-  catch { return null; }
-  return t.length > SVG_MAX ? null : svgClean(t, path, 'image/svg+xml');
+  let bytes;
+  try {
+    if (/;\s*base64/i.test(m[2])) bytes = Uint8Array.from(atob(m[3].replace(/\s/g, '')), c => c.charCodeAt(0));
+    else {
+      const out = [], enc = new TextEncoder(), t = m[3];
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] === '%' && /^[0-9a-f]{2}$/i.test(t.substr(i + 1, 2))) { out.push(parseInt(t.substr(i + 1, 2), 16)); i += 2; }
+        else { const c = t.codePointAt(i); for (const b of enc.encode(String.fromCodePoint(c))) out.push(b); if (c > 0xffff) i++; }
+      }
+      bytes = Uint8Array.from(out);
+    }
+  } catch { return null; }
+  return { type: m[1].trim().toLowerCase(), bytes };
+}
+const isDataSvg = v => /^data:\s*image\/svg\+xml\s*[;,]/i.test(urlText(v));
+// A picture given as a data: SVG (in a page or its styles) is cleaned as an SVG file is, not shown as it came: one
+// of about 1 KB could hold a <use> fan-out that hangs the tab (round 40 review, H-60). Kept per book, so a page drawn
+// again makes no new copy (round 41).
+function svgDataURL(v, path){
+  const b = book, key = urlText(v), seen = (b.svgData ||= new Map());
+  if (!seen.has(key)) seen.set(key, (async () => {
+    const d = dataBytes(key);
+    if (!d || d.bytes.length > SVG_MAX) return null;
+    return svgClean(new TextDecoder().decode(d.bytes), path, 'image/svg+xml', b);
+  })());
+  return seen.get(key);
+}
+// A data: raster picture (in a page, a style or an SVG) whose header says it is too large to decode: false (round 41,
+// as M-216 for files).
+function dataPictureFits(v){
+  const d = /^data:\s*image\//i.test(urlText(v)) && dataBytes(urlText(v));
+  const wh = d && pictureSize(d.bytes.subarray(0, 1 << 19));
+  if (wh && wh[0] * wh[1] > PIC_PIXELS) { console.warn(`a data: picture too large to show (${wh[0]} × ${wh[1]} pixels)`); return false; }
+  return true;
 }
 // <use> elements copy what they point to, so a few, ten each a level below ten more, make millions of copies from a
 // file of a kilobyte and hang the tab (or crash it), even only as a cover (round 40 review, H-60). The copies they
-// would make are counted (each pointing to its target, counted once by element); past SVG_USES more than the
-// picture's own elements, its <use> elements are dropped. (Nested deeper than can be counted: dropped too.)
+// would make are counted (each pointing to its target, counted once by element; one pointing into another SVG file of
+// the book, a sprite, counts as that element's size there: round 41); past twice the page's own elements and
+// SVG_USES more, its <use> elements are dropped (so many uses of small symbols, as MathJax's glyphs, stay: round 41).
+// (Nested deeper than can be counted: dropped too.) Returns the size of each element with an id, for a file's sprites.
 const SVG_USES = 50000;
 function svgUseCap(doc, root, where){
   const uses = root.getElementsByTagName('use');
-  if (!uses.length) return;
   const byId = new Map();
   for (const el of doc.querySelectorAll('[id]')) if (!byId.has(el.id)) byId.set(el.id, el);
-  const plain = root.getElementsByTagName('*').length, cap = plain + SVG_USES, memo = new Map(), busy = new Set();
+  const plain = root.getElementsByTagName('*').length, cap = 2 * plain + SVG_USES, memo = new Map(), busy = new Set();
   const size = el => {
     if (memo.has(el)) return memo.get(el);
     if (busy.has(el)) return 1;   // (one inside itself: the browser draws nothing for it)
@@ -2936,19 +2999,24 @@ function svgUseCap(doc, root, where){
     let k = 1;
     if (el.localName === 'use') {
       const h = urlText(el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href'));
-      const target = h.startsWith('#') && byId.get(h.slice(1));
-      if (target) k += size(target);
+      if (h.startsWith('#')) { const target = byId.get(h.slice(1)); if (target) k += size(target); }
+      else if (h.includes('#')) { const sizes = book?.svgSizes?.get(h.slice(0, h.indexOf('#'))); if (sizes) k += sizes.get(h.slice(h.indexOf('#') + 1)) ?? sizes.get('') ?? 1; }
     }
     for (const c of el.children) { if (k > cap) break; k += size(c); }
     busy.delete(el);
     k = Math.min(k, cap + 1); memo.set(el, k);
     return k;
   };
-  let over;
-  try { over = size(root) > cap; } catch { over = true; }
-  if (!over) return;
-  console.warn(`${where}: an SVG whose <use> elements would make too many copies: they aren't shown`);
-  for (const u of [...uses]) u.remove();
+  let over = false;
+  if (uses.length) { try { over = size(root) > cap; } catch { over = true; } }
+  if (over) {
+    console.warn(`${where}: an SVG whose <use> elements would make too many copies: they aren't shown`);
+    for (const u of [...uses]) u.remove();
+    memo.clear();
+  }
+  const sizes = new Map([['', 1]]);
+  try { for (const [id, el] of byId) if (root.contains(el)) sizes.set(id, size(el)); sizes.set('', size(root)); } catch {}
+  return sizes;
 }
 function resourceURL(path, owner){
   if (owner) { if (!book.owners) book.owners = new Map(); if (!book.owners.has(path)) book.owners.set(path, new Set()); book.owners.get(path).add(owner); }
@@ -2957,7 +3025,7 @@ function resourceURL(path, owner){
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
   // (An SVG by its type, with a parameter too (L-317), or by its name, whatever its type says: M-135.)
   const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' || /\.svgz?$/i.test(path) ? svgURL(path, 'image/svg+xml', book, owner || '')
-    : book.src.url(path, type).then(u => pictureFits(u, type, path));
+    : book.src.url(path, type).then(u => pictureFits(u, type, path));   // (any file but SVG: round 41)
   book.urls.set(path, job);
   job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
@@ -3244,7 +3312,8 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
     r.local = !!ref && !ref.startsWith('#') && !isExternal(ref) && !isRemote(ref);
     if (r.local && r.kind === 'image' && !jobs.has(ref)) jobs.set(ref, resourceURL(resolve(cssPath, ref), owner));
     // (A data: SVG cleaned as a file is: round 40 review, H-60.)
-    r.svgData = r.kind === 'image' && /^data:image\/svg\+xml/i.test(ref);
+    r.svgData = r.kind === 'image' && isDataSvg(ref);
+    if (r.kind === 'image' && !r.svgData && /^data:/i.test(ref) && !dataPictureFits(ref)) r.tooLarge = true;   // (round 41)
     // (Not one inside an SVG: an SVG inside an SVG isn't followed, H-42.)
     if (r.svgData && !owner?.startsWith('svg:') && !jobs.has(ref)) jobs.set(ref, svgDataURL(ref, cssPath));
     r.clean = ref;
@@ -3294,6 +3363,7 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
       // (A fragment, such as an SVG sprite's view, is kept as attributes keep it: REVIEW.md L-84.)
       text = u ? cssUrl(u + frag) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
     } else if (r.svgData) { const u = done.get(r.clean); text = u ? cssUrl(u) : NO_IMAGE; }
+    else if (r.tooLarge) text = NO_IMAGE;
     else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
     if (text === null) continue;
     parts.push(css.slice(at, r.s), text);
@@ -3737,7 +3807,8 @@ async function localize(doc, path, budget = cssBudget()){
       const v = urlText(el.getAttribute(attr));
       if (!v || v.startsWith('#')) continue;
       if (isRemote(v)) { if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); continue; }
-      if (/^data:image\/svg\+xml/i.test(v)) { jobs.push(svgDataURL(v, path).then(u => { if (u) el.setAttribute(attr, u); else el.removeAttribute(attr); })); continue; }   // (H-60)
+      if (isDataSvg(v)) { jobs.push(svgDataURL(v, path).then(u => { if (u) el.setAttribute(attr, u); else el.removeAttribute(attr); })); continue; }   // (H-60)
+      if (/^data:/i.test(v) && !dataPictureFits(v)) { el.removeAttribute(attr); continue; }   // (a data: picture too large to decode: round 41)
       if (isExternal(v)) continue;   // data: and blob:
       // A file the book doesn't have is removed rather than left to resolve against this site. (A fragment, as in
       // sprite.svg#icon, is kept on the file's new address.)
@@ -3759,6 +3830,9 @@ async function localize(doc, path, budget = cssBudget()){
   }
   for (const el of withBody('[style*="("]')) jobs.push(rewriteCss(el.getAttribute('style'), path, { budget, attr: true, owner: path }).then(c => el.setAttribute('style', c)));
   await Promise.all(jobs);
+  // (<use> of the book's SVG files, sprites, counted now their addresses are known: a page of many uses of a big group
+  // multiplied each file's own limit: round 41.)
+  if (doc.body) svgUseCap(doc, doc.body, path);
 }
 const XLINK = 'http://www.w3.org/1999/xlink';
 // A reference to another site. Browsers drop tabs and newlines inside URLs and read "//host" (and backslash
@@ -6121,7 +6195,7 @@ function ttsUpdateBar(status){
     else if ((st.state === 'idle' || (st === pk && st.state === 'ready')) && neural.agreed()) { neural.load(); status = 'Loading natural voice…'; }
     else if (st.state === 'loading') status = st.progressText || 'Loading natural voice…';
     else if (st.state === 'error') { status = `Natural voice failed: ${st.error}`; dl = 'Try again'; }
-    else { status = `${neural.name}: one-time ${neural.size()} download`; dl = 'Download'; }
+    else { status = `${neural.name}: one-time ${neural.size()} download${neural === NEURAL.reverb ? ' (Reverb-TTS by Software Mansion, non-commercial use only; credits and licences in Settings)' : ''}`; dl = 'Download'; }
   }
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
   // Screen readers hear every status (errors, offers, notes), but a download's progress only at each quarter,
@@ -7175,13 +7249,14 @@ function rvVoicesConfig(value){
 // Yours first (those with their words), then the site's.
 function rvCustom(){
   return [...zn.own.filter(o => o.text?.trim()).map(o => ({ id: 'own:' + o.id, name: o.name, lang: o.lang || 'en', style: 'yours', gender: '', own: o.id, text: o.text.trim() })),
-    ...REVERB_VOICES_SITE.map(v => ({ id: 'url:' + v.abs, name: v.name, lang: v.language, style: 'this site', gender: '', url: v.abs, shown: v.url, text: v.text }))];
+    ...REVERB_VOICES_SITE.map(v => ({ id: 'url:' + v.abs, name: v.name, lang: v.language, style: 'this site', gender: '', url: v.abs, shown: v.url, text: v.text, version: rv.versions.get(v.abs) || '' }))];
 }
 // The part of saved speech's key that changes with a custom voice: its words, and a site recording's version.
 // What the voice list shows, so it's filled again when that changes.
 const rvKind = () => 'reverb:' + reverbLang() + ':' + rvCustom().map(v => v.id + v.name).join();
 // (With the recording's language too: round 40 review, L-453.)
-const rvVoiceTag = v => v.own ? `|t${hashText(v.text)}|${v.lang}` : v.url ? `|${rv.versions.get(v.url) || ''}|t${hashText(v.text)}|${v.lang}` : '';
+// (A site voice's version as it was when the voice was taken, so a snapshot (the audiobook's) keeps one: round 41.)
+const rvVoiceTag = v => v.own ? `|t${hashText(v.text)}|${v.lang}` : v.url ? `|${v.version ?? rv.versions.get(v.url) ?? ''}|t${hashText(v.text)}|${v.lang}` : '';
 // The weights FULL_PRECISION asks for, on this GPU (before the GPU is known, fp16 is assumed).
 const rvVariant = () => !FULL_PRECISION ? 'int4' : (rv.f16 || !rv.root) ? 'f16' : 'int8';
 const rvMB = () => Math.round(REVERB.models[rvVariant()][1] + REVERB.codecMB + 2);
@@ -7221,7 +7296,7 @@ async function rvLoad(){
     // copy, so they would download on every visit, which is said up front; and the browser is asked once to keep this
     // site's storage, as for ZONOS3.)
     try {
-      if (!store.get(`spine:reverbLoaded:${variant}`)) {
+      if (!store.get(`spine:reverbLoaded:${hashText(base + file)}`)) {   // (per copy: each folder's own, or Hugging Face's: round 41)
         const e = await navigator.storage.estimate(), free = e.quota - e.usage;
         if (free < total * 1048576 * 1.05) showNotice(`This browser allows this site only ${Math.max(0, Math.round(free / 1048576))} MB more storage, less than Reverb's ${total} MB, so it can't keep a copy: the files will download on every visit (this site uses ${Math.round(e.usage / 1048576)} of its ${Math.round(e.quota / 1048576)} MB).${ZN_FREE}`, 'error');
       }
@@ -7243,8 +7318,10 @@ async function rvLoad(){
     // (A GPU lost while it loaded: not "ready" over the error, round 40 review, L-456.)
     if (rv.dead) throw new Error(rv.dead);
     rv.tts = engine; rv.variant = variant; rv.state = 'ready';
-    rvKept(cache, variant, got > 2e6, [`st/${base + file}`, `st/${rv.codecPath}`, `json/${base}model/tokenizer.json`]);
-    store.set(`spine:reverbLoaded:${variant}`, true);
+    // (Whether these weights were loaded on an earlier visit, read before this one says so: round 41.)
+    const before = !!store.get(`spine:reverbLoaded:${hashText(base + file)}`);
+    store.set(`spine:reverbLoaded:${hashText(base + file)}`, true);
+    rvKept(cache, before, got > 2e6, [`st/${base + file}`, `st/${rv.codecPath}`, `json/${base}model/tokenizer.json`]);
     store.set(`spine:agreed:reverb:${FULL_PRECISION ? 'full' : 'int4'}`, true);   // the reader agreed to this download once
   } catch (e) {
     rv.state = 'error';
@@ -7253,10 +7330,11 @@ async function rvLoad(){
   ttsFillVoices(); nLoaded(rv);
 }
 /* After loading: runntime keeps what it downloads in the site's private file system (folder spine-reverb-<revision>,
-   one file per part of each weights file), which nothing cleared: other revisions', the other precision's and Hugging
-   Face's once the site has its own (up to about 2 GB). Those are removed, and a download the browser didn't keep, or a
-   browser that can't keep one, is said, as for ZONOS3 (round 40 review, L-455). */
-async function rvKept(cache, variant, downloaded, paths){
+   one file per part of each weights file). Folders of other revisions, which nothing will use again, are removed
+   (round 40 review, L-455); the current revision's copies are left, since another folder of the site may use another
+   precision or another copy (removing them made two folders take turns downloading: round 41). A download the browser
+   didn't keep, one made again since an earlier visit, or a browser that can't keep one, is said, as for ZONOS3. */
+async function rvKept(cache, before, downloaded, paths){
   const name = `spine-reverb-${REVERB.rev.slice(0, 8)}`, file = k => k.replace(/[^a-zA-Z0-9._-]/g, '_');
   // (runntime's names: st/ for a weights file's parts, json/ for the tokenizer, then reverb-v1/ and the address.)
   const keep = paths.map(p => file(p.replace(/^(\w+\/)https?:\/\//, '$1reverb-v1/')));
@@ -7266,17 +7344,14 @@ async function rvKept(cache, variant, downloaded, paths){
     for await (const [n, h] of root.entries()) if (n.startsWith('spine-reverb-') && n !== name && h.kind === 'directory') await root.removeEntry(n, { recursive: true }).catch(() => {});
     if (cache) {
       const dir = await root.getDirectoryHandle(name), found = new Set();
-      for await (const n of dir.keys()) {
-        const k = keep.findIndex(p => n.startsWith(p));
-        if (k < 0) await dir.removeEntry(n).catch(() => {}); else found.add(k);
-      }
+      for await (const n of dir.keys()) { const k = keep.findIndex(p => n.startsWith(p)); if (k >= 0) found.add(k); }
       kept = found.has(0) && found.has(1);   // (the weights and the codec)
     }
   } catch {}
   const why = ' Check that the browser keeps site data when it closes and that this isn\'t a private window.' + ZN_FREE;
   if (!cache) { if (downloaded) showNotice('This browser can\'t keep a copy of Reverb\'s files (it has no private file system for this site), so they will download on every visit.', 'error'); }
   else if (downloaded && kept === false) showNotice(`This browser didn't keep a copy of Reverb's files, so they will be downloaded again next time.${why}`, 'error');
-  else if (downloaded && store.get(`spine:reverbLoaded:${variant}`)) showNotice(`Reverb's files were downloaded again: this browser didn't keep its copy since last time.${why}`, 'error');
+  else if (downloaded && before) showNotice(`Reverb's files were downloaded again: this browser didn't keep its copy since last time.${why}`, 'error');
 }
 // Numbers, dates, money and units as words, in that language; text Verbalis can't read is left as it is.
 function rvSpell(text, lang){ try { return ((rv.verbalizers ??= {})[lang] ??= new rv.R.Verbalizer(lang)).process(text); } catch { return text; } }
@@ -7323,7 +7398,7 @@ function rvVersion(v){
 }
 // A custom voice: kept from before, or made now. (Made once, whoever asks: a reader that moves on stops waiting but
 // doesn't cancel it; a lost GPU ends the wait with the reason, as for ZONOS3's voices.)
-const rvMadeKey = v => v.own ? `rv|own|${v.own}|${hashText(v.text)}|${v.lang}` : `rv|url|${v.url}|${rv.versions.get(v.url) || ''}|${hashText(v.text)}|${v.lang}`;
+const rvMadeKey = v => v.own ? `rv|own|${v.own}|${hashText(v.text)}|${v.lang}` : `rv|url|${v.url}|${v.version ?? rv.versions.get(v.url) ?? ''}|${hashText(v.text)}|${v.lang}`;
 function rvMade(v, signal){
   const key = rvMadeKey(v);
   if (rv.made.has(key)) return Promise.resolve(rv.made.get(key));
@@ -7650,7 +7725,7 @@ const NEURAL = {
   // (Saved speech is kept per weights: int4, int8 or fp16.)
   reverb: { name: 'Reverb', st: rv, ready: rvReady, load: () => rvLoad(), size: () => `~${rvMB()} MB`, playbackSpeed: true,
     agreed: () => !!store.get(`spine:agreed:reverb:${FULL_PRECISION ? 'full' : 'int4'}`),
-    generate: rvGenerate, key: () => { const v = rvVoice(); return `reverb|${REVERB.rev.slice(0, 7)}|${rv.variant || rvVariant()}|${reverbLang()}|${v.id}${rvVoiceTag(v)}`; } },
+    generate: rvGenerate, key: () => { const v = rvVoice(); return `reverb|${REVERB.rev.slice(0, 7)}|s2|${rv.variant || rvVariant()}|${reverbLang()}|${v.id}${rvVoiceTag(v)}`; } },   // (s2: voices whole and spelled by the reader since round 40, M-214; speech saved before isn't played: round 41)
   server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
     generate: svGenerate, key: () => `server|${svVoice()?.id}|${svVoiceHash()}` }
 };
@@ -8709,6 +8784,7 @@ async function abRun(units, mode, target, format = 'aac'){
   const fmt = AB_FORMATS[format];
   const ne = neuralEngine(), b = book, rates = await abAacRates();   // (the encoder settings that work)
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
+  if (ne === NEURAL.reverb) await rvVersion(rvVoice());   // (a Reverb site voice's too: round 41)
   const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), rvVoice: rvVoice(), svVoice: svVoice(), lang: bookLang() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
   // (Each file's passages in its own language, keyed and sent so, the rest of the snapshot as it was when the export
@@ -11428,6 +11504,9 @@ function znOwnRender(){
   // to the page: round 34 review, L-437.)
   $('#znGpu').hidden = zonosGpu();
   $('#znRvNote').hidden = !REVERB_ON;
+  // (Reverb's credits shown, not only as a title, where it is offered: its codec's licence asks for them to be displayed
+  // prominently: round 41.)
+  $('#rvCredits').hidden = !REVERB_ON; $('#rvCodecCredit').textContent = REVERB_CODEC_CREDIT;
   const f = zn.focusAfter; zn.focusAfter = null;
   if (f) (f[0] ? ul.querySelector(`li[data-id="${f[0]}"] ${f[1]}`) : $(f[1]))?.focus();
 }
@@ -11640,6 +11719,8 @@ $('#setDialog').addEventListener('cancel', () => { const a = document.activeElem
   userThemesLoad();   // (the reader's own themes, before the folder's default theme is looked at: E-38)
   await loadConfig();
   loadUserSettings();
+  // ("Your voices" drawn again now REVERB is known: drawn before, a Reverb site hid its fields: round 41.)
+  znOwnRender();
   // (Saved speech over a limit lowered since the last visit, or any with a limit of 0: L-305. Only then, so a page
   // load doesn't open the saved speech for nothing.)
   { const was = store.get('spine:savedAudioMB'); if (was == null ? SAVED_AUDIO_MB === 0 : SAVED_AUDIO_MB < was) clipStore.trim(); store.set('spine:savedAudioMB', SAVED_AUDIO_MB); }

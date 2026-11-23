@@ -347,7 +347,7 @@ test('Reverb: runntime\'s reason is shown, not only its code (round 40 review, L
   assert.match(await h.noticeLike(p, /longer than 30 s this device takes/, 20000), /longer than 30 s this device takes/);
 });
 
-test('Reverb: other revisions\' and stray copies are removed after loading; a copy not kept, or no place to keep one, is said (round 40 review, L-455)', async () => {
+test('Reverb: other revisions\' copies are removed after loading (this one\'s kept); a copy not kept, or no place to keep one, is said (round 40 review, L-455)', async () => {
   let p = await page();
   await h.openReader(p, LONG, { ...reverb, 'spine:agreed:reverb:full': true });
   await opfs(p, async () => {
@@ -365,8 +365,9 @@ test('Reverb: other revisions\' and stray copies are removed after loading; a co
     return out;
   });
   assert.ok(!left.includes('spine-reverb-00000000'), left.join('\n'));
-  assert.ok(!left.some(k => /other_precision/.test(k)), left.join('\n'));
-  assert.equal(left.filter(k => /^  st_reverb-v1_/.test(k)).length, 2, 'the weights and codec in use stay: ' + left.join('\n'));
+  // (The current revision's other copies stay: another folder of the site may use them: round 41.)
+  assert.ok(left.some(k => /other_precision/.test(k)), left.join('\n'));
+  assert.equal(left.filter(k => /^  st_reverb-v1_huggingface/.test(k)).length, 3, 'the weights and codec in use stay: ' + left.join('\n'));
   await p.close();
   // A browser that didn't keep its copy.
   p = await page();
@@ -419,4 +420,45 @@ test('Reverb: download progress in MB is announced by quarters, not every step (
   assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
   const said = await p.evaluate(() => window.said.filter(t => /Downloading Reverb/.test(t)));
   assert.ok(said.length >= 1 && said.length <= 5, said.join(' | '));
+});
+
+// Round 41.
+test('Reverb: a first download shows no notice; two folders of a site keep their own copies (round 41)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, { ...reverb, 'spine:agreed:reverb:int4': true, 'spine:set:FULL_PRECISION': false });
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  await p.waitForTimeout(800);
+  assert.equal(await h.notice(p), '', 'no notice on a first download');
+  // Another folder with its own copy, then the first again: neither downloads again.
+  const local = `${h.SITE}/reverb-local/?book=/reader/books/long.epub`;
+  for (const url of [local, LONG, local]) {
+    await p.goto(url); await h.waitForBook(p);
+    await p.keyboard.press('r');
+    assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), url);
+    await p.waitForTimeout(800);
+    assert.equal(await h.notice(p), '', `${url}: no notice`);
+  }
+  const f = await fake(p);
+  assert.equal(f.opts.modelPath.startsWith(`${h.SITE}/reverb-local/`), true);
+  const loads = await p.evaluate(async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('spine-reverb-f5759ca1'); const n = []; for await (const k of d.keys()) n.push(k); return n; });
+  assert.equal(loads.filter(k => /int4/.test(k)).length, 2, 'both folders\' int4 copies kept: ' + loads.join(' '));
+});
+
+test('Reverb on: a voice of your own stored before shows its words field; Settings shows the credits, and the download offer says where (round 41)', async () => {
+  const p = await page();
+  await h.openReader(p, LONG, reverb);
+  await p.click('#setBtn');
+  await p.setInputFiles('#znFile', NARRATOR);
+  await p.waitForFunction(() => /Added reverb-clip/.test(document.querySelector('#znMsg').textContent));
+  await p.reload(); await h.waitForBook(p);
+  await p.click('#setBtn');
+  await p.waitForSelector('#znOwnList .zn-words');
+  assert.equal(await p.isVisible('#znOwnList .zn-words'), true, 'its words field, drawn before the config, shown now');
+  assert.equal(await p.isVisible('#rvCredits'), true);
+  assert.match(await p.textContent('#rvCredits'), /Built with Higgs Materials licensed from Boson AI USA, Inc\..*based on Meta Llama 3/);
+  assert.match(await p.textContent('#rvCredits'), /CC BY-NC 4\.0/);
+  await p.click('#setClose');
+  await p.keyboard.press('r');
+  await p.waitForFunction(() => /credits and licences in Settings/.test(document.querySelector('#ttsStatus').textContent));
 });

@@ -1671,6 +1671,38 @@ def main():
                ("ok", "ok.png", "image/png", "")], ["c1"],
                {"c1.xhtml": xhtml("One", '<h1>One</h1><p>Before the huge picture.</p><img alt="huge" src="huge.png"/><img alt="fine" src="ok.png"/><p>After the huge picture.</p>'),
                 "huge.png": big, "ok.png": png(40, 30, (200, 50, 50))}, "urn:huge-picture")
+    # Round 41: the round 40 fixes' bypasses and regressions.
+    (books / "quote-list.md").write_text("# Quoted list\n\n> - a\n" + "> b\n" * 100000)
+    (books / "fence-trick.md").write_text("# Fence trick\n\n```x``` code\n\n- a\n" + "b\n" * 100000)
+    # A sprite of about 11,000 copies, used 2,000 times by a page (22 million).
+    sprite = '<svg xmlns="http://www.w3.org/2000/svg"><defs><g id="l0"><rect width="1" height="1"/></g>' + "".join(f'<g id="l{i}">' + f'<use href="#l{i - 1}"/>' * 10 + "</g>" for i in range(1, 5)) + "</defs></svg>"
+    epub_items(books / "sprite-fanout.epub", "Sprite Fan-out", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("sp", "sprite.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>Sprites</h1>' + '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><use href="sprite.svg#l4"/></svg>' * 2000 + "<p>After the sprites.</p>"),
+                "sprite.svg": sprite}, "urn:sprite-fanout")
+    # A sprite of small icons used many times: kept.
+    icons = '<svg xmlns="http://www.w3.org/2000/svg"><defs><symbol id="dot" viewBox="0 0 2 2"><circle cx="1" cy="1" r="1"/></symbol></defs></svg>'
+    epub_items(books / "sprite-icons.epub", "Sprite Icons", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("sp", "icons.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>Icons</h1>' + '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><use href="icons.svg#dot"/></svg>' * 50 + "<p>After the icons.</p>"),
+                "icons.svg": icons}, "urn:sprite-icons")
+    space_fan = quote(fanout())
+    (books / "data-space.html").write_text(f'<!doctype html><html><head><title>Data space</title><style>p.bg{{background:url("data: image/svg+xml,{space_fan}")}}</style></head>'
+                                           f'<body><h1>Data space</h1><p class="bg">Styled.</p><img alt="fan" src="data: image/svg+xml,{space_fan}"><p>After the spaced picture.</p></body></html>')
+    pct = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='100%' height='100%'/></svg>"
+    (books / "data-percent.html").write_text(f'<!doctype html><html><head><title>Data percent</title></head><body><h1>Percent</h1><img alt="pct" src="data:image/svg+xml,{pct}"><p>After.</p></body></html>')
+    # Many cheap <use> of glyphs, as MathJax's SVG output: kept.
+    glyphs = '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"><defs>' + "".join(f'<path id="g{i}" d="M0 0h{i}v1z"/>' for i in range(6)) + "</defs></svg>"
+    formula = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="6">' + "".join(f'<use href="#g{i}" x="{i * 5}"/>' for i in range(6)) + "</svg>"
+    (books / "many-glyphs.html").write_text(f"<!doctype html><html><head><title>Many glyphs</title></head><body><h1>Glyphs</h1>{glyphs}" + f"<p>{formula}</p>" * 9000 + "<p>After the glyphs.</p></body></html>")
+    # Huge pictures past the type check: a data: PNG in a page and in an SVG, one typed image/x-png, one not listed,
+    # and a GIF whose frame is larger than its "screen".
+    b64 = base64.b64encode(big).decode()
+    (books / "data-huge.html").write_text(f'<!doctype html><html><head><title>Data huge</title></head><body><h1>Data huge</h1><img alt="huge" src="data:image/png;base64,{b64}"><p>After the data picture.</p></body></html>')
+    gif = b"GIF89a" + struct.pack("<HHBBB", 1, 1, 0, 0, 0) + b"\x2c" + struct.pack("<HHHHB", 0, 0, 20000, 20000, 0) + b"\x02\x02\x4c\x01\x00\x3b"
+    epub_items(books / "huge-other.epub", "Huge Other", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("x", "x.png", "image/x-png", ""), ("s", "p.svg", "image/svg+xml", ""),
+               ("g", "f.gif", "image/gif", ""), ("ok", "ok.png", "image/png", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="xpng" src="x.png"/><img alt="dat" src="h.dat"/><img alt="svg" src="p.svg"/><img alt="gif" src="f.gif"/><img alt="fine" src="ok.png"/><p>After the huge pictures.</p>'),
+                "x.png": big, "h.dat": big, "g.gif": gif, "f.gif": gif, "ok.png": png(40, 30, (50, 200, 50)),
+                "p.svg": f'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><image href="data:image/png;base64,{b64}" width="10" height="10"/><rect width="5" height="5"/></svg>'}, "urn:huge-other")
     print(f"Built {SITE}")
 
 

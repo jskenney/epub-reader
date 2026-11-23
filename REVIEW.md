@@ -830,9 +830,52 @@ fixed, the ZONOS3, Reverb and round 40 files: 58 of 58 pass.
 runs of `epubedit.test.js` and `layout.test.js` while a reviewer decoded 400-megapixel pictures alongside; those two
 files run again alone: 59 of 59 pass. So 568 pass, none fail, and six need `SLOW=1` or `NETWORK=1`.
 
+### Round 41
+
+A review of the round 40 fixes (`9d79c14`, `9238746`) by two reviewers on copies of their own: one on opening books and
+content safety, one on Reverb, the licences and the scripts. Several fixes didn't hold, or broke something:
+- *Bypasses.* A page using a sprite file's big `<use>` group 2,000 times (22 million copies) still hung the tab, each
+  file being capped on its own (H-61). A space after `data:` (`data: image/svg+xml,…`), which browsers ignore, skipped
+  the cleaning of data: SVGs, in pages and styles (H-62). marked was still quadratic for a list inside a block quote, and
+  after a line taken for a fence that marked doesn't take as one (```` ```x``` ````, a backtick in the info string, an
+  indented one) (H-63). Huge pictures still crashed the tab as data: pictures in pages or inside SVGs, typed oddly
+  (`image/x-png`) or not listed, or as a GIF whose frame is larger than its "screen" (M-218).
+- *Regressions.* A data: SVG with a literal `%` (`width='100%'`) was dropped (M-219); every `<use>` on a page was dropped
+  past 50,000 copies, so a MathJax chapter lost its formulas (M-220); a folder book's pictures were downloaded twice (L-463);
+  an OS/2 BMP's 16-bit sizes were read as 32-bit (L-464); the list pre-pass could cut an HTML block or `$$` math after a
+  list, or a fence in a quote (L-465); data: SVGs made new copies each time a page was drawn (L-466).
+- *Reverb.* Every first download showed "downloaded again" (`rvKept` wasn't waited for, and read the flag already set)
+  (M-221); two folders of a site deleted each other's copy, each visit downloading again (M-222); on a site with Reverb on,
+  "Your voices" hid the words field of voices stored before (it was drawn before the config was read) (M-223); the codec's
+  credit was only a tooltip, without "based on Meta Llama 3", and the README limited providing the agreements to serving
+  the codec (M-224); saved speech made before M-214 was still played for preset voices (L-467); the audiobook didn't check a
+  site voice's version, and could save new speech under an old version's key (L-468); runntime and js-tiktoken ship no
+  licence file, so LICENSES.txt lacked their MIT texts (L-469).
+- Docs D-46 (re-run `fetch-reverb.sh`; a sentence saying "these voices" twice); tests T-69 (the bypasses' shapes).
+
+**Fixed** in the commit after `9238746`, each with a test but L-465's HTML-block case and L-468 (by reading):
+- H-63: the pre-pass looks inside block quotes (and cuts with a `>` line), recognises fences as CommonMark does, and
+  even inside a fence puts a blank line in after 2,000 lines; a list ends at a heading, an HTML block or `$$` (L-465).
+  (A cut inside an indented item can still make its list loose, a cost only past 1,000 lines without a blank one.)
+- H-61, M-220: SVG files record the copies each element with an id makes, and a page's `<use>` of a sprite counts its
+  target's size, checked once the page's addresses are known; the limit is twice the page's own elements plus 50,000.
+- H-62, M-219, L-466, M-218: data: addresses are read as browsers read them (whitespace before the type; percent-decoding
+  that keeps a stray `%`); data: SVGs are kept per book; data: raster pictures (in pages, styles and SVGs) have their size
+  checked; every file but fonts, sound, video, styles, captions and SVG has its header read whatever its type; GIF frames
+  are counted; a site's file is read by its first 512 KB (L-463); OS/2 BMPs (L-464).
+- M-221, M-222: the "loaded before" flag is read before it is set, and kept per copy (folder or Hugging Face); `rvKept`
+  removes only other revisions' folders.
+- M-223: "Your voices" drawn again once the config is read.
+- M-224: the credit in the licence's words (with "based on Meta Llama 3") shown in Settings wherever Reverb is on, with
+  Reverb's own and links to both agreements, CC BY-NC and the acceptable-use policy; the download offer says where; the
+  README says so and that the agreements must be provided.
+- L-467: Reverb's saved-speech key carries `s2`. L-468: the audiobook waits for the site voice's version, and a voice
+  carries the version it was taken with. L-469: their upstream MIT licences kept in `tools/reverb-engine/licenses/`
+  (pinned commits) and put in LICENSES.txt by the build. D-46 done.
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Open (below): T-68,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Open (below): T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -842,6 +885,7 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | T-68 | Tests that can pass without testing: ZONOS3's "deleted while it is being made" (L-448) relies on a 400 ms sleep; M-210's Refresh test reads its place after 300 ms and never checks it moved from the start; L-447's (300/800 ms) and L-450's (500 ms) sleeps. | Tests |
 | [E-50](#e-50-reverb-tts-a-voice-in-the-browser-and-on-the-server) | Reverb-TTS: a voice in the browser (runntime, WebGPU; int4, fp16 with full precision) and on the server; custom voices with their words; weights non-commercial (off by default, a site can turn it on) | Enhancement |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
@@ -977,6 +1021,24 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-61 | A page's `<use>` of a sprite file's big group, many times over, hung the tab: each SVG file was capped on its own (round 41). A sprite's elements carry their copy counts; a page's use of one counts that much. | (the commit after `9238746`) |
+| H-62 | `data: image/svg+xml,…` (a space before the type) skipped the data: SVG cleaning, in pages and styles (round 41). data: addresses read as browsers read them. | (the commit after `9238746`) |
+| H-63 | marked still quadratic for a list in a block quote, or after a line taken for a fence marked doesn't take (round 41). The pre-pass looks inside quotes, recognises fences as CommonMark does, and cuts inside one after 2,000 lines. | (the commit after `9238746`) |
+| M-218 | Huge pictures still crashed the tab as data: pictures (pages, SVGs), typed oddly or unlisted, or as a GIF frame larger than its screen (round 41). Every non-font, non-media file's header read whatever its type; data: rasters checked; GIF frames counted. | (the commit after `9238746`) |
+| M-219 | A data: SVG with a literal `%` was dropped (round 41, regression from H-60's fix). Percent-decoding that keeps a stray `%`. | (the commit after `9238746`) |
+| M-220 | Every `<use>` of a page dropped past 50,000 copies, MathJax's glyphs included (round 41, regression). Limit twice the page's own elements plus 50,000. | (the commit after `9238746`) |
+| M-221 | Every first Reverb download said "downloaded again" (round 41, regression). The flag read before it is set, and kept per copy. | (the commit after `9238746`) |
+| M-222 | Two folders of a site deleted each other's Reverb copy, each visit downloading again (round 41, regression). Only other revisions' folders removed. | (the commit after `9238746`) |
+| M-223 | On a Reverb site, "Your voices" hid stored voices' words fields (drawn before the config) (round 41, regression). Drawn again once the config is read. | (the commit after `9238746`) |
+| M-224 | The codec's credit only a tooltip, without "based on Meta Llama 3"; the README limited providing the agreements to serving the codec (round 41). Shown in Settings wherever Reverb is on, with links to both agreements; the offer says where; README. | (the commit after `9238746`) |
+| L-463 | A folder book's pictures downloaded twice (round 41). Its first 512 KB asked for by range. | (the commit after `9238746`) |
+| L-464 | OS/2 BMPs' 16-bit sizes read as 32-bit, so refused (round 41). Read by their header's size. | (the commit after `9238746`) |
+| L-465 | The list pre-pass could cut an HTML block or `$$` math after a list, or a fence in a quote (round 41). A list ends at those; quotes followed. (A cut in an indented item can still make a list loose.) | (the commit after `9238746`) |
+| L-466 | data: SVGs copied anew each time a page was drawn (round 41). Kept per book. | (the commit after `9238746`) |
+| L-467 | Reverb speech saved before M-214 still played for preset voices (round 41). The key carries `s2`. | (the commit after `9238746`) |
+| L-468 | The audiobook didn't check a Reverb site voice's version, and could save new speech under an old key (round 41). It waits for the check; a voice carries its version. | (the commit after `9238746`) |
+| L-469 | runntime's and js-tiktoken's MIT texts missing from LICENSES.txt (they ship none) (round 41). Upstream licences kept at pinned commits, added by the build. | (the commit after `9238746`) |
+| D-46 | README: re-running `fetch-reverb.sh` for the licences; "these voices" twice (round 41). Done. | (the commit after `9238746`) |
 | H-59 | A Markdown list item followed by many lines without a blank one freezes the tab: marked's list tokenizer takes time with the square of the lines (`- a` then N lines `b`, or `  b`): 16,000 lines 1.2 s to read, 200 KB 50 s to open, 1 MB minutes; again at each parse. Reachable by `?book=`, `?get=` and links. Fix: a linear pre-pass ending a list paragraph after about 1,000 lines without a blank one (or a newer marked if fixed); a fixture. A linear pre-pass (`mdUnstick`) puts a blank line in after every 1,000 lines of a list item without one (not in a fenced code block, and not past the list's end), which only starts a new paragraph there; the editor's line matching allows for the lines put in. 200 KB of such a list: 0.04 s to read instead of 47 s. Tested. | `9d79c14` |
 | H-60 | An SVG `<use>` fan-out (about 1 KB; ten `<use>` of the level below at each of six or seven levels) hangs the tab: inline in a document, as a picture, or as a book's cover, which `setBookIcon` decodes for the tab icon whatever the page shows; `data:image/svg+xml` pictures skip `svgURL`'s cleaning. Fix: count each SVG's expanded size (a `<use>` counts as its target, memoised by id) in `svgURL` and `sanitize`, dropping `<use>` past about 20,000; `data:` SVG pictures through the same cleaning. `svgUseCap` counts the copies an SVG's `<use>` elements would make (each counted as its target, once per element; a loop counted once; nesting too deep counted as too much) and drops its `<use>` elements past 50,000 more than its own elements: in SVG files and covers (`svgURL`, now `svgClean`) and inline in pages (`sanitize`, with targets found in the whole page). `data:image/svg+xml` pictures in pages and styles are cleaned as SVG files are (`svgDataURL`), not shown as they came; one inside an SVG isn't followed. Tested (inline, as data: pictures and in a style, as the cover). | `9d79c14` |
 | M-213 | Reverb's codec is under the Boson Higgs Audio 2 Community License (Llama 3-based), stated nowhere: a site serving it from `reverb/models/` must ship both agreements, a Notice file with its set wording, and display "Built with Higgs Materials licensed from Boson AI…", and past 100,000 annual active users needs an expanded licence from Boson; `fetch-reverb.sh`'s NOTICE.txt names the codec without a licence, and the README speaks only of the weights' CC BY-NC (and of a `LICENSES/` folder it doesn't write). Fix: fetch the licence texts into `reverb/models/LICENSES/`, the Notice lines in NOTICE.txt, and the terms in the README beside CC BY-NC (and in the server repository's). `fetch-reverb.sh` fetches, checked like the rest, the codec's agreement (Boson Higgs Audio 2 Community License), the Meta Llama 3 Community License it takes in, and both model cards, at pinned revisions, into `reverb/models/LICENSES/`; its NOTICE.txt carries the Notice lines the agreement asks for and says what a site must display and follow. The reader shows both credits as the Reverb voice's title in the read-aloud bar; the README (the voice, the licences) and the server repository's README (`9129ccc`) state the terms. Tested (the script). | `9d79c14` |

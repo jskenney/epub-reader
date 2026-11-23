@@ -500,11 +500,13 @@ site as the reader.
   the [Boson Higgs Audio 2 Community License](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/blob/main/LICENSE)**,
   based on Meta's Llama 3 licence: a site that uses it must display "Built with Higgs Materials licensed from Boson AI
   USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3
-  Community License, Copyright Meta Platforms, Inc., All Rights Reserved" on a related page (the reader shows both
-  credits as the voice's title in the read-aloud bar), follow the
-  [Llama 3 Acceptable Use Policy](https://llama.meta.com/llama3/use-policy), ship both agreements with the codec when
-  it serves it (`fetch-reverb.sh` saves them, with the Notice they ask for, in `reverb/models/LICENSES/` and
-  `NOTICE.txt`), and ask Boson AI for an expanded licence past 100,000 annual active users. So it is **off by
+  Community License, Copyright Meta Platforms, Inc., All Rights Reserved, based on Meta Llama 3" on a related page
+  (the reader shows it, with Reverb's own credit and links to both agreements, in Settings wherever Reverb is on, says
+  where in its download offer, and gives the credits as the voice's title in the read-aloud bar), provide both
+  agreements (`fetch-reverb.sh` saves them, with the Notice they ask for, in `reverb/models/LICENSES/` and
+  `NOTICE.txt`; Settings links to them), follow the
+  [Llama 3 Acceptable Use Policy](https://llama.meta.com/llama3/use-policy), and ask Boson AI for an expanded licence
+  past 100,000 annual active users. So it is **off by
   default**: a site these licences fit turns it on with `"REVERB": true` in `reader-config.json`.
   **Custom voices** (listed first among Reverb's voices): Reverb copies a voice from a recording *and the words said
   in it*. Your own voices in Settings ("Your voices", shared with ZONOS3) are listed once their words and language
@@ -843,7 +845,8 @@ The reader uses this site's copy only when `NOTICE.txt` is there and so are the 
 full precision, by the GPU; int4 otherwise); otherwise it loads them from Hugging Face (or, with `ALLOW_CDN` false,
 says to run the script). Re-runs skip finished files, every file is checked against `checksums/reverb.sha256`, and
 `reverb/models/` is git-ignored. Remember the weights' licence: CC BY-NC 4.0, non-commercial only; the voice is
-offered only with `"REVERB": true` in `reader-config.json`.
+offered only with `"REVERB": true` in `reader-config.json`. **A site that ran an earlier `fetch-reverb.sh` should run it
+again**: it now also saves the codec's licences and their Notice (only the missing files are downloaded).
 
 The engine (`reverb/engine/reverb.js`, about 1.2 MB, with `LICENSES.txt`) is part of the reader, served under
 `VOICE_FILES` like the other voice files. `tools/build-reverb-engine.sh` rebuilds it with esbuild from the npm

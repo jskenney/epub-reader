@@ -8,6 +8,12 @@ test.afterEach(h.closePages);
 test.after(h.close);
 
 const frameText = page => h.inFrame(page, doc => doc.body.textContent);
+// A function of the reader's, taken from index.html, to try on its own.
+const readerFn = (start, name) => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const i = src.indexOf(start), j = src.indexOf('\n}\n', i) + 3;
+  return new Function(src.slice(i, j) + `; return ${name};`)();
+};
 
 test('a Markdown list item followed by 100,000 lines without a blank one opens in good time (round 40 review, H-59)', async () => {
   const page = await h.newPage();
@@ -84,4 +90,71 @@ test('an EPUB on another site is downloaded whole, even where that site shows it
   await h.openReader(page, `${h.PLAIN}/reader/index.html?get=${encodeURIComponent(`${h.SOFT}/reader/books/long.epub?expose=1`)}`);
   assert.ok((await h.title(page)).length > 0);
   assert.deepEqual(ranged, [], 'no range requests to the other site');
+});
+
+// Round 41: the round 40 fixes' bypasses and regressions.
+test('Markdown lists in block quotes, and after a line taken for a fence, open in good time (round 41)', async () => {
+  for (const [book, title] of [['quote-list.md', 'Quoted list'], ['fence-trick.md', 'Fence trick']]) {
+    const page = await h.newPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(Date.now() - t0 < 12000, `${book}: took ${Date.now() - t0} ms`);
+    assert.equal(await h.title(page), title);
+    // (A real fence is still one: the pre-pass leaves a code block of fewer lines whole.)
+    const mdUnstick = readerFn('const MD_ITEM_LINES', 'mdUnstick');
+    const md = '- a\n```\n' + 'x\n'.repeat(1500) + '```\n' + 'b\n'.repeat(1500), u = mdUnstick(md);
+    assert.deepEqual([u.added.length, u.text.split('\n').slice(2, 1502).every(l => l === 'x')], [1, true]);
+    await page.close();
+  }
+});
+
+test('a page using a sprite\'s big group many times opens without the copies; small icons used many times stay (round 41)', async () => {
+  let page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/sprite-fanout.epub`);
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.waitFor(async () => /After the sprites/.test(await frameText(page)), 10000));
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('use').length), 0);
+  await page.close();
+  page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/sprite-icons.epub`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('use').length), 50, 'the icons kept');
+  await page.close();
+  page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/many-glyphs.html`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('use').length), 54000, 'MathJax-like glyph uses kept');
+});
+
+test('a data: SVG with a space before its type is cleaned too; one with a % shows (round 41)', async () => {
+  let page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/data-space.html`);
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.waitFor(async () => /After the spaced picture/.test(await frameText(page)), 10000));
+  assert.ok((await h.inFrame(page, doc => [...doc.images].map(i => i.getAttribute('src') || ''))).every(s => !/^data:/i.test(s)));
+  await page.close();
+  page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/data-percent.html`);
+  assert.ok(await h.waitFor(() => h.inFrame(page, doc => doc.images[0].complete && doc.images[0].naturalWidth === 10), 10000), 'the picture with a % shows');
+});
+
+test('huge pictures as data: in a page and in an SVG, typed oddly, unlisted, or a GIF frame larger than its screen, are left out (round 41)', async () => {
+  for (const book of ['data-huge.html', 'huge-other.epub']) {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(await h.waitFor(async () => /After the (data|huge) picture/.test(await frameText(page)), 10000), book);
+    await page.waitForTimeout(1500);
+    assert.equal(await page.evaluate(() => 1 + 1), 2, `${book}: the tab still answers`);
+    const imgs = await h.inFrame(page, doc => [...doc.images].map(i => [i.alt, !!i.getAttribute('src')]));
+    for (const [alt, has] of imgs) assert.equal(has, alt === 'fine' || alt === 'svg', `${book}: ${alt}`);
+    if (book === 'huge-other.epub') assert.equal(await h.inFrame(page, doc => doc.images[2].naturalWidth), 10, 'the SVG still shows, its huge picture taken out');
+    await page.close();
+  }
+  // An OS/2 BMP's 16-bit sizes, and a GIF's frame, read right.
+  const pictureSize = readerFn('function pictureSize(b){', 'pictureSize');
+  assert.deepEqual((() => {
+    const bmp = new Uint8Array(26); bmp.set([0x42, 0x4d]); new DataView(bmp.buffer).setUint32(14, 12, true); new DataView(bmp.buffer).setUint16(18, 100, true); new DataView(bmp.buffer).setUint16(20, 50, true);
+    const gif = new Uint8Array([71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 0, 0, 0, 0x2c, 0, 0, 0, 0, 0x20, 0x4e, 0x20, 0x4e, 0, 2, 2, 0x4c, 1, 0, 0x3b]);
+    return [pictureSize(bmp), pictureSize(gif)];
+  })(), [[100, 50], [20000, 20000]]);
 });
