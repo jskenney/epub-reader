@@ -780,7 +780,7 @@ none fail. 560 at `e67e6f6`, after your decisions: 554 pass, none fail. Six need
 
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. Open (below): only enhancements
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. Open (below): only enhancements, E-50 (Reverb-TTS) first
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -790,6 +790,7 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| [E-50](#e-50-reverb-tts-a-voice-in-the-browser-and-on-the-server) | Reverb-TTS: a voice in the browser (runntime, WebGPU; int4, fp16 with full precision) and on the server; custom voices with their words; weights non-commercial, so a site turns it on | Enhancement |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
@@ -854,6 +855,35 @@ audio-only clips (no text) shown as such in the read-aloud bar, rather than igno
 ### E-45. Narration on fixed-layout spreads
 On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
 whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
+
+### E-50. Reverb-TTS: a voice in the browser and on the server
+[Reverb-TTS](https://github.com/software-mansion-labs/Reverb-TTS) (Software Mansion, November 2026): a 297M-parameter
+voice-cloning model, 7 languages (English, German, French, Spanish, Italian, Polish, Portuguese), 16 built-in voices,
+the lowest word error rate on the Open TTS Leaderboard by its own figures, and fast (masked diffusion: a passage is made
+whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache 2.0; **weights CC BY-NC 4.0**
+(non-commercial, with attribution), unlike Kokoro and ZONOS3 (Apache 2.0).
+
+- **In the browser** ("Reverb" beside Kokoro, Pocket TTS and ZONOS3): through Software Mansion's `runntime` (MIT,
+  WebGPU), whose `createTextToSpeech` runs Reverb, its audio codec and tokenizer. Built from its npm releases into
+  `reverb/engine/` by a reproducible `tools/build-reverb-engine.sh` (runntime, TypeGPU, the tokenizer and Verbalis,
+  versions and checksums pinned), as `zonos/engine/` is. Models from the Hugging Face Hub at pinned revisions, or from
+  the site by a `fetch-reverb.sh` into `reverb/models/`. Downloads: int4 (about 385 MB with the codec, half ZONOS3's) by
+  default; with `FULL_PRECISION`, fp16 weights and math (about 790 MB) where the GPU has `shader-f16`, else int8. Text
+  spelled out first by Verbalis (numbers, dates, money, units) in all 7 languages. Offered for books in its languages;
+  its built-in voices, the book's language first; saved speech keyed by model, voice and language. Because of the
+  weights' licence, a site turns it on (`REVERB: true` in reader-config.json, off by default), and the README says why.
+- **Custom voices** (E-48's three ways), each needing what was said: a recording made in Settings reads a passage
+  shown, so its words are known; an upload or a site recording takes its words beside it (Settings: a box for them;
+  `REVERB_VOICES` entries with a `text`, or a `.txt` of the same name next to the recording). The voice (codec codes,
+  under 100 KB) is made once on the GPU (`createVoiceMaker().fromRecording`) and kept in the browser.
+- **On the server**: a service speaking the reader's server API (as epub-reader-tts-server-zonos3's adapter does),
+  `reverb-tts` in fp16 on the GPU (594 MB; it computes in bfloat16 whatever the file), `/health` listing its 7
+  languages and `"instructions": false`, voices from the voices folder's clips and their `ref_text`, the studio. Where
+  it lives (a repo of its own, or a service in an existing one) is yours to say.
+
+Limits: no Chinese, Japanese or the like (ZONOS3 stays for those); not streamed, but quick; very new (the repo dates
+from 19 November 2026, `runntime` 0.3.1), so pinned and checked as ZONOS3's engine is. Tests with a stand-in engine, as
+for ZONOS3, and a check of the real one through WebGPU on SwiftShader.
 
 ## Suggested order
 
