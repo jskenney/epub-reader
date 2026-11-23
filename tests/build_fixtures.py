@@ -155,28 +155,49 @@ export async function createVoiceMaker(config, { cache } = {}) {
   const f = window.reverbFake;
   f.makers = (f.makers || 0) + 1;
   f.makerCodec = config.codecPath; f.makerCache = cache?.name;
-  return { minSeconds: 1, maxSeconds: 30, async fromRecording(samples, o) {
+  return { minSeconds: 3, maxSeconds: 30, async fromRecording(samples, o) {   // (runntime's 3 s: T-67)
     f.made = [...(f.made || []), { seconds: Math.round(samples.length / o.sampleRate * 10) / 10, rate: o.sampleRate, transcript: o.transcript, language: o.language }];
     await wait(window.reverbFakeMakeSlow || 20);
     if (window.reverbFakeMakerFail) throw Object.assign(new Error(window.reverbFakeMakerFail), { code: 'INVALID_ARGUMENT' });
     return { codes: new Int32Array(8 * 3).fill(7), frames: 3, transcript: o.transcript, language: o.language, speechFrames: 3 };
   } };
 }
-export function createOpfsCache(name) { window.reverbFake.cacheName = name; return { name }; }
+// The cache in the site's private file system, as runntime's (one folder per name; window.reverbFakeNoOpfs: none).
+export async function createOpfsCache(name) {
+  (window.reverbFake ??= { requests: [] }).cacheName = name;
+  if (window.reverbFakeNoOpfs) return undefined;
+  const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(name, { create: true });
+  return { name, dir };
+}
+const fileName = k => k.replace(/[^a-zA-Z0-9._-]/g, '_');
+const partName = p => fileName(`st/reverb-v1/${p.replace(/^https?:\/\//, '')}/0-8388608`);
 export async function createTextToSpeech(opts, { cache, onBytes } = {}) {
   const f = window.reverbFake;
   f.loads = (f.loads || 0) + 1;
-  f.opts = { modelPath: opts.modelPath, codecPath: opts.codecPath, tokenizerPath: opts.tokenizerPath, dtype: opts.dtype ?? null };
+  f.opts = { modelPath: opts.modelPath, codecPath: opts.codecPath, tokenizerPath: opts.tokenizerPath, dtype: opts.dtype ?? null, verbalize: !!opts.verbalize };
   f.cache = cache?.name;
-  for (let i = 0; i < 4; i++) { onBytes?.(50 * 1048576); await wait(20); }
+  // (Downloaded, with progress, only what the cache doesn't have; kept unless window.reverbFakeNoKeep.)
+  let missing = !cache;
+  for (const p of [opts.modelPath, opts.codecPath]) {
+    if (!cache) break;
+    try { await cache.dir.getFileHandle(partName(p)); } catch {
+      missing = true;
+      if (!window.reverbFakeNoKeep) { const w = await (await cache.dir.getFileHandle(partName(p), { create: true })).createWritable(); await w.write('x'); await w.close(); }
+    }
+  }
+  if (missing) for (let i = 0, n = window.reverbFakeSteps || 4; i < n; i++) { onBytes?.(Math.round(200 / n) * 1048576); await wait(20); }
+  if (window.reverbFakeLoseDuringLoad) window.reverbLose('lost while loading');
   if (window.reverbFakeFail) throw new Error(window.reverbFakeFail);
   return {
     sampleRate: 24000,
-    async synthesize(text, voice, o = {}) {
-      if (!(voice.codes instanceof Int32Array)) throw new Error('codes must be an Int32Array');
-      const spoken = opts.verbalize(text, voice.language);
+    async synthesize(text, input, o = {}) {
+      if (!(input.codes instanceof Int32Array)) throw new Error('codes must be an Int32Array');
+      // (As runntime's spokenInput: with verbalize, the text and the voice's words spelled in the voice's language,
+      // and the voice rebuilt without its speechFrames: round 40 review, M-214.)
+      const voice = opts.verbalize ? { codes: input.codes, frames: input.frames, language: input.language, transcript: opts.verbalize(input.transcript, input.language) } : input;
+      const spoken = opts.verbalize ? opts.verbalize(text, input.language) : text;
       f.requests.push({ text, spoken, language: voice.language, transcript: voice.transcript, frames: voice.frames, speechFrames: voice.speechFrames, seed: o.seed });
-      if (text.includes('FAILME')) throw Object.assign(new Error('refused'), { code: 'TEXT_TOO_LONG' });
+      if (text.includes('FAILME')) throw Object.assign(new Error('the text needs 900 frames, more than the 800 this device runs at once'), { code: 'INVALID_ARGUMENT' });
       await wait(window.reverbFakeSlow || 30);
       const n = Math.round(24000 * (0.3 * text.split(/\s+/).length + 0.2)), out = new Float32Array(n);
       for (let i = 0; i < n; i++) out[i] = 0.1 * Math.sin(i * 0.05);
@@ -341,7 +362,7 @@ def main():
     os.symlink(REPO / "index.html", SITE / "reverb-voices" / "index.html")
     (SITE / "tts-voices" / "teller.txt").write_text("Words beside the teller.\n")
     (SITE / "reverb-voices" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB": True, "REVERB_VOICES": [
-        {"name": "Site narrator", "url": "/tts-voices/narrator.wav", "text": "The narrator's words.", "language": "fr"},
+        {"name": "Site narrator", "url": "/tts-voices/reverb-clip.wav", "text": "The narrator's words.", "language": "fr"},
         {"name": "Teller", "url": "/tts-voices/teller.wav"}, {"name": "No words", "url": "/tts-voices/second.wav"},
         {"name": "Bad", "url": "ftp://x/y.wav"}, {"name": "Klingon", "url": "/x.wav", "language": "tlh"}]}))
     (SITE / "reverb-off").mkdir()
@@ -1611,7 +1632,8 @@ def main():
         os.utime(SITE / folder / "voice.wav", (1700000000, 1700000000))
         (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": "Here = voice.wav"}))
     wav(SITE / "tts-voices" / "second.wav", 1.5)
-    wav(SITE / "tts-voices" / "teller.wav", 1.8)   # (a Reverb site voice, its words in teller.txt: E-50)
+    wav(SITE / "tts-voices" / "teller.wav", 4.0)   # (a Reverb site voice, its words in teller.txt: E-50)
+    wav(SITE / "tts-voices" / "reverb-clip.wav", 4.0)   # (long enough for Reverb's voice maker, 3 s at least)
     (SITE / "tts-voices" / "voices.json").write_text(json.dumps({"voices": [
         {"id": "narrator", "name": "Test narrator", "ref_audio": "narrator.wav", "ref_text": "A test clip.", "seed": 42, "cfg_scale": 1.0},
         {"id": "second", "name": "Second narrator", "ref_audio": "second.wav", "ref_text": "Another clip.", "seed": 42},
@@ -1622,6 +1644,33 @@ def main():
         {"id": "up", "name": "Up a folder", "ref_audio": "../reader/books/clip.wav", "ref_text": "x"},
         {"id": "encoded", "name": "Encoded dots", "ref_audio": "%2e%2e/reader/clip.wav", "ref_text": "x"},
         {"id": "rooted", "name": "From the root", "ref_audio": "/clip.wav", "ref_text": "x"}]}))
+    # Round 40 review: hostile files that froze or crashed the tab.
+    # (H-59) A list item followed by 100,000 lines without a blank one: quadratic in marked.
+    (books / "long-list.md").write_text("# Long list\n\n- a\n" + "b\n" * 100000 + "\nAfter the long list.\n")
+    # (L-461) Nesting deeper than marked can follow.
+    (books / "deep-nest.md").write_text(">" * 10000 + " x\n")
+    # (H-60) <use> fan-outs: ten copies of the level below at each of seven levels (ten million copies, about 1 KB).
+    def fanout(levels=7):
+        g = '<g id="l0"><rect width="1" height="1"/></g>' + "".join(f'<g id="l{i}">' + f'<use href="#l{i - 1}"/>' * 10 + "</g>" for i in range(1, levels + 1))
+        return f'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs>{g}</defs><use href="#l{levels}"/></svg>'
+    (books / "use-fanout.html").write_text(f"<!doctype html><html><head><title>Fan-out</title></head><body><h1>Fan-out page</h1><p>Before.</p>{fanout()}<p>After the picture.</p></body></html>")
+    from urllib.parse import quote
+    (books / "use-data.html").write_text(f'<!doctype html><html><head><title>Fan-out data</title><style>p.bg{{background:url("data:image/svg+xml,{quote(fanout())}")}}</style></head>'
+                                         f'<body><h1>Data fan-out</h1><p class="bg">Styled.</p><img alt="fan" src="data:image/svg+xml,{quote(fanout())}"><p>After the data picture.</p>'
+                                         f'<img alt="ok" src="data:image/svg+xml,{quote('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>')}"></body></html>')
+    cover_items = [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("cov", "cover.svg", "image/svg+xml", 'properties="cover-image"')]
+    epub_items(books / "svg-cover-fanout.epub", "SVG Cover Fan-out", cover_items, ["c1"],
+               {"c1.xhtml": xhtml("One", "<h1>One</h1><p>The book with a fan-out cover.</p>"), "cover.svg": fanout()}, "urn:svg-cover-fanout")
+    # (M-216) A PNG of 20,000 by 20,000 pixels (1 bit, about 50 KB): as the cover and in a page.
+    def huge_png(w=20000, h=20000):
+        row = b"\0" + b"\0" * ((w + 7) // 8)
+        chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+        return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 1, 0, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(row * h, 9)) + chunk(b"IEND", b"")
+    big = huge_png()
+    epub_items(books / "huge-picture.epub", "Huge Picture", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("cov", "huge.png", "image/png", 'properties="cover-image"'),
+               ("ok", "ok.png", "image/png", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><p>Before the huge picture.</p><img alt="huge" src="huge.png"/><img alt="fine" src="ok.png"/><p>After the huge picture.</p>'),
+                "huge.png": big, "ok.png": png(40, 30, (200, 50, 50))}, "urn:huge-picture")
     print(f"Built {SITE}")
 
 

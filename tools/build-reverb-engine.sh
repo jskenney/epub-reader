@@ -28,21 +28,32 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cp tools/reverb-engine/package.json tools/reverb-engine/package-lock.json tools/reverb-engine/entry.js "$tmp/"
 (cd "$tmp" && npm ci --silent --no-audit --no-fund --ignore-scripts \
   && node node_modules/esbuild/bin/esbuild entry.js --bundle --format=esm --platform=browser --target=es2022 \
-       --minify --legal-comments=eof --log-level=warning --outfile=reverb.js)
-# The licences of what it bundles, beside it (runntime and TypeGPU MIT, the tokenizers Apache-2.0, Verbalis MIT).
-{ for p in runntime typegpu verbalis @huggingface/tokenizers; do
-    f=$(ls "$tmp/node_modules/$p"/LICENSE* 2>/dev/null | head -1 || true)
-    echo "== $p $(node -p "require('$tmp/node_modules/$p/package.json').version") ($(node -p "require('$tmp/node_modules/$p/package.json').license"))"
-    [ -n "$f" ] && cat "$f"; echo
-  done; } > "$tmp/LICENSES.txt"
+       --minify --legal-comments=eof --log-level=warning --metafile=meta.json --outfile=reverb.js)
+# The licences of every package it bundles, beside it, taken from esbuild's list of what went in (a fixed list missed
+# five and named one that isn't bundled: round 40 review, M-217). Sorted, so the build stays the same.
+(cd "$tmp" && node -e '
+  const fs = require("fs"), path = require("path");
+  const inputs = Object.keys(JSON.parse(fs.readFileSync("meta.json", "utf8")).inputs);
+  const dirs = [...new Set(inputs.map(i => (/^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(i) || [])[1]).filter(Boolean))].sort();
+  let out = "";
+  for (const d of dirs) {
+    const pkg = JSON.parse(fs.readFileSync(path.join(d, "package.json"), "utf8"));
+    const lic = fs.readdirSync(d).filter(f => /^(licen[cs]e|copying|notice)/i.test(f) && fs.statSync(path.join(d, f)).isFile()).sort();
+    out += `== ${pkg.name} ${pkg.version} (${pkg.license || "see below"})\n`;
+    for (const f of lic) out += fs.readFileSync(path.join(d, f), "utf8").trimEnd() + "\n";
+    if (!lic.length) out += "(no licence file in the package; its package.json says " + (pkg.license || "nothing") + ")\n";
+    out += "\n";
+  }
+  fs.writeFileSync("LICENSES.txt", out);
+')
 
 if [ "$WRITE" = 1 ]; then
   mkdir -p reverb/engine
   cp "$tmp/reverb.js" "$tmp/LICENSES.txt" reverb/engine/
-  (cd reverb/engine && "${SHA[@]}" reverb.js | sed 's|  |  reverb/engine/|') > checksums/reverb-engine.sha256
+  (cd reverb/engine && "${SHA[@]}" reverb.js LICENSES.txt | sed 's|  |  reverb/engine/|') > checksums/reverb-engine.sha256
   echo "Wrote reverb/engine/ and checksums/reverb-engine.sha256."
 else
-  mkdir -p "$tmp/check/reverb/engine" && cp "$tmp/reverb.js" "$tmp/check/reverb/engine/"
+  mkdir -p "$tmp/check/reverb/engine" && cp "$tmp/reverb.js" "$tmp/LICENSES.txt" "$tmp/check/reverb/engine/"
   (cd "$tmp/check" && "${SHA[@]}" -c --quiet "$OLDPWD/checksums/reverb-engine.sha256") \
     && echo "The build matches checksums/reverb-engine.sha256." \
     || { echo "The build doesn't match checksums/reverb-engine.sha256." >&2; exit 1; }

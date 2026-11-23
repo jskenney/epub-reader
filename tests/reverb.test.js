@@ -74,14 +74,16 @@ test('Reverb: agreeing to the download loads fp16 from Hugging Face, lists the v
   assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), 'reads after loading');
   const f = await fake(p);
   assert.deepEqual(f.opts, { modelPath: HUB + 'model/safetensors/fp16/model.safetensors', codecPath: CODEC,
-    tokenizerPath: HUB + 'model/tokenizer.json', dtype: 'f16' });
+    tokenizerPath: HUB + 'model/tokenizer.json', dtype: 'f16', verbalize: false });
   assert.equal(f.cache, 'spine-reverb-f5759ca1', 'kept in the browser under the revision');
   assert.deepEqual(f.gpuOpts, { device: { optionalFeatures: ['subgroups', 'shader-f16'] } });
   const first = f.requests[0];
   assert.equal(first.language, 'en');
   assert.equal(first.transcript, 'Hub en_female_narrator.', "the voice's own transcript goes with its codes");
   assert.equal(first.seed, 0);
-  assert.ok(f.requests.every(r => !/\d/.test(r.spoken)), JSON.stringify(f.requests.map(r => r.spoken)));
+  assert.ok(f.requests.every(r => !/\d/.test(r.text)), 'the reader spells the text out: ' + JSON.stringify(f.requests.map(r => r.text)));
+  assert.equal(f.opts.verbalize, false, 'runntime is given no verbalize, which would drop the voices\' speechFrames (round 40 review, M-214)');
+  assert.equal(first.speechFrames, 2, 'the preset voice\'s speechFrames reach runntime');
   assert.ok(p.hub.includes(HUB + 'voices/en_female_narrator.json'));
   assert.deepEqual(p.blocked, []);
   // A reload doesn't ask again.
@@ -118,7 +120,8 @@ test('Reverb: a French book is read in French, and a chosen voice is kept', asyn
   assert.equal(f.requests[0].transcript, 'Hub fr_female_standard.', "the book's language's voice first");
   assert.deepEqual((await p.$$eval('#ttsVoice option', os => os.map(o => o.value))).slice(0, 2), ['fr_female_standard', 'fr_male_standard']);
   await p.selectOption('#ttsVoice', 'en_male_narrator_2');
-  await p.waitForFunction(() => window.reverbFake.requests.some(r => r.transcript === 'Hub en_male_narrator_2.'), null, { timeout: 20000 });
+  // (The voice's words spelled out in its own language, as the reader now does: "2" as "two", M-214.)
+  await p.waitForFunction(() => window.reverbFake.requests.some(r => r.transcript === 'Hub en_male_narrator_two.'), null, { timeout: 20000 });
   f = await fake(p);
   assert.equal(f.requests.at(-1).language, 'fr', 'any voice reads the book in its language');
   await p.reload(); await h.waitForBook(p);
@@ -136,7 +139,7 @@ test('Reverb files are used from this site only when fetch-reverb.sh finished, a
     const f = await fake(p), base = `${h.SITE}/${folder}/reverb/models/`;
     if (local) {
       assert.deepEqual(f.opts, { modelPath: base + 'model/runntime/int4/model.safetensors', codecPath: base + 'codec/model.safetensors',
-        tokenizerPath: base + 'model/tokenizer.json', dtype: null });
+        tokenizerPath: base + 'model/tokenizer.json', dtype: null, verbalize: false });
       assert.equal(f.requests[0].transcript, 'Local en_female_narrator.', 'voices from this site too');
       assert.deepEqual(p.hub, [], 'nothing from Hugging Face');
     } else assert.ok(f.opts.modelPath.startsWith(HUB), `${folder} ${precision}: ${f.opts.modelPath}`);
@@ -195,7 +198,7 @@ test('Reverb: Generate config gives REVERB, and readAloud "reverb" is kept', asy
 });
 
 // Custom voices (E-50): yours from Settings (with their words and language) and the site's (REVERB_VOICES).
-const NARRATOR = require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav');
+const NARRATOR = require('node:path').join(__dirname, 'site', 'tts-voices', 'reverb-clip.wav');
 const listed = p => p.$$eval('#ttsVoice option', os => os.map(o => o.textContent));
 
 test('Reverb: a voice uploaded in Settings is listed once its words are given, made once from them, and used', async () => {
@@ -203,11 +206,11 @@ test('Reverb: a voice uploaded in Settings is listed once its words are given, m
   await h.openReader(p, LONG, { ...reverb, 'spine:agreed:reverb:full': true });
   await p.click('#setBtn');
   await p.setInputFiles('#znFile', NARRATOR);
-  await p.waitForFunction(() => /Added narrator.*for Reverb, give the words said in it/.test(document.querySelector('#znMsg').textContent));
+  await p.waitForFunction(() => /Added reverb-clip.*for Reverb, give the words said in it/.test(document.querySelector('#znMsg').textContent));
   await p.click('#setClose');
   await p.keyboard.press('r');
   assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
-  assert.ok(!(await listed(p)).some(t => /narrator \(/.test(t) && /yours/.test(t)), 'not listed without its words');
+  assert.ok(!(await listed(p)).some(t => /reverb-clip \(/.test(t) && /yours/.test(t)), 'not listed without its words');
   // Its words and language given in Settings: listed first.
   await p.click('#ttsClose');
   await p.click('#setBtn');
@@ -219,13 +222,14 @@ test('Reverb: a voice uploaded in Settings is listed once its words are given, m
   await p.click('#setClose');
   await p.keyboard.press('r');
   await p.waitForSelector('#tts:not([hidden])');
-  await p.waitForFunction(() => document.querySelector('#ttsVoice option')?.textContent === 'narrator (de, yours)');
-  await p.selectOption('#ttsVoice', { label: 'narrator (de, yours)' });
+  await p.waitForFunction(() => document.querySelector('#ttsVoice option')?.textContent === 'reverb-clip (de, yours)');
+  await p.selectOption('#ttsVoice', { label: 'reverb-clip (de, yours)' });
   await p.waitForFunction(() => window.reverbFake.requests.some(r => r.transcript === 'A test clip, de2 seconds long.'), null, { timeout: 20000 });
   let f = await fake(p);
   assert.equal(f.made.length, 1, 'made once');
-  assert.deepEqual(f.made[0], { seconds: 2, rate: 24000, transcript: 'A test clip, de2 seconds long.', language: 'de' }, 'its words spelled out in its own language');
+  assert.deepEqual(f.made[0], { seconds: 4, rate: 24000, transcript: 'A test clip, de2 seconds long.', language: 'de' }, 'its words spelled out in its own language');
   assert.equal(f.makerCodec, CODEC, 'the voice maker uses the codec already loaded');
+  assert.equal(f.requests.at(-1).speechFrames, 3, 'the made voice\'s speechFrames reach runntime (M-214)');
   assert.equal(f.requests.at(-1).language, 'en', 'the book read in its language');
   // Kept: after a reload it isn't made again.
   await p.reload(); await h.waitForBook(p);
@@ -239,7 +243,7 @@ test('Reverb: a voice uploaded in Settings is listed once its words are given, m
   await p.click('#setBtn');
   p.once('dialog', d => d.accept());
   await p.click('#znOwnList button:has-text("Delete")');
-  await p.waitForFunction(() => /Deleted narrator/.test(document.querySelector('#znMsg').textContent));
+  await p.waitForFunction(() => /Deleted reverb-clip/.test(document.querySelector('#znMsg').textContent));
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('spine:reverbVoice'))), '');
   const keys = await p.evaluate(() => new Promise(res => { const rq = indexedDB.open('spine-zonos-voices'); rq.onsuccess = () => { const g = rq.result.transaction('emb').objectStore('emb').getAllKeys(); g.onsuccess = () => res(g.result); }; }));
   assert.deepEqual(keys.filter(k => String(k).startsWith('rv|')), [], 'its made voice deleted too');
@@ -261,6 +265,7 @@ test('Reverb: a voice recorded in Settings takes the passage read as its words',
   await p.fill('#znName', 'Recorded');
   await p.click('#znKeep');
   await p.waitForFunction(() => /Added Recorded.*or Reverb's/.test(document.querySelector('#znMsg').textContent));
+  await p.waitForSelector('#znOwnList .zn-text', { state: 'attached' });
   assert.match(await p.$eval('#znOwnList .zn-text', i => i.value), /^The old house stood at the end of the lane.*come back to it\.$/);
   assert.equal(await p.$eval('#znOwnList .zn-lang', s => s.value), 'en');
 });
@@ -285,7 +290,7 @@ test('Reverb site voices (REVERB_VOICES): words given or beside the recording, m
   await p.click('#setGenerate');
   const cfg = await h.waitFor(async () => { const t = await p.$eval('#cfgText', el => el.value).catch(() => ''); return t && JSON.parse(t); }, 5000);
   assert.deepEqual(cfg.REVERB_VOICES, [
-    { name: 'Site narrator', url: '/tts-voices/narrator.wav', text: "The narrator's words.", language: 'fr' },
+    { name: 'Site narrator', url: '/tts-voices/reverb-clip.wav', text: "The narrator's words.", language: 'fr' },
     { name: 'Teller', url: '/tts-voices/teller.wav', language: 'en' }, { name: 'No words', url: '/tts-voices/second.wav', language: 'en' }]);
 });
 
@@ -293,5 +298,125 @@ test('Reverb: a recording the voice maker refuses stops reading with the reason'
   const p = await page();
   await p.addInitScript(() => { window.reverbFakeMakerFail = 'too quiet'; });
   await openBar(p, `${h.SITE}/reverb-voices/?book=/reader/books/long.epub`, { ...reverb, 'spine:agreed:reverb:full': true, 'spine:reverbVoice': 'url:' + `${h.SITE}/tts-voices/teller.wav` });
-  await p.waitForFunction(() => /Teller couldn't be made into a voice \(INVALID_ARGUMENT\)/.test(document.querySelector('#notice')?.textContent || ''), null, { timeout: 20000 });
+  await p.waitForFunction(() => /Teller couldn't be made into a voice \(too quiet\)/.test(document.querySelector('#notice')?.textContent || ''), null, { timeout: 20000 });
+});
+
+// Round 40 review.
+const VOICES = `${h.SITE}/reverb-voices/?book=/reader/books/long.epub`;
+const opfs = (p, fn) => p.evaluate(fn);
+
+test('Reverb: a site voice\'s version is kept, so a visit where its check fails still plays its saved speech (round 40 review, M-215)', async () => {
+  let p = await page();
+  await openBar(p, VOICES, { ...reverb, 'spine:agreed:reverb:full': true, 'spine:reverbVoice': `url:${h.SITE}/tts-voices/reverb-clip.wav` });
+  await p.waitForFunction(() => window.reverbFake?.requests.length >= 2, null, { timeout: 20000 });
+  await p.keyboard.press(' ');
+  const kept = await p.evaluate(() => JSON.parse(localStorage.getItem('spine:reverbVersions')));
+  assert.ok(kept[`${h.SITE}/tts-voices/reverb-clip.wav`], JSON.stringify(kept));
+  // The recording now unreachable (offline, say): saved speech still plays, and the voice isn't made again.
+  await p.route('**/tts-voices/reverb-clip.wav', r => r.abort());
+  await p.reload(); await h.waitForBook(p);
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000), 'reads from saved speech');
+  const f = await fake(p);
+  assert.equal(f?.made, undefined, 'not made again');
+  // (Passages beyond those saved are made with the kept voice, its recording not needed.)
+  assert.ok((f?.requests || []).every(r => r.transcript === "The narrator's words."), JSON.stringify(f?.requests));
+  assert.doesNotMatch(await h.notice(p), /couldn't be fetched/);
+});
+
+test('Reverb: a site voice\'s words corrected in its .txt make it again (round 40 review, L-452)', async () => {
+  const fs = require('node:fs'), txt = require('node:path').join(__dirname, 'site', 'tts-voices', 'teller.txt');
+  const before = fs.readFileSync(txt, 'utf8');
+  try {
+    let p = await page();
+    await openBar(p, VOICES, { ...reverb, 'spine:agreed:reverb:full': true, 'spine:reverbVoice': `url:${h.SITE}/tts-voices/teller.wav` });
+    await p.waitForFunction(() => window.reverbFake?.made?.length === 1, null, { timeout: 20000 });
+    await p.keyboard.press(' ');
+    fs.writeFileSync(txt, 'Corrected words beside the teller.\n');
+    const t = new Date(Date.now() + 5000); fs.utimesSync(txt, t, t);
+    await p.reload(); await h.waitForBook(p);
+    await p.keyboard.press('r');
+    await p.waitForFunction(() => window.reverbFake?.made?.some(m => m.transcript === 'Corrected words beside the teller.'), null, { timeout: 20000 });
+  } finally { fs.writeFileSync(txt, before); }
+});
+
+test('Reverb: runntime\'s reason is shown, not only its code (round 40 review, L-454)', async () => {
+  const p = await page();
+  await openBar(p, VOICES, { ...reverb, 'spine:agreed:reverb:full': true, 'spine:reverbVoice': `url:${h.SITE}/tts-voices/teller.wav` });
+  await p.evaluate(() => { window.reverbFakeMakerFail = 'longer than 30 s this device takes'; });
+  assert.match(await h.noticeLike(p, /longer than 30 s this device takes/, 20000), /longer than 30 s this device takes/);
+});
+
+test('Reverb: other revisions\' and stray copies are removed after loading; a copy not kept, or no place to keep one, is said (round 40 review, L-455)', async () => {
+  let p = await page();
+  await h.openReader(p, LONG, { ...reverb, 'spine:agreed:reverb:full': true });
+  await opfs(p, async () => {
+    const root = await navigator.storage.getDirectory();
+    const old = await root.getDirectoryHandle('spine-reverb-00000000', { create: true });
+    await (await old.getFileHandle('st_reverb-v1_old', { create: true })).createWritable().then(async w => { await w.write('x'); await w.close(); });
+    const cur = await root.getDirectoryHandle('spine-reverb-f5759ca1', { create: true });
+    await (await cur.getFileHandle('st_reverb-v1_huggingface.co_other_precision', { create: true })).createWritable().then(async w => { await w.write('x'); await w.close(); });
+  });
+  await p.keyboard.press('r');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  const left = await opfs(p, async () => {
+    const root = await navigator.storage.getDirectory(), out = [];
+    for await (const [n, hd] of root.entries()) { if (!n.startsWith('spine-reverb-')) continue; out.push(n); if (hd.kind === 'directory') for await (const k of hd.keys()) out.push('  ' + k); }
+    return out;
+  });
+  assert.ok(!left.includes('spine-reverb-00000000'), left.join('\n'));
+  assert.ok(!left.some(k => /other_precision/.test(k)), left.join('\n'));
+  assert.equal(left.filter(k => /^  st_reverb-v1_/.test(k)).length, 2, 'the weights and codec in use stay: ' + left.join('\n'));
+  await p.close();
+  // A browser that didn't keep its copy.
+  p = await page();
+  await p.addInitScript(() => { window.reverbFakeNoKeep = true; });
+  await h.openReader(p, LONG, { ...reverb, 'spine:agreed:reverb:full': true });
+  await p.keyboard.press('r');
+  assert.match(await h.noticeLike(p, /didn't keep a copy of Reverb's files/, 20000), /didn't keep a copy of Reverb's files/);
+  await p.close();
+  // ... and one with no private file system.
+  p = await page();
+  await p.addInitScript(() => { window.reverbFakeNoOpfs = true; });
+  await h.openReader(p, LONG, { ...reverb, 'spine:agreed:reverb:full': true });
+  await p.keyboard.press('r');
+  assert.match(await h.noticeLike(p, /can't keep a copy of Reverb's files/, 20000), /can't keep a copy of Reverb's files/);
+});
+
+test('Reverb: a GPU lost while it loads leaves it failed with the reason, not ready (round 40 review, L-456)', async () => {
+  const p = await page();
+  await p.addInitScript(() => { window.reverbFakeLoseDuringLoad = true; });
+  await openBar(p, LONG, { ...reverb, 'spine:agreed:reverb:full': true });
+  await p.waitForFunction(() => /stopped working \(lost while loading\)/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
+  assert.equal(await p.textContent('#ttsDownload'), 'Try again');
+});
+
+test('Reverb off (the default): its option hidden, a stored choice of it reads with the device voice, "Your voices" says nothing of it, Generate config gives REVERB false (round 40 review, L-457, T-66)', async () => {
+  const p = await page();
+  await openBar(p, `${h.READER}?book=books/long.epub`, { ...reverb, 'spine:agreed:reverb:full': true });
+  assert.deepEqual(await optionOf(p), ['Reverb (off on this site)', true, false], 'shown, as it is the choice stored, but not usable');
+  assert.equal(await p.isHidden('#ttsDownload'), true, 'no download offered');
+  await p.waitForTimeout(500);
+  assert.equal(await fake(p), null, 'nothing loaded');
+  await p.click('#ttsClose');
+  await p.click('#setBtn');
+  await p.setInputFiles('#znFile', NARRATOR);
+  await p.waitForFunction(() => /Added reverb-clip/.test(document.querySelector('#znMsg').textContent));
+  assert.doesNotMatch(await p.textContent('#znMsg'), /Reverb/);
+  assert.equal(await p.isHidden('#znOwnList .zn-words'), true);
+  assert.equal(await p.isHidden('#znRvNote'), true);
+  await p.click('#setGenerate');
+  const cfg = await h.waitFor(async () => { const t = await p.$eval('#cfgText', el => el.value).catch(() => ''); return t && JSON.parse(t); }, 5000);
+  assert.equal(cfg.REVERB, false);
+});
+
+test('Reverb: download progress in MB is announced by quarters, not every step (round 40 review, L-458)', async () => {
+  const p = await page();
+  await p.addInitScript(() => { window.reverbFakeSteps = 40; });
+  await openBar(p, LONG, reverb);
+  await p.evaluate(() => { window.said = []; new MutationObserver(() => window.said.push(document.querySelector('#ttsAnnounce').textContent)).observe(document.querySelector('#ttsAnnounce'), { childList: true, characterData: true, subtree: true }); });
+  await p.click('#ttsDownload');
+  assert.ok(await h.waitFor(() => h.spokenWord(p), 20000));
+  const said = await p.evaluate(() => window.said.filter(t => /Downloading Reverb/.test(t)));
+  assert.ok(said.length >= 1 && said.length <= 5, said.join(' | '));
 });

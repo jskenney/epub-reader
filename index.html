@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.0306</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.1330</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -799,7 +799,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <div class="set-row"><span><label for="set-LOOKAHEAD_SEC">Speech prepared ahead (seconds)</label><small>For the natural voices.</small><small class="set-def"></small></span><input id="set-LOOKAHEAD_SEC" type="number" min="0" max="1800" step="10" data-set="LOOKAHEAD_SEC"></div>
         <div class="set-row"><span><label for="set-SAVED_AUDIO_MB">Saved speech kept in this browser (MB)</label><small>0 saves none.</small><small class="set-def"></small></span><input id="set-SAVED_AUDIO_MB" type="number" min="0" max="1000000" step="50" data-set="SAVED_AUDIO_MB"></div>
         <div class="set-row"><span><label for="set-ZONOS_VOICES">ZONOS3 voices from recordings</label><small>A name = the address of a recording (MP3, WAV, M4A, OGG…), several separated by | (Narrator = /voices/narrator.mp3). Listed first among ZONOS3's voices. 5–15 seconds of clean speech from one speaker works best; the first one made downloads ZONOS3's speaker encoder once (about 45 MB).</small><small class="set-def"></small></span><input id="set-ZONOS_VOICES" type="text" spellcheck="false" autocomplete="off" data-set="ZONOS_VOICES"></div>
-        <div class="set-block" id="znOwn"><span><b>Your voices</b><small>Upload or record a recording of a voice (5–15 seconds of clean speech from one speaker): it stays in this browser and is listed first among ZONOS3's voices, and Reverb's once you give the words said in it and their language (a voice recorded here has them already).</small></span>
+        <div class="set-block" id="znOwn"><span><b>Your voices</b><small>Upload or record a recording of a voice (5–15 seconds of clean speech from one speaker): it stays in this browser and is listed first among ZONOS3's voices<span id="znRvNote">, and Reverb's once you give the words said in it and their language (a voice recorded here has them already)</span>.</small></span>
           <ul id="znOwnList" class="zn-list"></ul>
           <div class="zn-add"><button type="button" class="btn" id="znUpload">Upload a voice…</button><input type="file" id="znFile" accept="audio/*,.mp3,.wav,.m4a,.m4b,.ogg,.opus,.flac,.webm,.aac" hidden><button type="button" class="btn" id="znRecord">Record a voice</button></div>
           <div id="znRec" class="zn-rec" hidden>
@@ -809,7 +809,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
             <audio id="znTake" controls hidden></audio>
             <p class="zn-save" hidden><label>Name <input type="text" id="znName" maxlength="60" value="My voice" autocomplete="off"></label> <button type="button" class="btn primary" id="znKeep">Save</button> <button type="button" class="btn" id="znAgain">Record again</button> <button type="button" class="btn" id="znCancel">Cancel</button></p>
           </div>
-          <p class="ab-muted" id="znGpu" hidden>ZONOS3 and Reverb need WebGPU, which this browser doesn't have: these voices are used where it does.</p>
+          <p class="ab-muted" id="znGpu" hidden>These voices need WebGPU, which this browser doesn't have: these voices are used where it does.</p>
           <p class="ab-muted" id="znMsg" aria-live="polite"></p>
         </div>
         <div class="set-row"><span><label for="set-FULL_PRECISION">Full-precision voice models</label><small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-FULL_PRECISION" type="checkbox" data-set="FULL_PRECISION"></div>
@@ -856,6 +856,9 @@ const OPS = 'http://www.idpf.org/2007/ops';
 // fetch-zonos.sh) live. ZONOS3's engine (zonos/engine/) must be on the reader's own site.
 // '' = the folder this page is in. Set a site path such as '/reader/' when index.html is linked into several
 // folders, so every copy shares one set of files (and the browser downloads and caches them once).
+// (The credits Reverb's licences ask for where it is used: its weights' (CC BY-NC 4.0) and its codec's (the Boson
+// Higgs Audio 2 Community License): round 40 review, M-213. Shown as the voice's title in the read-aloud bar.)
+const REVERB_CREDIT = 'Reverb-TTS by Software Mansion (CC BY-NC 4.0, non-commercial). Built with Higgs Materials licensed from Boson AI USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3 Community License, Copyright Meta Platforms, Inc., All Rights Reserved.';
 let VOICE_FILES = '';
 // Where the self-hosted libraries and fonts (libs/ and fonts/, from fetch-libs.sh and fetch-fonts.sh) live.
 // '' = the folder this page is in; like VOICE_FILES, a site path such as '/reader/' shares one copy.
@@ -1277,11 +1280,16 @@ async function wholeFile(r){
 }
 async function zipFromUrl(url, init = {}){
   let r;
-  try { r = await fetch(url, { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
+  // (A book on another site, or sent on to one, is downloaded whole, as the README says: read in place, that site
+  // would see which chapters are read and when: round 40 review, D-44.)
+  const foreign = u => new URL(u, location.href).origin !== location.origin;
+  try { r = await fetch(url, foreign(url) ? init : { ...init, headers: { Range: 'bytes=0-3' } }); } catch { return { miss: 'network error' }; }
   if (!r.ok) return { miss: String(r.status) };
   init.onHost?.(new URL(r.url).host);   // (where it came from, after any redirect: round 24 review)
   init.onUrl?.(r.url);
   if (r.redirected && !sameSite(new URL(r.url), new URL(url, location.href)) && !init.anySite) return { miss: `it is sent on to ${new URL(r.url).host}, another site` };
+  if (foreign(url)) return wholeFile(r);
+  if (foreign(r.url)) { r.body?.cancel().catch(() => {}); return wholeFile(await fetch(url, init)); }
   const first = r.status === 206 && /^bytes 0-\d+\/(\d+)$/.exec(r.headers.get('content-range') || '');
   const total = first ? Number(first[1]) : 0;
   if (total > 0) {
@@ -1500,13 +1508,61 @@ function parseDoc(text, type){
    It's drawn into a small square, whole and centred. Books without a cover get the site's favicon back. */
 const pageIcons = [...document.querySelectorAll('link[rel~="icon"]')].map(l => ({ href: l.href, type: l.type, sizes: l.getAttribute('sizes') }));
 let iconToken = 0;
+/* A picture's width and height from its header (PNG, GIF, JPEG, WebP, BMP, AVIF), so one too large to decode is never
+   handed to the browser: a 49 KB PNG of 20,000 by 20,000 pixels (1.6 GB decoded) crashed the tab, as a cover (drawn for
+   the tab's icon) or in a page (round 40 review, M-216). */
+const PIC_PIXELS = 100e6;
+function pictureSize(b){
+  const be16 = i => (b[i] << 8) | b[i + 1], le16 = i => b[i] | (b[i + 1] << 8), le24 = i => le16(i) | (b[i + 2] << 16);
+  const be32 = i => be16(i) * 65536 + be16(i + 2), le32 = i => le16(i) + le16(i + 2) * 65536, tag = (i, t) => String.fromCharCode(...b.subarray(i, i + t.length)) === t;
+  if (b.length >= 24 && tag(1, 'PNG')) return [be32(16), be32(20)];
+  if (b.length >= 10 && tag(0, 'GIF8')) return [le16(6), le16(8)];
+  if (b.length >= 26 && tag(0, 'BM')) return [le32(18), Math.abs(le32(22) | 0)];
+  if (b.length >= 30 && tag(0, 'RIFF') && tag(8, 'WEBP')) {
+    if (tag(12, 'VP8 ')) return [le16(26) & 0x3fff, le16(28) & 0x3fff];
+    if (tag(12, 'VP8L')) return [1 + (((b[22] & 0x3f) << 8) | b[21]), 1 + (((b[24] & 0xf) << 10) | (b[23] << 2) | ((b[22] & 0xc0) >> 6))];
+    if (tag(12, 'VP8X')) return [1 + le24(24), 1 + le24(27)];
+  }
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    for (let i = 2; i + 9 < b.length;) {
+      if (b[i] !== 0xff) return null;
+      const m = b[i + 1];
+      if (m === 0xff) { i++; continue; }
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return [be16(i + 7), be16(i + 5)];
+      if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+      i += 2 + be16(i + 2);
+    }
+    return null;
+  }
+  if (b.length >= 12 && tag(4, 'ftyp')) {   // (AVIF and HEIF: the largest of their "ispe" boxes)
+    let best = null;
+    for (let i = 4; i + 16 <= b.length; i++) if (b[i] === 0x69 && tag(i, 'ispe')) { const w = be32(i + 8), h = be32(i + 12); if (!best || w * h > best[0] * best[1]) best = [w, h]; }
+    return best;
+  }
+  return null;
+}
+// The address, or null (the picture left out, as a missing one is) when its header says it is too large to decode.
+async function pictureFits(u, type, path){
+  if (!u || !/^image\/(png|gif|jpe?g|pjpeg|webp|bmp|x-ms-bmp|avif|heic|heif|apng)\b/i.test(String(type))) return u;
+  try {
+    const r = await fetch(u);
+    const reader = r.body.getReader(), parts = [];
+    let n = 0;
+    while (n < 1 << 19) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
+    reader.cancel().catch(() => {});
+    const head = new Uint8Array(n); let at = 0; for (const p of parts) { head.set(p, at); at += p.length; }
+    const wh = pictureSize(head);
+    if (wh && wh[0] * wh[1] > PIC_PIXELS) { console.warn(`${path}: a picture too large to show (${wh[0]} × ${wh[1]} pixels)`); return null; }
+  } catch {}
+  return u;
+}
 async function coverUrl(b){
   if (!b?.manifest?.size) return null;
   const all = [...b.manifest.values()];
   const item = all.find(i => i.props.includes('cover-image')) || (b.coverId && b.manifest.get(b.coverId))
     || all.find(i => /^image\//.test(i.type) && /cover/i.test(`${i.id} ${i.href}`));
   if (!item) return null;
-  const pic = (path, type) => /svg/i.test(type) || /\.svg$/i.test(path) ? svgURL(path, 'image/svg+xml', b) : b.src.url(path, type);   // (H-30)
+  const pic = (path, type) => /svg/i.test(type) || /\.svg$/i.test(path) ? svgURL(path, 'image/svg+xml', b) : b.src.url(path, type).then(u => pictureFits(u, type, path));   // (H-30, M-216)
   if (/^image\//.test(item.type)) return pic(item.path, item.type);
   if (/html|xml/.test(item.type)) {   // a cover page: use its first image
     const t = await readText(b.src, item.path);
@@ -1846,7 +1902,30 @@ async function markdownToHtml(md){
     await loadData('emoji').then(list => { mdEmoji = new Map(); for (const e of list) for (const a of e.aliases || []) if (!mdEmoji.has(a)) mdEmoji.set(a, e.emoji); })
       .catch(err => console.warn(`Emoji: ${err.message}`));
   }
-  return { html: mdAlerts(mdMarked().parse(md)), ...meta };
+  return { html: mdAlerts(mdMarked().parse(mdUnstick(md).text)), ...meta };
+}
+// marked's list items take time with the square of their lines when many follow without a blank one ("- a" then
+// 100,000 lines: 50 s to open a 200 KB file): a blank line is put in after every MD_ITEM_LINES such lines of a list
+// item (not in a fenced code block), which only starts a new paragraph there (round 40 review, H-59). Returns the
+// text and where blank lines were put in (line numbers in the new text), for the editor's line matching.
+const MD_ITEM_LINES = 1000;
+function mdUnstick(md){
+  if (md.length < MD_ITEM_LINES * 2) return { text: md, added: [] };
+  const lines = md.split('\n'), out = [], added = [];
+  let inItem = false, run = 0, fence = null, blank = false;
+  for (const l of lines) {
+    const f = /^\s*(`{3,}|~{3,})/.exec(l);
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !/\S/.test(l.slice(l.indexOf(f[1]) + f[1].length))) fence = null; out.push(l); continue; }
+    if (f) { fence = f[1]; run = 0; out.push(l); continue; }
+    if (!/\S/.test(l)) { run = 0; blank = true; out.push(l); continue; }
+    // (A list ends at a line after a blank one that isn't indented, nor another item: an HTML block there isn't cut.)
+    if (/^\s{0,3}([-+*]|\d{1,9}[.)])([ \t]|$)/.test(l)) { inItem = true; run = 0; }
+    else if (blank && !/^\s/.test(l)) inItem = false;
+    else if (inItem && ++run >= MD_ITEM_LINES) { added.push(out.length); out.push(''); run = 0; }
+    blank = false;
+    out.push(l);
+  }
+  return { text: added.length ? out.join('\n') : md, added };
 }
 /* GitHub's additions to Markdown beyond GFM: math (E-31), footnotes (E-32) and alerts (E-33). */
 // Math: the TeX as MathML (Temml), which browsers draw, with the TeX kept in it (for the editor, search and reading
@@ -2795,6 +2874,11 @@ async function svgURL(path, type, b = book, owner = ''){
   const t = await b.src.text(path); if (t == null) return null;
   if (over(t.length)) { console.warn(`${path}: a picture too large to show`); return null; }
   if (owner) spent.set(owner, (spent.get(owner) || 0) + t.length);
+  return svgClean(t, path, type, b);
+}
+// An SVG picture's text cleaned and given an address of its own (from a file, or a data: address: round 40 review,
+// H-60).
+async function svgClean(t, path, type, b = book){
   const d = new DOMParser().parseFromString(t, 'image/svg+xml');
   if (!d.documentElement || d.getElementsByTagName('parsererror').length) return null;
   // (An SVG, or nothing: a page of XHTML typed as SVG would be a page, forms and all, opened on its own; and
@@ -2806,6 +2890,7 @@ async function svgURL(path, type, b = book, owner = ''){
   // (Processing instructions, <?xml-stylesheet?> say, and animations that set an address: round 25 review, L-292.)
   for (const n of [...d.childNodes]) if (n.nodeType === 7) n.remove();
   d.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
+  svgUseCap(d, d.documentElement, path);
   const jobs = [], budget = cssBudget(), paint = ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end', 'cursor'];
   for (const el of d.getElementsByTagName('*')) {
     for (const a of [...el.attributes]) {
@@ -2823,13 +2908,56 @@ async function svgURL(path, type, b = book, owner = ''){
   (b.svgBlobs ||= []).push(u);
   return u;
 }
+// A picture given as a data: SVG (in a page or its styles) is cleaned as an SVG file is, not shown as it came: one
+// of about 1 KB could hold a <use> fan-out that hangs the tab (round 40 review, H-60).
+async function svgDataURL(v, path){
+  const m = /^data:image\/svg\+xml(;[^,]*)?,(.*)$/is.exec(v);
+  if (!m || v.length > SVG_MAX * 2) return null;
+  let t;
+  try { t = /;base64/i.test(m[1] || '') ? new TextDecoder().decode(Uint8Array.from(atob(m[2].replace(/\s/g, '')), c => c.charCodeAt(0))) : decodeURIComponent(m[2]); }
+  catch { return null; }
+  return t.length > SVG_MAX ? null : svgClean(t, path, 'image/svg+xml');
+}
+// <use> elements copy what they point to, so a few, ten each a level below ten more, make millions of copies from a
+// file of a kilobyte and hang the tab (or crash it), even only as a cover (round 40 review, H-60). The copies they
+// would make are counted (each pointing to its target, counted once by element); past SVG_USES more than the
+// picture's own elements, its <use> elements are dropped. (Nested deeper than can be counted: dropped too.)
+const SVG_USES = 50000;
+function svgUseCap(doc, root, where){
+  const uses = root.getElementsByTagName('use');
+  if (!uses.length) return;
+  const byId = new Map();
+  for (const el of doc.querySelectorAll('[id]')) if (!byId.has(el.id)) byId.set(el.id, el);
+  const plain = root.getElementsByTagName('*').length, cap = plain + SVG_USES, memo = new Map(), busy = new Set();
+  const size = el => {
+    if (memo.has(el)) return memo.get(el);
+    if (busy.has(el)) return 1;   // (one inside itself: the browser draws nothing for it)
+    busy.add(el);
+    let k = 1;
+    if (el.localName === 'use') {
+      const h = urlText(el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href'));
+      const target = h.startsWith('#') && byId.get(h.slice(1));
+      if (target) k += size(target);
+    }
+    for (const c of el.children) { if (k > cap) break; k += size(c); }
+    busy.delete(el);
+    k = Math.min(k, cap + 1); memo.set(el, k);
+    return k;
+  };
+  let over;
+  try { over = size(root) > cap; } catch { over = true; }
+  if (!over) return;
+  console.warn(`${where}: an SVG whose <use> elements would make too many copies: they aren't shown`);
+  for (const u of [...uses]) u.remove();
+}
 function resourceURL(path, owner){
   if (owner) { if (!book.owners) book.owners = new Map(); if (!book.owners.has(path)) book.owners.set(path, new Set()); book.owners.get(path).add(owner); }
   if (book.urls.has(path)) return book.urls.get(path);
   let type = typeOf(path);
   if ((['ttf','otf','woff','woff2'].includes(ext(path)) || /font|opentype/.test(type)) && !type.startsWith('font/')) type = 'font/' + (ext(path) || 'ttf');
   // (An SVG by its type, with a parameter too (L-317), or by its name, whatever its type says: M-135.)
-  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' || /\.svgz?$/i.test(path) ? svgURL(path, 'image/svg+xml', book, owner || '') : book.src.url(path, type);
+  const job = type.split(';')[0].trim().toLowerCase() === 'image/svg+xml' || /\.svgz?$/i.test(path) ? svgURL(path, 'image/svg+xml', book, owner || '')
+    : book.src.url(path, type).then(u => pictureFits(u, type, path));
   book.urls.set(path, job);
   job.catch(() => { if (book.urls.get(path) === job) book.urls.delete(path); });   // a failure isn't remembered: try again next time
   return job;
@@ -3115,6 +3243,10 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
     const ref = r.ref.replace(/[\t\n\r]/g, '').trim();
     r.local = !!ref && !ref.startsWith('#') && !isExternal(ref) && !isRemote(ref);
     if (r.local && r.kind === 'image' && !jobs.has(ref)) jobs.set(ref, resourceURL(resolve(cssPath, ref), owner));
+    // (A data: SVG cleaned as a file is: round 40 review, H-60.)
+    r.svgData = r.kind === 'image' && /^data:image\/svg\+xml/i.test(ref);
+    // (Not one inside an SVG: an SVG inside an SVG isn't followed, H-42.)
+    if (r.svgData && !owner?.startsWith('svg:') && !jobs.has(ref)) jobs.set(ref, svgDataURL(ref, cssPath));
     r.clean = ref;
   }
   const done = new Map();
@@ -3161,7 +3293,8 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
       const u = done.get(r.clean), frag = r.clean.includes('#') ? r.clean.slice(r.clean.indexOf('#')) : '';
       // (A fragment, such as an SVG sprite's view, is kept as attributes keep it: REVIEW.md L-84.)
       text = u ? cssUrl(u + frag) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
-    } else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
+    } else if (r.svgData) { const u = done.get(r.clean); text = u ? cssUrl(u) : NO_IMAGE; }
+    else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
     if (text === null) continue;
     parts.push(css.slice(at, r.s), text);
     at = r.e;
@@ -3576,6 +3709,7 @@ function sanitize(doc){
   // (Animations that set an address get round link handling, remote content on or off; and a link left without an
   // address keeps no target: round 25 review, L-303.)
   doc.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
+  if (doc.body) svgUseCap(doc, doc.body, 'a page');   // (inline SVG: H-60)
   for (const el of doc.body.querySelectorAll('*')) {
     // (A name, or id, that would hide one of the page's own methods (document.getElementById, say), which the
     // reader uses: dropped (round 25 review, L-288). A named img, form or embed shows on the document (an img by its
@@ -3603,6 +3737,7 @@ async function localize(doc, path, budget = cssBudget()){
       const v = urlText(el.getAttribute(attr));
       if (!v || v.startsWith('#')) continue;
       if (isRemote(v)) { if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); continue; }
+      if (/^data:image\/svg\+xml/i.test(v)) { jobs.push(svgDataURL(v, path).then(u => { if (u) el.setAttribute(attr, u); else el.removeAttribute(attr); })); continue; }   // (H-60)
       if (isExternal(v)) continue;   // data: and blob:
       // A file the book doesn't have is removed rather than left to resolve against this site. (A fragment, as in
       // sprite.svg#icon, is kept on the file's new address.)
@@ -4905,7 +5040,11 @@ function cornerSync(){
   if (Math.abs(top - cornerTop) > 4 || top <= 8) cornerTop = top;
 }
 function friendly(err, name){
-  const m = String(err?.message || err);
+  let m = String(err?.message || err);
+  // (marked's own advice to report its errors to it isn't for the reader; nesting too deep is what it means: round
+  // 40 review, L-461.)
+  if (/Please report this to https:\/\/github\.com\/markedjs\/marked/i.test(m)) m = /call stack|too much recursion/i.test(m)
+    ? 'It is nested too deeply (quotes, lists or emphasis inside one another) to be shown.' : m.replace(/\s*Please report this to https:\/\/github\.com\/markedjs\/marked\.?/i, '').trim();
   if (/central directory|zip/i.test(m) && !/EPUB|^Nothing was found/.test(m)) return `${name} couldn't be read as a ZIP archive. EPUB files are ZIP archives, so this probably isn't an EPUB.`;
   return `${name} couldn't be opened. ${m}`;
 }
@@ -5970,7 +6109,8 @@ function ttsUpdateBar(status){
     (tts.engine === 'server' && (!sv.available || !serverFits()));
   const auto = unusable && tts.engine === 'narration';
   eng.value = auto ? 'device' : tts.engine;
-  eng.title = unusable && !auto ? 'Not available for this book or right now: the device voice reads instead' : '';
+  eng.title = unusable && !auto ? 'Not available for this book or right now: the device voice reads instead'
+    : tts.engine === 'reverb' ? REVERB_CREDIT : '';
   fitSelect(eng);
   let dl = '';
   const neural = !tts.mo && neuralEngine();
@@ -5986,8 +6126,10 @@ function ttsUpdateBar(status){
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
   // Screen readers hear every status (errors, offers, notes), but a download's progress only at each quarter,
   // not every step ("12%", "13%", …): REVIEW.md L-68.
-  const pct = /(\d+)%/.exec(status || '');
-  const kind = pct ? (status.replace(/\d+%/, '') + Math.floor(+pct[1] / 25)) : (status || '');
+  // (Progress in MB too, "N of ~M MB" (Reverb, Pocket TTS, ZONOS3), by quarters: round 40 review, L-458.)
+  const pct = /(\d+)%/.exec(status || ''), mb = /(\d+) of ~(\d+) MB/.exec(status || '');
+  const kind = pct ? (status.replace(/\d+%/, '') + Math.floor(+pct[1] / 25))
+    : mb ? (status.replace(mb[0], '') + Math.floor(4 * +mb[1] / Math.max(1, +mb[2]))) : (status || '');
   if (!tts.open) { tts.announced = null; $('#ttsAnnounce').textContent = ''; }   // (closed: nothing to say, and afresh when it opens)
   else if (kind !== tts.announced) { tts.announced = kind; $('#ttsAnnounce').textContent = status || ''; }
   $('#ttsDownload').hidden = !dl; $('#ttsDownload').textContent = dl;
@@ -6102,7 +6244,10 @@ $('#ttsVoice').addEventListener('change', e => {
   if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
   else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
   else if (e.target.dataset.kind.startsWith('zonos')) { zn.voice = e.target.value; store.set('spine:zonosVoice', zn.voice); }
-  else if (e.target.dataset.kind.startsWith('reverb')) { rv.voice = e.target.value; store.set('spine:reverbVoice', rv.voice); }
+  else if (e.target.dataset.kind.startsWith('reverb')) {
+    rv.voice = e.target.value; store.set('spine:reverbVoice', rv.voice);
+    const v = rvVoice(); if (v.url) rv.checks.delete(v.url);   // (a site voice looked at again when chosen: L-452)
+  }
   else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); svClipVersion(svVoice()); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
   if (tts.playing) ttsGo(tts.ci, tts.pos); else ttsDropPaused();
@@ -6996,7 +7141,7 @@ function rvVoiceOf(id){
 }
 const rv = { state: 'idle', R: null, root: null, tts: null, f16: false, variant: '', local: false, voices: REVERB_VOICES.map(rvVoiceOf),
   data: new Map(), queue: Promise.resolve(), error: '', progressText: '', wantPlay: false, voice: store.get('spine:reverbVoice') || '',
-  codecPath: '', cache: undefined, maker: null, made: new Map(), making: new Map(), versions: new Map(), checks: new Map() };
+  codecPath: '', cache: undefined, maker: null, made: new Map(), making: new Map(), versions: new Map(Object.entries(store.get('spine:reverbVersions') || {})), checks: new Map() };
 const rvReady = () => rv.state === 'ready';
 // The chosen voice, else the first in the book's language, else the first.
 function rvVoice(){
@@ -7035,7 +7180,8 @@ function rvCustom(){
 // The part of saved speech's key that changes with a custom voice: its words, and a site recording's version.
 // What the voice list shows, so it's filled again when that changes.
 const rvKind = () => 'reverb:' + reverbLang() + ':' + rvCustom().map(v => v.id + v.name).join();
-const rvVoiceTag = v => v.own ? `|t${hashText(v.text)}` : v.url ? `|${rv.versions.get(v.url) || ''}|t${hashText(v.text)}` : '';
+// (With the recording's language too: round 40 review, L-453.)
+const rvVoiceTag = v => v.own ? `|t${hashText(v.text)}|${v.lang}` : v.url ? `|${rv.versions.get(v.url) || ''}|t${hashText(v.text)}|${v.lang}` : '';
 // The weights FULL_PRECISION asks for, on this GPU (before the GPU is known, fp16 is assumed).
 const rvVariant = () => !FULL_PRECISION ? 'int4' : (rv.f16 || !rv.root) ? 'f16' : 'int8';
 const rvMB = () => Math.round(REVERB.models[rvVariant()][1] + REVERB.codecMB + 2);
@@ -7082,19 +7228,22 @@ async function rvLoad(){
       if (!await navigator.storage.persisted() && !store.get('spine:reverbPersist')) { store.set('spine:reverbPersist', true); await navigator.storage.persist(); }
     } catch {}
     const cache = await Promise.resolve(R.createOpfsCache?.(`spine-reverb-${REVERB.rev.slice(0, 8)}`)).catch(() => undefined);
-    const verbalizers = rv.verbalizers = {};
+    rv.verbalizers = {};
     rv.codecPath = rv.local ? base + 'codec/model.safetensors' : REVERB.codec; rv.cache = cache;
-    rv.tts = await R.createTextToSpeech({
+    // (No verbalize here: runntime then rebuilds each voice without its speechFrames, which paces the speech by the
+    // whole clip, silences and all; the reader spells the text and the voices' words itself: round 40 review, M-214.)
+    const engine = await R.createTextToSpeech({
       modelPath: base + file, codecPath: rv.codecPath, tokenizerPath: base + 'model/tokenizer.json',
-      dtype: variant === 'f16' ? 'f16' : rv.f16 ? undefined : 'f32',
-      // (Numbers, dates, money and units as words, in the text's language; text it can't read is left as it is.)
-      verbalize: (text, lang) => rvSpell(text, lang)
+      dtype: variant === 'f16' ? 'f16' : rv.f16 ? undefined : 'f32'
     }, { cache, onBytes: n => {
       got += n;
       rv.progressText = `Downloading Reverb${rv.local ? ' from this site' : ''}… ${Math.min(total, Math.round(got / 1048576))} of ~${total} MB`;
       if (tts.open) ttsUpdateBar();
     } });
-    rv.variant = variant; rv.state = 'ready';
+    // (A GPU lost while it loaded: not "ready" over the error, round 40 review, L-456.)
+    if (rv.dead) throw new Error(rv.dead);
+    rv.tts = engine; rv.variant = variant; rv.state = 'ready';
+    rvKept(cache, variant, got > 2e6, [`st/${base + file}`, `st/${rv.codecPath}`, `json/${base}model/tokenizer.json`]);
     store.set(`spine:reverbLoaded:${variant}`, true);
     store.set(`spine:agreed:reverb:${FULL_PRECISION ? 'full' : 'int4'}`, true);   // the reader agreed to this download once
   } catch (e) {
@@ -7102,6 +7251,32 @@ async function rvLoad(){
     rv.error = rv.dead || (/webgpu|adapter|no gpu/i.test(e.message) ? `WebGPU isn't usable in this browser (${e.message})` : e.message);
   }
   ttsFillVoices(); nLoaded(rv);
+}
+/* After loading: runntime keeps what it downloads in the site's private file system (folder spine-reverb-<revision>,
+   one file per part of each weights file), which nothing cleared: other revisions', the other precision's and Hugging
+   Face's once the site has its own (up to about 2 GB). Those are removed, and a download the browser didn't keep, or a
+   browser that can't keep one, is said, as for ZONOS3 (round 40 review, L-455). */
+async function rvKept(cache, variant, downloaded, paths){
+  const name = `spine-reverb-${REVERB.rev.slice(0, 8)}`, file = k => k.replace(/[^a-zA-Z0-9._-]/g, '_');
+  // (runntime's names: st/ for a weights file's parts, json/ for the tokenizer, then reverb-v1/ and the address.)
+  const keep = paths.map(p => file(p.replace(/^(\w+\/)https?:\/\//, '$1reverb-v1/')));
+  let kept = null;
+  try {
+    const root = await navigator.storage.getDirectory();
+    for await (const [n, h] of root.entries()) if (n.startsWith('spine-reverb-') && n !== name && h.kind === 'directory') await root.removeEntry(n, { recursive: true }).catch(() => {});
+    if (cache) {
+      const dir = await root.getDirectoryHandle(name), found = new Set();
+      for await (const n of dir.keys()) {
+        const k = keep.findIndex(p => n.startsWith(p));
+        if (k < 0) await dir.removeEntry(n).catch(() => {}); else found.add(k);
+      }
+      kept = found.has(0) && found.has(1);   // (the weights and the codec)
+    }
+  } catch {}
+  const why = ' Check that the browser keeps site data when it closes and that this isn\'t a private window.' + ZN_FREE;
+  if (!cache) { if (downloaded) showNotice('This browser can\'t keep a copy of Reverb\'s files (it has no private file system for this site), so they will download on every visit.', 'error'); }
+  else if (downloaded && kept === false) showNotice(`This browser didn't keep a copy of Reverb's files, so they will be downloaded again next time.${why}`, 'error');
+  else if (downloaded && store.get(`spine:reverbLoaded:${variant}`)) showNotice(`Reverb's files were downloaded again: this browser didn't keep its copy since last time.${why}`, 'error');
 }
 // Numbers, dates, money and units as words, in that language; text Verbalis can't read is left as it is.
 function rvSpell(text, lang){ try { return ((rv.verbalizers ??= {})[lang] ??= new rv.R.Verbalizer(lang)).process(text); } catch { return text; } }
@@ -7112,18 +7287,36 @@ function rvVoiceData(v, signal){
     const r = await fetch(rvBase() + `voices/${v.id}.json`);
     if (!r.ok || looksHtml(r)) throw new Error(`the voice ${v.name} couldn't be loaded (${r.status})`);
     const p = await r.json();
-    return { codes: Int32Array.from(p.codes), frames: p.frames, transcript: p.transcript, language: p.language, speechFrames: p.speech_frames };
+    // (Its words spelled out in its own language: M-214.)
+    return { codes: Int32Array.from(p.codes), frames: p.frames, transcript: rvSpell(p.transcript, p.language), language: p.language, speechFrames: p.speech_frames };
   })().catch(e => { rv.data.delete(v.id); throw e; }));
   return rv.data.get(v.id);
 }
-// A site recording's version (its ETag, or its date and size), so one replaced at the same address makes a new voice.
+// A site recording's version (its ETag, or its date and size), and its .txt's when its words are there, so either
+// replaced at the same address makes a new voice (round 40 review, L-452). The last seen is kept in this browser, so a
+// visit where the check fails still finds the voice and its saved speech (M-215, as for ZONOS3's site voices). Checked
+// once per visit, and again when the voice is chosen (as the server voice's is: L-447).
+const rvTxtOf = url => { const u = new URL(url); u.pathname = u.pathname.replace(/(\.[a-z0-9]+)?$/i, '.txt'); u.search = ''; return u.href; };
 function rvVersion(v){
   if (!v?.url) return Promise.resolve();
   if (!rv.checks.has(v.url)) rv.checks.set(v.url, (async () => {
+    const head = async url => {
+      try {
+        const r = await fetch(url, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
+        const h = r.headers;
+        return r.ok && !looksHtml(r) ? h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '') : '';
+      } catch { return ''; }
+    };
+    const [rec, txt] = await Promise.all([head(v.url), v.text ? '' : head(rvTxtOf(v.url))]);
+    if (!rec || (!v.text && !txt)) return;   // (not known now: the last seen stays)
+    const version = v.text ? rec : `${rec}|${txt}`;
+    if (rv.versions.get(v.url) === version) return;
+    rv.versions.set(v.url, version);
+    const seen = store.get('spine:reverbVersions') || {};
+    seen[v.url] = version; store.set('spine:reverbVersions', seen);
+    // (What was made from older versions isn't used again.)
     try {
-      const r = await fetch(v.url, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
-      const h = r.headers, version = r.ok && !looksHtml(r) ? h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '') : '';
-      if (version) rv.versions.set(v.url, version);
+      for (const k of await znDb.embKeys()) if (typeof k === 'string' && k.startsWith(`rv|url|${v.url}|`) && !k.startsWith(`rv|url|${v.url}|${version}|`)) await znDb.delEmb(k);
     } catch {}
   })());
   return rv.checks.get(v.url);
@@ -7163,8 +7356,7 @@ async function rvMake(v, key){
       };
       clip = await (await get(v.url, 'recording')).blob();
       if (!text) {
-        const u = new URL(v.url); u.pathname = u.pathname.replace(/(\.[a-z0-9]+)?$/i, '.txt'); u.search = '';
-        text = (await (await get(u.href, 'words (a .txt beside the recording)')).text()).trim();
+        text = (await (await get(rvTxtOf(v.url), 'words (a .txt beside the recording)')).text()).trim();
       }
     }
     if (!text) throw new Error(`${v.name} has no words: Reverb needs what is said in the recording`);
@@ -7185,7 +7377,7 @@ async function rvMake(v, key){
     let voice;
     // (The words spelled out in the recording's own language: runntime would read them in the book's.)
     try { voice = await maker.fromRecording(samples, { sampleRate: 24000, transcript: rvSpell(text, v.lang), language: v.lang }); }
-    catch (e) { live(); throw new Error(`${v.name} couldn't be made into a voice (${e.code || e.message})`); }
+    catch (e) { live(); throw new Error(`${v.name} couldn't be made into a voice (${e.message || e.code})`); }
     live();
     // (Not kept, nor used, if the voice was deleted while it was made: as for ZONOS3, round 39 review, L-448.)
     if (v.own && !await znDb.get(v.own).catch(() => null)) throw new Error(`your voice ${v.name} was deleted`);
@@ -7205,11 +7397,11 @@ function rvGenerate(text, opts = {}){
     if (opts.signal?.aborted) throw staleError();
     let data;
     // (The text's language goes with the voice: any voice speaks any of the seven.)
-    try { data = await rv.tts.synthesize(text, { ...voice, language: lang }, { seed: 0 }); }
+    try { data = await rv.tts.synthesize(rvSpell(text, lang), { ...voice, language: lang }, { seed: 0 }); }
     catch (e) {
       if (opts.signal?.aborted) throw staleError();
       if (rv.dead) throw transientError(rv.dead);
-      throw new Error(`Reverb couldn't speak this (${e.code || e.message})`);
+      throw new Error(`Reverb couldn't speak this (${e.message || e.code})`);   // (runntime's reason, not only its code: L-454)
     }
     if (opts.signal?.aborted) throw staleError();
     return { data, rate: rv.tts.sampleRate, genSec: (performance.now() - t0) / 1000 };
@@ -9268,7 +9460,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   LIB_FILES: ['string', v => { LIB_FILES = v; }],
   ALLOW_CDN: ['boolean', v => { ALLOW_CDN = v; }],
   REVERB: ['boolean', v => { REVERB_ON = v; }],   // (on: the Reverb voice, where its non-commercial licence fits: E-50)
-  REVERB_VOICES: ['object', v => { REVERB_VOICES_SITE = rvVoicesConfig(v); }],   // (custom voices from the site's recordings: E-50)   // (off: no Reverb voice, for a site its non-commercial licence doesn't fit: E-50)
+  REVERB_VOICES: ['object', v => { REVERB_VOICES_SITE = rvVoicesConfig(v); }],   // (custom voices from the site's recordings: E-50)
   TTS_SERVER: ['object', v => {
     if (typeof v.api !== 'string' || typeof v.voices !== 'string') throw new Error('needs "api" and "voices" paths');
     const dir = u => { const h = new URL(u, location.href).href; return h.endsWith('/') ? h : h + '/'; };
@@ -9784,10 +9976,12 @@ function editBlocks(){
   let text = ed.text.replace(/^﻿/, '').replace(/\r\n?/g, '\n'), line = 0;
   const fm = text.match(/^---\n([\s\S]*?)\n(?:---|\.\.\.)\n/);
   if (fm) { line = fm[0].split('\n').length - 1; text = text.slice(fm[0].length); }
-  const out = [];
+  const out = [], { text: lexed, added } = mdUnstick(text), base = line;
+  // (Lines the pre-pass put in aren't the document's: H-59.)
+  const real = l => { let k = 0; while (k < added.length && added[k] < l - base) k++; return l - k; };
   try {
-    for (const t of window.marked.lexer(text, { gfm: true })) {
-      if (t.type !== 'space' && t.type !== 'def') out.push(line);
+    for (const t of window.marked.lexer(lexed, { gfm: true })) {
+      if (t.type !== 'space' && t.type !== 'def') out.push(real(line));
       line += (t.raw.match(/\n/g) || []).length;
     }
   } catch { return null; }
@@ -11225,6 +11419,7 @@ function znOwnRender(){
     };
     words.addEventListener('change', edit); lang.addEventListener('change', edit);
     line.className = 'zn-words'; line.append(words, lang);
+    line.hidden = !REVERB_ON;   // (Reverb's fields only where it is on: round 40 review, L-457)
     li.append(name, `${o.seconds ? Math.round(o.seconds) + ' s' : ''}`, play, del, line);
     li.dataset.id = o.id;
     return li;
@@ -11232,6 +11427,7 @@ function znOwnRender(){
   // (The WebGPU note in a place of its own, not over each message; focus kept on the list after a change, not lost
   // to the page: round 34 review, L-437.)
   $('#znGpu').hidden = zonosGpu();
+  $('#znRvNote').hidden = !REVERB_ON;
   const f = zn.focusAfter; zn.focusAfter = null;
   if (f) (f[0] ? ul.querySelector(`li[data-id="${f[0]}"] ${f[1]}`) : $(f[1]))?.focus();
 }
@@ -11249,7 +11445,7 @@ async function znOwnAdd(blob, file, name, text = ''){
   try { await znDb.put({ id, name: (name || 'My voice').slice(0, 60), file, blob, type: blob.type, seconds, created: Date.now(), text, lang: 'en' }); }
   catch (e) { znMsg(`The voice couldn't be kept in this browser: ${e.message}`); return false; }
   zn.focusAfter = [id, '.zn-name'];
-  znMsg(`Added ${name}${seconds > 60 ? ' (only its first 60 seconds are used)' : seconds > 20 ? ' (5–15 seconds works best)' : ''}. Choose it among ZONOS3's voices${text ? " or Reverb's" : "; for Reverb, give the words said in it"}.`);
+  znMsg(`Added ${name}${seconds > 60 ? ' (only its first 60 seconds are used)' : seconds > 20 ? ' (5–15 seconds works best)' : ''}. Choose it among ZONOS3's voices${!REVERB_ON ? '' : text ? " or Reverb's" : "; for Reverb, give the words said in it"}.`);
   await znOwnLoad();
   return true;
 }
@@ -11495,6 +11691,8 @@ async function fetchDocument(u, kind, init = {}){
 }
 // The folder's default book: the first name in DEFAULT_BOOK that is really there, else the built-in sample.
 async function openDefault(seq = ++openSeq){
+  // (The default book isn't the address that failed: Refresh asks for the default, round 40 review, L-460.)
+  if (opening?.seq === seq) opening = null;
   for (const ref of [DEFAULT_BOOK].flat()) {
     if (isStale(seq)) return;
     const u = new URL(ref, location.href); u.search = ''; u.hash = '';

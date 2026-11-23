@@ -265,7 +265,8 @@ Two more parameters open files by address:
   reader says so. An `http` address can't be read from a page served over
   `https` (the browser blocks it). A note says which site it came from; it can
   be edited and saved as a copy on your computer. An EPUB from another site is
-  downloaded whole (its size and ranges aren't shown to other sites). A site
+  downloaded whole (its size and ranges aren't shown to other sites), and so is one on this site that sends the
+  reader on to another. A site
   address that sends the reader on to another site is refused by `?book=`
   and `?edit=`; `?get=` follows it and names the site it ended up on. If
   several of `?edit=`, `?get=` and `?book=` are given, the first in that
@@ -474,7 +475,7 @@ site as the reader.
   **Custom voices** (listed first among ZONOS3's voices): from recordings named in
   `ZONOS_VOICES` (Settings, or a list in `reader-config.json`: a name and the address of
   any recording the browser can play), or uploaded or recorded with the microphone in
-  Settings ("Your ZONOS3 voices", kept in this browser). The first time a voice is
+  Settings ("Your voices", kept in this browser). The first time a voice is
   used, ZONOS3's speaker encoder (about 45 MB, once) turns its recording into a speaker
   embedding on the GPU, which the reader keeps, so later visits need neither the
   recording nor the encoder. 5–15 seconds of clean speech from one speaker works best.
@@ -488,20 +489,29 @@ site as the reader.
   before the download); any voice reads any of the seven, with its own accent. Numbers, dates, money and units are
   spelled out in the book's language first (Verbalis). Each passage is made whole, then played; speed is applied at
   playback. A one-time download after pressing Download: with full precision (`FULL_PRECISION`, the default) the
-  fp16 model on a GPU with 16-bit shaders (`shader-f16`), about 750 MB with its audio codec, or the int8 model on
-  other GPUs (about 480 MB); with it off, the int4 model (about 370 MB). The browser keeps its copy (in the site's
+  fp16 model on a GPU with 16-bit shaders (`shader-f16`), about 753 MB with its audio codec, or the int8 model on
+  other GPUs (about 478 MB); with it off, the int4 model (about 368 MB) (MB of 1,048,576 bytes here, as the reader
+  shows them). The browser keeps its copy (in the site's
   private file system), so later visits load it from there; as for ZONOS3, the reader says before downloading when
   the site's storage quota has no room, and asks the browser once to keep the site's storage. Its engine is part of
   the reader (`reverb/engine/reverb.js`, built from npm releases of runntime, TypeGPU and Verbalis by
   `tools/build-reverb-engine.sh`). **Its weights are [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
-  non-commercial use only, with attribution** ("Reverb-TTS by Software Mansion"). So it is **off by default**: a
-  site its licence fits turns it on with `"REVERB": true` in `reader-config.json`.
+  non-commercial use only, with attribution** ("Reverb-TTS by Software Mansion"), **and its audio codec is under
+  the [Boson Higgs Audio 2 Community License](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/blob/main/LICENSE)**,
+  based on Meta's Llama 3 licence: a site that uses it must display "Built with Higgs Materials licensed from Boson AI
+  USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3
+  Community License, Copyright Meta Platforms, Inc., All Rights Reserved" on a related page (the reader shows both
+  credits as the voice's title in the read-aloud bar), follow the
+  [Llama 3 Acceptable Use Policy](https://llama.meta.com/llama3/use-policy), ship both agreements with the codec when
+  it serves it (`fetch-reverb.sh` saves them, with the Notice they ask for, in `reverb/models/LICENSES/` and
+  `NOTICE.txt`), and ask Boson AI for an expanded licence past 100,000 annual active users. So it is **off by
+  default**: a site these licences fit turns it on with `"REVERB": true` in `reader-config.json`.
   **Custom voices** (listed first among Reverb's voices): Reverb copies a voice from a recording *and the words said
   in it*. Your own voices in Settings ("Your voices", shared with ZONOS3) are listed once their words and language
   are given there; one recorded in Settings reads the passage shown, so it has them already. A site lists its own in
   `REVERB_VOICES` in `reader-config.json`, each with its words in `"text"` or in a `.txt` file of the same name beside
   the recording. The first time a voice is used, its recording becomes a voice on the GPU (a second or two) and the
-  reader keeps it in the browser, so it isn't made again; changing its words makes it again. 3–15 seconds of clean
+  reader keeps it in the browser, so it isn't made again; changing its words makes it again. 5–15 seconds of clean
   speech from one speaker works best, its words exactly as said.
 - Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
   any of three with the same API:
@@ -822,9 +832,9 @@ site, so it must be served from the same site as `index.html` (under `VOICE_FILE
 ## Self-hosting Reverb
 
 ```bash
-./fetch-reverb.sh            # for FULL_PRECISION on (the default): the fp16 and int8 models, about 1.05 GB
-./fetch-reverb.sh --int4     # for FULL_PRECISION off: the int4 model, about 385 MB
-./fetch-reverb.sh --all      # both, about 1.25 GB
+./fetch-reverb.sh            # for FULL_PRECISION on (the default): the fp16 and int8 models, about 1,050 MB
+./fetch-reverb.sh --int4     # for FULL_PRECISION off: the int4 model, about 370 MB
+./fetch-reverb.sh --all      # both, about 1,230 MB
 ```
 
 This fills `./reverb/models/` with Reverb-TTS's files at pinned revisions of `software-mansion/Reverb-TTS` and its
@@ -1028,7 +1038,7 @@ default books and the memory and request sizes stay the site's to set.
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site (except in a folder that locks it). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
-| `FULL_PRECISION` ✓ ⚙ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads), and Reverb's fp16 model (int8 on a GPU without 16-bit shaders; off, int4). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. Readers can change it in Settings; with `ALLOW_CDN` false (or a policy that blocks the CDNs), Pocket TTS then needs both precisions self-hosted (`./fetch-pocket.sh` and `./fetch-pocket.sh --int8`), or it tells the reader to set it back. |
+| `FULL_PRECISION` ✓ ⚙ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads), and Reverb's fp16 model (int8 on a GPU without 16-bit shaders; off, int4). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. Readers can change it in Settings; with `ALLOW_CDN` false (or a policy that blocks the CDNs), Pocket TTS then needs both precisions self-hosted (`./fetch-pocket.sh` and `./fetch-pocket.sh --int8`), or it tells the reader to set it back. Reverb likewise then needs both (`./fetch-reverb.sh --all`). |
 | `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. Whole seconds. |
 | `SAVED_AUDIO_MB` ✓ ⚙ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. Whole MB. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
@@ -1157,7 +1167,8 @@ repository) is under the [MIT licence](LICENSE).
 
 The parts the fetch scripts download aren't part of this repository and keep
 their own licences, which the scripts save beside them (a `LICENSES/` folder
-with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/`, `pocket/`, `zonos/` and `reverb/models/`;
+with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/`, `pocket/` and `reverb/models/`; a `NOTICE.txt` in
+`zonos/models/`;
 a `NOTICE.txt` in `fonts/`):
 
 - JSZip: MIT or GPLv3 (your choice); marked: MIT; Temml: MIT; highlight.js: BSD-3-Clause; gemoji: MIT; lamejs: LGPL-3.0 (a port of
@@ -1171,5 +1182,8 @@ a `NOTICE.txt` in `fonts/`):
   pocket-tts-js: MIT.
 - ZONOS3-Mini: its engine (`zonos/engine/`, with its `LICENSE` and `NOTICE`) MIT; its model Apache-2.0.
 - Reverb-TTS: its weights (and preset voices) **CC BY-NC 4.0, non-commercial only**, by Software Mansion; its code
-  Apache-2.0. The engine (`reverb/engine/reverb.js`) bundles runntime, TypeGPU, Verbalis and the Hugging Face
-  tokenizers (MIT and Apache-2.0; their texts in `reverb/engine/LICENSES.txt`).
+  Apache-2.0. Its audio codec (the Higgs Audio v2 tokenizer): the **Boson Higgs Audio 2 Community License**, which
+  takes in the Meta Llama 3 Community License (both saved in `reverb/models/LICENSES/`; see the Reverb voice above for
+  what it asks of a site). The engine (`reverb/engine/reverb.js`) bundles runntime, TypeGPU, Verbalis, the Hugging
+  Face tokenizers, js-tiktoken, base64-js, typed-binary, tinyest and tsover-runtime (MIT and Apache-2.0; their texts in
+  `reverb/engine/LICENSES.txt`, made by the build from what it bundles).

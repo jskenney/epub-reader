@@ -4,11 +4,10 @@
   "type": "module",
   "description": "Builds reverb/engine/reverb.js (REVIEW.md E-50): run tools/build-reverb-engine.sh, not npm directly.",
   "dependencies": {
+    "js-tiktoken": "1.0.21",
     "runntime": "0.3.1",
     "typegpu": "0.12.10",
-    "@huggingface/tokenizers": "0.2.0",
-    "verbalis": "0.1.1",
-    "js-tiktoken": "1.0.21"
+    "verbalis": "0.1.1"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

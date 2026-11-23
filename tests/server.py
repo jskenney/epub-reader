@@ -112,6 +112,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "max-age=3600" if cache_on[0] and not self.path.startswith("/__") else "no-store")
         if not self.path.startswith("/nocors/"):   # (E-24: a site that doesn't let other sites read its files)
             self.send_header("Access-Control-Allow-Origin", "*")
+            # (?expose=1: a site that lets other sites see its ranges, so a reader could read a book in place: round 40
+            # review, D-44.)
+            if "expose=1" in self.path:
+                self.send_header("Access-Control-Expose-Headers", "Content-Range, ETag, Last-Modified")
         super().end_headers()
 
     def send_header(self, key, value):

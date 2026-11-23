@@ -334,3 +334,85 @@ test('build-zonos-engine.sh refuses an option it doesn\'t know before building a
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /Unknown option: --wirte/);
 });
+
+// fetch-reverb.sh with a curl that "downloads" small stand-ins and checksums made for them (E-50; round 40 review,
+// M-213, L-459, T-65).
+function reverbSandbox() {
+  const dir = tempDir('spine-reverb-');
+  fs.copyFileSync(path.join(REPO, 'fetch-reverb.sh'), path.join(dir, 'fetch-reverb.sh'));
+  fs.mkdirSync(path.join(dir, 'checksums'));
+  const crypto = require('node:crypto'), body = f => `stand-in for ${f}\n`;
+  const files = fs.readFileSync(path.join(REPO, 'checksums', 'reverb.sha256'), 'utf8').trim().split('\n').map(l => l.split(/\s+/)[1]);
+  // (The list written without a final newline, as by hand: its last file must still be fetched.)
+  fs.writeFileSync(path.join(dir, 'checksums', 'reverb.sha256'), files.map(f => `${crypto.createHash('sha256').update(body(f)).digest('hex')}  ${f}`).join('\n'));
+  const bin = tempDir('spine-bin-'), log = path.join(bin, 'log');
+  stub(bin, 'curl', `#!/bin/sh
+url=""; out=""; prev=""; for a; do [ "$prev" = "-o" ] && out=$a; prev=$a; url=$a; done
+echo "$url -> $out" >> "${log}"
+f=\${out%.part}; f=\${f#reverb/models/}
+printf 'stand-in for reverb/models/%s\\n' "$f" > "$out"
+`);
+  return { dir, bin, log, files, env: { PATH: `${bin}:${process.env.PATH}` } };
+}
+test('fetch-reverb.sh: what each option fetches, the licences always, NOTICE.txt last, a list without a final newline, an old partial file (round 40 review, M-213, L-459)', () => {
+  const sets = { '': f => !/runntime\/int4\//.test(f), '--int4': f => !/runntime\/int8\/|safetensors\/fp16\//.test(f), '--all': () => true };
+  for (const [opt, want] of Object.entries(sets)) {
+    const s = reverbSandbox();
+    const r = run(s.dir, 'fetch-reverb.sh', opt ? [opt] : [], s.env);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /All files match their checksums/);
+    for (const f of s.files) assert.equal(fs.existsSync(path.join(s.dir, f)), want(f), `${opt || 'default'}: ${f}`);
+    assert.ok(fs.existsSync(path.join(s.dir, 'reverb/models/voices/pt_male_standard.json')), 'the last line, without a newline, is fetched');
+    for (const l of ['higgs-audio-v2-tokenizer-LICENSE.txt', 'meta-llama-3-LICENSE.txt', 'reverb-model-card.md']) assert.ok(fs.existsSync(path.join(s.dir, 'reverb/models/LICENSES', l)), l);
+    const notice = fs.readFileSync(path.join(s.dir, 'reverb/models/NOTICE.txt'), 'utf8');
+    assert.match(notice, /Boson Higgs Audio 2 is licensed under the Boson Community License/);
+    assert.match(notice, /Meta Llama 3 is licensed under the Meta Llama 3 Community License/);
+    assert.match(notice, /Built with Higgs Materials licensed from Boson AI/);
+    assert.match(fs.readFileSync(s.log, 'utf8'), /raw\.githubusercontent\.com\/meta-llama\/llama3\/[0-9a-f]{40}\/LICENSE/);
+  }
+  // A file failing its checksum: removed, and no NOTICE.txt (the reader then doesn't use the folder).
+  const s = reverbSandbox();
+  stub(s.bin, 'curl', `#!/bin/sh
+out=""; prev=""; for a; do [ "$prev" = "-o" ] && out=$a; prev=$a; done
+echo wrong > "$out"
+`);
+  const bad = run(s.dir, 'fetch-reverb.sh', ['--int4'], s.env);
+  assert.equal(bad.code, 1, bad.out);
+  assert.equal(fs.existsSync(path.join(s.dir, 'reverb/models/NOTICE.txt')), false);
+  // A partial file left from another address (an older revision) isn't resumed.
+  const p = reverbSandbox(), part = path.join(p.dir, 'reverb/models/model/tokenizer.json.part');
+  fs.mkdirSync(path.dirname(part), { recursive: true });
+  fs.writeFileSync(part, 'old'); fs.writeFileSync(part + '.url', 'https://huggingface.co/software-mansion/Reverb-TTS/resolve/0000/model/tokenizer.json\n');
+  stub(p.bin, 'curl', `#!/bin/sh
+out=""; prev=""; for a; do [ "$prev" = "-o" ] && out=$a; prev=$a; done
+f=\${out%.part}; f=\${f#reverb/models/}
+[ -s "$out" ] && exit 9
+printf 'stand-in for reverb/models/%s\\n' "$f" > "$out"
+`);
+  const ok = run(p.dir, 'fetch-reverb.sh', ['--int4'], p.env);
+  assert.equal(ok.code, 0, ok.out);
+  assert.equal(fs.existsSync(part + '.url'), false);
+  const u = run(p.dir, 'fetch-reverb.sh', ['--wrong'], p.env);
+  assert.equal(u.code, 2); assert.match(u.out, /Unknown option: --wrong/);
+});
+test('Reverb: index.html, fetch-reverb.sh, its checksums and the engine agree (round 40 review, T-65)', () => {
+  const read = f => fs.readFileSync(path.join(REPO, f), 'utf8');
+  const page = read('index.html'), script = read('fetch-reverb.sh'), sums = read('checksums/reverb.sha256');
+  const v = name => script.match(new RegExp(`^${name}=(\\S+)`, 'm'))?.[1];
+  const block = page.slice(page.indexOf('const REVERB = {'), page.indexOf('};', page.indexOf('const REVERB = {')));
+  assert.equal(block.match(/rev: '([0-9a-f]{40})'/)?.[1], v('REV'), 'REV');
+  assert.equal(block.match(/codecRev: '([0-9a-f]{40})'/)?.[1], v('CODEC_REV'), 'CODEC_REV');
+  assert.ok(block.includes(`/resolve/${v('REV')}/`) && block.includes(`/resolve/${v('CODEC_REV')}/`), 'the hub and codec addresses use those revisions');
+  for (const [, file] of block.matchAll(/\['(model\/[^']+\.safetensors)', \d+\]/g)) assert.ok(sums.includes(`  reverb/models/${file}\n`), file);
+  const voices = page.match(/const REVERB_VOICES = \[([\s\S]*?)\];/)[1].match(/'([a-z_0-9]+)'/g).map(x => x.slice(1, -1)).sort();
+  assert.deepEqual(voices, [...sums.matchAll(/reverb\/models\/voices\/([a-z_0-9]+)\.json/g)].map(m => m[1]).sort());
+  for (const line of read('checksums/reverb-engine.sha256').trim().split('\n')) {
+    const [hash, file] = line.split(/\s+/);
+    assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(REPO, file))).digest('hex'), hash, file);
+  }
+  assert.match(read('checksums/reverb-engine.sha256'), /reverb\/engine\/LICENSES\.txt/, 'the licences are checked too (M-217)');
+  for (const p of ['js-tiktoken', 'base64-js', 'typed-binary', 'tinyest', 'tsover-runtime', 'runntime', 'typegpu', 'verbalis']) assert.match(read('reverb/engine/LICENSES.txt'), new RegExp(`^== ${p} `, 'm'), p);
+  const r = run(REPO, 'tools/build-reverb-engine.sh', ['--wirte']);
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Unknown option: --wirte/);
+});
