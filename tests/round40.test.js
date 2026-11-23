@@ -203,3 +203,70 @@ test('a data: address is read as the browser reads it, and only its first bytes 
   assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
   assert.equal(d.bytes.length, 1 << 19);
 });
+
+// Round 43.
+test('Markdown shown as plain text is edited in Raw only, its text never rewritten from the plain view; the editor starts no checks of its own (round 43 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  // (A check given 1 ms: as on a slow machine, the large ordinary document falls back.)
+  await page.addInitScript(() => {
+    window.SPINE_TEST = { mdProbeMs: 1 };
+    const W = window.Worker; window.workersMade = 0;
+    window.Worker = function (...a) { window.workersMade++; return new W(...a); };
+  });
+  await h.openReader(page, `${h.READER}?book=books/big-normal.md`, { 'spine:editMode': 'wysiwyg', 'spine:editSplit': true });
+  assert.ok(await h.waitFor(async () => SLOW_NOTE.test(await frameText(page)), 10000));
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  await page.waitForFunction(() => document.querySelector('[data-mode="raw"]').getAttribute('aria-pressed') === 'true', null, { timeout: 10000 });
+  assert.equal(await page.evaluate(() => document.querySelector('[data-mode="wysiwyg"]').disabled), true, 'WYSIWYG not offered');
+  const before = await page.evaluate(() => document.querySelector('.CodeMirror').CodeMirror.getValue());
+  assert.match(before, /^# Big normal\n\n## Part 0/);
+  const made = await page.evaluate(() => window.workersMade);
+  // Scrolling the source many times starts no more checks.
+  for (let i = 0; i < 15; i++) { await page.mouse.move(1000, 400); await page.mouse.wheel(0, 300); await page.waitForTimeout(50); }
+  assert.ok(await page.evaluate(() => window.workersMade) - made <= 1, 'no check per scroll');
+  assert.doesNotMatch(await page.evaluate(() => document.querySelector('.CodeMirror').CodeMirror.getValue()), /shown as plain text|\\#/);
+});
+
+test('a worker error counts as a failure: Markdown nested past its stack, then slow, is shown as plain text (round 43 review)', async () => {
+  const page = await mdPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/deep-then-list.md`);
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.waitFor(async () => SLOW_NOTE.test(await frameText(page)), 10000));
+});
+
+test('a few broken <use> references leave the working ones; a <use> by about:srcdoc is dropped (round 43 review)', async () => {
+  let page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/use-broken.html`);
+  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('use[href="#star"]').length) === 400, 'the working icons kept');
+  await page.close();
+  page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.SITE}/folder-remote/?book=srcdoc-use.html`);
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  assert.equal(await h.inFrame(page, doc => [...doc.querySelectorAll('use')].filter(u => /about:/.test(u.getAttribute('href') || '')).length), 0);
+});
+
+test('a JPEG with stray bytes before its size, or its size past 512 KB, is left out (round 43 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/jpeg-tricks.epub`);
+  assert.ok(await h.waitFor(async () => /After the JPEGs/.test(await frameText(page)), 10000));
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => 1 + 1), 2, 'the tab still answers');
+  assert.deepEqual(await h.inFrame(page, doc => [...doc.images].map(i => [i.alt, !!i.getAttribute('src')])), [['junk', false], ['far', false], ['fine', true]]);
+});
+
+test('long words in HTML open in good time; breaks in plain text never split a character (round 43 review)', async () => {
+  let page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/long-word.html`);
+  assert.ok(Date.now() - t0 < 12000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('wbr[data-spine-wbr]').length) > 100);
+  await page.close();
+  page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long-cjk.txt`);
+  const t = await frameText(page);
+  assert.equal((t.match(/𠮷/gu) || []).length, 8);
+  assert.doesNotMatch(t, /�/);
+});

@@ -1721,6 +1721,27 @@ def main():
                ("c", "c.mp3", "audio/mpeg", ""), ("ok", "ok.png", "image/png", "")], ["c1"],
                {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="a" src="a.png"/><img alt="b" src="b.png"/><img alt="c" src="c.mp3"/><img alt="fine" src="ok.png"/><p>After the typed pictures.</p>'),
                 "a.png": big, "b.png": big, "c.mp3": big, "ok.png": png(40, 30, (50, 50, 200))}, "urn:huge-typed")
+    # Round 43.
+    # A worker error must count as a failure: nesting deeper than the worker's stack, then a slow list.
+    (books / "deep-then-list.md").write_text("# Deep then list\n\n" + "> " * 1200 + "x\n\n- a\n" + "b\n" * 80000)
+    # Working icon uses with a few broken references: the working ones stay.
+    icons = '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"><defs><symbol id="star" viewBox="0 0 2 2"><circle cx="1" cy="1" r="1"/></symbol></defs></svg>'
+    page = icons + '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><use href="#star"/></svg>' * 400 + '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><use href="#icon-missing"/></svg>' * 40
+    (books / "use-broken.html").write_text(f"<!doctype html><html><head><title>Use broken</title></head><body><h1>Icons</h1>{page}<p>After the icons.</p></body></html>")
+    # JPEGs of 20,000 x 20,000 whose size marker the old check missed: stray bytes before it, or past 512 KB.
+    def jpeg(junk=b"", pad=0):
+        soi = b"\xff\xd8"
+        app = b"".join(b"\xff\xef" + struct.pack(">H", 65535) + b"\0" * 65533 for _ in range(pad))
+        sof = b"\xff\xc0" + struct.pack(">HBHHB", 17, 8, 20000, 20000, 3) + b"\x01\x11\x00\x02\x11\x01\x03\x11\x01"
+        return soi + app + junk + sof + b"\xff\xd9"
+    epub_items(books / "jpeg-tricks.epub", "JPEG Tricks", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("j1", "junk.jpg", "image/jpeg", ""), ("j2", "far.jpg", "image/jpeg", ""), ("ok", "ok.png", "image/png", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="junk" src="junk.jpg"/><img alt="far" src="far.jpg"/><img alt="fine" src="ok.png"/><p>After the JPEGs.</p>'),
+                "junk.jpg": jpeg(b"\x00\x01\x02\x03"), "far.jpg": jpeg(pad=9), "ok.png": png(40, 30, (90, 90, 90))}, "urn:jpeg-tricks")
+    # Long words in HTML, and in plain text with characters outside the BMP on the 200-character boundaries.
+    (books / "long-word.html").write_text("<!doctype html><html><head><title>Long word</title></head><body><h1>Word</h1><p>" + "*a" * 200000 + "</p><p>After the word.</p></body></html>")
+    (books / "long-cjk.txt").write_text("Long CJK\n\n" + ("一" * 199 + "𠮷") * 8 + "\n")
+    # An SVG <use> by about:srcdoc, the page itself, with remote content on.
+    (SITE / "folder-remote" / "srcdoc-use.html").write_text("<!doctype html><html><head><title>Srcdoc use</title></head><body><h1>Srcdoc</h1>" + fanout(6).replace('href="#', 'href="about:srcdoc#') + "<p>After the srcdoc picture.</p></body></html>")
     print(f"Built {SITE}")
 
 

@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.1622</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.1726</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1539,19 +1539,19 @@ function pictureSize(b){
   }
   if (b[0] === 0xff && b[1] === 0xd8) {
     for (let i = 2; i + 9 < b.length;) {
-      if (b[i] !== 0xff) return null;
+      if (b[i] !== 0xff) { i++; continue; }   // (stray bytes skipped, as the decoder skips them: round 43 review)
       const m = b[i + 1];
       if (m === 0xff) { i++; continue; }
       if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return [be16(i + 7), be16(i + 5)];
       if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
       i += 2 + be16(i + 2);
     }
-    return null;
+    return 'unknown';   // (no size in the bytes read)
   }
   if (b.length >= 12 && tag(4, 'ftyp')) {   // (AVIF and HEIF: the largest of their "ispe" boxes)
     let best = null;
     for (let i = 4; i + 16 <= b.length; i++) if (b[i] === 0x69 && tag(i, 'ispe')) { const w = be32(i + 8), h = be32(i + 12); if (!best || w * h > best[0] * best[1]) best = [w, h]; }
-    return best;
+    return best || 'unknown';
   }
   return null;
 }
@@ -1561,17 +1561,23 @@ function pictureSize(b){
 // for by its first 512 KB only, not downloaded twice whole: round 41.)
 // (Every file but the SVGs, which are cleaned and counted on their own, whatever its type or name: a PNG typed audio or
 // named .mp3 is drawn by its bytes all the same: round 42 review, M-228.)
+// (A file a folder book serves by its own address, named as sound, video or a font, isn't read first: an extra request
+// of each before a page shows, 15 s against 4 for a chapter of six videos on a slow line: round 43 review. A book's
+// files in an archive are all read, which costs nothing.) A JPEG or AVIF whose size isn't in its first 512 KB is taken
+// as too large: one with its size marker pushed past them crashed the tab (round 43 review).
+const PIC_HEAD = 1 << 19;
+const tooLargeHead = (wh, full) => wh === 'unknown' ? full : !!wh && wh[0] * wh[1] > PIC_PIXELS;
 async function pictureFits(u, type, path){
-  if (!u) return u;
+  if (!u || (!u.startsWith('blob:') && /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4|m4v|webm|ogv|mov|woff2?|ttf|otf|eot|vtt)$/i.test(path))) return u;
   try {
     const r = await fetch(u, u.startsWith('blob:') ? {} : { headers: { Range: 'bytes=0-524287' } });
     const reader = r.body.getReader(), parts = [];
     let n = 0;
-    while (n < 1 << 19) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
+    while (n < PIC_HEAD) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
     reader.cancel().catch(() => {});
     const head = new Uint8Array(n); let at = 0; for (const p of parts) { head.set(p, at); at += p.length; }
     const wh = pictureSize(head);
-    if (wh && wh[0] * wh[1] > PIC_PIXELS) { console.warn(`${path}: a picture too large to show (${wh[0]} × ${wh[1]} pixels)`); return null; }
+    if (tooLargeHead(wh, n >= PIC_HEAD)) { console.warn(`${path}: a picture too large to show (${wh === 'unknown' ? 'its size not found in its first 512 KB' : `${wh[0]} × ${wh[1]} pixels`})`); return null; }
   } catch {}
   return u;
 }
@@ -1882,7 +1888,7 @@ function textToHtml(raw){
   // (A word of thousands of characters without a break, the browser lays out very slowly: a 400 KB one, 15 s. Such words
   // get a break opportunity every 200 characters, entities kept whole: round 42 review, H-67, whose plain-text
   // fallback shows Markdown this way.)
-  const breakLong = h => h.replace(/>([^<]+)</g, (m, t) => '>' + t.replace(/[^\s<>]{1000,}/g, w => w.match(/(?:&[a-z0-9#]+;|[^&]){1,200}/gi).join('<wbr>')) + '<');
+  const breakLong = h => h.replace(/>([^<]+)</g, (m, t) => '>' + t.replace(/[^\s<>]{1000,}/g, w => w.match(/(?:&[a-z0-9#]+;|[^&]\p{M}*){1,200}/giu).join('<wbr data-spine-wbr>')) + '<');
   const html = breakLong(items.map(it => it.heading ? `<${it.level}>${it.html}</${it.level}>` : it.html).join('\n'));
   return { html, ...meta };
 }
@@ -1927,7 +1933,7 @@ async function markdownToHtml(md){
       .catch(err => console.warn(`Emoji: ${err.message}`));
   }
   // (Markdown that marked would take too long over is shown as plain text, with a note: round 42 review.)
-  if (!await mdProbe(md)) { const t = textToHtml(md); return { ...t, ...meta, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
+  if (!await mdProbe(md)) { const t = textToHtml(md); return { ...t, ...meta, slow: true, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
   return { html: mdAlerts(mdMarked().parse(md)), ...meta };
 }
 /* Some Markdown takes marked time with the square of its size (a list item followed by many lines without a blank one,
@@ -1936,31 +1942,52 @@ async function markdownToHtml(md){
    MD_PROBE_MIN characters is first read by marked in a worker (the same file the page loaded, its hash checked), given
    MD_PROBE_MS: past it the worker is stopped and the document shown as plain text, with a note (round 42 review, H-66,
    H-67, L-471, L-472). The editor's line matching reads it only when that check passed. */
-const MD_PROBE_MIN = 20000, MD_PROBE_MS = Number(window.SPINE_TEST?.mdProbeMs) || 5000;
+const MD_PROBE_MIN = 20000, MD_PROBE_MS = Number(window.SPINE_TEST?.mdProbeMs) || 5000, MD_NO_PROBE_MAX = 200000;
 const MD_SLOW_NOTE = 'This document is shown as plain text: its Markdown would take too long to lay out.';
 let mdProbeCode = null;
-const mdProbed = { text: null, ok: true };
-async function mdProbe(md){
-  if (md.length < MD_PROBE_MIN) return true;
-  if (mdProbed.text === md) return mdProbed.ok;
-  let ok = true, w = null;
+// (One check per text, however often it is asked for, and the last few results kept: the editor asked on every scroll,
+// starting a worker each time: round 43 review.)
+const mdProbes = new Map();
+const mdProbeResult = md => md.length < MD_PROBE_MIN ? true : mdProbes.get(md)?.result;
+function mdProbe(md){
+  if (md.length < MD_PROBE_MIN) return Promise.resolve(true);
+  let e = mdProbes.get(md);
+  if (!e) {
+    e = { result: undefined };
+    e.job = mdProbeRun(md).then(ok => (e.result = ok));
+    mdProbes.set(md, e);
+    while (mdProbes.size > 4) mdProbes.delete(mdProbes.keys().next().value);
+  }
+  return e.job;
+}
+async function mdProbeRun(md){
+  let w = null, ready = false;
   try {
     mdProbeCode ??= (async () => {
       const r = await fetch(libsFrom.marked || new URL(LIBS.marked.file, folderBase(LIB_FILES)).href, { integrity: LIBS.marked.integrity });
       if (!r.ok) throw new Error(String(r.status));
-      return URL.createObjectURL(new Blob([await r.text(), '\n;onmessage = e => { marked.lexer(e.data, { gfm: true }); postMessage(1); };'], { type: 'text/javascript' }));
-    })().catch(e => { mdProbeCode = null; throw e; });
+      // (An error, nesting deeper than the worker's stack say, is a failure: the page's own reading has a deeper stack,
+      // and a document starting so could turn the check off: round 43 review.)
+      return URL.createObjectURL(new Blob([await r.text(),
+        '\n;postMessage("ready"); onmessage = e => { try { marked.lexer(e.data, { gfm: true }); postMessage(true); } catch (err) { postMessage(false); } };'], { type: 'text/javascript' }));
+    })().catch(err => { mdProbeCode = null; throw err; });
     w = new Worker(await mdProbeCode);
-    ok = await new Promise(res => {
-      const timer = setTimeout(() => res(false), MD_PROBE_MS);
-      // (An error, too deep say, is left for the page's own reading to report.)
-      w.onmessage = w.onerror = () => { clearTimeout(timer); res(true); };
-      w.postMessage(md);
+    return await new Promise(res => {
+      // (The clock starts once the worker is ready, not while it compiles marked; a worker that never starts counts as
+      // none.)
+      let timer = setTimeout(() => res(md.length <= MD_NO_PROBE_MAX), 10000);
+      w.onmessage = ({ data }) => {
+        if (data === 'ready') { ready = true; clearTimeout(timer); timer = setTimeout(() => res(false), MD_PROBE_MS); w.postMessage(md); return; }
+        clearTimeout(timer); res(data === true);
+      };
+      w.onerror = () => { clearTimeout(timer); res(ready ? false : md.length <= MD_NO_PROBE_MAX); };
     });
-  } catch (e) { console.warn(`Markdown check: ${e.message}`); }   // (no worker here: read as before)
-  w?.terminate();
-  Object.assign(mdProbed, { text: md, ok });
-  return ok;
+  } catch (err) {
+    // (No worker here (a policy without blob: workers, marked not fetchable): a document past MD_NO_PROBE_MAX is shown as
+    // plain text rather than read unchecked: round 43 review.)
+    console.warn(`Markdown check: ${err.message}`);
+    return md.length <= MD_NO_PROBE_MAX;
+  } finally { w?.terminate(); }
 }
 /* GitHub's additions to Markdown beyond GFM: math (E-31), footnotes (E-32) and alerts (E-33). */
 // Math: the TeX as MathML (Temml), which browsers draw, with the TeX kept in it (for the editor, search and reading
@@ -2990,18 +3017,19 @@ function svgDataURL(v, path){
 // A data: picture (in a page, a style or an SVG) whose header says it is too large to decode: false. Any type but SVG:
 // the browser draws a picture typed octet-stream, or not at all, by its bytes (round 42 review, M-225). Its first
 // 512 KB only are decoded, once per address (M-226, M-227).
-const dataFits = new Map();
+// (Kept per book, by the address's length and a hash of it, not the address itself: multi-MB addresses stayed in
+// memory across books: round 43 review.)
 function dataPictureFits(v){
   const key = urlText(v);
   if (!/^data:/i.test(key) || isDataSvg(key)) return true;
-  if (!dataFits.has(key)) {
-    const d = dataBytes(key, 1 << 19), wh = d && pictureSize(d.bytes);
-    const fits = !(wh && wh[0] * wh[1] > PIC_PIXELS);
-    if (!fits) console.warn(`a data: picture too large to show (${wh[0]} × ${wh[1]} pixels)`);
-    if (dataFits.size > 2000) dataFits.clear();
-    dataFits.set(key, fits);
+  const seen = book ? (book.dataFits ||= new Map()) : new Map(), id = `${key.length}|${hashText(key)}`;
+  if (!seen.has(id)) {
+    const d = dataBytes(key, PIC_HEAD), wh = d && pictureSize(d.bytes);
+    const fits = !tooLargeHead(wh, !!d && d.bytes.length >= PIC_HEAD);
+    if (!fits) console.warn(`a data: picture too large to show (${wh === 'unknown' ? 'its size not found in its first 512 KB' : `${wh[0]} × ${wh[1]} pixels`})`);
+    seen.set(id, fits);
   }
-  return dataFits.get(key);
+  return seen.get(id);
 }
 // <use> elements copy what they point to, so a few, ten each a level below ten more, make millions of copies from a
 // file of a kilobyte and hang the tab (or crash it), even only as a cover (round 40 review, H-60). The copies they
@@ -3024,7 +3052,9 @@ function svgUseCap(doc, root, where, wantSizes = false){
     const h = urlText(el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href'));
     if (!h) return null;
     const at = h.indexOf('#'), base = at < 0 ? h : h.slice(0, at), frag = at < 0 ? '' : h.slice(at + 1);
-    if (!base) return byId.get(decode(frag)) || byId.get(frag) || plain;
+    // (A fragment of this page: also "about:srcdoc#…", the page shown; one that resolves to nothing draws nothing, so a
+    // few broken references don't drop the page's working ones: round 43 review.)
+    if (!base || /^about:/i.test(base)) return byId.get(decode(frag)) || byId.get(frag) || 1;
     const sizes = book?.svgSizes?.get(base);
     return sizes ? (frag ? sizes.get(decode(frag)) ?? sizes.get(frag) ?? sizes.get('') : sizes.get('')) : 1;
   };
@@ -3803,6 +3833,29 @@ async function showPartner(i, token){
     wirePageInput(d);
   } catch { frame2.hidden = true; cur.spreadOther = -1; cur.spreadFailed = p; }
 }
+// A word of thousands of characters with no break, the browser lays out very slowly in the reader's columns (100 KB:
+// 11 s; 400 KB: 45 s), in any kind of document: such words get a <wbr> every 200 characters (a character's combining
+// marks kept with it), marked as the reader's so the editor doesn't save them (round 43 review).
+const LONG_WORD = /[^\s]{1000,}/u;
+function breakLongWords(doc){
+  if (!doc.body || !LONG_WORD.test(doc.body.textContent)) return;
+  const tw = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), long = [];
+  for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+    const p = t.parentElement;
+    if (t.data.length >= 1000 && LONG_WORD.test(t.data) && p && !/^(style|script|textarea|title)$/i.test(p.localName) && p.namespaceURI === 'http://www.w3.org/1999/xhtml') long.push(t);
+  }
+  for (const t of long) {
+    const frag = doc.createDocumentFragment();
+    for (const part of t.data.split(/(\s+)/)) {
+      if (part.length < 1000 || /\s/.test(part)) { frag.append(part); continue; }
+      part.match(/(?:\P{M}\p{M}*){1,200}|\p{M}+/gu).forEach((piece, i) => {
+        if (i) { const w = doc.createElementNS('http://www.w3.org/1999/xhtml', 'wbr'); w.setAttribute('data-spine-wbr', ''); frag.append(w); }
+        frag.append(piece);
+      });
+    }
+    t.replaceWith(frag);
+  }
+}
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
   // it into a live shadow root, links and all. Templates show nothing on their own, so nothing is lost.)
@@ -3814,6 +3867,7 @@ function sanitize(doc){
   // address keeps no target: round 25 review, L-303.)
   doc.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
   if (doc.body) svgUseCap(doc, doc.body, 'a page');   // (inline SVG: H-60)
+  breakLongWords(doc);
   for (const el of doc.body.querySelectorAll('*')) {
     // (A name, or id, that would hide one of the page's own methods (document.getElementById, say), which the
     // reader uses: dropped (round 25 review, L-288). A named img, form or embed shows on the document (an img by its
@@ -3840,6 +3894,9 @@ async function localize(doc, path, budget = cssBudget()){
     for (const el of doc.getElementsByTagName(tag)) {
       const v = urlText(el.getAttribute(attr));
       if (!v || v.startsWith('#')) continue;
+      // (A <use> or <feImage> by about: or another scheme that isn't the web's: "about:srcdoc#…" is the page itself, a
+      // way round the count when remote content is on: round 43 review.)
+      if ((tag === 'use' || tag === 'feImage') && /^[a-z][a-z0-9+.-]*:/i.test(v) && !/^(https?|blob|data):/i.test(v)) { el.removeAttribute(attr); continue; }
       if (isRemote(v)) { if (!ALLOW_REMOTE_CONTENT) el.removeAttribute(attr); continue; }
       if (isDataSvg(v)) { jobs.push(svgDataURL(v, path).then(u => { if (u) el.setAttribute(attr, u); else el.removeAttribute(attr); })); continue; }   // (H-60)
       if (/^data:/i.test(v) && !dataPictureFits(v)) { el.removeAttribute(attr); continue; }   // (a data: picture too large to decode: round 41)
@@ -9956,7 +10013,7 @@ async function editStart({ mode } = {}){
       ed.epub = { i: cur.i, path: item.path, item, doc: d };
     }
     const last = ed.epub ? (b.savedText?.get(ed.epub.path) ?? d.source) : (d.saved ?? d.text);   // (a document left with changes by Done: as last saved)
-    Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: last, blocks: null, blocksFor: null });
+    Object.assign(ed, { kind: d.kind, name: d.name, handle: d.handle, fresh: d.fresh, text: d.text, saved: last, blocks: null, blocksFor: null, mdSlow: false });
     let draft = await draftGet(draftKey());
     // (A chapter's draft kept under the book's key before L-311 changed it: moved over: round 25 review, L-318.)
     if (!draft && ed.epub) for (const k of b.legacyKeys || []) {
@@ -9995,15 +10052,17 @@ async function editStart({ mode } = {}){
 // no WYSIWYG. Changing mode makes the page again: from the page's edits (WYSIWYG to Raw), or for editing.
 const pageShown = () => !(ed.mode === 'raw' && !ed.split);
 async function editSetMode(mode, split = ed.split, save = true){
-  if (ed.kind === 'text' || ed.epub?.doc.rawOnly) mode = 'raw';
+  // (Long Markdown marked would take too long over is edited in Raw only, as text is: round 43 review.)
+  if (ed.kind === 'markdown') { const t = ed.text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').replace(/^---\n[\s\S]*?\n(?:---|\.\.\.)\n/, ''); ed.mdSlow = !await mdProbe(t); }
+  if (ed.kind === 'text' || ed.epub?.doc.rawOnly || (ed.kind === 'markdown' && ed.mdSlow)) mode = 'raw';
   if (ed.on && ed.epub && mode === 'wysiwyg' && ed.mode === 'raw' && $('#editBar').hasAttribute('data-ready') && !editWellFormed()) mode = 'raw';
   const was = ed.mode, changed = ed.on && was !== mode && $('#editBar').hasAttribute('data-ready');
   if (changed && was === 'wysiwyg') editFlush();
   if (ed.mode !== mode || !$('#editBar').hasAttribute('data-ready')) ed.tab = mode === 'wysiwyg' ? 'page' : 'src';   // (a narrow screen shows what is edited: round 24 review)
   ed.mode = mode; ed.split = split; ed.previewWaiting = false;
   // (A mode forced by what is edited, text or a fixed page, isn't kept as the one chosen: round 24 review.)
-  if (save) { if (!(ed.kind === 'text' || ed.epub?.doc.rawOnly)) store.set('spine:editMode', mode); store.set('spine:editSplit', split); }
-  for (const btn of $('#editBar').querySelectorAll('[data-mode]')) { btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode)); btn.disabled = (ed.kind === 'text' || !!ed.epub?.doc.rawOnly) && btn.dataset.mode === 'wysiwyg'; }
+  if (save) { if (!(ed.kind === 'text' || ed.epub?.doc.rawOnly || ed.mdSlow)) store.set('spine:editMode', mode); store.set('spine:editSplit', split); }
+  for (const btn of $('#editBar').querySelectorAll('[data-mode]')) { btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode)); btn.disabled = (ed.kind === 'text' || !!ed.epub?.doc.rawOnly || (ed.kind === 'markdown' && !!ed.mdSlow)) && btn.dataset.mode === 'wysiwyg'; }
   $('#editSplit').setAttribute('aria-pressed', String(split));
   $('#editTools').hidden = mode !== 'wysiwyg';
   ed.api?.cm?.setOption('readOnly', mode === 'wysiwyg');
@@ -10089,7 +10148,8 @@ function editBlocks(){
   if (fm) { line = fm[0].split('\n').length - 1; text = text.slice(fm[0].length); }
   // (Long Markdown only once the worker's check of this very text passed: marked could freeze the editor on each
   // change: round 42 review, H-66.)
-  if (text.length >= MD_PROBE_MIN && !(mdProbed.text === text && mdProbed.ok)) { mdProbe(text).then(ok => { if (ok && ed.on && ed.split) editSyncToPage(); }); return null; }
+  // (Never a check of its own: the page's (its preview's) check of this text, once passed: round 43 review.)
+  if (mdProbeResult(text) !== true) return null;
   const out = [];
   try {
     for (const t of window.marked.lexer(text, { gfm: true })) {
@@ -10582,6 +10642,9 @@ async function editMarkupText(){
   ed.xml = false; ed.wDoc = null;
   if (ed.kind === 'markdown') {
     const m = await markdownToHtml(ed.text);
+    // (Markdown shown as plain text, too slow for marked, is edited in Raw only: written back from its plain view, its
+    // markup would be lost: round 43 review.)
+    if (m.slow) { ed.mdSlow = true; ed.wBase = null; setTimeout(() => { if (ed.on && ed.mode === 'wysiwyg') editSetMode('raw', ed.split, false); }); }
     // (Front matter as it is now: written back in front of what the page becomes.)
     ed.wFront = ed.text.replace(/^\uFEFF/, '').match(/^---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)\r?\n(?:[ \t]*\r?\n)*/)?.[0] || '';
     d = new DOMParser().parseFromString(`<!DOCTYPE html><html${m.language ? ` lang="${escHtml(m.language)}"` : ''}><head><meta charset="utf-8"><title>${escHtml(m.title || '')}</title>${m.author ? `<meta name="author" content="${escHtml(m.author)}">` : ''}</head><body>${m.html}</body></html>`, 'text/html');
@@ -10602,6 +10665,8 @@ async function editMarkupText(){
 function editRestore(nodes, model, html){
   const holder = model.createElementNS('http://www.w3.org/1999/xhtml', 'div');
   holder.append(...nodes.map(nd => model.importNode(nd, true)));
+  holder.querySelectorAll('wbr[data-spine-wbr]').forEach(w => w.remove());   // (the reader's breaks in long words: round 43 review)
+  holder.normalize();
   // (Of the elements sharing an index, a block split by Enter, the first with something in it keeps the id.)
   const byIndex = new Map();
   for (const el of holder.querySelectorAll('[data-ed]')) { const k = el.getAttribute('data-ed'); byIndex.set(k, [...(byIndex.get(k) || []), el]); }
@@ -10671,7 +10736,7 @@ function bodyRange(t, xml){
 }
 function editSerialize(){
   const flow = frame.contentDocument?.getElementById(RID.flow);
-  if (!flow || !ed.wBase) return ed.text;
+  if (!flow || !ed.wBase || ed.mdSlow) return ed.text;   // (never the plain view of slow Markdown: round 43 review)
   const nodes = [...flow.childNodes].filter(nd => nd.id !== RID.end);
   if (ed.kind === 'markdown') {
     // (The page's content put back where it sat in the document: inside its wrapper, with what was beside the

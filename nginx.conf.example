@@ -17,7 +17,8 @@ location ^~ /reader/ {
     # connect-src allows https: so ?get= can read a file from another site (E-24; that site must allow it with
     # CORS). Book pages run no scripts, so this lets nothing in a book connect anywhere. With GET_URLS = false
     # in reader-config.json, take https: out of connect-src (the CDN policy below then needs its CDN hosts back:
-    # https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co).
+    # https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co;
+    # cdnjs too, which the Markdown check fetches marked from when it isn't self-hosted).
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' data: blob: https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'" always;
 
     # If you don't self-host everything (ALLOW_CDN = true, the default), use this policy instead: it adds the
