@@ -15,14 +15,25 @@ const readerFn = (start, name) => {
   return new Function(src.slice(i, j) + `; return ${name};`)();
 };
 
-test('a Markdown list item followed by 100,000 lines without a blank one opens in good time (round 40 review, H-59)', async () => {
-  const page = await h.newPage();
-  const t0 = Date.now();
-  await h.openReader(page, `${h.READER}?book=books/long-list.md`);
-  assert.ok(Date.now() - t0 < 12000, `took ${Date.now() - t0} ms`);
-  assert.equal(await h.title(page), 'Long list');
-  // (A document this long is shown in parts: the first holds the list.)
-  assert.ok(await h.waitFor(async () => /^\s*Long list\s*a\s+b\s+b/.test(await frameText(page)), 10000), 'the list');
+// (Markdown marked would take too long over is shown as plain text once the worker's check runs out: round 42; the
+// check given 2 s here.)
+async function mdPage() { const p = await h.newPage(); await p.addInitScript(() => { window.SPINE_TEST = { mdProbeMs: 2000 }; }); return p; }
+const SLOW_NOTE = /shown as plain text: its Markdown would take too long to lay out/;
+test('Markdown marked would take minutes over opens in good time as plain text, with a note (round 40 review, H-59; round 42, H-66, H-67)', async () => {
+  for (const book of ['long-list.md', 'quote-list.md', 'fence-trick.md', 'item-html.md', 'long-emphasis.md']) {
+    const page = await mdPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(Date.now() - t0 < 15000, `${book}: took ${Date.now() - t0} ms`);
+    assert.ok(await h.waitFor(async () => SLOW_NOTE.test(await frameText(page)), 10000), `${book}: the note`);
+    assert.equal(await page.evaluate(() => 1 + 1), 2);
+    await page.close();
+  }
+  // A large ordinary document stays Markdown.
+  const page = await mdPage();
+  await h.openReader(page, `${h.READER}?book=books/big-normal.md`);
+  assert.doesNotMatch(await frameText(page), SLOW_NOTE);
+  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('h2').length) > 0, 'its headings');
 });
 
 test('an SVG <use> fan-out inline, as a data: picture, in a style and as the cover opens, without its copies (round 40 review, H-60)', async () => {
@@ -93,21 +104,6 @@ test('an EPUB on another site is downloaded whole, even where that site shows it
 });
 
 // Round 41: the round 40 fixes' bypasses and regressions.
-test('Markdown lists in block quotes, and after a line taken for a fence, open in good time (round 41)', async () => {
-  for (const [book, title] of [['quote-list.md', 'Quoted list'], ['fence-trick.md', 'Fence trick']]) {
-    const page = await h.newPage();
-    const t0 = Date.now();
-    await h.openReader(page, `${h.READER}?book=books/${book}`);
-    assert.ok(Date.now() - t0 < 12000, `${book}: took ${Date.now() - t0} ms`);
-    assert.equal(await h.title(page), title);
-    // (A real fence is still one: the pre-pass leaves a code block of fewer lines whole.)
-    const mdUnstick = readerFn('const MD_ITEM_LINES', 'mdUnstick');
-    const md = '- a\n```\n' + 'x\n'.repeat(1500) + '```\n' + 'b\n'.repeat(1500), u = mdUnstick(md);
-    assert.deepEqual([u.added.length, u.text.split('\n').slice(2, 1502).every(l => l === 'x')], [1, true]);
-    await page.close();
-  }
-});
-
 test('a page using a sprite\'s big group many times opens without the copies; small icons used many times stay (round 41)', async () => {
   let page = await h.newPage();
   const t0 = Date.now();
@@ -157,4 +153,53 @@ test('huge pictures as data: in a page and in an SVG, typed oddly, unlisted, or 
     const gif = new Uint8Array([71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 0, 0, 0, 0x2c, 0, 0, 0, 0, 0x20, 0x4e, 0x20, 0x4e, 0, 2, 2, 0x4c, 1, 0, 0x3b]);
     return [pictureSize(bmp), pictureSize(gif)];
   })(), [[100, 50], [20000, 20000]]);
+});
+
+// Round 42.
+test('<use> by an encoded fragment, of a whole file, and on a page nested deep are counted as the browser resolves them (round 42 review, H-64, H-65, L-474)', async () => {
+  for (const [book, after] of [['use-pct.html', 'After the encoded picture'], ['use-whole.epub', 'After the whole files']]) {
+    const page = await h.newPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(Date.now() - t0 < 15000, `${book}: took ${Date.now() - t0} ms`);
+    assert.ok(await h.waitFor(async () => new RegExp(after).test(await frameText(page)), 10000), book);
+    assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('use').length), 0, `${book}: its uses dropped`);
+    await page.close();
+  }
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/deep-use.html`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('use').length), 1, 'a harmless use deep in the page kept');
+});
+
+test('huge pictures as data: of any type, and files typed or named as sound, are left out (round 42 review, M-225, M-228)', async () => {
+  for (const [book, after] of [['data-odd.html', 'After the odd pictures'], ['huge-typed.epub', 'After the typed pictures']]) {
+    const page = await h.newPage();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(await h.waitFor(async () => new RegExp(after).test(await frameText(page)), 10000), book);
+    await page.waitForTimeout(1500);
+    assert.equal(await page.evaluate(() => 1 + 1), 2, `${book}: the tab still answers`);
+    const imgs = await h.inFrame(page, doc => [...doc.images].map(i => [i.alt, !!i.getAttribute('src')]));
+    for (const [alt, has] of imgs) assert.equal(has, alt === 'fine', `${book}: ${alt}`);
+    await page.close();
+  }
+});
+
+test('a data: address is read as the browser reads it, and only its first bytes for a picture\'s size, quickly (round 42 review, M-225 to M-227)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const i = src.indexOf('const DATA_RE'), j = src.indexOf('\n}\n', src.indexOf('function dataBytes')) + 3;
+  const dataBytes = new Function(src.slice(i, j) + '; return dataBytes;')();
+  const png = Buffer.from(require('node:fs').readFileSync(require('node:path').join(__dirname, 'site', 'reader', 'books', 'huge-picture.epub'))).length;
+  assert.ok(png > 0);
+  const b64 = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
+  assert.deepEqual([...dataBytes(`data:image/png;base64,${b64}`).bytes], [0x89, 0x50, 0x4e, 0x47]);
+  // (";base64" not last: percent-decoded, as the browser does.)
+  assert.equal(dataBytes('data:image/png;base64;x=y,%89PNG').bytes[0], 0x89);
+  assert.equal(dataBytes('data:image/png;base64x,%89PNG').bytes[0], 0x89);
+  assert.equal(dataBytes('data: image/svg+xml,a%b').type, 'image/svg+xml');
+  assert.equal(new TextDecoder().decode(dataBytes('data:,100%25 and 100%').bytes), '100% and 100%');
+  // 9 MB of percent-encoded text: only the header decoded.
+  const long = 'data:image/png,' + '%89PNG' + 'x'.repeat(9 << 20);
+  const t0 = Date.now(), d = dataBytes(long, 1 << 19);
+  assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
+  assert.equal(d.bytes.length, 1 << 19);
 });

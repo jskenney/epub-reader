@@ -39,6 +39,9 @@ saved position) works as for EPUBs.
   self-hosted, otherwise from cdnjs. YAML front
   matter `title`, `author` and `lang` are used. Links to headings
   (`[see](#a-heading)`) work. Tables are drawn with lines between their cells.
+  Some Markdown takes marked minutes over (a long list item without blank lines, a long line of emphasis): a
+  document over 20,000 characters is first read in a background worker, and one that takes over 5 seconds there is
+  shown as plain text, with a note, rather than freezing the page.
   GitHub's additions work too:
   - **Math:** `$…$` and `` $`…`$ `` in a line, `$$…$$` and ` ```math ` blocks, as GitHub writes them.
     It is turned into MathML by [Temml](https://temml.org/), loaded only for a document with a `$` in it.

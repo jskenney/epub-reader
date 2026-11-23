@@ -1703,6 +1703,24 @@ def main():
                {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="xpng" src="x.png"/><img alt="dat" src="h.dat"/><img alt="svg" src="p.svg"/><img alt="gif" src="f.gif"/><img alt="fine" src="ok.png"/><p>After the huge pictures.</p>'),
                 "x.png": big, "h.dat": big, "g.gif": gif, "f.gif": gif, "ok.png": png(40, 30, (50, 200, 50)),
                 "p.svg": f'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><image href="data:image/png;base64,{b64}" width="10" height="10"/><rect width="5" height="5"/></svg>'}, "urn:huge-other")
+    # Round 42: more ways round the defences, and a large ordinary document that must stay Markdown.
+    (books / "item-html.md").write_text("# Item HTML\n\n- a\n<b>x</b>\n" + "b\n" * 60000)
+    (books / "long-emphasis.md").write_text("# Emphasis\n\n" + "*a" * 200000 + "\n")
+    (books / "big-normal.md").write_text("# Big normal\n\n" + "".join(f"## Part {i}\n\nParagraph {i} with *emphasis* and a [link](#p{i}).\n\n- item {i}\n- another\n\n" for i in range(3000)))
+    pct = fanout(6).replace('href="#l', 'href="#%6c')
+    (books / "use-pct.html").write_text(f"<!doctype html><html><head><title>Use pct</title></head><body><h1>Encoded</h1>{pct}<p>After the encoded picture.</p></body></html>")
+    whole = '<svg xmlns="http://www.w3.org/2000/svg">' + '<g id="l0"><rect width="1" height="1"/></g>' + "".join(f'<g id="l{i}">' + f'<use href="#l{i - 1}"/>' * 10 + "</g>" for i in range(1, 4)) + "</svg>"
+    epub_items(books / "use-whole.epub", "Use Whole", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("sp", "whole.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>Whole</h1>' + '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><use href="whole.svg"/></svg>' * 2000 + "<p>After the whole files.</p>"),
+                "whole.svg": whole}, "urn:use-whole")
+    deep = "<div>" * 20000 + '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><defs><rect id="r" width="4" height="4"/></defs><use href="#r"/></svg>' + "</div>" * 20000
+    (books / "deep-use.html").write_text(f"<!doctype html><html><head><title>Deep use</title></head><body><h1>Deep</h1>{deep}<p>After the deep picture.</p></body></html>")
+    odd = "".join(f'<img alt="{n}" src="data:{t},{b64}">' for n, t in (("oct", "application/octet-stream;base64"), ("none", ";base64"), ("text", "text/plain;base64")))
+    (books / "data-odd.html").write_text(f'<!doctype html><html><head><title>Data odd</title></head><body><h1>Odd</h1>{odd}<p>After the odd pictures.</p></body></html>')
+    epub_items(books / "huge-typed.epub", "Huge Typed", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("a", "a.png", "audio/mpeg", ""), ("b", "b.png", "image/svgz", ""),
+               ("c", "c.mp3", "audio/mpeg", ""), ("ok", "ok.png", "image/png", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="a" src="a.png"/><img alt="b" src="b.png"/><img alt="c" src="c.mp3"/><img alt="fine" src="ok.png"/><p>After the typed pictures.</p>'),
+                "a.png": big, "b.png": big, "c.mp3": big, "ok.png": png(40, 30, (50, 50, 200))}, "urn:huge-typed")
     print(f"Built {SITE}")
 
 

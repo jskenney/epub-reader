@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.1437</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.1622</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1559,8 +1559,10 @@ function pictureSize(b){
 // (Whatever type the book gives it, but for fonts, sound, video, styles and captions: a picture is drawn by its bytes,
 // so "image/x-png" or a name the manifest doesn't list got past a check by type: round 41. A file on a site is asked
 // for by its first 512 KB only, not downloaded twice whole: round 41.)
+// (Every file but the SVGs, which are cleaned and counted on their own, whatever its type or name: a PNG typed audio or
+// named .mp3 is drawn by its bytes all the same: round 42 review, M-228.)
 async function pictureFits(u, type, path){
-  if (!u || /^(font|audio|video)\/|^text\/(css|vtt)|svg/i.test(String(type)) || /\.(css|vtt|woff2?|ttf|otf|eot|mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4|m4v|webm|ogv|mov|svgz?)$/i.test(path)) return u;
+  if (!u) return u;
   try {
     const r = await fetch(u, u.startsWith('blob:') ? {} : { headers: { Range: 'bytes=0-524287' } });
     const reader = r.body.getReader(), parts = [];
@@ -1716,7 +1718,7 @@ function loadScript(src, integrity){
     document.head.append(el);
   });
 }
-const libsLoaded = {}, libsSlow = {};
+const libsLoaded = {}, libsSlow = {}, libsFrom = {};   // (libsFrom: the address each came from, for the Markdown worker)
 // An optional library for a page (math, highlighting: E-37): waited for at most a few seconds, then the page is shown
 // without it, and it isn't waited for again (round 31 review: one that never answered kept a chapter from showing).
 async function loadLibSoon(name, ms = 8000){
@@ -1728,10 +1730,11 @@ async function loadLibSoon(name, ms = 8000){
 function loadLib(name){
   const lib = LIBS[name];
   return libsLoaded[name] ??= (async () => {
-    try { return await loadScript(new URL(lib.file, folderBase(LIB_FILES)).href, lib.integrity); }
+    const here = new URL(lib.file, folderBase(LIB_FILES)).href;
+    try { await loadScript(here, lib.integrity); libsFrom[name] = here; return; }
     catch {}
     if (!ALLOW_CDN) throw new Error(`libs/${lib.file.split('/').pop()} isn't on this site (run fetch-libs.sh); ALLOW_CDN is off`);
-    try { return await loadScript(lib.cdn, lib.integrity); }
+    try { await loadScript(lib.cdn, lib.integrity); libsFrom[name] = lib.cdn; return; }
     catch { throw new Error(`the ${name} library couldn't be loaded from ${new URL(lib.cdn).host}`); }
   })().catch(e => { delete libsLoaded[name]; throw e; });
 }
@@ -1876,7 +1879,11 @@ function textToHtml(raw){
     }
     i = Math.max(j, i + 1);
   }
-  const html = items.map(it => it.heading ? `<${it.level}>${it.html}</${it.level}>` : it.html).join('\n');
+  // (A word of thousands of characters without a break, the browser lays out very slowly: a 400 KB one, 15 s. Such words
+  // get a break opportunity every 200 characters, entities kept whole: round 42 review, H-67, whose plain-text
+  // fallback shows Markdown this way.)
+  const breakLong = h => h.replace(/>([^<]+)</g, (m, t) => '>' + t.replace(/[^\s<>]{1000,}/g, w => w.match(/(?:&[a-z0-9#]+;|[^&]){1,200}/gi).join('<wbr>')) + '<');
+  const html = breakLong(items.map(it => it.heading ? `<${it.level}>${it.html}</${it.level}>` : it.html).join('\n'));
   return { html, ...meta };
 }
 const TXT_CSS = '<style>.txt-lines{text-indent:0;margin:0 0 1em}</style>';
@@ -1919,43 +1926,41 @@ async function markdownToHtml(md){
     await loadData('emoji').then(list => { mdEmoji = new Map(); for (const e of list) for (const a of e.aliases || []) if (!mdEmoji.has(a)) mdEmoji.set(a, e.emoji); })
       .catch(err => console.warn(`Emoji: ${err.message}`));
   }
-  return { html: mdAlerts(mdMarked().parse(mdUnstick(md).text)), ...meta };
+  // (Markdown that marked would take too long over is shown as plain text, with a note: round 42 review.)
+  if (!await mdProbe(md)) { const t = textToHtml(md); return { ...t, ...meta, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
+  return { html: mdAlerts(mdMarked().parse(md)), ...meta };
 }
-// marked's list items take time with the square of their lines when many follow without a blank one ("- a" then
-// 100,000 lines: 50 s to open a 200 KB file): a blank line is put in after every MD_ITEM_LINES such lines of a list
-// item, in a block quote too (round 40 review, H-59; round 41), which only starts a new paragraph there. Fences are
-// recognised as CommonMark does (indented 3 spaces at most; no backtick in a backtick fence's info string), and even
-// inside one a blank line goes in after MD_FENCE_LINES lines, so a line taken for a fence that marked doesn't take as
-// one can't hide a list from the count (round 41). A list ends at a heading, an HTML block or $$ math too, which are
-// left whole. Returns the text and where blank lines were put in (line numbers in the new text), for the editor's line
-// matching.
-const MD_ITEM_LINES = 1000, MD_FENCE_LINES = 2000;
-function mdUnstick(md){
-  if (md.length < MD_ITEM_LINES * 2) return { text: md, added: [] };
-  const lines = md.split('\n'), out = [], added = [];
-  let inItem = false, run = 0, fence = null, blank = false;
-  const cut = quote => { added.push(out.length); out.push(quote.replace(/\s+$/, '')); run = 0; };
-  for (const l of lines) {
-    const quote = /^(?: {0,3}> ?)*/.exec(l)[0], inner = l.slice(quote.length);
-    if (fence) {
-      const f = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(inner);
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) { fence = null; run = 0; }
-      else if (!/\S/.test(inner)) run = 0;
-      else if (++run >= MD_FENCE_LINES) cut(quote);
-      out.push(l); continue;
-    }
-    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(inner);
-    if (f && !(f[1][0] === '`' && f[2].includes('`'))) { fence = f[1]; run = 0; out.push(l); continue; }
-    if (!/\S/.test(inner)) { run = 0; blank = true; out.push(l); continue; }
-    if (/^ {0,3}([-+*]|\d{1,9}[.)])([ \t]|$)/.test(inner)) { inItem = true; run = 0; }
-    // (A list ends at a line after a blank one that isn't indented, nor another item; and at a heading, an HTML block
-    // or $$ math, which aren't cut.)
-    else if ((blank && !/^\s/.test(inner)) || /^ {0,3}(#{1,6}([ \t]|$)|<[a-zA-Z/!?]|\$\$)/.test(inner)) { inItem = false; run = 0; }
-    else if (inItem && ++run >= MD_ITEM_LINES) cut(quote);
-    blank = false;
-    out.push(l);
-  }
-  return { text: added.length ? out.join('\n') : md, added };
+/* Some Markdown takes marked time with the square of its size (a list item followed by many lines without a blank one,
+   a long line of emphasis, and others): a document of a few hundred KB froze the tab for minutes. Three rounds of
+   guessing which, in a pre-pass, were each got round by the next review (rounds 40 to 42). Instead, a document over
+   MD_PROBE_MIN characters is first read by marked in a worker (the same file the page loaded, its hash checked), given
+   MD_PROBE_MS: past it the worker is stopped and the document shown as plain text, with a note (round 42 review, H-66,
+   H-67, L-471, L-472). The editor's line matching reads it only when that check passed. */
+const MD_PROBE_MIN = 20000, MD_PROBE_MS = Number(window.SPINE_TEST?.mdProbeMs) || 5000;
+const MD_SLOW_NOTE = 'This document is shown as plain text: its Markdown would take too long to lay out.';
+let mdProbeCode = null;
+const mdProbed = { text: null, ok: true };
+async function mdProbe(md){
+  if (md.length < MD_PROBE_MIN) return true;
+  if (mdProbed.text === md) return mdProbed.ok;
+  let ok = true, w = null;
+  try {
+    mdProbeCode ??= (async () => {
+      const r = await fetch(libsFrom.marked || new URL(LIBS.marked.file, folderBase(LIB_FILES)).href, { integrity: LIBS.marked.integrity });
+      if (!r.ok) throw new Error(String(r.status));
+      return URL.createObjectURL(new Blob([await r.text(), '\n;onmessage = e => { marked.lexer(e.data, { gfm: true }); postMessage(1); };'], { type: 'text/javascript' }));
+    })().catch(e => { mdProbeCode = null; throw e; });
+    w = new Worker(await mdProbeCode);
+    ok = await new Promise(res => {
+      const timer = setTimeout(() => res(false), MD_PROBE_MS);
+      // (An error, too deep say, is left for the page's own reading to report.)
+      w.onmessage = w.onerror = () => { clearTimeout(timer); res(true); };
+      w.postMessage(md);
+    });
+  } catch (e) { console.warn(`Markdown check: ${e.message}`); }   // (no worker here: read as before)
+  w?.terminate();
+  Object.assign(mdProbed, { text: md, ok });
+  return ok;
 }
 /* GitHub's additions to Markdown beyond GFM: math (E-31), footnotes (E-32) and alerts (E-33). */
 // Math: the TeX as MathML (Temml), which browsers draw, with the TeX kept in it (for the editor, search and reading
@@ -2920,13 +2925,13 @@ async function svgClean(t, path, type, b = book){
   // (Processing instructions, <?xml-stylesheet?> say, and animations that set an address: round 25 review, L-292.)
   for (const n of [...d.childNodes]) if (n.nodeType === 7) n.remove();
   d.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
-  const useSizes = svgUseCap(d, d.documentElement, path);
+  const useSizes = svgUseCap(d, d.documentElement, path, true);
   const jobs = [], budget = cssBudget(), paint = ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end', 'cursor'];
   for (const el of d.getElementsByTagName('*')) {
     for (const a of [...el.attributes]) {
       const v = urlText(a.value);
       if (/^on/i.test(a.localName) || /^(form)?action$/i.test(a.localName) || /^\s*javascript:/i.test(v)) el.removeAttributeNode(a);
-      else if (/^(href|src)$/i.test(a.localName) && !v.startsWith('#') && !(/^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(v) && dataPictureFits(v))) el.removeAttributeNode(a);
+      else if (/^(href|src)$/i.test(a.localName) && !v.startsWith('#') && !(/^data:\s*image\/(png|jpe?g|gif|webp)\s*[;,]/i.test(v) && dataPictureFits(v))) el.removeAttributeNode(a);
       else if (a.localName === 'style' || (paint.includes(a.localName) && v.includes('('))) jobs.push(rewriteCss(a.value, path, { budget, attr: true, owner: 'svg:' + path }).then(c => el.setAttribute(a.name, c)));
     }
     if (el.localName === 'style') jobs.push(rewriteCss(el.textContent, path, { budget, owner: 'svg:' + path }).then(c => { el.textContent = c; }));
@@ -2939,25 +2944,34 @@ async function svgClean(t, path, type, b = book){
   (b.svgSizes ||= new Map()).set(u, useSizes);   // (what a page's <use> of it costs: round 41)
   return u;
 }
-// A data: address as bytes (base64, or percent-encoded as browsers read it: a stray % kept as written, not an error:
-// round 41) and its type, or null. Whitespace before the type counts for nothing, as browsers read it (round 41).
-const DATA_RE = /^data:\s*([^,;]*)((?:;[^,]*)?),(.*)$/is;
-function dataBytes(v){
+// A data: address as bytes, read as browsers read it: whitespace before the type counts for nothing; base64 only when
+// the part before the comma ends in ";base64"; percent-decoding that keeps a stray % (rounds 41, 42). max: at most that
+// many bytes (a picture's header), decoded from the start only, so a long address costs little (round 42, M-226, M-227).
+const DATA_RE = /^data:([^,]*),/i;
+function dataBytes(v, max = Infinity){
   const m = DATA_RE.exec(v);
-  if (!m || v.length > SVG_MAX * 2) return null;
-  let bytes;
+  if (!m) return null;
+  const head = m[1], body = v.slice(m[0].length), b64 = /;\s*base64\s*$/i.test(head);
+  const type = head.replace(/;\s*base64\s*$/i, '').split(';')[0].trim().toLowerCase();
   try {
-    if (/;\s*base64/i.test(m[2])) bytes = Uint8Array.from(atob(m[3].replace(/\s/g, '')), c => c.charCodeAt(0));
-    else {
-      const out = [], enc = new TextEncoder(), t = m[3];
-      for (let i = 0; i < t.length; i++) {
-        if (t[i] === '%' && /^[0-9a-f]{2}$/i.test(t.substr(i + 1, 2))) { out.push(parseInt(t.substr(i + 1, 2), 16)); i += 2; }
-        else { const c = t.codePointAt(i); for (const b of enc.encode(String.fromCodePoint(c))) out.push(b); if (c > 0xffff) i++; }
-      }
-      bytes = Uint8Array.from(out);
+    if (b64) {
+      // (Cut to whole groups of four only where it was cut short; atob takes a last group without its padding.)
+      const cut = Number.isFinite(max) && body.length > Math.ceil(max / 3) * 4 + 8;
+      let t = (cut ? body.slice(0, Math.ceil(max / 3) * 4 + 8) : body).replace(/[^A-Za-z0-9+/]/g, '');
+      if (cut || t.length % 4 === 1) t = t.slice(0, t.length - t.length % 4);
+      const bin = atob(t);
+      return { type, bytes: Uint8Array.from(bin, c => c.charCodeAt(0)).subarray(0, max) };
     }
+    const out = new Uint8Array(Math.min(Number.isFinite(max) ? max : Infinity, body.length * 3)), enc = new TextEncoder();
+    let n = 0;
+    for (let i = 0; i < body.length && n < out.length; i++) {
+      const c = body.charCodeAt(i);
+      if (c === 37 && /^[0-9a-f]{2}$/i.test(body.substr(i + 1, 2))) { out[n++] = parseInt(body.substr(i + 1, 2), 16); i += 2; }
+      else if (c < 128) out[n++] = c;
+      else { const cp = body.codePointAt(i); for (const x of enc.encode(String.fromCodePoint(cp))) if (n < out.length) out[n++] = x; if (cp > 0xffff) i++; }
+    }
+    return { type, bytes: out.subarray(0, n) };
   } catch { return null; }
-  return { type: m[1].trim().toLowerCase(), bytes };
 }
 const isDataSvg = v => /^data:\s*image\/svg\+xml\s*[;,]/i.test(urlText(v));
 // A picture given as a data: SVG (in a page or its styles) is cleaned as an SVG file is, not shown as it came: one
@@ -2966,56 +2980,76 @@ const isDataSvg = v => /^data:\s*image\/svg\+xml\s*[;,]/i.test(urlText(v));
 function svgDataURL(v, path){
   const b = book, key = urlText(v), seen = (b.svgData ||= new Map());
   if (!seen.has(key)) seen.set(key, (async () => {
-    const d = dataBytes(key);
+    if (key.length > SVG_MAX * 3) return null;
+    const d = dataBytes(key, SVG_MAX + 1);
     if (!d || d.bytes.length > SVG_MAX) return null;
     return svgClean(new TextDecoder().decode(d.bytes), path, 'image/svg+xml', b);
   })());
   return seen.get(key);
 }
-// A data: raster picture (in a page, a style or an SVG) whose header says it is too large to decode: false (round 41,
-// as M-216 for files).
+// A data: picture (in a page, a style or an SVG) whose header says it is too large to decode: false. Any type but SVG:
+// the browser draws a picture typed octet-stream, or not at all, by its bytes (round 42 review, M-225). Its first
+// 512 KB only are decoded, once per address (M-226, M-227).
+const dataFits = new Map();
 function dataPictureFits(v){
-  const d = /^data:\s*image\//i.test(urlText(v)) && dataBytes(urlText(v));
-  const wh = d && pictureSize(d.bytes.subarray(0, 1 << 19));
-  if (wh && wh[0] * wh[1] > PIC_PIXELS) { console.warn(`a data: picture too large to show (${wh[0]} × ${wh[1]} pixels)`); return false; }
-  return true;
+  const key = urlText(v);
+  if (!/^data:/i.test(key) || isDataSvg(key)) return true;
+  if (!dataFits.has(key)) {
+    const d = dataBytes(key, 1 << 19), wh = d && pictureSize(d.bytes);
+    const fits = !(wh && wh[0] * wh[1] > PIC_PIXELS);
+    if (!fits) console.warn(`a data: picture too large to show (${wh[0]} × ${wh[1]} pixels)`);
+    if (dataFits.size > 2000) dataFits.clear();
+    dataFits.set(key, fits);
+  }
+  return dataFits.get(key);
 }
 // <use> elements copy what they point to, so a few, ten each a level below ten more, make millions of copies from a
 // file of a kilobyte and hang the tab (or crash it), even only as a cover (round 40 review, H-60). The copies they
-// would make are counted (each pointing to its target, counted once by element; one pointing into another SVG file of
-// the book, a sprite, counts as that element's size there: round 41); past twice the page's own elements and
-// SVG_USES more, its <use> elements are dropped (so many uses of small symbols, as MathJax's glyphs, stay: round 41).
-// (Nested deeper than can be counted: dropped too.) Returns the size of each element with an id, for a file's sprites.
+// would make are counted, each <use> as its target as the browser resolves it (round 42 review, H-64, H-65): a fragment
+// percent-decoded; one into another SVG file of the book (a sprite) as that element's size there, or the whole file's
+// without a fragment; one that can't be resolved as the whole page. Past twice the page's own elements and SVG_USES
+// more, its <use> elements are dropped (many uses of small symbols, as MathJax's glyphs, stay: round 41). Counted with
+// a stack of its own, so a page nested however deep is counted (L-474), and only where there is a <use> (L-470).
+// wantSizes (an SVG file, for its sprites): returns the size of each element with an id, and the whole file's ('').
 const SVG_USES = 50000;
-function svgUseCap(doc, root, where){
+function svgUseCap(doc, root, where, wantSizes = false){
   const uses = root.getElementsByTagName('use');
+  if (!uses.length && !wantSizes) return null;
   const byId = new Map();
   for (const el of doc.querySelectorAll('[id]')) if (!byId.has(el.id)) byId.set(el.id, el);
   const plain = root.getElementsByTagName('*').length, cap = 2 * plain + SVG_USES, memo = new Map(), busy = new Set();
-  const size = el => {
-    if (memo.has(el)) return memo.get(el);
-    if (busy.has(el)) return 1;   // (one inside itself: the browser draws nothing for it)
-    busy.add(el);
-    let k = 1;
-    if (el.localName === 'use') {
-      const h = urlText(el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href'));
-      if (h.startsWith('#')) { const target = byId.get(h.slice(1)); if (target) k += size(target); }
-      else if (h.includes('#')) { const sizes = book?.svgSizes?.get(h.slice(0, h.indexOf('#'))); if (sizes) k += sizes.get(h.slice(h.indexOf('#') + 1)) ?? sizes.get('') ?? 1; }
-    }
-    for (const c of el.children) { if (k > cap) break; k += size(c); }
-    busy.delete(el);
-    k = Math.min(k, cap + 1); memo.set(el, k);
-    return k;
+  const decode = f => { try { return decodeURIComponent(f); } catch { return f; } };
+  // (What a <use> points to: an element of this page, or a count from another file.)
+  const target = el => {
+    const h = urlText(el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href'));
+    if (!h) return null;
+    const at = h.indexOf('#'), base = at < 0 ? h : h.slice(0, at), frag = at < 0 ? '' : h.slice(at + 1);
+    if (!base) return byId.get(decode(frag)) || byId.get(frag) || plain;
+    const sizes = book?.svgSizes?.get(base);
+    return sizes ? (frag ? sizes.get(decode(frag)) ?? sizes.get(frag) ?? sizes.get('') : sizes.get('')) : 1;
   };
-  let over = false;
-  if (uses.length) { try { over = size(root) > cap; } catch { over = true; } }
-  if (over) {
+  const deps = el => { const out = [...el.children]; if (el.localName === 'use') { const t = target(el); if (t && typeof t === 'object') out.push(t); } return out; };
+  const size = start => {
+    const stack = [start];
+    while (stack.length) {
+      const el = stack[stack.length - 1];
+      if (memo.has(el)) { stack.pop(); continue; }
+      if (!busy.has(el)) { busy.add(el); for (const d of deps(el)) if (!memo.has(d) && !busy.has(d)) stack.push(d); continue; }
+      let k = 1;
+      if (el.localName === 'use') { const t = target(el); if (typeof t === 'number') k += t; }
+      for (const d of deps(el)) { k += memo.get(d) ?? 1; if (k > cap) break; }   // (one inside itself: counted once)
+      memo.set(el, Math.min(k, cap + 1)); busy.delete(el); stack.pop();
+    }
+    return memo.get(start);
+  };
+  if (uses.length && size(root) > cap) {
     console.warn(`${where}: an SVG whose <use> elements would make too many copies: they aren't shown`);
     for (const u of [...uses]) u.remove();
-    memo.clear();
+    memo.clear(); busy.clear();
   }
-  const sizes = new Map([['', 1]]);
-  try { for (const [id, el] of byId) if (root.contains(el)) sizes.set(id, size(el)); sizes.set('', size(root)); } catch {}
+  if (!wantSizes) return null;
+  const sizes = new Map([['', size(root)]]);
+  for (const [id, el] of byId) if (root.contains(el)) sizes.set(id, size(el));
   return sizes;
 }
 function resourceURL(path, owner){
@@ -6195,7 +6229,8 @@ function ttsUpdateBar(status){
     else if ((st.state === 'idle' || (st === pk && st.state === 'ready')) && neural.agreed()) { neural.load(); status = 'Loading natural voice…'; }
     else if (st.state === 'loading') status = st.progressText || 'Loading natural voice…';
     else if (st.state === 'error') { status = `Natural voice failed: ${st.error}`; dl = 'Try again'; }
-    else { status = `${neural.name}: one-time ${neural.size()} download${neural === NEURAL.reverb ? ' (Reverb-TTS by Software Mansion, non-commercial use only; credits and licences in Settings)' : ''}`; dl = 'Download'; }
+    // (Reverb's credits said where they are, or given here where a site hides Settings: round 42 review, L-473.)
+    else { status = `${neural.name}: one-time ${neural.size()} download${neural !== NEURAL.reverb ? '' : toolbarShown.SHOW_SETTINGS_BUTTON ? ' (Reverb-TTS by Software Mansion, non-commercial use only; credits and licences in Settings)' : ` (${REVERB_CREDIT})`}`; dl = 'Download'; }
   }
   $('#ttsStatus').hidden = !status; $('#ttsStatus').textContent = status || '';
   // Screen readers hear every status (errors, offers, notes), but a download's progress only at each quarter,
@@ -10052,12 +10087,13 @@ function editBlocks(){
   let text = ed.text.replace(/^﻿/, '').replace(/\r\n?/g, '\n'), line = 0;
   const fm = text.match(/^---\n([\s\S]*?)\n(?:---|\.\.\.)\n/);
   if (fm) { line = fm[0].split('\n').length - 1; text = text.slice(fm[0].length); }
-  const out = [], { text: lexed, added } = mdUnstick(text), base = line;
-  // (Lines the pre-pass put in aren't the document's: H-59.)
-  const real = l => { let k = 0; while (k < added.length && added[k] < l - base) k++; return l - k; };
+  // (Long Markdown only once the worker's check of this very text passed: marked could freeze the editor on each
+  // change: round 42 review, H-66.)
+  if (text.length >= MD_PROBE_MIN && !(mdProbed.text === text && mdProbed.ok)) { mdProbe(text).then(ok => { if (ok && ed.on && ed.split) editSyncToPage(); }); return null; }
+  const out = [];
   try {
-    for (const t of window.marked.lexer(lexed, { gfm: true })) {
-      if (t.type !== 'space' && t.type !== 'def') out.push(real(line));
+    for (const t of window.marked.lexer(text, { gfm: true })) {
+      if (t.type !== 'space' && t.type !== 'def') out.push(line);
       line += (t.raw.match(/\n/g) || []).length;
     }
   } catch { return null; }
