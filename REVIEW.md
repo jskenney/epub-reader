@@ -958,8 +958,10 @@ defences, one looking for what they broke. What it found:
   over 200,000 characters as plain text, smaller ones read as before; the clock starts once the worker is ready.
 - H-69: stray bytes skipped as the decoder skips them; a JPEG or AVIF whose size isn't found in its first 512 KB is left
   out.
-- H-73, M-231: every page's words of 1,000 characters or more (not in styles, scripts or SVG) get a `<wbr>` every 200
-  characters, each character kept whole with its combining marks; the editor drops them before saving.
+- M-231: the plain-text view's breaks keep each character whole with its combining marks. (H-73, long words in HTML and
+  EPUB pages, is left open: breaks there helped one kind of word and made another, which the reader showed in 1.4 s,
+  take 7 to 40 s — the browser's layout of a long paragraph with break elements, not the reader's code; zero-width
+  spaces instead changed nothing for the slow kind. See H-73.)
 - M-229, M-234: a reference that resolves to nothing counts as one; `about:srcdoc#…` as this page; a `<use>` or
   `<feImage>` by any scheme but http(s), blob: and data: is removed.
 - M-230: a folder book's sound, video, font and captions files served by their address aren't read first (a book's files
@@ -968,7 +970,7 @@ defences, one looking for what they broke. What it found:
 
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and four items left open: H-70, H-71, M-233, L-475. Open (below): those, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open: H-70, H-71, H-73, M-233, L-475. Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -979,6 +981,7 @@ Most important first.
 | ID | Title | Kind |
 |---|---|---|
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
+| H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | H-70 | Nested `<marker>` and `<mask>` references multiply drawing as `<use>` did and aren't counted: a polyline of 30 vertices whose markers hold such polylines, four deep (1.8 KB), ran the tab out of memory; masks six deep, 35 s (round 43). Fix: count paint and effect references (markers by vertex count) in the same walk, or drop markers and masks whose targets carry such references themselves. | High |
 | H-71 | A footnote's body is lexed with marked's extensions only on the page, not in the worker's check: a slow list inside a footnote (120 KB) passes it and takes 20 s (round 43). Fix: run the reader's own marked set-up, extensions included, in the worker, or parse there and hand back the result. | High |
 | M-233 | After a passing check the page lexes the document again: up to about twice the check's time on the main thread, plus math, highlighting and layout (round 43). Fix: parse in the worker and use its result, or a smaller budget. | Medium |
@@ -1121,7 +1124,6 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 | H-68 | WYSIWYG editing of long Markdown shown as plain text wrote the plain view back over the file (round 43, regression). Raw only for it; the plain view never serialized. | (the commit after `cc954ee`) |
 | H-69 | A JPEG with stray bytes before its size marker, or the marker past 512 KB, wasn't sized and crashed the tab (round 43). Stray bytes skipped; a JPEG or AVIF without a size in its first 512 KB left out. | (the commit after `cc954ee`) |
 | H-72 | A worker error counted as a pass (round 43). A failure. | (the commit after `cc954ee`) |
-| H-73 | Long unbreakable words froze HTML, EPUB and Markdown pages (round 43). A `<wbr>` every 200 characters in every page's long words, dropped by the editor. | (the commit after `cc954ee`) |
 | H-74 | The editor started a worker on every scroll (round 43, regression). One check per text; none from the editor. | (the commit after `cc954ee`) |
 | M-229 | A `<use>` resolving to nothing counted as the whole page, dropping working ones (round 43, regression). Counts as one. | (the commit after `cc954ee`) |
 | M-230 | A folder book's fonts, sound and video were read before its page showed (round 43, regression). Not read when served by their address. | (the commit after `cc954ee`) |

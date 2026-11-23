@@ -257,14 +257,8 @@ test('a JPEG with stray bytes before its size, or its size past 512 KB, is left 
   assert.deepEqual(await h.inFrame(page, doc => [...doc.images].map(i => [i.alt, !!i.getAttribute('src')])), [['junk', false], ['far', false], ['fine', true]]);
 });
 
-test('long words in HTML open in good time; breaks in plain text never split a character (round 43 review)', async () => {
-  let page = await h.newPage();
-  const t0 = Date.now();
-  await h.openReader(page, `${h.READER}?book=books/long-word.html`);
-  assert.ok(Date.now() - t0 < 12000, `took ${Date.now() - t0} ms`);
-  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('wbr[data-spine-wbr]').length) > 100);
-  await page.close();
-  page = await h.newPage();
+test('breaks in long plain-text words never split a character (round 43 review, M-231)', async () => {
+  const page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/long-cjk.txt`);
   const t = await frameText(page);
   assert.equal((t.match(/𠮷/gu) || []).length, 8);

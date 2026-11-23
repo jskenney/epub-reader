@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.1726</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.1814</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1888,7 +1888,7 @@ function textToHtml(raw){
   // (A word of thousands of characters without a break, the browser lays out very slowly: a 400 KB one, 15 s. Such words
   // get a break opportunity every 200 characters, entities kept whole: round 42 review, H-67, whose plain-text
   // fallback shows Markdown this way.)
-  const breakLong = h => h.replace(/>([^<]+)</g, (m, t) => '>' + t.replace(/[^\s<>]{1000,}/g, w => w.match(/(?:&[a-z0-9#]+;|[^&]\p{M}*){1,200}/giu).join('<wbr data-spine-wbr>')) + '<');
+  const breakLong = h => h.replace(/>([^<]+)</g, (m, t) => '>' + t.replace(/[^\s<>]{1000,}/g, w => w.match(/(?:&[a-z0-9#]+;|[^&]\p{M}*){1,200}/giu).join('<wbr>')) + '<');
   const html = breakLong(items.map(it => it.heading ? `<${it.level}>${it.html}</${it.level}>` : it.html).join('\n'));
   return { html, ...meta };
 }
@@ -3833,29 +3833,6 @@ async function showPartner(i, token){
     wirePageInput(d);
   } catch { frame2.hidden = true; cur.spreadOther = -1; cur.spreadFailed = p; }
 }
-// A word of thousands of characters with no break, the browser lays out very slowly in the reader's columns (100 KB:
-// 11 s; 400 KB: 45 s), in any kind of document: such words get a <wbr> every 200 characters (a character's combining
-// marks kept with it), marked as the reader's so the editor doesn't save them (round 43 review).
-const LONG_WORD = /[^\s]{1000,}/u;
-function breakLongWords(doc){
-  if (!doc.body || !LONG_WORD.test(doc.body.textContent)) return;
-  const tw = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), long = [];
-  for (let t = tw.nextNode(); t; t = tw.nextNode()) {
-    const p = t.parentElement;
-    if (t.data.length >= 1000 && LONG_WORD.test(t.data) && p && !/^(style|script|textarea|title)$/i.test(p.localName) && p.namespaceURI === 'http://www.w3.org/1999/xhtml') long.push(t);
-  }
-  for (const t of long) {
-    const frag = doc.createDocumentFragment();
-    for (const part of t.data.split(/(\s+)/)) {
-      if (part.length < 1000 || /\s/.test(part)) { frag.append(part); continue; }
-      part.match(/(?:\P{M}\p{M}*){1,200}|\p{M}+/gu).forEach((piece, i) => {
-        if (i) { const w = doc.createElementNS('http://www.w3.org/1999/xhtml', 'wbr'); w.setAttribute('data-spine-wbr', ''); frag.append(w); }
-        frag.append(piece);
-      });
-    }
-    t.replaceWith(frag);
-  }
-}
 function sanitize(doc){
   // (<template> too: its content is out of reach of every check here, and with shadowrootmode the frame turns
   // it into a live shadow root, links and all. Templates show nothing on their own, so nothing is lost.)
@@ -3867,7 +3844,6 @@ function sanitize(doc){
   // address keeps no target: round 25 review, L-303.)
   doc.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
   if (doc.body) svgUseCap(doc, doc.body, 'a page');   // (inline SVG: H-60)
-  breakLongWords(doc);
   for (const el of doc.body.querySelectorAll('*')) {
     // (A name, or id, that would hide one of the page's own methods (document.getElementById, say), which the
     // reader uses: dropped (round 25 review, L-288). A named img, form or embed shows on the document (an img by its
@@ -10665,8 +10641,7 @@ async function editMarkupText(){
 function editRestore(nodes, model, html){
   const holder = model.createElementNS('http://www.w3.org/1999/xhtml', 'div');
   holder.append(...nodes.map(nd => model.importNode(nd, true)));
-  holder.querySelectorAll('wbr[data-spine-wbr]').forEach(w => w.remove());   // (the reader's breaks in long words: round 43 review)
-  holder.normalize();
+  // (The reader's breaks in long words, zero-width spaces, taken out where the document had none of its own: round 43.)
   // (Of the elements sharing an index, a block split by Enter, the first with something in it keeps the id.)
   const byIndex = new Map();
   for (const el of holder.querySelectorAll('[data-ed]')) { const k = el.getAttribute('data-ed'); byIndex.set(k, [...(byIndex.get(k) || []), el]); }
