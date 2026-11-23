@@ -289,7 +289,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
 .set-block{padding:8px 0;border-top:1px solid var(--rule)}
 .set-block>span{display:block}.set-block small{display:block;color:var(--muted)}
 .zn-list{list-style:none;margin:6px 0;padding:0}.zn-list li{display:flex;align-items:center;gap:6px;padding:3px 0}
-.zn-list li input{flex:1;min-width:0}.zn-add{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+.zn-list li{flex-wrap:wrap}.zn-list li input{flex:1;min-width:0}.zn-list .zn-words{flex-basis:100%;display:flex;gap:6px;align-items:center}.zn-add{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
 .zn-rec{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;margin:6px 0}.zn-rec p{margin:6px 0}
 .zn-meter{height:8px;background:var(--rule);border-radius:4px;overflow:hidden}.zn-meter span{display:block;height:100%;width:0;background:var(--ribbon)}
 .set-row label{cursor:pointer}
@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.0200</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.0217</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -799,7 +799,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <div class="set-row"><span><label for="set-LOOKAHEAD_SEC">Speech prepared ahead (seconds)</label><small>For the natural voices.</small><small class="set-def"></small></span><input id="set-LOOKAHEAD_SEC" type="number" min="0" max="1800" step="10" data-set="LOOKAHEAD_SEC"></div>
         <div class="set-row"><span><label for="set-SAVED_AUDIO_MB">Saved speech kept in this browser (MB)</label><small>0 saves none.</small><small class="set-def"></small></span><input id="set-SAVED_AUDIO_MB" type="number" min="0" max="1000000" step="50" data-set="SAVED_AUDIO_MB"></div>
         <div class="set-row"><span><label for="set-ZONOS_VOICES">ZONOS3 voices from recordings</label><small>A name = the address of a recording (MP3, WAV, M4A, OGG…), several separated by | (Narrator = /voices/narrator.mp3). Listed first among ZONOS3's voices. 5–15 seconds of clean speech from one speaker works best; the first one made downloads ZONOS3's speaker encoder once (about 45 MB).</small><small class="set-def"></small></span><input id="set-ZONOS_VOICES" type="text" spellcheck="false" autocomplete="off" data-set="ZONOS_VOICES"></div>
-        <div class="set-block" id="znOwn"><span><b>Your ZONOS3 voices</b><small>Upload or record a recording of a voice (5–15 seconds of clean speech from one speaker): it stays in this browser and is listed first among ZONOS3's voices.</small></span>
+        <div class="set-block" id="znOwn"><span><b>Your voices</b><small>Upload or record a recording of a voice (5–15 seconds of clean speech from one speaker): it stays in this browser and is listed first among ZONOS3's voices, and Reverb's once you give the words said in it and their language (a voice recorded here has them already).</small></span>
           <ul id="znOwnList" class="zn-list"></ul>
           <div class="zn-add"><button type="button" class="btn" id="znUpload">Upload a voice…</button><input type="file" id="znFile" accept="audio/*,.mp3,.wav,.m4a,.m4b,.ogg,.opus,.flac,.webm,.aac" hidden><button type="button" class="btn" id="znRecord">Record a voice</button></div>
           <div id="znRec" class="zn-rec" hidden>
@@ -809,7 +809,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
             <audio id="znTake" controls hidden></audio>
             <p class="zn-save" hidden><label>Name <input type="text" id="znName" maxlength="60" value="My voice" autocomplete="off"></label> <button type="button" class="btn primary" id="znKeep">Save</button> <button type="button" class="btn" id="znAgain">Record again</button> <button type="button" class="btn" id="znCancel">Cancel</button></p>
           </div>
-          <p class="ab-muted" id="znGpu" hidden>ZONOS3 needs WebGPU, which this browser doesn't have: these voices are used where it does.</p>
+          <p class="ab-muted" id="znGpu" hidden>ZONOS3 and Reverb need WebGPU, which this browser doesn't have: these voices are used where it does.</p>
           <p class="ab-muted" id="znMsg" aria-live="polite"></p>
         </div>
         <div class="set-row"><span><label for="set-FULL_PRECISION">Full-precision voice models</label><small>Larger downloads; off uses smaller ones on the CPU. Takes effect when the page is reloaded.</small><small class="set-def"></small></span><input id="set-FULL_PRECISION" type="checkbox" data-set="FULL_PRECISION"></div>
@@ -5996,7 +5996,7 @@ function ttsUpdateBar(status){
   const ne = !tts.mo && neuralEngine();
   const want = !ne ? 'device' : ne === NEURAL.kokoro ? 'kokoro' : ne === NEURAL.pocket ? 'pocket:' + (pkReady() ? pk.lang : '')
     : ne === NEURAL.zonos ? 'zonos:' + (znReady() ? zn.voices.length + ':' + bookLang() + ':' + znCustom().map(v => v.id + v.name).join() : '')
-    : ne === NEURAL.reverb ? 'reverb:' + reverbLang() : 'server:' + sv.voices.length;
+    : ne === NEURAL.reverb ? rvKind() : 'server:' + sv.voices.length;
   if ($('#ttsVoice').dataset.kind !== want) ttsFillVoices();
 }
 function ttsMeasureBar(){
@@ -6050,10 +6050,11 @@ function ttsFillVoices(){
   if (!tts.mo && neuralEngine() === NEURAL.reverb) {
     // (The preset voices are known before the model loads: the book's language first, then the rest. Any voice
     // reads any of the seven languages, with its own accent.)
+    // (Custom voices first: yours, then the site's.)
     const lang = reverbLang(), chosen = rvVoice().id;
-    sel.dataset.kind = 'reverb:' + lang; sel.disabled = false;
-    const vs = [...rv.voices].sort((a, b) => (b.lang === lang) - (a.lang === lang) || REVERB_LANGS.indexOf(a.lang) - REVERB_LANGS.indexOf(b.lang));
-    sel.replaceChildren(...vs.map(v => { const o = new Option(`${v.name} (${v.lang}, ${v.gender})`, v.id); o.selected = v.id === chosen; return o; }));
+    sel.dataset.kind = rvKind(); sel.disabled = false;
+    const vs = [...rvCustom(), ...[...rv.voices].sort((a, b) => (b.lang === lang) - (a.lang === lang) || REVERB_LANGS.indexOf(a.lang) - REVERB_LANGS.indexOf(b.lang))];
+    sel.replaceChildren(...vs.map(v => { const o = new Option(`${v.name} (${[v.lang, v.style === 'yours' || v.style === 'this site' ? v.style : v.gender].join(', ')})`, v.id); o.selected = v.id === chosen; return o; }));
     return;
   }
   if (tts.engine === 'kokoro' && kokoroFits() && !tts.mo) {
@@ -6768,7 +6769,7 @@ const znDb = (() => {
     embKeys: () => run('emb', 'readonly', st => st.getAllKeys()), delEmb: k => run('emb', 'readwrite', st => st.delete(k)) };
 })();
 async function znOwnLoad(){
-  try { zn.own = (await znDb.all()).map(({ id, name, file, seconds, created }) => ({ id, name, file, seconds, created })).sort((a, b) => a.created - b.created); }
+  try { zn.own = (await znDb.all()).map(({ id, name, file, seconds, created, text, lang }) => ({ id, name, file, seconds, created, text: text || '', lang: lang || 'en' })).sort((a, b) => a.created - b.created); }
   catch { zn.own = []; }
   if (tts.open) ttsFillVoices();
   znOwnRender();
@@ -6994,10 +6995,47 @@ function rvVoiceOf(id){
   return m ? { id, lang: m[1], gender: m[2], style: m[3], name: m[3][0].toUpperCase() + m[3].slice(1) + (m[4] ? ' ' + m[4] : '') } : { id, lang: '', gender: '', style: '', name: id };
 }
 const rv = { state: 'idle', R: null, root: null, tts: null, f16: false, variant: '', local: false, voices: REVERB_VOICES.map(rvVoiceOf),
-  data: new Map(), queue: Promise.resolve(), error: '', progressText: '', wantPlay: false, voice: store.get('spine:reverbVoice') || '' };
+  data: new Map(), queue: Promise.resolve(), error: '', progressText: '', wantPlay: false, voice: store.get('spine:reverbVoice') || '',
+  codecPath: '', cache: undefined, maker: null, made: new Map(), making: new Map(), versions: new Map(), checks: new Map() };
 const rvReady = () => rv.state === 'ready';
 // The chosen voice, else the first in the book's language, else the first.
-function rvVoice(){ const lang = reverbLang(); return rv.voices.find(v => v.id === rv.voice) || rv.voices.find(v => v.lang === lang) || rv.voices[0]; }
+function rvVoice(){
+  const lang = reverbLang();
+  return rvCustom().find(v => v.id === rv.voice) || rv.voices.find(v => v.id === rv.voice) || rv.voices.find(v => v.lang === lang) || rv.voices[0];
+}
+/* Custom voices (E-50): a recording and the words said in it (Reverb copies a voice from both), made into a voice once
+   on the GPU by runntime's voice maker (its codec's encoder, from the same file as the decoder) and kept in this
+   browser. Two ways in: your own recordings (Settings, "Your voices": shared with ZONOS3, with the words and the
+   language for Reverb; one recorded there reads the passage shown, so its words are known), and REVERB_VOICES in
+   reader-config.json: {"name", "url", "text", "language"}, the words beside the recording in a .txt of the same name
+   when "text" is left out. */
+let REVERB_VOICES_SITE = [];
+function rvVoicesConfig(value){
+  if (!Array.isArray(value)) throw new Error('a list of {"name", "url", "text", "language"}');
+  return value.filter(x => {
+    try {
+      if (!x || typeof x !== 'object' || typeof x.url !== 'string') throw new Error('each needs a "url"');
+      const u = new URL(x.url, location.href);
+      if (!/^https?:$/.test(u.protocol)) throw new Error(`${x.url} isn't a web address`);
+      if (x.language != null && !REVERB_LANGS.includes(x.language)) throw new Error(`${x.language} isn't one of ${REVERB_LANGS.join(', ')}`);
+      if (x.text != null && typeof x.text !== 'string') throw new Error('"text" must be the words, as a string');
+      return true;
+    } catch (e) { console.warn(`${CONFIG_FILE}: REVERB_VOICES: ${e.message} (left out)`); return false; }
+  }).map(x => {
+    const u = new URL(x.url, location.href);
+    return { name: String(x.name || safeDecode(u.pathname.split('/').pop()).replace(/\.[a-z0-9]+$/i, '') || 'Voice').slice(0, 60), url: x.url, abs: u.href,
+      text: typeof x.text === 'string' && x.text.trim() ? x.text.trim() : '', language: x.language || 'en' };
+  });
+}
+// Yours first (those with their words), then the site's.
+function rvCustom(){
+  return [...zn.own.filter(o => o.text?.trim()).map(o => ({ id: 'own:' + o.id, name: o.name, lang: o.lang || 'en', style: 'yours', gender: '', own: o.id, text: o.text.trim() })),
+    ...REVERB_VOICES_SITE.map(v => ({ id: 'url:' + v.abs, name: v.name, lang: v.language, style: 'this site', gender: '', url: v.abs, shown: v.url, text: v.text }))];
+}
+// The part of saved speech's key that changes with a custom voice: its words, and a site recording's version.
+// What the voice list shows, so it's filled again when that changes.
+const rvKind = () => 'reverb:' + reverbLang() + ':' + rvCustom().map(v => v.id + v.name).join();
+const rvVoiceTag = v => v.own ? `|t${hashText(v.text)}` : v.url ? `|${rv.versions.get(v.url) || ''}|t${hashText(v.text)}` : '';
 // The weights FULL_PRECISION asks for, on this GPU (before the GPU is known, fp16 is assumed).
 const rvVariant = () => !FULL_PRECISION ? 'int4' : (rv.f16 || !rv.root) ? 'f16' : 'int8';
 const rvMB = () => Math.round(REVERB.models[rvVariant()][1] + REVERB.codecMB + 2);
@@ -7044,12 +7082,13 @@ async function rvLoad(){
       if (!await navigator.storage.persisted() && !store.get('spine:reverbPersist')) { store.set('spine:reverbPersist', true); await navigator.storage.persist(); }
     } catch {}
     const cache = await Promise.resolve(R.createOpfsCache?.(`spine-reverb-${REVERB.rev.slice(0, 8)}`)).catch(() => undefined);
-    const verbalizers = {};
+    const verbalizers = rv.verbalizers = {};
+    rv.codecPath = rv.local ? base + 'codec/model.safetensors' : REVERB.codec; rv.cache = cache;
     rv.tts = await R.createTextToSpeech({
-      modelPath: base + file, codecPath: rv.local ? base + 'codec/model.safetensors' : REVERB.codec, tokenizerPath: base + 'model/tokenizer.json',
+      modelPath: base + file, codecPath: rv.codecPath, tokenizerPath: base + 'model/tokenizer.json',
       dtype: variant === 'f16' ? 'f16' : rv.f16 ? undefined : 'f32',
       // (Numbers, dates, money and units as words, in the text's language; text it can't read is left as it is.)
-      verbalize: (text, lang) => { try { return (verbalizers[lang] ??= new R.Verbalizer(lang)).process(text); } catch { return text; } }
+      verbalize: (text, lang) => rvSpell(text, lang)
     }, { cache, onBytes: n => {
       got += n;
       rv.progressText = `Downloading Reverb${rv.local ? ' from this site' : ''}… ${Math.min(total, Math.round(got / 1048576))} of ~${total} MB`;
@@ -7064,8 +7103,11 @@ async function rvLoad(){
   }
   ttsFillVoices(); nLoaded(rv);
 }
-// A preset voice's codes and transcript (voices/<id>.json), kept once loaded.
-function rvVoiceData(v){
+// Numbers, dates, money and units as words, in that language; text Verbalis can't read is left as it is.
+function rvSpell(text, lang){ try { return ((rv.verbalizers ??= {})[lang] ??= new rv.R.Verbalizer(lang)).process(text); } catch { return text; } }
+// A preset voice's codes and transcript (voices/<id>.json), kept once loaded; a custom voice made from its recording.
+function rvVoiceData(v, signal){
+  if (v.own || v.url) return rvMade(v, signal);
   if (!rv.data.has(v.id)) rv.data.set(v.id, (async () => {
     const r = await fetch(rvBase() + `voices/${v.id}.json`);
     if (!r.ok || looksHtml(r)) throw new Error(`the voice ${v.name} couldn't be loaded (${r.status})`);
@@ -7074,13 +7116,92 @@ function rvVoiceData(v){
   })().catch(e => { rv.data.delete(v.id); throw e; }));
   return rv.data.get(v.id);
 }
+// A site recording's version (its ETag, or its date and size), so one replaced at the same address makes a new voice.
+function rvVersion(v){
+  if (!v?.url) return Promise.resolve();
+  if (!rv.checks.has(v.url)) rv.checks.set(v.url, (async () => {
+    try {
+      const r = await fetch(v.url, { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(8000) });
+      const h = r.headers, version = r.ok && !looksHtml(r) ? h.get('etag') || (h.get('last-modified') ? `${h.get('last-modified')}|${h.get('content-length') || ''}` : '') : '';
+      if (version) rv.versions.set(v.url, version);
+    } catch {}
+  })());
+  return rv.checks.get(v.url);
+}
+// A custom voice: kept from before, or made now. (Made once, whoever asks: a reader that moves on stops waiting but
+// doesn't cancel it; a lost GPU ends the wait with the reason, as for ZONOS3's voices.)
+const rvMadeKey = v => v.own ? `rv|own|${v.own}|${hashText(v.text)}|${v.lang}` : `rv|url|${v.url}|${rv.versions.get(v.url) || ''}|${hashText(v.text)}|${v.lang}`;
+function rvMade(v, signal){
+  const key = rvMadeKey(v);
+  if (rv.made.has(key)) return Promise.resolve(rv.made.get(key));
+  let job = rv.making.get(key);
+  if (!job) { job = rvMake(v, key).finally(() => rv.making.delete(key)); rv.making.set(key, job); }
+  return new Promise((res, rej) => {
+    const gone = () => rej(rv.dead ? transientError(rv.dead) : staleError());
+    if (signal?.aborted) return gone();
+    signal?.addEventListener('abort', gone, { once: true });
+    job.then(res, rej).finally(() => signal?.removeEventListener('abort', gone));
+  });
+}
+async function rvMake(v, key){
+  const live = () => { if (rv.dead) throw transientError(rv.dead); };
+  let made = await znDb.emb(key).catch(() => null);
+  if (!made?.codes) {
+    let clip, text = v.text;
+    if (v.own) {
+      const o = await znDb.get(v.own);
+      if (!o) throw new Error(`your voice ${v.name} is no longer in this browser`);
+      clip = o.blob;
+    } else {
+      // (Not waited for for good: as for ZONOS3's site voices, round 36 review, L-442.)
+      const get = async (url, what) => {
+        let r;
+        try { r = await fetch(url, { cache: 'no-cache', signal: AbortSignal.timeout(ZN_CLIP_WAIT) }); }
+        catch (err) { live(); throw new Error(`the ${what} for ${v.name} couldn't be fetched from ${url} (${err.message})`); }
+        if (!r.ok || looksHtml(r)) throw new Error(`the ${what} for ${v.name} isn't at ${url}${r.ok ? '' : ` (${r.status})`}`);
+        return r;
+      };
+      clip = await (await get(v.url, 'recording')).blob();
+      if (!text) {
+        const u = new URL(v.url); u.pathname = u.pathname.replace(/(\.[a-z0-9]+)?$/i, '.txt'); u.search = '';
+        text = (await (await get(u.href, 'words (a .txt beside the recording)')).text()).trim();
+      }
+    }
+    if (!text) throw new Error(`${v.name} has no words: Reverb needs what is said in the recording`);
+    live();
+    let maker;
+    try {
+      // (The voice maker loads the codec's encoder once, from the file the reader already has.)
+      rv.maker ??= rv.R.createVoiceMaker({ codecPath: rv.codecPath }, { cache: rv.cache });
+      maker = await rv.maker;
+    } catch (e) { rv.maker = null; live(); throw new Error(`Reverb's voice maker couldn't be loaded (${e.message})`); }
+    live();
+    let samples;
+    try { samples = await rv.R.decodeAudio(await clip.arrayBuffer(), 24000); }
+    catch { throw new Error(`the recording for ${v.name} isn't one this browser can play`); }
+    const sec = samples.length / 24000;
+    if (sec < maker.minSeconds) throw new Error(`the recording for ${v.name} is too short (${sec.toFixed(1)} s; Reverb needs at least ${maker.minSeconds} s, and 5–15 s works best)`);
+    if (sec > maker.maxSeconds) throw new Error(`the recording for ${v.name} is too long (${Math.round(sec)} s; Reverb takes up to ${Math.round(maker.maxSeconds)} s on this device, and 5–15 s works best)`);
+    let voice;
+    // (The words spelled out in the recording's own language: runntime would read them in the book's.)
+    try { voice = await maker.fromRecording(samples, { sampleRate: 24000, transcript: rvSpell(text, v.lang), language: v.lang }); }
+    catch (e) { live(); throw new Error(`${v.name} couldn't be made into a voice (${e.code || e.message})`); }
+    live();
+    // (Not kept, nor used, if the voice was deleted while it was made: as for ZONOS3, round 39 review, L-448.)
+    if (v.own && !await znDb.get(v.own).catch(() => null)) throw new Error(`your voice ${v.name} was deleted`);
+    made = { codes: voice.codes, frames: voice.frames, transcript: voice.transcript, language: voice.language, speechFrames: voice.speechFrames };
+    znDb.putEmb(key, made).catch(() => {});
+  }
+  rv.made.set(key, made);
+  return made;
+}
 function rvGenerate(text, opts = {}){
   const run = async () => {
     if (opts.signal?.aborted) throw staleError();
     if (!rvReady()) throw transientError(rv.error || 'the voice stopped working');
     const v = opts.snap?.rvVoice ?? rvVoice(), lang = reverbLang(opts.snap?.lang ?? bookLang()) || 'en';
     const t0 = performance.now();
-    const voice = await rvVoiceData(v);
+    const voice = await rvVoiceData(v, opts.signal);
     if (opts.signal?.aborted) throw staleError();
     let data;
     // (The text's language goes with the voice: any voice speaks any of the seven.)
@@ -7337,7 +7458,7 @@ const NEURAL = {
   // (Saved speech is kept per weights: int4, int8 or fp16.)
   reverb: { name: 'Reverb', st: rv, ready: rvReady, load: () => rvLoad(), size: () => `~${rvMB()} MB`, playbackSpeed: true,
     agreed: () => !!store.get(`spine:agreed:reverb:${FULL_PRECISION ? 'full' : 'int4'}`),
-    generate: rvGenerate, key: () => `reverb|${REVERB.rev.slice(0, 7)}|${rv.variant || rvVariant()}|${reverbLang()}|${rvVoice().id}` },
+    generate: rvGenerate, key: () => { const v = rvVoice(); return `reverb|${REVERB.rev.slice(0, 7)}|${rv.variant || rvVariant()}|${reverbLang()}|${v.id}${rvVoiceTag(v)}`; } },
   server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
     generate: svGenerate, key: () => `server|${svVoice()?.id}|${svVoiceHash()}` }
 };
@@ -7585,6 +7706,8 @@ async function nSpeak(c, ci, pos, token, { single = false, jump = false } = {}){
     const check = svClipChecks.get(svClipURL(svVoice()));
     if (check) { await svClipVersion(svVoice()); if (token !== tts.token) return; }
   }
+  // (And a Reverb site voice's version, once per visit: E-50.)
+  if (ne === NEURAL.reverb && rvVoice().url) { await rvVersion(rvVoice()); if (token !== tts.token) return; }
   // (The same for a ZONOS3 site voice chosen while its version is still being checked: round 35 review.)
   if (ne === NEURAL.zonos) {
     const check = zn.checks.get(znVoice()?.url);
@@ -9144,7 +9267,8 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   VOICE_FILES: ['string', v => { VOICE_FILES = v; }],
   LIB_FILES: ['string', v => { LIB_FILES = v; }],
   ALLOW_CDN: ['boolean', v => { ALLOW_CDN = v; }],
-  REVERB: ['boolean', v => { REVERB_ON = v; }],   // (off: no Reverb voice, for a site its non-commercial licence doesn't fit: E-50)
+  REVERB: ['boolean', v => { REVERB_ON = v; }],
+  REVERB_VOICES: ['object', v => { REVERB_VOICES_SITE = rvVoicesConfig(v); }],   // (custom voices from the site's recordings: E-50)   // (off: no Reverb voice, for a site its non-commercial licence doesn't fit: E-50)
   TTS_SERVER: ['object', v => {
     if (typeof v.api !== 'string' || typeof v.voices !== 'string') throw new Error('needs "api" and "voices" paths');
     const dir = u => { const h = new URL(u, location.href).href; return h.endsWith('/') ? h : h + '/'; };
@@ -11039,18 +11163,19 @@ $('#setForm').addEventListener('change', e => {
 });
 $('#setDialog').addEventListener('close', () => { $('#setBtn').focus(); znRecStop(true); });
 
-/* Settings: the reader's own ZONOS3 voices (E-48), uploaded or recorded, kept in this browser. */
+/* Settings: the reader's own voices (E-48), uploaded or recorded, kept in this browser: for ZONOS3, and for Reverb with
+   the words said in them and their language (E-50). */
 const znMsg = t => { $('#znMsg').textContent = t; };
 function znOwnRender(){
   const ul = $('#znOwnList');
   if (!ul) return;
   ul.replaceChildren(...zn.own.map(o => {
     const li = document.createElement('li'), name = document.createElement('input');
-    name.type = 'text'; name.value = o.name; name.maxLength = 60; name.setAttribute('aria-label', `Name of ${o.name}`);
+    name.type = 'text'; name.className = 'zn-name'; name.value = o.name; name.maxLength = 60; name.setAttribute('aria-label', `Name of ${o.name}`);
     name.addEventListener('change', async () => {
       const n = name.value.trim() || o.name;
       const rec = await znDb.get(o.id).catch(() => null);
-      if (rec) { await znDb.put({ ...rec, name: n }).catch(() => {}); znMsg(`Renamed to ${n}.`); zn.focusAfter = [o.id, 'input']; await znOwnLoad(); }
+      if (rec) { await znDb.put({ ...rec, name: n }).catch(() => {}); znMsg(`Renamed to ${n}.`); zn.focusAfter = [o.id, '.zn-name']; await znOwnLoad(); }
     });
     const play = document.createElement('button'); play.type = 'button'; play.className = 'btn'; play.textContent = 'Play';
     play.setAttribute('aria-label', `Play ${o.name}`);
@@ -11068,6 +11193,9 @@ function znOwnRender(){
       await znDb.del(o.id).catch(() => {});
       // (Its embedding too: round 34 review, L-436.)
       zn.emb.delete('own|' + o.id); await znDb.delEmb('own|' + o.id).catch(() => {});
+      for (const k of await znDb.embKeys().catch(() => [])) if (typeof k === 'string' && k.startsWith(`rv|own|${o.id}|`)) await znDb.delEmb(k).catch(() => {});
+      for (const k of [...rv.made.keys()]) if (k.startsWith(`rv|own|${o.id}|`)) rv.made.delete(k);
+      if (rv.voice === 'own:' + o.id) { rv.voice = ''; store.set('spine:reverbVoice', ''); }
       // (And the speech saved in it: your decision, round 39 review, L-448.)
       const mine = k => typeof k === 'string' && k.includes(`|own:${o.id}|`);
       for (const k of [...n.cache.keys()]) if (mine(k)) n.cache.delete(k);
@@ -11076,7 +11204,28 @@ function znOwnRender(){
       const i = zn.own.findIndex(x => x.id === o.id), next = zn.own[i + 1] || zn.own[i - 1];
       znMsg(`Deleted ${o.name}.`); zn.focusAfter = next ? [next.id, '.zn-del'] : [null, '#znUpload']; await znOwnLoad();
     });
-    li.append(name, `${o.seconds ? Math.round(o.seconds) + ' s' : ''}`, play, del);
+    // (Reverb copies a voice from a recording and its words: E-50. A change makes the voice again.)
+    const words = document.createElement('input'), lang = document.createElement('select'), line = document.createElement('span');
+    words.type = 'text'; words.className = 'zn-text'; words.value = o.text || ''; words.maxLength = 1000; words.placeholder = 'The words said in it (for Reverb)';
+    words.setAttribute('aria-label', `Words said in ${o.name}`);
+    lang.className = 'zn-lang'; lang.setAttribute('aria-label', `Language of ${o.name}`);
+    lang.replaceChildren(...REVERB_LANGS.map(l => { const op = new Option(l, l); op.selected = l === (o.lang || 'en'); return op; }));
+    const edit = async () => {
+      const rec = await znDb.get(o.id).catch(() => null);
+      if (!rec) return;
+      await znDb.put({ ...rec, text: words.value.trim(), lang: lang.value }).catch(() => {});
+      for (const k of await znDb.embKeys().catch(() => [])) if (typeof k === 'string' && k.startsWith(`rv|own|${o.id}|`)) await znDb.delEmb(k).catch(() => {});
+      for (const k of [...rv.made.keys()]) if (k.startsWith(`rv|own|${o.id}|`)) rv.made.delete(k);
+      // (Reverb's speech saved in it, which won't be played again: ZONOS3's doesn't depend on the words.)
+      const old = k => typeof k === 'string' && k.startsWith('reverb|') && k.includes(`|own:${o.id}|`);
+      for (const k of [...n.cache.keys()]) if (old(k)) n.cache.delete(k);
+      await clipStore.removeWhere(old).catch(() => {});
+      znMsg(words.value.trim() ? `${o.name}: its words kept; Reverb lists it.` : `${o.name}: without its words, Reverb doesn't list it.`);
+      zn.focusAfter = [o.id, '.zn-text']; await znOwnLoad();
+    };
+    words.addEventListener('change', edit); lang.addEventListener('change', edit);
+    line.className = 'zn-words'; line.append(words, lang);
+    li.append(name, `${o.seconds ? Math.round(o.seconds) + ' s' : ''}`, play, del, line);
     li.dataset.id = o.id;
     return li;
   }));
@@ -11087,7 +11236,7 @@ function znOwnRender(){
   if (f) (f[0] ? ul.querySelector(`li[data-id="${f[0]}"] ${f[1]}`) : $(f[1]))?.focus();
 }
 // A recording kept as a voice, after checking the browser can decode it (and how long it is).
-async function znOwnAdd(blob, file, name){
+async function znOwnAdd(blob, file, name, text = ''){
   let seconds = 0;
   // (Not decoded whole when far longer than a voice needs: an hour's audiobook would be: round 34 review, L-438.)
   if (blob.size > ZN_CLIP_MAX) { znMsg(`${file} is too large (${Math.round(blob.size / 1048576)} MB): a recording of 5–15 seconds is all a voice needs.`); return false; }
@@ -11097,10 +11246,10 @@ async function znOwnAdd(blob, file, name){
   } catch { znMsg(`${file} isn't a recording this browser can play.`); return false; }
   if (seconds < 1) { znMsg('That recording is too short: 5–15 seconds of speech works best.'); return false; }
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  try { await znDb.put({ id, name: (name || 'My voice').slice(0, 60), file, blob, type: blob.type, seconds, created: Date.now() }); }
+  try { await znDb.put({ id, name: (name || 'My voice').slice(0, 60), file, blob, type: blob.type, seconds, created: Date.now(), text, lang: 'en' }); }
   catch (e) { znMsg(`The voice couldn't be kept in this browser: ${e.message}`); return false; }
-  zn.focusAfter = [id, 'input'];
-  znMsg(`Added ${name}${seconds > 60 ? ' (only its first 60 seconds are used)' : seconds > 20 ? ' (5–15 seconds works best)' : ''}. Choose it among ZONOS3's voices.`);
+  zn.focusAfter = [id, '.zn-name'];
+  znMsg(`Added ${name}${seconds > 60 ? ' (only its first 60 seconds are used)' : seconds > 20 ? ' (5–15 seconds works best)' : ''}. Choose it among ZONOS3's voices${text ? " or Reverb's" : "; for Reverb, give the words said in it"}.`);
   await znOwnLoad();
   return true;
 }
@@ -11171,7 +11320,9 @@ $('#znKeep').addEventListener('click', async () => {
   if (!znRec.blob || znRec.saving) return;
   const ext = /mp4|aac/.test(znRec.blob.type) ? 'm4a' : /ogg/.test(znRec.blob.type) ? 'ogg' : 'webm', gen = znRec.gen;
   znRec.saving = true;
-  try { if (await znOwnAdd(znRec.blob, `recording.${ext}`, $('#znName').value.trim() || 'My voice') && gen === znRec.gen) znRecStop(true); }   // (not a take begun meanwhile: round 35 review)
+  // (Its words are the passage shown, for Reverb: E-50.)
+  const said = $('.zn-read i').textContent.replace(/^[“"]|[”"]$/g, '').trim();
+  try { if (await znOwnAdd(znRec.blob, `recording.${ext}`, $('#znName').value.trim() || 'My voice', said) && gen === znRec.gen) znRecStop(true); }   // (not a take begun meanwhile: round 35 review)
   finally { znRec.saving = false; }
 });
 znOwnLoad();
@@ -11190,6 +11341,7 @@ function configNow(){
     ADDITIONAL_FONTS: v('ADDITIONAL_FONTS') ? parseFontList(v('ADDITIONAL_FONTS')).map(f => f.name + (f.axes ? ':' + f.axes : '')) : [],
     MATH_DELIMITERS: v('MATH_DELIMITERS'),
     ZONOS_VOICES: v('ZONOS_VOICES') ? znVoiceList(v('ZONOS_VOICES')).map(({ name, url }) => ({ name, url })) : [],
+    REVERB_VOICES: REVERB_VOICES_SITE.map(({ name, url, text, language }) => ({ name, url, ...(text ? { text } : {}), language })),
     KEEP_POSITIONS_DAYS: v('KEEP_POSITIONS_DAYS'), SEARCH_MAX: v('SEARCH_MAX'), COMIC_PART: v('COMIC_PART'),
     TTS_SERVER: { api: here(TTS_SERVER.api), voices: here(TTS_SERVER.voices) }, FULL_PRECISION: v('FULL_PRECISION'),
     LOOKAHEAD_SEC: v('LOOKAHEAD_SEC'), SAVED_AUDIO_MB: v('SAVED_AUDIO_MB'), NCACHE_SEC, SPAN_MAX: { ...SPAN_MAX },

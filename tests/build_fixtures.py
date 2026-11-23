@@ -145,6 +145,23 @@ export const tgpu = { async init(opts) {
   return { device: { lost } };
 } };
 export function initRunntime(root) { window.reverbFake.runntime = !!root; }
+// (Decoded by the browser, resampled to the rate asked for, mono.)
+export async function decodeAudio(data, sampleRate = 16000) {
+  const buf = await new OfflineAudioContext(1, 1, sampleRate).decodeAudioData(data);
+  return buf.getChannelData(0);
+}
+// The voice maker: window.reverbFakeMakerFail makes fromRecording fail; window.reverbFakeMakeSlow delays it.
+export async function createVoiceMaker(config, { cache } = {}) {
+  const f = window.reverbFake;
+  f.makers = (f.makers || 0) + 1;
+  f.makerCodec = config.codecPath; f.makerCache = cache?.name;
+  return { minSeconds: 1, maxSeconds: 30, async fromRecording(samples, o) {
+    f.made = [...(f.made || []), { seconds: Math.round(samples.length / o.sampleRate * 10) / 10, rate: o.sampleRate, transcript: o.transcript, language: o.language }];
+    await wait(window.reverbFakeMakeSlow || 20);
+    if (window.reverbFakeMakerFail) throw Object.assign(new Error(window.reverbFakeMakerFail), { code: 'INVALID_ARGUMENT' });
+    return { codes: new Int32Array(8 * 3).fill(7), frames: 3, transcript: o.transcript, language: o.language, speechFrames: 3 };
+  } };
+}
 export function createOpfsCache(name) { window.reverbFake.cacheName = name; return { name }; }
 export async function createTextToSpeech(opts, { cache, onBytes } = {}) {
   const f = window.reverbFake;
@@ -314,6 +331,14 @@ def main():
             (models / "NOTICE.txt").write_text("fetch-reverb.sh\n")
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
         (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/"}))
+    # Site voices from recordings (REVERB_VOICES): one with its words, one with a .txt beside it, one with neither.
+    (SITE / "reverb-voices").mkdir()
+    os.symlink(REPO / "index.html", SITE / "reverb-voices" / "index.html")
+    (SITE / "tts-voices" / "teller.txt").write_text("Words beside the teller.\n")
+    (SITE / "reverb-voices" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB_VOICES": [
+        {"name": "Site narrator", "url": "/tts-voices/narrator.wav", "text": "The narrator's words.", "language": "fr"},
+        {"name": "Teller", "url": "/tts-voices/teller.wav"}, {"name": "No words", "url": "/tts-voices/second.wav"},
+        {"name": "Bad", "url": "ftp://x/y.wav"}, {"name": "Klingon", "url": "/x.wav", "language": "tlh"}]}))
     (SITE / "reverb-off").mkdir()
     os.symlink(REPO / "index.html", SITE / "reverb-off" / "index.html")
     (SITE / "reverb-off" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB": False}))
@@ -1581,6 +1606,7 @@ def main():
         os.utime(SITE / folder / "voice.wav", (1700000000, 1700000000))
         (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "ZONOS_VOICES": "Here = voice.wav"}))
     wav(SITE / "tts-voices" / "second.wav", 1.5)
+    wav(SITE / "tts-voices" / "teller.wav", 1.8)   # (a Reverb site voice, its words in teller.txt: E-50)
     (SITE / "tts-voices" / "voices.json").write_text(json.dumps({"voices": [
         {"id": "narrator", "name": "Test narrator", "ref_audio": "narrator.wav", "ref_text": "A test clip.", "seed": 42, "cfg_scale": 1.0},
         {"id": "second", "name": "Second narrator", "ref_audio": "second.wav", "ref_text": "Another clip.", "seed": 42},

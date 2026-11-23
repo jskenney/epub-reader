@@ -310,9 +310,9 @@ test('ZONOS3: a voice uploaded in Settings is kept, listed first and used; a fil
   await p.waitForFunction(() => /notes\.txt isn't a recording this browser can play/.test(document.querySelector('#znMsg').textContent));
   await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
   await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
-  assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['narrator']);
+  assert.deepEqual(await p.$$eval('#znOwnList input.zn-name', is => is.map(i => i.value)), ['narrator']);
   // Renamed in Settings, then chosen in the read-aloud bar.
-  await p.fill('#znOwnList input', 'Me reading'); await p.locator('#znOwnList input').dispatchEvent('change');
+  await p.fill('#znOwnList input.zn-name', 'Me reading'); await p.locator('#znOwnList input.zn-name').dispatchEvent('change');
   await p.waitForFunction(() => /Renamed to Me reading/.test(document.querySelector('#znMsg').textContent));
   await p.click('#setClose');
   await p.keyboard.press('r');
@@ -344,7 +344,7 @@ test('ZONOS3: a voice recorded in Settings with the microphone is kept and liste
   await p.fill('#znName', 'Recorded');
   await p.click('#znKeep');
   await p.waitForFunction(() => /Added Recorded/.test(document.querySelector('#znMsg').textContent), null, { timeout: 10000 });
-  assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['Recorded']);
+  assert.deepEqual(await p.$$eval('#znOwnList input.zn-name', is => is.map(i => i.value)), ['Recorded']);
   assert.equal(await p.isHidden('#znRec'), true);
 });
 
@@ -395,7 +395,7 @@ test('ZONOS3: Settings closed while the browser asks for the microphone records 
   await p.waitForTimeout(1000);
   assert.equal(await p.isVisible('#znStop'), true, 'the new take is recording');
   assert.equal(await live(), 1);
-  assert.deepEqual(await p.$$eval('#znOwnList input', is => is.map(i => i.value)), ['After'], 'saved once');
+  assert.deepEqual(await p.$$eval('#znOwnList input.zn-name', is => is.map(i => i.value)), ['After'], 'saved once');
   await p.click('#znStop');
 });
 
@@ -524,7 +524,7 @@ test('ZONOS3, your voices: messages stay without WebGPU, focus stays in the list
   await p.setInputFiles('#znFile', require('node:path').join(__dirname, 'site', 'tts-voices', 'narrator.wav'));
   await p.waitForFunction(() => /Added narrator/.test(document.querySelector('#znMsg').textContent));
   assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Name of narrator');
-  await p.fill('#znOwnList input', 'Me'); await p.locator('#znOwnList input').dispatchEvent('change');
+  await p.fill('#znOwnList input.zn-name', 'Me'); await p.locator('#znOwnList input.zn-name').dispatchEvent('change');
   await p.waitForFunction(() => /Renamed to Me/.test(document.querySelector('#znMsg').textContent));
   assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Name of Me');
 });

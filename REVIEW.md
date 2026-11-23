@@ -898,7 +898,16 @@ whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache
   each request, text spelled out by Verbalis; saved speech keyed by revision, weights, language and voice; a lost GPU
   stops it with the reason (a reload restarts it); `SPAN_MAX.reverb` 400; Generate config gives `REVERB` and
   `readAloud: "reverb"`; README sections (the voice, self-hosting, settings, upgrading, licence). 10 tests with a
-  stand-in engine (`tests/reverb.test.js`). Custom voices (below) are next.
+  stand-in engine (`tests/reverb.test.js`) (`f5eaf39`).
+  **Custom voices built** (the commit after `f5eaf39`): your own (Settings' "Your voices", now shared by ZONOS3 and
+  Reverb: each with its words and language; a recording made there takes the passage read) and the site's,
+  `REVERB_VOICES` in reader-config.json (`{"name", "url", "text", "language"}`, the words from a `.txt` beside the
+  recording when `text` is left out; not a Settings field, so that a list with words needn't fit one line). Made once on
+  the GPU by `createVoiceMaker().fromRecording` with the codec already loaded, the words spelled out in the recording's
+  own language (runntime spells the voice's words in the book's), kept in the browser beside ZONOS3's embeddings, keyed
+  by the words, the language and a site recording's version; deleting or changing a voice of your own deletes what was
+  made from it, and the speech saved in it. A recording too short or too long for the voice maker, or without words,
+  stops reading with the reason. Tests with the stand-in's voice maker.
 
 Limits: no Chinese, Japanese or the like (ZONOS3 stays for those); not streamed, but quick; very new (the repo dates
 from 19 November 2026, `runntime` 0.3.1), so pinned and checked as ZONOS3's engine is. Tests with a stand-in engine, as

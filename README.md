@@ -496,6 +496,13 @@ site as the reader.
   `tools/build-reverb-engine.sh`). **Its weights are [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
   non-commercial use only, with attribution** ("Reverb-TTS by Software Mansion"). It is offered by default; a
   commercial site should turn it off with `"REVERB": false` in `reader-config.json`.
+  **Custom voices** (listed first among Reverb's voices): Reverb copies a voice from a recording *and the words said
+  in it*. Your own voices in Settings ("Your voices", shared with ZONOS3) are listed once their words and language
+  are given there; one recorded in Settings reads the passage shown, so it has them already. A site lists its own in
+  `REVERB_VOICES` in `reader-config.json`, each with its words in `"text"` or in a `.txt` file of the same name beside
+  the recording. The first time a voice is used, its recording becomes a voice on the GPU (a second or two) and the
+  reader keeps it in the browser, so it isn't made again; changing its words makes it again. 3–15 seconds of clean
+  speech from one speaker works best, its words exactly as said.
 - Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
   any of three with the same API:
   - Breeze TTS 2 ([jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server)):
@@ -994,6 +1001,7 @@ default books and the memory and request sizes stay the site's to set.
 | `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/`, `pocket/`, `zonos/` and `reverb/` folders are (the ZONOS3 and Reverb engines, `zonos/engine/` and `reverb/engine/`, are always loaded from there, so they must exist there). `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
+| `REVERB_VOICES` ✓ | `[]` | Reverb voices from this site's recordings, listed first among Reverb's voices: `[{"name": "Narrator", "url": "/voices/narrator.wav", "text": "The words said in it.", "language": "en"}]`. `text` left out: the words are read from a `.txt` of the same name beside the recording (`/voices/narrator.txt`). `language` is the recording's, one of `en de fr es it pl pt` (default `en`). An address on this site, or on another that allows cross-origin reads; a recording replaced at the same address (a new ETag or date) makes a new voice. A bad entry is left out with a warning in the console. Not in Settings: readers add their own under "Your voices". |
 | `REVERB` ✓ | `true` | `false` takes the Reverb voice away (its option says "off on this site"): its weights are CC BY-NC 4.0, so turn it off on a commercial site. |
 | `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
