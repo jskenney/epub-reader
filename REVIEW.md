@@ -885,6 +885,9 @@ whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache
   (`ec79fa4`, `2fed7d5`): the API in the same process as the model, the studio, speech-to-text, `make-voice.sh`, the
   proxy examples and the Mac scripts; 21 tests with a stand-in; checked with the real model on the CPU (preset voices,
   a clip in another language, previews, `make-voice.sh`). Not yet built as a Docker image here (no GPU or Docker).
+  **Browser engine built** (`e929ea5`, `617ebd3`): `reverb/engine/reverb.js`, reproducible from the pinned npm releases;
+  checked in headless Chromium (WebGPU on SwiftShader) with the int4 model served from the site: it loaded (about 90 s
+  there) and spoke a preset voice, the text spelled out by Verbalis. The voice in the reader is next.
 
 Limits: no Chinese, Japanese or the like (ZONOS3 stays for those); not streamed, but quick; very new (the repo dates
 from 19 November 2026, `runntime` 0.3.1), so pinned and checked as ZONOS3's engine is. Tests with a stand-in engine, as
