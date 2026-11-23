@@ -127,6 +127,49 @@ export async function localFetch(path, init = {}) {
 """
 
 
+# A stand-in for Reverb's browser engine (reverb/engine/reverb.js): the same exports the reader uses, no WebGPU. It
+# records what it was asked in window.reverbFake; window.reverbFakeFail makes loading fail; window.reverbLose(msg)
+# loses the GPU; text with FAILME is refused. Verbalizer spells out digits, as Verbalis would.
+REVERB_FAKE = r"""
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+export class Verbalizer {
+  constructor(lang) { if (!['de', 'en', 'es', 'fr', 'it', 'pl', 'pt'].includes(lang)) throw new Error('no ' + lang); this.lang = lang; }
+  process(text) { return text.replace(/\d/g, d => (this.lang === 'en' ? WORDS[d] : this.lang + d)); }
+}
+export const tgpu = { async init(opts) {
+  let lose;
+  const lost = new Promise(r => { lose = r; });
+  window.reverbLose = message => lose({ message });
+  (window.reverbFake ??= { requests: [] }).gpuOpts = opts;
+  return { device: { lost } };
+} };
+export function initRunntime(root) { window.reverbFake.runntime = !!root; }
+export function createOpfsCache(name) { window.reverbFake.cacheName = name; return { name }; }
+export async function createTextToSpeech(opts, { cache, onBytes } = {}) {
+  const f = window.reverbFake;
+  f.loads = (f.loads || 0) + 1;
+  f.opts = { modelPath: opts.modelPath, codecPath: opts.codecPath, tokenizerPath: opts.tokenizerPath, dtype: opts.dtype ?? null };
+  f.cache = cache?.name;
+  for (let i = 0; i < 4; i++) { onBytes?.(50 * 1048576); await wait(20); }
+  if (window.reverbFakeFail) throw new Error(window.reverbFakeFail);
+  return {
+    sampleRate: 24000,
+    async synthesize(text, voice, o = {}) {
+      if (!(voice.codes instanceof Int32Array)) throw new Error('codes must be an Int32Array');
+      const spoken = opts.verbalize(text, voice.language);
+      f.requests.push({ text, spoken, language: voice.language, transcript: voice.transcript, frames: voice.frames, speechFrames: voice.speechFrames, seed: o.seed });
+      if (text.includes('FAILME')) throw Object.assign(new Error('refused'), { code: 'TEXT_TOO_LONG' });
+      await wait(window.reverbFakeSlow || 30);
+      const n = Math.round(24000 * (0.3 * text.split(/\s+/).length + 0.2)), out = new Float32Array(n);
+      for (let i = 0; i < n; i++) out[i] = 0.1 * Math.sin(i * 0.05);
+      return out;
+    }
+  };
+}
+"""
+
+
 def xhtml(title, body, head="", lang="en"):
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="{lang}">
@@ -250,6 +293,30 @@ def main():
     os.symlink(REPO / "zonos" / "engine", reader / "zonos" / "engine")
     (SITE / "zonos-fake").mkdir()
     (SITE / "zonos-fake" / "engine.js").write_text(ZONOS_FAKE)
+    # Reverb's engine (part of the reader) without its models, and a stand-in engine (SPINE_TEST.reverbEngine: E-50).
+    (reader / "reverb").mkdir()
+    os.symlink(REPO / "reverb" / "engine", reader / "reverb" / "engine")
+    (SITE / "reverb-fake").mkdir()
+    (SITE / "reverb-fake" / "reverb.js").write_text(REVERB_FAKE)
+    # Self-hosted Reverb files (stand-ins): a finished int4 download (fetch-reverb.sh writes NOTICE.txt last), one
+    # that stopped partway, and a site that turns the voice off (REVERB: false: its weights are non-commercial).
+    for folder, done in (("reverb-local", True), ("reverb-partial", False)):
+        models = SITE / folder / "reverb" / "models"
+        for d in ("model/runntime/int4", "codec", "voices"):
+            (models / d).mkdir(parents=True)
+        (models / "model" / "tokenizer.json").write_text("{}")
+        (models / "model" / "runntime" / "int4" / "model.safetensors").write_bytes(b"\0" * 64)
+        (models / "codec" / "model.safetensors").write_bytes(b"\0" * 64)
+        for v in ("en_female_narrator", "en_male_narrator_1", "fr_female_standard"):
+            (models / "voices" / f"{v}.json").write_text(json.dumps({"name": v, "language": v[:2], "transcript": f"Local {v}.",
+                "frames": 3, "duration": 0.12, "speech_frames": 3, "codes": list(range(24))}))
+        if done:
+            (models / "NOTICE.txt").write_text("fetch-reverb.sh\n")
+        os.symlink(REPO / "index.html", SITE / folder / "index.html")
+        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/"}))
+    (SITE / "reverb-off").mkdir()
+    os.symlink(REPO / "index.html", SITE / "reverb-off" / "index.html")
+    (SITE / "reverb-off" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB": False}))
     # A folder whose config gives ZONOS3 voices from recordings: one there, one missing (E-48).
     (SITE / "zonos-voices").mkdir()
     os.symlink(REPO / "index.html", SITE / "zonos-voices" / "index.html")

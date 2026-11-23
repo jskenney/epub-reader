@@ -2,10 +2,11 @@
 # Download Reverb-TTS's files into ./reverb/models/ next to index.html, so the reader's Reverb voice loads them from this
 # site instead of huggingface.co (REVIEW.md E-50).
 #
-#   ./fetch-reverb.sh          the int4 model, the audio codec, the tokenizer and the 16 preset voices (about 385 MB):
-#                              what the reader uses by default
-#   ./fetch-reverb.sh --full   also the int8 and fp16 models (about 900 MB more), which the reader uses when
-#                              FULL_PRECISION is on (fp16 on a GPU with shader-f16, int8 otherwise)
+#   ./fetch-reverb.sh          what the reader uses by default (FULL_PRECISION on): the fp16 model (for GPUs with
+#                              shader-f16) and the int8 one (for the others), the audio codec, the tokenizer and the
+#                              16 preset voices (about 1.05 GB)
+#   ./fetch-reverb.sh --int4   the int4 model instead, for FULL_PRECISION off (about 385 MB)
+#   ./fetch-reverb.sh --all    every model (about 1.25 GB)
 #
 # Reverb's weights are CC BY-NC 4.0: non-commercial use only, with attribution (README: "Reverb").
 # The engine itself (reverb/engine/reverb.js) is part of the reader, built by tools/build-reverb-engine.sh.
@@ -22,12 +23,13 @@ CODEC=https://huggingface.co/software-mansion/higgs-audio-v2-tokenizer-Reverb/re
 DEST=reverb/models
 SUMS=checksums/reverb.sha256
 
-FULL=0 VERIFY=1
+SET=full VERIFY=1
 for arg in "$@"; do
   case "$arg" in
-    --full) FULL=1 ;;
+    --int4) SET=int4 ;;
+    --all) SET=all ;;
     --no-verify) VERIFY=0 ;;
-    *) echo "Unknown option: $arg (options: --full, --no-verify)" >&2; exit 2 ;;
+    *) echo "Unknown option: $arg (options: --int4, --all, --no-verify)" >&2; exit 2 ;;
   esac
 done
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
@@ -50,13 +52,17 @@ get() {   # get PATH-UNDER-DEST
   mv "$out.part" "$out"
 }
 
-echo "Reverb-TTS (revision ${REV:0:8}): $([ "$FULL" = 1 ] && echo 'every model, about 1.3 GB' || echo 'int4, about 385 MB')"
+case "$SET" in full) what='fp16 and int8, about 1.05 GB' ;; int4) what='int4, about 385 MB' ;; all) what='every model, about 1.25 GB' ;; esac
+echo "Reverb-TTS (revision ${REV:0:8}): $what"
 # NOTICE.txt is written only once every file is here and checked: the reader uses the folder only then.
 rm -f "$DEST/NOTICE.txt"
 bad=0
 while read -r hash path; do
   f=${path#"$DEST"/}
-  case "$f" in model/runntime/int8/*|model/safetensors/fp16/*) [ "$FULL" = 1 ] || continue ;; esac
+  case "$f" in
+    model/runntime/int4/*) [ "$SET" = full ] && continue ;;
+    model/runntime/int8/*|model/safetensors/fp16/*) [ "$SET" = int4 ] && continue ;;
+  esac
   get "$f"
   if [ "$VERIFY" = 1 ] && [ "$("${SHA[@]}" "$path" | cut -d' ' -f1)" != "$hash" ]; then
     echo "  BAD    $f (removed)"; rm -f "$path"; bad=1

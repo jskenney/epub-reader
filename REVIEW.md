@@ -887,7 +887,18 @@ whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache
   a clip in another language, previews, `make-voice.sh`). Not yet built as a Docker image here (no GPU or Docker).
   **Browser engine built** (`e929ea5`, `617ebd3`): `reverb/engine/reverb.js`, reproducible from the pinned npm releases;
   checked in headless Chromium (WebGPU on SwiftShader) with the int4 model served from the site: it loaded (about 90 s
-  there) and spoke a preset voice, the text spelled out by Verbalis. The voice in the reader is next.
+  there) and spoke a preset voice, the text spelled out by Verbalis.
+  **In the reader** (`a5ecbb1`, and the commit after it, below): "Reverb" in the read-aloud bar, for books in its 7
+  languages with WebGPU (the option says why not otherwise, or "off on this site" with `REVERB: false`); its 16 preset
+  voices listed at once, the book's language first; agreement to the download with its size, which follows
+  `FULL_PRECISION` (on, the reader's default: fp16 where the GPU has `shader-f16`, int8 otherwise; off: int4); the files
+  from `reverb/models/` when `fetch-reverb.sh` finished with those weights (default: fp16 and int8; `--int4`, `--all`),
+  else from Hugging Face, or a reason with `ALLOW_CDN` off; kept by runntime in the origin's private file system, with
+  ZONOS3's storage-quota warning and persistence request; the text's language and the voice's codes and transcript in
+  each request, text spelled out by Verbalis; saved speech keyed by revision, weights, language and voice; a lost GPU
+  stops it with the reason (a reload restarts it); `SPAN_MAX.reverb` 400; Generate config gives `REVERB` and
+  `readAloud: "reverb"`; README sections (the voice, self-hosting, settings, upgrading, licence). 10 tests with a
+  stand-in engine (`tests/reverb.test.js`). Custom voices (below) are next.
 
 Limits: no Chinese, Japanese or the like (ZONOS3 stays for those); not streamed, but quick; very new (the repo dates
 from 19 November 2026, `runntime` 0.3.1), so pinned and checked as ZONOS3's engine is. Tests with a stand-in engine, as

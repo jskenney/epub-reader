@@ -615,6 +615,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
           <option value="kokoro">Kokoro</option>
           <option value="pocket">Pocket</option>
           <option value="zonos">ZONOS3</option>
+          <option value="reverb">Reverb</option>
           <option value="server" hidden>Server</option>
         </select>
         <select id="ttsVoice" aria-label="Voice"></select>
@@ -736,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261117.1225</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.0200</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -5402,7 +5403,7 @@ ${chapters.map(([id]) => `  <itemref idref="${id}"/>`).join('\n')}
 const synth = window.speechSynthesis;
 const tts = { open: false, playing: false, doc: null, chunks: null, nodes: null, ci: 0, pos: 0, follow: true, token: 0,
   awaitChapter: false, rate: Math.min(2, Math.max(0.5, Number(store.get('spine:ttsRate')) || 1)), voiceURI: store.get('spine:ttsVoice') || '',
-  barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
+  barH: 0, utt: null, engine: ['device', 'kokoro', 'pocket', 'zonos', 'reverb', 'server'].includes(store.get('spine:ttsEngine')) ? store.get('spine:ttsEngine') : 'narration', mo: null };
 const TTS_SKIP = 'script,style,rt,rp,pre,noscript,template,math,[data-fn-ref],[data-footnotes],[hidden],[aria-hidden="true"],[data-spine-note],[data-ed-keep],#' + RID.end + ',' +
   ['footnote', 'endnote', 'rearnote', 'noteref', 'pagebreak'].map(t => `[epub\\:type~="${t}"],[*|type~="${t}"]`).join(',');
 const TTS_BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd,figcaption,caption,div,section,article,aside,header,footer,nav,body';
@@ -5957,12 +5958,15 @@ function ttsUpdateBar(status){
   const zo = eng.querySelector('[value="zonos"]');
   zo.disabled = !zonosFits();
   zo.textContent = !zonosGpu() ? 'ZONOS3 (needs WebGPU)' : zonosFits() ? 'ZONOS3' : "ZONOS3 (not in this book's language)";
+  const ro = eng.querySelector('[value="reverb"]');
+  ro.disabled = !reverbFits(); ro.hidden = !REVERB_ON && tts.engine !== 'reverb';
+  ro.textContent = !REVERB_ON ? 'Reverb (off on this site)' : !navigator.gpu ? 'Reverb (needs WebGPU)' : reverbFits() ? 'Reverb' : 'Reverb (en, de, fr, es, it, pl, pt)';
   const so = eng.querySelector('[value="server"]');
   so.hidden = !sv.available && tts.engine !== 'server'; so.disabled = !sv.available || !serverFits();
   so.textContent = !sv.available ? 'Server (unavailable)' : serverFits() ? 'Server'
     : sv.langs ? "Server (not in this book's language)" : 'Server (English and Chinese only)';
   const unusable = (tts.engine === 'narration' && !book?.hasOverlays) || (tts.engine === 'kokoro' && !kokoroFits()) ||
-    (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'zonos' && !zonosFits()) ||
+    (tts.engine === 'pocket' && !pocketLang()) || (tts.engine === 'zonos' && !zonosFits()) || (tts.engine === 'reverb' && !reverbFits()) ||
     (tts.engine === 'server' && (!sv.available || !serverFits()));
   const auto = unusable && tts.engine === 'narration';
   eng.value = auto ? 'device' : tts.engine;
@@ -5991,7 +5995,8 @@ function ttsUpdateBar(status){
   $('#ttsSaved').hidden = !(!tts.mo && neuralEngine());
   const ne = !tts.mo && neuralEngine();
   const want = !ne ? 'device' : ne === NEURAL.kokoro ? 'kokoro' : ne === NEURAL.pocket ? 'pocket:' + (pkReady() ? pk.lang : '')
-    : ne === NEURAL.zonos ? 'zonos:' + (znReady() ? zn.voices.length + ':' + bookLang() + ':' + znCustom().map(v => v.id + v.name).join() : '') : 'server:' + sv.voices.length;
+    : ne === NEURAL.zonos ? 'zonos:' + (znReady() ? zn.voices.length + ':' + bookLang() + ':' + znCustom().map(v => v.id + v.name).join() : '')
+    : ne === NEURAL.reverb ? 'reverb:' + reverbLang() : 'server:' + sv.voices.length;
   if ($('#ttsVoice').dataset.kind !== want) ttsFillVoices();
 }
 function ttsMeasureBar(){
@@ -6042,6 +6047,15 @@ function ttsFillVoices(){
     }));
     return;
   }
+  if (!tts.mo && neuralEngine() === NEURAL.reverb) {
+    // (The preset voices are known before the model loads: the book's language first, then the rest. Any voice
+    // reads any of the seven languages, with its own accent.)
+    const lang = reverbLang(), chosen = rvVoice().id;
+    sel.dataset.kind = 'reverb:' + lang; sel.disabled = false;
+    const vs = [...rv.voices].sort((a, b) => (b.lang === lang) - (a.lang === lang) || REVERB_LANGS.indexOf(a.lang) - REVERB_LANGS.indexOf(b.lang));
+    sel.replaceChildren(...vs.map(v => { const o = new Option(`${v.name} (${v.lang}, ${v.gender})`, v.id); o.selected = v.id === chosen; return o; }));
+    return;
+  }
   if (tts.engine === 'kokoro' && kokoroFits() && !tts.mo) {
     sel.dataset.kind = 'kokoro'; sel.disabled = false;
     // Best-rated first (the table is kept in grade order), with the grade in each label.
@@ -6087,6 +6101,7 @@ $('#ttsVoice').addEventListener('change', e => {
   if (e.target.dataset.kind === 'kokoro') { k.voice = e.target.value; store.set('spine:kokoroVoice', k.voice); }
   else if (e.target.dataset.kind.startsWith('pocket')) { pk.voice = e.target.value; store.set('spine:pocketVoice', pk.voice); }
   else if (e.target.dataset.kind.startsWith('zonos')) { zn.voice = e.target.value; store.set('spine:zonosVoice', zn.voice); }
+  else if (e.target.dataset.kind.startsWith('reverb')) { rv.voice = e.target.value; store.set('spine:reverbVoice', rv.voice); }
   else if (e.target.dataset.kind.startsWith('server')) { sv.voice = e.target.value; store.set('spine:serverVoice', sv.voice); svClipVersion(svVoice()); }
   else { tts.voiceURI = e.target.value; store.set('spine:ttsVoice', tts.voiceURI); }
   if (tts.playing) ttsGo(tts.ci, tts.pos); else ttsDropPaused();
@@ -6308,6 +6323,7 @@ function kSpeedCheck(ratio, ne){
   if (med > 1.15) {
     st.slowWarned = true;
     if (ne === NEURAL.server) showNotice('The voice server is generating speech slower than it plays, so there will be pauses between paragraphs.', 'error');
+    else if (ne === NEURAL.reverb) showNotice('Reverb is generating speech slower than it speaks on this device\'s GPU, so there will be pauses between paragraphs. Device voice has no pauses.', 'error');
     else if (ne === NEURAL.zonos) showNotice('ZONOS3 is generating speech slower than it speaks on this device\'s GPU, so there will be pauses between paragraphs. Device voice has no pauses.', 'error');
     else if (ne === NEURAL.pocket) showNotice('Pocket TTS runs on this device\'s CPU and is generating speech slower than it speaks, so there will be pauses between sentences. Device voice has no pauses.', 'error');
     else showNotice(k.device === 'wasm'
@@ -6946,6 +6962,142 @@ async function zonosSpeak(text, v, lang, ctl, opts, t0){
     return { data, rate, genSec: (performance.now() - t0) / 1000 };
 }
 
+/* ---------- Reverb-TTS (REVIEW.md E-50) ----------
+   Software Mansion's Reverb-TTS in the browser: runntime runs the model, its audio codec and its tokenizer on the GPU
+   with WebGPU (reverb/engine/reverb.js, built from npm releases by tools/build-reverb-engine.sh), and Verbalis spells
+   text out first (numbers, dates, money, units). 7 languages, 16 preset voices, 24 kHz; a passage is made whole. The
+   files come from reverb/models/ (fetch-reverb.sh) or Hugging Face, at pinned revisions, and are kept in the browser
+   (runntime's cache, in the origin's private file system). int4 weights (about 370 MB with the codec), or with
+   FULL_PRECISION fp16 weights and math (about 750 MB) on a GPU with shader-f16, int8 otherwise. The weights are
+   CC BY-NC 4.0 (non-commercial): a site can turn the voice off (REVERB: false). */
+const REVERB = {
+  rev: 'f5759ca1b6c4efc4a5b7113068560323730628a5',        // software-mansion/Reverb-TTS (fetch-reverb.sh's REV)
+  codecRev: 'e0d9ccd2935d7f953764a83b09444dc0677a44a0',   // its codec (CODEC_REV)
+  hub: 'https://huggingface.co/software-mansion/Reverb-TTS/resolve/f5759ca1b6c4efc4a5b7113068560323730628a5/',
+  codec: 'https://huggingface.co/software-mansion/higgs-audio-v2-tokenizer-Reverb/resolve/e0d9ccd2935d7f953764a83b09444dc0677a44a0/combined/safetensors/d8e8/model.safetensors',
+  // The weights by variant: the file (under the hub or reverb/models/) and MB of 1,048,576 bytes; the codec's MB.
+  models: { int4: ['model/runntime/int4/model.safetensors', 182], int8: ['model/runntime/int8/model.safetensors', 292],
+    f16: ['model/safetensors/fp16/model.safetensors', 567] },
+  codecMB: 184,
+  local: new URL('reverb/', voiceFilesBase()).href   // reverb/engine/ (part of the reader) and reverb/models/
+};
+const REVERB_LANGS = ['en', 'de', 'fr', 'es', 'it', 'pl', 'pt'];
+// The preset voices at that revision (voices/<id>.json): language, gender, style and a number where two share one.
+const REVERB_VOICES = ['en_female_narrator', 'en_male_narrator_1', 'en_male_narrator_2', 'en_female_whisper', 'en_male_angry',
+  'de_female_standard', 'de_male_standard', 'fr_female_standard', 'fr_male_standard', 'es_male_standard_1', 'es_male_standard_2',
+  'it_male_standard', 'it_male_expressive', 'pl_male_standard', 'pt_female_standard', 'pt_male_standard'];
+let REVERB_ON = true;   // reader-config.json REVERB: false turns it off
+const reverbLang = (tag = bookLang()) => { const p = String(tag).toLowerCase().split(/[-_]/)[0]; return REVERB_LANGS.includes(p) ? p : null; };
+const reverbFits = () => REVERB_ON && !!navigator.gpu && !!reverbLang();
+function rvVoiceOf(id){
+  const m = /^([a-z]{2})_(male|female)_([a-z]+)(?:_(\d+))?$/.exec(id);
+  return m ? { id, lang: m[1], gender: m[2], style: m[3], name: m[3][0].toUpperCase() + m[3].slice(1) + (m[4] ? ' ' + m[4] : '') } : { id, lang: '', gender: '', style: '', name: id };
+}
+const rv = { state: 'idle', R: null, root: null, tts: null, f16: false, variant: '', local: false, voices: REVERB_VOICES.map(rvVoiceOf),
+  data: new Map(), queue: Promise.resolve(), error: '', progressText: '', wantPlay: false, voice: store.get('spine:reverbVoice') || '' };
+const rvReady = () => rv.state === 'ready';
+// The chosen voice, else the first in the book's language, else the first.
+function rvVoice(){ const lang = reverbLang(); return rv.voices.find(v => v.id === rv.voice) || rv.voices.find(v => v.lang === lang) || rv.voices[0]; }
+// The weights FULL_PRECISION asks for, on this GPU (before the GPU is known, fp16 is assumed).
+const rvVariant = () => !FULL_PRECISION ? 'int4' : (rv.f16 || !rv.root) ? 'f16' : 'int8';
+const rvMB = () => Math.round(REVERB.models[rvVariant()][1] + REVERB.codecMB + 2);
+const rvBase = () => rv.local ? REVERB.local + 'models/' : REVERB.hub;
+async function rvLoad(){
+  if (rv.state === 'loading' || rvReady() || !reverbFits()) return;
+  rv.state = 'loading'; rv.progressText = 'Loading Reverb…'; ttsUpdateBar();
+  try {
+    if (rv.dead) throw new Error(rv.dead);
+    const url = window.SPINE_TEST?.reverbEngine || REVERB.local + 'engine/reverb.js';
+    if (!rv.R) {
+      try { rv.R = await import(url); }
+      catch (e) { throw new Error(`the Reverb engine couldn't be loaded from ${url} (reverb/engine/ in ${VOICE_FILES ? `VOICE_FILES, "${VOICE_FILES}"` : "this page's folder"}): ${e.message}`); }
+    }
+    const R = rv.R;
+    if (!rv.root) {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) throw new Error('WebGPU found no GPU to use');
+      rv.f16 = adapter.features.has('shader-f16');
+      rv.root = await R.tgpu.init({ device: { optionalFeatures: ['subgroups', 'shader-f16'] } });
+      R.initRunntime(rv.root);
+      // (A lost GPU can't be recovered here: only a reload starts it again.)
+      rv.root.device?.lost?.then(info => {
+        rv.dead = `the voice stopped working (${info?.message || 'the GPU was lost'}); reload the page to use it again`;
+        rv.state = 'error'; rv.error = rv.dead; rv.queue = Promise.resolve();
+        if (tts.open) ttsUpdateBar();
+      });
+    }
+    const variant = rvVariant(), [file, mb] = REVERB.models[variant];
+    // (This site's copy only when fetch-reverb.sh finished, NOTICE.txt last, and has these weights: int4 with --int4.)
+    rv.local = await allReal(REVERB.local + 'models/', ['NOTICE.txt', 'model/tokenizer.json', 'voices/en_female_narrator.json'])
+      && await realFile(REVERB.local + 'models/' + file, 'any', true);
+    if (!rv.local && !ALLOW_CDN) throw new Error(`the self-hosted Reverb files are missing (run fetch-reverb.sh${variant === 'int4' ? ' --int4' : ''}); ALLOW_CDN is off`);
+    const base = rvBase(), total = mb + REVERB.codecMB + 2;
+    let got = 0;
+    // (Before the first download of these weights: without room in the site's storage quota the browser can't keep a
+    // copy, so they would download on every visit, which is said up front; and the browser is asked once to keep this
+    // site's storage, as for ZONOS3.)
+    try {
+      if (!store.get(`spine:reverbLoaded:${variant}`)) {
+        const e = await navigator.storage.estimate(), free = e.quota - e.usage;
+        if (free < total * 1048576 * 1.05) showNotice(`This browser allows this site only ${Math.max(0, Math.round(free / 1048576))} MB more storage, less than Reverb's ${total} MB, so it can't keep a copy: the files will download on every visit (this site uses ${Math.round(e.usage / 1048576)} of its ${Math.round(e.quota / 1048576)} MB).${ZN_FREE}`, 'error');
+      }
+      if (!await navigator.storage.persisted() && !store.get('spine:reverbPersist')) { store.set('spine:reverbPersist', true); await navigator.storage.persist(); }
+    } catch {}
+    const cache = await Promise.resolve(R.createOpfsCache?.(`spine-reverb-${REVERB.rev.slice(0, 8)}`)).catch(() => undefined);
+    const verbalizers = {};
+    rv.tts = await R.createTextToSpeech({
+      modelPath: base + file, codecPath: rv.local ? base + 'codec/model.safetensors' : REVERB.codec, tokenizerPath: base + 'model/tokenizer.json',
+      dtype: variant === 'f16' ? 'f16' : rv.f16 ? undefined : 'f32',
+      // (Numbers, dates, money and units as words, in the text's language; text it can't read is left as it is.)
+      verbalize: (text, lang) => { try { return (verbalizers[lang] ??= new R.Verbalizer(lang)).process(text); } catch { return text; } }
+    }, { cache, onBytes: n => {
+      got += n;
+      rv.progressText = `Downloading Reverb${rv.local ? ' from this site' : ''}… ${Math.min(total, Math.round(got / 1048576))} of ~${total} MB`;
+      if (tts.open) ttsUpdateBar();
+    } });
+    rv.variant = variant; rv.state = 'ready';
+    store.set(`spine:reverbLoaded:${variant}`, true);
+    store.set(`spine:agreed:reverb:${FULL_PRECISION ? 'full' : 'int4'}`, true);   // the reader agreed to this download once
+  } catch (e) {
+    rv.state = 'error';
+    rv.error = rv.dead || (/webgpu|adapter|no gpu/i.test(e.message) ? `WebGPU isn't usable in this browser (${e.message})` : e.message);
+  }
+  ttsFillVoices(); nLoaded(rv);
+}
+// A preset voice's codes and transcript (voices/<id>.json), kept once loaded.
+function rvVoiceData(v){
+  if (!rv.data.has(v.id)) rv.data.set(v.id, (async () => {
+    const r = await fetch(rvBase() + `voices/${v.id}.json`);
+    if (!r.ok || looksHtml(r)) throw new Error(`the voice ${v.name} couldn't be loaded (${r.status})`);
+    const p = await r.json();
+    return { codes: Int32Array.from(p.codes), frames: p.frames, transcript: p.transcript, language: p.language, speechFrames: p.speech_frames };
+  })().catch(e => { rv.data.delete(v.id); throw e; }));
+  return rv.data.get(v.id);
+}
+function rvGenerate(text, opts = {}){
+  const run = async () => {
+    if (opts.signal?.aborted) throw staleError();
+    if (!rvReady()) throw transientError(rv.error || 'the voice stopped working');
+    const v = opts.snap?.rvVoice ?? rvVoice(), lang = reverbLang(opts.snap?.lang ?? bookLang()) || 'en';
+    const t0 = performance.now();
+    const voice = await rvVoiceData(v);
+    if (opts.signal?.aborted) throw staleError();
+    let data;
+    // (The text's language goes with the voice: any voice speaks any of the seven.)
+    try { data = await rv.tts.synthesize(text, { ...voice, language: lang }, { seed: 0 }); }
+    catch (e) {
+      if (opts.signal?.aborted) throw staleError();
+      if (rv.dead) throw transientError(rv.dead);
+      throw new Error(`Reverb couldn't speak this (${e.code || e.message})`);
+    }
+    if (opts.signal?.aborted) throw staleError();
+    return { data, rate: rv.tts.sampleRate, genSec: (performance.now() - t0) / 1000 };
+  };
+  const job = rv.queue.then(run, run);
+  rv.queue = job.catch(() => {});
+  return job;
+}
+
 /* ---------- Server voice ----------
    A text-to-speech API on this same site: Breeze TTS 2 (https://github.com/jskenney/epub-reader-tts-server) or
    ZONOS3-Mini (https://github.com/jskenney/epub-reader-tts-server-zonos3) behind a reverse
@@ -7182,6 +7334,10 @@ const NEURAL = {
   zonos: { name: 'ZONOS3', st: zn, ready: znReady, load: () => znLoad(), size: () => `~${ZONOS.mb} MB`, playbackSpeed: true, stream: true,
     agreed: () => !!store.get('spine:agreed:zonos'),
     generate: znGenerate, key: () => { const v = znVoice(); return `zonos|${ZONOS.commit.slice(0, 7)}|t${ZN_TEXT_V}|${zonosLang()}|${v?.id}${v?.url ? '|' + v.version : ''}`; } },
+  // (Saved speech is kept per weights: int4, int8 or fp16.)
+  reverb: { name: 'Reverb', st: rv, ready: rvReady, load: () => rvLoad(), size: () => `~${rvMB()} MB`, playbackSpeed: true,
+    agreed: () => !!store.get(`spine:agreed:reverb:${FULL_PRECISION ? 'full' : 'int4'}`),
+    generate: rvGenerate, key: () => `reverb|${REVERB.rev.slice(0, 7)}|${rv.variant || rvVariant()}|${reverbLang()}|${rvVoice().id}` },
   server: { name: 'Server voice', st: sv, ready: () => sv.state === 'ready' && sv.voices.length > 0, load: () => svLoad(), auto: true, playbackSpeed: true, stream: true, agreed: () => true,
     generate: svGenerate, key: () => `server|${svVoice()?.id}|${svVoiceHash()}` }
 };
@@ -7189,6 +7345,7 @@ function neuralEngine(){
   if (tts.engine === 'kokoro' && kokoroFits()) return NEURAL.kokoro;
   if (tts.engine === 'pocket' && pocketLang()) return NEURAL.pocket;
   if (tts.engine === 'zonos' && zonosFits()) return NEURAL.zonos;
+  if (tts.engine === 'reverb' && reverbFits()) return NEURAL.reverb;
   if (tts.engine === 'server' && sv.available && serverFits()) return NEURAL.server;
   return null;
 }
@@ -7296,7 +7453,7 @@ function textWeights(text){
 function nSynth(ne, text){
   // The settings the audio is made with, taken now, with its key: a speed or voice changed while the passage
   // waits its turn must not make audio saved under the old key (REVIEW.md L-50).
-  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice(), lang: bookLang() };
+  const snap = { rate: tts.rate, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), rvVoice: rvVoice(), svVoice: svVoice(), lang: bookLang() };
   const key = `${ne.key()}|${text}`;
   let e = n.cache.get(key);
   if (e) { n.cache.delete(key); n.cache.set(key, e); return e; }
@@ -7357,10 +7514,10 @@ function nCancelStale(keepKey){
 // Natural voices read whole paragraphs where possible (better phrasing than sentence by sentence):
 // a span runs from (ci, pos) through the following sentences of the same block, up to a length the
 // model handles in one go. Sentences stay the unit for highlighting, skipping and resuming.
-let SPAN_MAX = { kokoro: 350, pocket: 600, zonos: 600, server: 600 };
+let SPAN_MAX = { kokoro: 350, pocket: 600, zonos: 600, reverb: 400, server: 600 };
 function nSpan(ne, ci, pos, single = false, chunks = ttsChunks()){
   const c = chunks[ci], max = ne === NEURAL.kokoro ? SPAN_MAX.kokoro : ne === NEURAL.pocket ? SPAN_MAX.pocket
-    : ne === NEURAL.zonos ? SPAN_MAX.zonos : SPAN_MAX.server;
+    : ne === NEURAL.zonos ? SPAN_MAX.zonos : ne === NEURAL.reverb ? SPAN_MAX.reverb : SPAN_MAX.server;
   let cj = ci;
   while (!single && chunks[cj + 1] && chunks[cj + 1].b === c.b && chunks[cj + 1].e - pos <= max) cj++;
   return { ci, cj, pos, b: c.b, e: chunks[cj].e, ...speakable(c.b.text.slice(pos, chunks[cj].e)) };
@@ -7390,6 +7547,7 @@ function voiceSpeaks(ne, lang){
   const base = String(lang || '').toLowerCase().split(/[-_]/)[0];
   return ne === NEURAL.server ? (sv.langs ? sv.langs.includes(base) : /^(en|zh)$/.test(base))
     : ne === NEURAL.zonos ? !!zonosLang(lang)
+    : ne === NEURAL.reverb ? !!reverbLang(lang)
     : ne === NEURAL.kokoro ? base === 'en'
     : ne === NEURAL.pocket ? POCKET_LANGS[base]?.[0] === pk.lang : true;
 }
@@ -8236,7 +8394,7 @@ async function abRun(units, mode, target, format = 'aac'){
   const fmt = AB_FORMATS[format];
   const ne = neuralEngine(), b = book, rates = await abAacRates();   // (the encoder settings that work)
   if (ne === NEURAL.server) await svClipVersion(svVoice());   // (the clip's version is part of the saved audio's key)
-  const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice(), lang: bookLang() };
+  const snap = { rate: 1, kVoice: k.voice, pkVoice: pkVoice(), znVoice: znVoice(), rvVoice: rvVoice(), svVoice: svVoice(), lang: bookLang() };
   const keyBase = ne === NEURAL.kokoro ? `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|1` : ne.key();   // (always 1×)
   // (Each file's passages in its own language, keyed and sent so, the rest of the snapshot as it was when the export
   // began: round 34 review, L-433.)
@@ -8249,7 +8407,7 @@ async function abRun(units, mode, target, format = 'aac'){
   const langKeys = new Map([[snap.lang, [keyBase, snap]]]);
   const abInLang = lang => {
     if (!lang || ne === NEURAL.kokoro) return [keyBase, snap];
-    if (!langKeys.has(lang)) langKeys.set(lang, inLang(lang, () => [ne.key(), { ...snap, lang, pkVoice: pkVoice(), znVoice: znVoice(), svVoice: svVoice() }]));
+    if (!langKeys.has(lang)) langKeys.set(lang, inLang(lang, () => [ne.key(), { ...snap, lang, pkVoice: pkVoice(), znVoice: znVoice(), rvVoice: rvVoice(), svVoice: svVoice() }]));
     return langKeys.get(lang);
   };
   const cover = await abCover();
@@ -8986,6 +9144,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   VOICE_FILES: ['string', v => { VOICE_FILES = v; }],
   LIB_FILES: ['string', v => { LIB_FILES = v; }],
   ALLOW_CDN: ['boolean', v => { ALLOW_CDN = v; }],
+  REVERB: ['boolean', v => { REVERB_ON = v; }],   // (off: no Reverb voice, for a site its non-commercial licence doesn't fit: E-50)
   TTS_SERVER: ['object', v => {
     if (typeof v.api !== 'string' || typeof v.voices !== 'string') throw new Error('needs "api" and "voices" paths');
     const dir = u => { const h = new URL(u, location.href).href; return h.endsWith('/') ? h : h + '/'; };
@@ -9029,7 +9188,7 @@ const CONFIG_DEFAULTS = {   // name: [stored setting it defers to, check, apply]
   font: ['spine:face', v => FONTS.some(f => f.id === v) || /^g-[a-z0-9-]+$/.test(v), v => { fontFace = v; }],   // (g-: a font of ADDITIONAL_FONTS)
   fontSize: ['spine:font', v => typeof v === 'number' && v >= 70 && v <= 200, v => { fontPct = v; }],   // (the A−/A+ range)
   lineSpacing: ['spine:line', v => typeof v === 'number' && v >= 1 && v <= 2.6, v => { lineH = v; }],
-  readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(v), v => { tts.engine = v; }],
+  readAloud: ['spine:ttsEngine', v => ['device', 'kokoro', 'pocket', 'zonos', 'reverb', 'server'].includes(v), v => { tts.engine = v; }],
   shortcuts: ['spine:shortcuts', v => typeof v === 'boolean', v => { singleKeys = v; }],
 };
 async function loadConfig(){
@@ -9095,6 +9254,7 @@ async function loadConfig(){
   KOKORO.local = new URL('kokoro/', voiceFilesBase()).href;
   POCKET.local = new URL('pocket/', voiceFilesBase()).href;
   ZONOS.local = new URL('zonos/', voiceFilesBase()).href;
+  REVERB.local = new URL('reverb/', voiceFilesBase()).href;
 }
 
 /* ---------- editing (E-21) ----------
@@ -11022,7 +11182,7 @@ znOwnLoad();
 function configNow(){
   const v = name => SET_VARS[name] ? setShown(name) : null, here = h => { const u = new URL(h, location.href); return u.origin === location.origin ? u.pathname : u.href; };
   const c = {
-    DEFAULT_BOOK, BOOKSHELF, LIB_FILES, VOICE_FILES, ALLOW_CDN, CONTENTS_TITLE, NAVBAR_ICON, NAVBAR_LINK, NAVBAR_ALT, ...toolbarShown,
+    DEFAULT_BOOK, BOOKSHELF, LIB_FILES, VOICE_FILES, ALLOW_CDN, REVERB: REVERB_ON, CONTENTS_TITLE, NAVBAR_ICON, NAVBAR_LINK, NAVBAR_ALT, ...toolbarShown,
     ALLOW_REMOTE_CONTENT: v('ALLOW_REMOTE_CONTENT'), ALLOW_EXTERNAL_LINKS: v('ALLOW_EXTERNAL_LINKS'), EDITING, GET_URLS,
     SHOW_CONTENTS: v('SHOW_CONTENTS'), SHOW_PROGRESS: v('SHOW_PROGRESS'), SHOW_TOPBAR: v('SHOW_TOPBAR'),
     TIME_LEFT: v('TIME_LEFT'), SLEEP_TIMER: v('SLEEP_TIMER'), FORCE_LTR: v('FORCE_LTR'),
@@ -11047,7 +11207,7 @@ function configNow(){
   if (THEMES.includes(theme)) c.theme = theme;
   else if (themeById(theme)) c.theme = asSite(themeById(theme));
   Object.assign(c, { layout: ed.on && ed.prevLayout ? ed.prevLayout : layout, width: WIDTHS[widthStep][0], font: fontFace, fontSize: fontPct, lineSpacing: lineH });
-  if (['device', 'kokoro', 'pocket', 'zonos', 'server'].includes(tts.engine)) c.readAloud = tts.engine;
+  if (['device', 'kokoro', 'pocket', 'zonos', 'reverb', 'server'].includes(tts.engine)) c.readAloud = tts.engine;
   c.shortcuts = singleKeys;
   c.LOCKED = [...LOCKED];
   return JSON.stringify(c, null, 2) + '\n';

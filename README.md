@@ -481,12 +481,29 @@ site as the reader.
   Such voices catch a speaker's sound, but less of the exact recording than ZONOS3's
   server cloning; recordings stay in the browser; a recording on another site must
   allow cross-origin reads; recording needs an https: page.
+- Natural voice (Reverb-TTS, "Reverb" in the read-aloud bar): Software Mansion's
+  [Reverb-TTS](https://github.com/software-mansion-labs/Reverb-TTS) running in the browser on the GPU with
+  **WebGPU** (like ZONOS3, no CPU fallback). It reads books in 7 languages (English, German, French, Spanish,
+  Italian, Polish, Portuguese) with 16 preset voices, those in the book's language listed first (the list is there
+  before the download); any voice reads any of the seven, with its own accent. Numbers, dates, money and units are
+  spelled out in the book's language first (Verbalis). Each passage is made whole, then played; speed is applied at
+  playback. A one-time download after pressing Download: with full precision (`FULL_PRECISION`, the default) the
+  fp16 model on a GPU with 16-bit shaders (`shader-f16`), about 750 MB with its audio codec, or the int8 model on
+  other GPUs (about 480 MB); with it off, the int4 model (about 370 MB). The browser keeps its copy (in the site's
+  private file system), so later visits load it from there; as for ZONOS3, the reader says before downloading when
+  the site's storage quota has no room, and asks the browser once to keep the site's storage. Its engine is part of
+  the reader (`reverb/engine/reverb.js`, built from npm releases of runntime, TypeGPU and Verbalis by
+  `tools/build-reverb-engine.sh`). **Its weights are [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
+  non-commercial use only, with attribution** ("Reverb-TTS by Software Mansion"). It is offered by default; a
+  commercial site should turn it off with `"REVERB": false` in `reader-config.json`.
 - Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
-  either of two with the same API:
+  any of three with the same API:
   - Breeze TTS 2 ([jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server)):
     English and Chinese; the model and its output are for non-commercial use.
   - ZONOS3-Mini ([jskenney/epub-reader-tts-server-zonos3](https://github.com/jskenney/epub-reader-tts-server-zonos3)):
     43 languages, built-in voices, numbers and dates read properly; MIT and Apache-2.0.
+  - Reverb-TTS ([jskenney/epub-reader-tts-server-reverb](https://github.com/jskenney/epub-reader-tts-server-reverb)):
+    7 languages, 16 preset voices, voices cloned from a clip and its transcript; the weights are for non-commercial use.
 
   It appears in the read-aloud bar when `/tts/health` on the site root answers, for books in the languages the
   server lists there (English and Chinese for a server that lists none, as Breeze); the book's language is sent with
@@ -494,7 +511,7 @@ site as the reader.
   and managed in the server's voice studio at `/tts-studio/`. Setup, Docker Compose, reverse-proxy examples and the
   voice script are in each server's repository.
 - Natural voices read a whole paragraph at a time where they can (up to
-  about 350 characters for Kokoro and 600 for Pocket TTS and ZONOS3), which phrases
+  about 350 characters for Kokoro, 400 for Reverb and 600 for Pocket TTS and ZONOS3), which phrases
   better than sentence by sentence; the sentence and word highlights move
   through the paragraph as it plays. Device voices are listed with the
   vendors' higher tiers (Natural, Neural, Premium, Enhanced, Online) first.
@@ -519,7 +536,7 @@ site as the reader.
   silent clip plays alongside read-aloud. (iPhones and iPads stop device
   voices when the screen locks, whatever the page does.)
 - Audiobook export: the headphones button in the read-aloud bar makes
-  audiobooks with the natural voice chosen (Kokoro, Pocket, ZONOS3 or Server; the
+  audiobooks with the natural voice chosen (Kokoro, Pocket, ZONOS3, Reverb or Server; the
   device voice can't be recorded). Each chapter is read in its own language; one
   in a language the voice doesn't speak is read in the book's language, or, if
   the voice can't do that either, left out with a note. Tick the chapters you want (All / None,
@@ -724,6 +741,8 @@ Library versions and model revisions are pinned in two places each, which must a
 | ONNX Runtime (Pocket) | `POCKET.ort` | `ORT` in `fetch-pocket.sh` |
 | Pocket model | `POCKET.model` | `REV` in `fetch-pocket.sh` |
 | ZONOS3 models | `ZONOS.model` | `REV` in `fetch-zonos.sh` |
+| Reverb models | `REVERB.rev`, `REVERB.codecRev` (and `REVERB.models` if a file moves) | `REV`, `CODEC_REV` in `fetch-reverb.sh`; write `checksums/reverb.sha256` by hand (`sha256sum` of each file) |
+| Reverb engine (`reverb/engine/`) | (none) | the versions in `tools/reverb-engine/package.json` and its lock file; rebuild with `tools/build-reverb-engine.sh --write` (Node and npm), which also rewrites `checksums/reverb-engine.sha256` |
 | ZONOS3 engine (`zonos/engine/`) | `ZONOS.commit` | `ZONOS3_COMMIT` in `tools/build-zonos-engine.sh`; rebuild with `tools/build-zonos-engine.sh --write` (git, Node and pnpm), which also rewrites `checksums/zonos-engine.sha256` |
 
 To upgrade one:
@@ -765,7 +784,7 @@ Re-runs skip finished files, every file is checked against
 
 French isn't offered: its model bundle at this revision has no built-in
 voices (`voices.bin`), so it can't speak. French books are read by device
-voices, ZONOS3 in the browser (with WebGPU), or the server voice when its server lists French (as a ZONOS3 server does); Kokoro reads only English.
+voices, ZONOS3 or Reverb in the browser (with WebGPU), or the server voice when its server lists French (as a ZONOS3 server does); Kokoro reads only English.
 
 ## Self-hosting ZONOS3
 
@@ -792,6 +811,26 @@ downloaded: it isn't published anywhere to load from, and browsers start its wor
 site, so it must be served from the same site as `index.html` (under `VOICE_FILES`, like the other voice files).
 `tools/build-zonos-engine.sh` rebuilds it from ZONOS3-Mini's source at the pinned commit and checks it against
 `checksums/zonos-engine.sha256` (the build is reproducible).
+
+## Self-hosting Reverb
+
+```bash
+./fetch-reverb.sh            # for FULL_PRECISION on (the default): the fp16 and int8 models, about 1.05 GB
+./fetch-reverb.sh --int4     # for FULL_PRECISION off: the int4 model, about 385 MB
+./fetch-reverb.sh --all      # both, about 1.25 GB
+```
+
+This fills `./reverb/models/` with Reverb-TTS's files at pinned revisions of `software-mansion/Reverb-TTS` and its
+codec: the model weights, the audio codec, the tokenizer and the 16 preset voices, with a `NOTICE.txt` written last.
+The reader uses this site's copy only when `NOTICE.txt` is there and so are the weights it wants (fp16 or int8 for
+full precision, by the GPU; int4 otherwise); otherwise it loads them from Hugging Face (or, with `ALLOW_CDN` false,
+says to run the script). Re-runs skip finished files, every file is checked against `checksums/reverb.sha256`, and
+`reverb/models/` is git-ignored. Remember the weights' licence: CC BY-NC 4.0, non-commercial only.
+
+The engine (`reverb/engine/reverb.js`, about 1.2 MB, with `LICENSES.txt`) is part of the reader, served under
+`VOICE_FILES` like the other voice files. `tools/build-reverb-engine.sh` rebuilds it with esbuild from the npm
+packages pinned in `tools/reverb-engine/` and checks it against `checksums/reverb-engine.sha256` (the build is
+reproducible).
 
 ## Self-hosting the natural voice
 
@@ -823,7 +862,7 @@ is larger than GitHub's 100 MB file limit. Serve `.wasm` files as
 
 ### One copy of the voice files for several folders
 
-By default the reader looks for `kokoro/`, `pocket/` and `zonos/` next to the page it
+By default the reader looks for `kokoro/`, `pocket/`, `zonos/` and `reverb/` next to the page it
 was opened from. If `index.html` is linked (or copied) into several folders,
 for example one per book with its own `default.epub`, set `VOICE_FILES` near
 the top of `index.html` to the site path that holds them:
@@ -952,9 +991,10 @@ default books and the memory and request sizes stay the site's to set.
 |---|---|---|
 | `DEFAULT_BOOK` ✓ | `['default.epub', 'default.md']` | Opened when the address has no `?book=`: the first of these that is really there, from the same folder as `index.html` (an EPUB or comic must be a valid archive; a text, Markdown or HTML document mustn't be the site's "not found" page). Otherwise the built-in sample opens. A single name works too; names must be on the same site. |
 | `BOOKSHELF` ✓ | `'/bookshelf/'` | Site folder searched for a relative `?book=` path that isn't found next to `index.html`. |
-| `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/`, `pocket/` and `zonos/` folders are (ZONOS3's engine, `zonos/engine/`, is always loaded from there, so it must exist there). `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
+| `VOICE_FILES` ✓ | `''` | Where the self-hosted `kokoro/`, `pocket/`, `zonos/` and `reverb/` folders are (the ZONOS3 and Reverb engines, `zonos/engine/` and `reverb/engine/`, are always loaded from there, so they must exist there). `''` is this page's folder; set a site path such as `'/reader/'` when `index.html` is linked into several folders (see [One copy of the voice files](#one-copy-of-the-voice-files-for-several-folders)). |
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
+| `REVERB` ✓ | `true` | `false` takes the Reverb voice away (its option says "off on this site"): its weights are CC BY-NC 4.0, so turn it off on a commercial site. |
 | `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones (`?edit=` opens the document to read). |
@@ -979,11 +1019,11 @@ default books and the memory and request sizes stay the site's to set.
 | `TIME_LEFT` ✓ ⚙ | `false` | `true` shows the reading time left in the footer ("12 min left in chapter · 3 h 10 min in book"). |
 | `KEEP_POSITIONS_DAYS` ✓ ⚙ | `730` | Reading positions of books not opened for this many days are forgotten (checked once a day), in whole days (under one counts as one). `0` keeps them forever. Positions are kept per site, so the longest value any folder of the site has asked for applies (a folder's `0` keeps them all). The browser remembers that value, so lowering it later (or removing a folder's `0`) doesn't shorten it in browsers that have already run the page. A time a reader sets in Settings is used as it is, for the whole site (except in a folder that locks it). |
 | `TTS_SERVER` ✓ | `/tts/` and `/tts-voices/` on the site root | Where the Server voice's API and voice list are. Change both paths if your proxy serves them somewhere else; in a config file: `"TTS_SERVER": {"api": "/tts/", "voices": "/tts-voices/"}`. |
-| `FULL_PRECISION` ✓ ⚙ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. Readers can change it in Settings; with `ALLOW_CDN` false (or a policy that blocks the CDNs), Pocket TTS then needs both precisions self-hosted (`./fetch-pocket.sh` and `./fetch-pocket.sh --int8`), or it tells the reader to set it back. |
+| `FULL_PRECISION` ✓ ⚙ | `true` | Full-precision Kokoro and Pocket TTS models (best quality, larger downloads), and Reverb's fp16 model (int8 on a GPU without 16-bit shaders; off, int4). `false` uses the 8-bit models: Pocket TTS always, Kokoro on the CPU only (on WebGPU it stays full precision). Self-host them with `./fetch-pocket.sh --int8`. Readers can change it in Settings; with `ALLOW_CDN` false (or a policy that blocks the CDNs), Pocket TTS then needs both precisions self-hosted (`./fetch-pocket.sh` and `./fetch-pocket.sh --int8`), or it tells the reader to set it back. |
 | `LOOKAHEAD_SEC` ✓ ⚙ | `120` | Seconds of natural-voice audio prepared ahead of the passage being read, into the next chapters. Lower it to keep a laptop's CPU or GPU less busy. Whole seconds. |
 | `SAVED_AUDIO_MB` ✓ ⚙ | `500` | Finished natural-voice audio kept in the browser (IndexedDB) for rereading; the least recently used passages are dropped past this. About 170 MB per hour of audio. `0` saves nothing. Whole MB. |
 | `NCACHE_SEC` ✓ | `900` | Seconds of finished audio also kept in memory for instant replay. Lower it on low-memory devices (it never goes below twice `LOOKAHEAD_SEC` plus a minute, so prepared audio isn't dropped before it plays). |
-| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, ZONOS3 in the browser `600`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches Breeze's warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail (a ZONOS3 server, epub-reader-tts-server-zonos3, has no such limit). In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "zonos": 600, "server": 600}` (any of the four); a value outside 21–5000 is ignored. |
+| `SPAN_MAX` ✓ | Kokoro `350`, Pocket TTS `600`, ZONOS3 in the browser `600`, Reverb `400`, server `600` | Most characters sent to a natural voice in one request (a paragraph or part of one): sentences are joined up to it, and a single sentence longer than this is still sent on its own (sentences over 220 characters are first split at a comma or space). The server's limit matches Breeze's warmup profile in epub-reader-tts-server: raise it there first, or long paragraphs fail (a ZONOS3 server, epub-reader-tts-server-zonos3, has no such limit). In a config file: `"SPAN_MAX": {"kokoro": 350, "pocket": 600, "zonos": 600, "reverb": 400, "server": 600}` (any of the five); a value outside 21–5000 is ignored. |
 | `FONTS` | Literata and others | The reading-font menu. Each entry has an `id`, a `name`, a short `note` shown beside it, an optional `css` (a Google Fonts family spec, loaded when chosen) and a CSS font `stack`. |
 | `WIDTHS` | Narrow, Medium, Wide, Full | Text-width steps: a name, then the widest the text gets in the one-column layout and in the two-column layout (`null` for no limit). |
 | `SEARCH_MAX` ✓ ⚙ | `500` | Most search results listed. |
@@ -1033,7 +1073,7 @@ each with its own `default.epub`:
   (`"Narrow"`, `"Medium"`, `"Wide"`, `"Full"`), `font` (an id from `FONTS`,
   such as `"literata"`, or `g-` and the name of a font of `ADDITIONAL_FONTS` in lower case with hyphens, such as
   `"g-merriweather"`), `fontSize` (percent, 70–200), `lineSpacing`
-  (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"zonos"`, `"server"`) and
+  (1–2.6), `readAloud` (`"device"`, `"kokoro"`, `"pocket"`, `"zonos"`, `"reverb"`, `"server"`) and
   `shortcuts` (`false` starts with single-key shortcuts off).
 - `LOCKED`: a list of options readers can't change in this folder's
   Settings, such as `["ALLOW_REMOTE_CONTENT", "ALLOW_EXTERNAL_LINKS",
@@ -1108,7 +1148,7 @@ repository) is under the [MIT licence](LICENSE).
 
 The parts the fetch scripts download aren't part of this repository and keep
 their own licences, which the scripts save beside them (a `LICENSES/` folder
-with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/`, `pocket/` and `zonos/`;
+with the licence texts and a `NOTICE.txt` in `libs/`, `kokoro/`, `pocket/`, `zonos/` and `reverb/models/`;
 a `NOTICE.txt` in `fonts/`):
 
 - JSZip: MIT or GPLv3 (your choice); marked: MIT; Temml: MIT; highlight.js: BSD-3-Clause; gemoji: MIT; lamejs: LGPL-3.0 (a port of
@@ -1121,3 +1161,6 @@ a `NOTICE.txt` in `fonts/`):
 - Pocket TTS's model: CC-BY-4.0 (credit its authors when redistributing it);
   pocket-tts-js: MIT.
 - ZONOS3-Mini: its engine (`zonos/engine/`, with its `LICENSE` and `NOTICE`) MIT; its model Apache-2.0.
+- Reverb-TTS: its weights (and preset voices) **CC BY-NC 4.0, non-commercial only**, by Software Mansion; its code
+  Apache-2.0. The engine (`reverb/engine/reverb.js`) bundles runntime, TypeGPU, Verbalis and the Hugging Face
+  tokenizers (MIT and Apache-2.0; their texts in `reverb/engine/LICENSES.txt`).
