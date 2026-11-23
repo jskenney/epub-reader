@@ -25,3 +25,4 @@ reader-config.json
 /tests/site/
 /tests/node_modules/
 __pycache__/
+/tools/reverb-engine/node_modules/
