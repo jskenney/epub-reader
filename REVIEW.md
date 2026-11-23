@@ -881,6 +881,10 @@ whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache
   `reverb-tts` in fp16 on the GPU (594 MB; it computes in bfloat16 whatever the file), `/health` listing its 7
   languages and `"instructions": false`, voices from the voices folder's clips and their `ref_text`, the studio, in a
   repo of its own (your decision), apart from the Apache-licensed setups.
+  **Built** in [jskenney/epub-reader-tts-server-reverb](https://github.com/jskenney/epub-reader-tts-server-reverb)
+  (`ec79fa4`, `2fed7d5`): the API in the same process as the model, the studio, speech-to-text, `make-voice.sh`, the
+  proxy examples and the Mac scripts; 21 tests with a stand-in; checked with the real model on the CPU (preset voices,
+  a clip in another language, previews, `make-voice.sh`). Not yet built as a Docker image here (no GPU or Docker).
 
 Limits: no Chinese, Japanese or the like (ZONOS3 stays for those); not streamed, but quick; very new (the repo dates
 from 19 November 2026, `runntime` 0.3.1), so pinned and checked as ZONOS3's engine is. Tests with a stand-in engine, as
