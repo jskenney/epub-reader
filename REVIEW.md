@@ -877,9 +877,44 @@ content safety, one on Reverb, the licences and the scripts. Several fixes didn'
 own tests, which take its functions out of index.html and lacked the new data: helpers (the commit after `b8a76e2` gives
 them); run again: 8 of 8 pass.
 
+### Round 42
+
+A review of `b8a76e2` (round 41's fixes) by one reviewer on a copy of their own. The Reverb fixes, the sprite-by-fragment
+limit, the picture checks for the forms tested and the folder books held; but the content defences can still be got
+round, each way reproduced:
+- `<use href="#%6c5">`: the browser decodes the fragment, the count doesn't, so a 1 KB fan-out hangs the tab again
+  (H-64). A `<use>` of a whole file or data: SVG (no fragment) counts as one copy, though it draws the whole document:
+  2,000 such uses hang the tab (H-65).
+- Any heading, HTML-looking or `$$` line inside a list item stops the pre-pass counting while marked keeps the item going
+  (`- a`, `<b>x</b>`, then 60,000 lines: 19 s to open; the editor runs it on every change too) (H-66). One long line of
+  emphasis (`*a` 200,000 times, 400 KB) takes time with the square of its length in marked: 34 s, untouched by the
+  pre-pass (H-67).
+- data: pictures typed other than `image/…` (`application/octet-stream`, none, `text/plain`), or with `;base64` not last
+  in their type, are drawn by the browser but not checked (M-225); one over 8 MB of text is let through unchecked (M-226);
+  percent-encoded data: is decoded slowly (8 MB: 12 s) and again for each element and each pass (M-227). A huge picture
+  typed `audio/mpeg`, `font/…`, `text/css` or `image/svgz`, or named `.mp3`, `.woff`, `.css`, skips `pictureFits` but is
+  drawn (M-228).
+- `svgUseCap` now walks every page whole, with no `<use>`, at least twice (200,000 elements: about 0.3 s a time) (L-470);
+  a list followed by a block quote, or a table in a long item, is cut into a paragraph of pipes (L-471); a real code block
+  over 2,000 lines gets an empty line (L-472); Reverb's credits can't be reached where Settings is hidden
+  (`SHOW_SETTINGS_BUTTON: false`) (L-473); a page nested deeper than the count can follow loses its harmless `<use>`
+  elements (L-474).
+
+Findings: **High** H-64 to H-67. **Medium** M-225 to M-228. **Low** L-470 to L-474. All open (below).
+
+**What this shows.** Three rounds of fixes to the Markdown pre-pass and the `<use>` count have each been got round by the
+next review: both guess at what marked and the browser will do. Proposed instead, for your decision:
+- *Markdown:* parse in a Web Worker with a time limit (say 5 s; the reader already builds workers from blobs), and past it
+  show the document as plain text with a note. That bounds every slow construct in marked, the ones found and those not
+  yet found, and the pre-pass can go.
+- *SVG `<use>`:* resolve references as the browser does (fragments decoded; a reference without a fragment, or one that
+  can't be resolved, counted as its whole document), count with an explicit stack, and only on pages that have `<use>`.
+- *Pictures:* read the header of every resource whatever its type or name (blobs cost nothing; a site's files one
+  ranged request), and every data: picture whatever its type, decoding only its first bytes, once per address.
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Open (below): T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474) and proposes a sturdier approach for your decision (see Round 42). Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -889,6 +924,19 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-64 | `<use href="#%6c5">` (a percent-encoded fragment): the browser decodes it, `svgUseCap` doesn't, so a 1 KB fan-out hangs the tab (round 42). | High |
+| H-65 | A `<use>` of a whole SVG file or data: SVG (no fragment) counts as one copy but draws the whole document: 2,000 hang the tab (round 42). | High |
+| H-66 | A heading, HTML-looking (`<b>`, an autolink) or `$$` line inside a list item ends the pre-pass's count while marked keeps the item: 120 KB, 19 s to open; the editor runs it on each change (round 42). | High |
+| H-67 | One long line of emphasis (`*a` × 200,000, 400 KB) takes time with the square of its length in marked: 34 s, the tab busy after (round 42). | High |
+| M-225 | data: pictures typed other than `image/…`, or with `;base64` not last in the type, are drawn by the browser but their size isn't checked: a 20,000² PNG crashes the tab (round 42). | Medium |
+| M-226 | A data: picture over 8 MB of text is let through unchecked (round 42). | Medium |
+| M-227 | Percent-encoded data: is decoded a character at a time (8 MB: 12 s), for each element and each pass, uncached (round 42). | Medium |
+| M-228 | A huge picture typed `audio/mpeg`, `font/…`, `text/css` or `image/svgz`, or named `.mp3`, `.woff`, `.css`, skips `pictureFits` but `<img>` draws it (round 42). | Medium |
+| L-470 | `svgUseCap` walks every page whole, `<use>` or not, at least twice (200,000 elements: about 0.3 s a time) (round 42). | Low |
+| L-471 | The pre-pass keeps counting into a block quote after a list, and cuts a table in a long item into a paragraph of pipes (round 42). | Low |
+| L-472 | A real code block over 2,000 non-blank lines gets an empty line put in (round 42). | Low |
+| L-473 | Reverb's credits are in Settings only, which a site can hide (`SHOW_SETTINGS_BUTTON: false`); the offer still points there (round 42). | Low |
+| L-474 | A page nested deeper than `svgUseCap` can follow (20,000 levels) loses all its `<use>`, harmless or not (round 42). | Low |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | T-68 | Tests that can pass without testing: ZONOS3's "deleted while it is being made" (L-448) relies on a 400 ms sleep; M-210's Refresh test reads its place after 300 ms and never checks it moved from the start; L-447's (300/800 ms) and L-450's (500 ms) sleeps. | Tests |
 | [E-50](#e-50-reverb-tts-a-voice-in-the-browser-and-on-the-server) | Reverb-TTS: a voice in the browser (runntime, WebGPU; int4, fp16 with full precision) and on the server; custom voices with their words; weights non-commercial (off by default, a site can turn it on) | Enhancement |
