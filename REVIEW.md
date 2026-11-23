@@ -1,7 +1,7 @@
 # Code and security review
 
-Review of the repository (2026-11-17, rounds 34 to 39): `index.html` (about 11,100 lines), the fetch scripts,
-`tools/make-checksums.py`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
+Review of the repository (2026-11-17 to 2026-11-23, rounds 34 to 40): `index.html` (about 11,700 lines), the fetch scripts,
+`tools/make-checksums.py`, `tools/build-*-engine.sh`, `nginx.conf.example`, `.github/workflows/slow.yml`, the README and the test suite in
 `tests/`. Open items keep their IDs from earlier versions; new findings are numbered after the highest earlier ID
 in each group. Fixed items are listed under [Resolved](#resolved) with their commits.
 
@@ -778,9 +778,51 @@ note (L-449), and reading aloud doesn't prepare such a chapter ahead; a deleted 
 **Tests.** 549 tests at `8af8b21`, before the review: 543 pass, none fail. 557 at `e533c90`, after the fixes: 551 pass,
 none fail. 560 at `e67e6f6`, after your decisions: 554 pass, none fail. Six need `SLOW=1` or `NETWORK=1` each time.
 
+### Round 40
+
+A full review at `e1ad43e` (after E-50, Reverb-TTS, with Reverb now off by default), by three reviewers each on a copy
+of their own: one on reading aloud (every voice, Reverb against runntime 0.3.1's own code, saved speech, custom voices,
+the voice scripts), one on opening books, security, layout, themes and the editor, and one on Settings, the
+configuration, the scripts, the README and the tests. Each finding below was reproduced by a reviewer or checked
+against the code; H-59, M-213 and M-214 were checked again here. No way found for a book, a config or an address to
+run script, reach another site or leak data, and no resolved item back. What it found:
+- *Hostile files that freeze or crash the tab.* A Markdown list item followed by many lines without a blank one takes
+  time with the square of their number in marked (16,000 lines: 1.2 s to read; 200 KB: 50 s to open; a 1 MB file,
+  minutes) (H-59). An SVG of about 1 KB whose `<use>` elements fan out tenfold at each of six or seven levels hangs the
+  tab, even only as a book's cover, which the reader decodes for its tab icon (H-60). A 49 KB PNG of 20,000 by 20,000
+  pixels as a cover or a page picture crashes the tab (M-216).
+- *Reverb's licences.* Its audio codec (`higgs-audio-v2-tokenizer-Reverb`) is under the Boson Higgs Audio 2 Community
+  License, based on Meta's Llama 3 licence, whose redistribution terms (a copy of both agreements, a Notice file with
+  set wording, a "Built with Higgs Materials…" credit, an acceptable-use policy, an expanded licence from Boson past
+  100,000 annual active users) a site that serves the codec from `reverb/models/` takes on; nothing says so (M-213). The engine's
+  `LICENSES.txt` leaves out five bundled packages (js-tiktoken, base64-js, typed-binary, tinyest, tsover-runtime) and
+  names a tokenizers version that isn't bundled (M-217).
+- *Reverb's voices.* Because the reader passes `verbalize`, runntime rebuilds each voice without `speechFrames`, so a
+  custom voice is paced by its whole clip, silences included, and speaks slower than its recording (M-214). A site
+  voice's version is kept only in memory: a visit where its check fails finds neither its saved speech nor its made
+  voice, and the recording must be fetched again (M-215). A site voice's words from its `.txt` aren't in its keys, and
+  a recording replaced while the page is open isn't seen (L-452); a voice of your own's language isn't in the saved
+  speech's key (L-453); runntime's errors show only their code (L-454); downloaded copies of other revisions or
+  precisions are never removed, and a copy the browser didn't keep isn't noticed (L-455); a GPU lost while Reverb
+  loads can still leave it "ready" (L-456); "Your voices" talks about Reverb on sites where it is off (L-457); a
+  stray comment from the change to off by default (L-462).
+- *Elsewhere.* Download progress in MB (Reverb, Pocket TTS, ZONOS3) is announced to screen readers at every MB, not
+  every quarter: L-68 back for those (L-458). `fetch-reverb.sh` drops the last line of a checksum list without a final
+  newline (yet writes `NOTICE.txt`), and resumes an old revision's partial file (L-459). Refresh on the default book
+  shown after a `?book=` that failed asks for the failed address again (L-460). Markdown nested too deeply shows
+  marked's "Please report this to …" in the notice (L-461).
+- Tests T-65 to T-68; docs D-40 to D-45.
+
+Findings: **High** H-59, H-60. **Medium** M-213 to M-217. **Low** L-452 to L-462. **Tests** T-65 to T-68. **Docs**
+D-40 to D-45. All open (below).
+
+**Tests.** 574 tests at `e1ad43e`. The first run had 28 failures, all "Target crashed" or a closed browser in two
+runs of `epubedit.test.js` and `layout.test.js` while a reviewer decoded 400-megapixel pictures alongside; those two
+files run again alone: 59 of 59 pass. So 568 pass, none fail, and six need `SLOW=1` or `NETWORK=1`.
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. Open (below): only enhancements, E-50 (Reverb-TTS) first
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: open (below), with
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -790,6 +832,34 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-59 | A Markdown list item followed by many lines without a blank one freezes the tab: marked's list tokenizer takes time with the square of the lines (`- a` then N lines `b`, or `  b`): 16,000 lines 1.2 s to read, 200 KB 50 s to open, 1 MB minutes; again at each parse. Reachable by `?book=`, `?get=` and links. Fix: a linear pre-pass ending a list paragraph after about 1,000 lines without a blank one (or a newer marked if fixed); a fixture. | High |
+| H-60 | An SVG `<use>` fan-out (about 1 KB; ten `<use>` of the level below at each of six or seven levels) hangs the tab: inline in a document, as a picture, or as a book's cover, which `setBookIcon` decodes for the tab icon whatever the page shows; `data:image/svg+xml` pictures skip `svgURL`'s cleaning. Fix: count each SVG's expanded size (a `<use>` counts as its target, memoised by id) in `svgURL` and `sanitize`, dropping `<use>` past about 20,000; `data:` SVG pictures through the same cleaning. | High |
+| M-213 | Reverb's codec is under the Boson Higgs Audio 2 Community License (Llama 3-based), stated nowhere: a site serving it from `reverb/models/` must ship both agreements, a Notice file with its set wording, and display "Built with Higgs Materials licensed from Boson AI…", and past 100,000 annual active users needs an expanded licence from Boson; `fetch-reverb.sh`'s NOTICE.txt names the codec without a licence, and the README speaks only of the weights' CC BY-NC (and of a `LICENSES/` folder it doesn't write). Fix: fetch the licence texts into `reverb/models/LICENSES/`, the Notice lines in NOTICE.txt, and the terms in the README beside CC BY-NC (and in the server repository's). | Medium |
+| M-214 | Custom Reverb voices speak slower than their recording: with `verbalize` given to `createTextToSpeech`, runntime's `spokenInput` rebuilds the voice without `speechFrames`, so the pace follows the whole clip, silences included (a Settings recording with 3 s of silence: about 20% slower, longer gaps). Fix: spell the text (and preset transcripts once, in their language) in the reader and give runntime no `verbalize`, passing the voice whole. | Medium |
+| M-215 | A Reverb site voice's version is kept only in memory: a visit where its HEAD check fails (offline, 8 s, 5xx) keys it `''`, so its saved speech and made voice aren't found and the recording is fetched again (reproduced: nothing played, "couldn't be fetched"); a voice made under `''` may later stand for a replaced recording; old versions' made voices are never pruned. Fix: as ZONOS3: keep the last version seen in `store`, prune old ones once the current is known. | Medium |
+| M-216 | A picture of huge dimensions crashes the tab: a 49 KB 1-bit PNG of 20,000 × 20,000 as `cover-image` (decoded for the tab icon) or in a page; a comic's first page is its cover; a reload by `?book=` crashes again. Fix: read width and height from the header (PNG, GIF, JPEG, WebP, BMP) where the blob is made and refuse past about 100 Mpx; for the icon, check `naturalWidth × naturalHeight` before decoding and drawing. | Medium |
+| M-217 | `reverb/engine/LICENSES.txt` leaves out five packages bundled in `reverb.js` (js-tiktoken, base64-js, typed-binary, tinyest: MIT; tsover-runtime: Apache-2.0) and lists `@huggingface/tokenizers` 0.2.0, which isn't bundled (runntime's own 0.1.3 is); the compare mode doesn't check LICENSES.txt. Fix: build it from esbuild's metafile inputs, drop the unused dependency, checksum it too, and correct the README's list. | Medium |
+| L-452 | A Reverb site voice's words from its `.txt` aren't in its keys (`hashText('')`): a corrected `.txt` never remakes the voice nor drops its saved speech (reproduced); and `rv.checks` is never cleared, so a recording replaced while the page is open isn't seen (L-447 re-checks the server voice on a voice change). | Low |
+| L-453 | A voice of your own's language isn't in Reverb's saved-speech key: a passage being made when the language is changed is saved after the edit's clearing, under the same key, and later played as the new language's voice. Fix: `v.lang` in `rvVoiceTag`. | Low |
+| L-454 | Reverb's errors show only runntime's code ("(INVALID_ARGUMENT)"), never its message ("the text needs N frames, more than the M this device runs at once"; "longer than X s"). | Low |
+| L-455 | Reverb's downloaded copies are never cleaned or checked: other revisions', the other precision's and Hugging Face's after self-hosting stay in the private file system (up to about 2 GB) with nothing to clear them; a copy the browser didn't keep (or a browser without the private file system) downloads again on each visit unnoticed, unlike ZONOS3's `znKept`. | Low |
+| L-456 | A GPU lost while `createTextToSpeech` is pending, then resolving, leaves Reverb `ready` over the error: each passage fails with a notice and "Try again" isn't offered. Fix: check `rv.dead` after the await. | Low |
+| L-457 | "Your voices" shows Reverb's words and language fields, its section text and "for Reverb, give the words said in it" where Reverb is off (the default). | Low |
+| L-458 | L-68 back for progress in MB: Reverb, Pocket TTS and ZONOS3 write "N of ~M MB", which the quarter rule (`/(\d+)%/`) doesn't match, so screen readers hear every MB (up to about 750 for Reverb's fp16). | Low |
+| L-459 | `fetch-reverb.sh` reads its list with `while read`, dropping a last line without a newline (the README says to write `checksums/reverb.sha256` by hand): that file is never fetched, yet NOTICE.txt is written; and it has no `.part.url` check (L-58), so after a revision change an old partial file is resumed from the new address, fails its checksum and is downloaded again. | Low |
+| L-460 | Refresh on the default book shown after a `?book=` (or `?get=`) that failed asks for the failed address again: `openDefault` keeps the failed opening's `asked`. | Low |
+| L-461 | Markdown nested too deeply (`>` 10,000 times, `**` 30,000 times) shows marked's "Please report this to https://github.com/markedjs/marked" in the notice. | Low |
+| L-462 | A stray comment, "(off: no Reverb voice, for a site its non-commercial licence doesn't fit…)", trails the `REVERB_VOICES` setting (`index.html`), left from turning Reverb off by default. | Low |
+| T-65 | No tests of `fetch-reverb.sh` (its three file sets, a bad option, a failed check, `--no-verify`, NOTICE.txt only after success; `sandbox()` doesn't copy it) or of `build-reverb-engine.sh` refusing a bad option; the versions test doesn't compare `REVERB.rev`/`codecRev` with the script, `REVERB.models` and `REVERB_VOICES` with `checksums/reverb.sha256`, or the engine with its checksum (they agree today). | Tests |
+| T-66 | Reader behaviour without a test: REVERB off with `readAloud` "reverb" stored (from another folder); Generate config's default `REVERB: false`; a voice of your own's words changed after it was made (made again, old speech dropped); one deleted while it is made; the real `reverb.js` exporting the names the reader calls. | Tests |
+| T-67 | The stand-in engine isn't runntime: its `synthesize` keeps `speechFrames` and doesn't spell the transcript in `voice.language` (so M-214 can't show), and its voice maker takes 1 s where runntime needs 3 (the custom-voice tests use a 2 s clip); no test of a site voice's version check failing (M-215); no hostile fixtures for H-59, H-60 or M-216. | Tests |
+| T-68 | Tests that can pass without testing: ZONOS3's "deleted while it is being made" (L-448) relies on a 400 ms sleep; M-210's Refresh test reads its place after 300 ms and never checks it moved from the start; L-447's (300/800 ms) and L-450's (500 ms) sleeps. | Tests |
+| D-40 | README: "Your ZONOS3 voices" is now "Your voices". | Docs |
+| D-41 | README: "3–15 seconds" works best for Reverb's custom voices; Settings and the errors say 5–15. | Docs |
+| D-42 | README: the `FULL_PRECISION` row says what a site with `ALLOW_CDN` false needs for Pocket TTS, not that Reverb then needs `./fetch-reverb.sh --all`. | Docs |
+| D-43 | README: int4 is "about 370 MB" (MiB) in one place and "about 385 MB" (MB) in another for the same files; one unit throughout. | Docs |
+| D-44 | README: a `?get=` EPUB from another site is "downloaded whole (its size and ranges aren't shown to other sites)", but it is read in place by range requests when that site exposes `Content-Range`, so it sees which chapters are read and when. Fix the README, or always download a foreign book whole. | Docs |
+| D-45 | REVIEW.md E-50's first bullet says int4 is the default download and fp16 "about 790 MB"; with `FULL_PRECISION` on by default fp16 is, at about 753 MB (the entry says so later). | Docs |
 | [E-50](#e-50-reverb-tts-a-voice-in-the-browser-and-on-the-server) | Reverb-TTS: a voice in the browser (runntime, WebGPU; int4, fp16 with full precision) and on the server; custom voices with their words; weights non-commercial (off by default, a site can turn it on) | Enhancement |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
