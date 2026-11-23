@@ -16,7 +16,7 @@ function cleaner(allowRemote = false) {
   const from = src.indexOf("/* A book's CSS is read with a tokenizer");
   const to = src.indexOf('\n}\n', src.indexOf('async function rewriteCss')) + 3;
   const line = name => { const a = src.indexOf(name); return src.slice(a, src.indexOf('\n', a)); };
-  const body = [line('const isExternal = '), line('const urlText = '), line('const isRemote = '), src.slice(from, to)].join('\n');
+  const body = [line('const isExternal = '), line('const urlText = '), line('const isRemote = '), line('const isDataSvg = '), src.slice(from, to)].join('\n');
   const files = { 'local.css': '.l{background:url(pic.png)}', 'tail.css': 'a{background:url(', 'tail2.css': 'a{background:u',
     'tail3.css': 'a{background-image:image-set(', 'open-comment.css': '/* never closed', 'open-string.css': 'a{content:"never closed', 'red.css': 'x{color:rgb(255, 0, 0)}',
     // H-6: sheets that import themselves or each other many times.
@@ -29,8 +29,10 @@ function cleaner(allowRemote = false) {
     'd1.css': '@import "d2.css";', 'd2.css': '@import "d3.css";', 'd3.css': '@import "d4.css";', 'd4.css': '@import "dd.css";', 'dd.css': '@import "ee.css"; .d{}', 'ee.css': '.e{color:red}',
     // L-86: a pasted sheet with its own namespace.
     'ns.css': '@namespace svg url(http://www.w3.org/2000/svg); svg|rect{fill:red}', 'plain.css': 'a{color:blue}' };
-  return new Function('ALLOW_REMOTE_CONTENT', 'book', 'resolve', 'readText', 'resourceURL', `${body}\nreturn { rewriteCss, cssTokens, cssRefs, cssPreprocess };`)(
-    allowRemote, { zip: null }, (base, ref) => ref.split('#')[0], async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`));
+  // (data: pictures: an SVG cleaned into a picture of its own, and a raster's size checked: round 40 review, H-60; round 41.)
+  return new Function('ALLOW_REMOTE_CONTENT', 'book', 'resolve', 'readText', 'resourceURL', 'svgDataURL', 'dataPictureFits', `${body}\nreturn { rewriteCss, cssTokens, cssRefs, cssPreprocess };`)(
+    allowRemote, { zip: null }, (base, ref) => ref.split('#')[0], async (zip, p) => files[p] ?? null, async p => (p.startsWith('missing') ? null : `blob:local/${p}`),
+    async () => 'blob:local/data-svg', () => true);
 }
 
 const R = 'http://evil.test';
