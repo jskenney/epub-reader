@@ -968,6 +968,8 @@ defences, one looking for what they broke. What it found:
   in an archive are, at no cost).
 - L-476: the cache per book, keyed by length and hash. D-47 done.
 
+**Tests.** 602 tests at `4d65a91`: 596 pass, none fail, six need `SLOW=1` or `NETWORK=1`.
+
 ## Summary
 
 Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open: H-70, H-71, H-73, M-233, L-475. Open (below): those, T-68, T-69,
@@ -1121,17 +1123,17 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
-| H-68 | WYSIWYG editing of long Markdown shown as plain text wrote the plain view back over the file (round 43, regression). Raw only for it; the plain view never serialized. | (the commit after `cc954ee`) |
-| H-69 | A JPEG with stray bytes before its size marker, or the marker past 512 KB, wasn't sized and crashed the tab (round 43). Stray bytes skipped; a JPEG or AVIF without a size in its first 512 KB left out. | (the commit after `cc954ee`) |
-| H-72 | A worker error counted as a pass (round 43). A failure. | (the commit after `cc954ee`) |
-| H-74 | The editor started a worker on every scroll (round 43, regression). One check per text; none from the editor. | (the commit after `cc954ee`) |
-| M-229 | A `<use>` resolving to nothing counted as the whole page, dropping working ones (round 43, regression). Counts as one. | (the commit after `cc954ee`) |
-| M-230 | A folder book's fonts, sound and video were read before its page showed (round 43, regression). Not read when served by their address. | (the commit after `cc954ee`) |
-| M-231 | The plain-text `<wbr>` could split a character outside the BMP (round 43, regression). Whole characters with their marks. | (the commit after `cc954ee`) |
-| M-232 | A policy without blob: workers, or marked not fetchable, let every document through unchecked (round 43). Over 200,000 characters shown as plain text then. | (the commit after `cc954ee`) |
-| M-234 | A `<use>` by `about:srcdoc#…` went uncounted with remote content on (round 43). Counted as this page; non-web schemes removed. | (the commit after `cc954ee`) |
-| L-476 | The data: check's cache held whole addresses across books (round 43). Per book, by length and hash. | (the commit after `cc954ee`) |
-| D-47 | nginx.conf.example's CDN hosts lacked cdnjs (round 43). Added. | (the commit after `cc954ee`) |
+| H-68 | WYSIWYG editing of long Markdown shown as plain text wrote the plain view back over the file (round 43, regression). Raw only for it; the plain view never serialized. | `153eff1`, `4d65a91` |
+| H-69 | A JPEG with stray bytes before its size marker, or the marker past 512 KB, wasn't sized and crashed the tab (round 43). Stray bytes skipped; a JPEG or AVIF without a size in its first 512 KB left out. | `153eff1`, `4d65a91` |
+| H-72 | A worker error counted as a pass (round 43). A failure. | `153eff1`, `4d65a91` |
+| H-74 | The editor started a worker on every scroll (round 43, regression). One check per text; none from the editor. | `153eff1`, `4d65a91` |
+| M-229 | A `<use>` resolving to nothing counted as the whole page, dropping working ones (round 43, regression). Counts as one. | `153eff1`, `4d65a91` |
+| M-230 | A folder book's fonts, sound and video were read before its page showed (round 43, regression). Not read when served by their address. | `153eff1`, `4d65a91` |
+| M-231 | The plain-text `<wbr>` could split a character outside the BMP (round 43, regression). Whole characters with their marks. | `153eff1`, `4d65a91` |
+| M-232 | A policy without blob: workers, or marked not fetchable, let every document through unchecked (round 43). Over 200,000 characters shown as plain text then. | `153eff1`, `4d65a91` |
+| M-234 | A `<use>` by `about:srcdoc#…` went uncounted with remote content on (round 43). Counted as this page; non-web schemes removed. | `153eff1`, `4d65a91` |
+| L-476 | The data: check's cache held whole addresses across books (round 43). Per book, by length and hash. | `153eff1`, `4d65a91` |
+| D-47 | nginx.conf.example's CDN hosts lacked cdnjs (round 43). Added. | `153eff1`, `4d65a91` |
 | H-64 | `<use href="#%6c5">` (a percent-encoded fragment): the browser decodes it, `svgUseCap` doesn't, so a 1 KB fan-out hangs the tab (round 42). References resolved as the browser does: a fragment percent-decoded. | `1ed87f3` |
 | H-65 | A `<use>` of a whole SVG file or data: SVG (no fragment) counts as one copy but draws the whole document: 2,000 hang the tab (round 42). A reference without a fragment counts as the whole file (its recorded size), or the whole page when it can't be resolved. | `1ed87f3` |
 | H-66 | A heading, HTML-looking (`<b>`, an autolink) or `$$` line inside a list item ends the pre-pass's count while marked keeps the item: 120 KB, 19 s to open; the editor runs it on each change (round 42). The pre-pass is gone: Markdown over 20,000 characters is first read by marked in a worker (the same file, its hash checked) for at most 5 s; past it the document is shown as plain text with a note. The editor's line matching reads long Markdown only once that check passed. | `1ed87f3` |
