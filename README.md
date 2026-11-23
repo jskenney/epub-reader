@@ -494,8 +494,8 @@ site as the reader.
   the site's storage quota has no room, and asks the browser once to keep the site's storage. Its engine is part of
   the reader (`reverb/engine/reverb.js`, built from npm releases of runntime, TypeGPU and Verbalis by
   `tools/build-reverb-engine.sh`). **Its weights are [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
-  non-commercial use only, with attribution** ("Reverb-TTS by Software Mansion"). It is offered by default; a
-  commercial site should turn it off with `"REVERB": false` in `reader-config.json`.
+  non-commercial use only, with attribution** ("Reverb-TTS by Software Mansion"). So it is **off by default**: a
+  site its licence fits turns it on with `"REVERB": true` in `reader-config.json`.
   **Custom voices** (listed first among Reverb's voices): Reverb copies a voice from a recording *and the words said
   in it*. Your own voices in Settings ("Your voices", shared with ZONOS3) are listed once their words and language
   are given there; one recorded in Settings reads the passage shown, so it has them already. A site lists its own in
@@ -832,7 +832,8 @@ codec: the model weights, the audio codec, the tokenizer and the 16 preset voice
 The reader uses this site's copy only when `NOTICE.txt` is there and so are the weights it wants (fp16 or int8 for
 full precision, by the GPU; int4 otherwise); otherwise it loads them from Hugging Face (or, with `ALLOW_CDN` false,
 says to run the script). Re-runs skip finished files, every file is checked against `checksums/reverb.sha256`, and
-`reverb/models/` is git-ignored. Remember the weights' licence: CC BY-NC 4.0, non-commercial only.
+`reverb/models/` is git-ignored. Remember the weights' licence: CC BY-NC 4.0, non-commercial only; the voice is
+offered only with `"REVERB": true` in `reader-config.json`.
 
 The engine (`reverb/engine/reverb.js`, about 1.2 MB, with `LICENSES.txt`) is part of the reader, served under
 `VOICE_FILES` like the other voice files. `tools/build-reverb-engine.sh` rebuilds it with esbuild from the npm
@@ -1002,7 +1003,7 @@ default books and the memory and request sizes stay the site's to set.
 | `LIB_FILES` ✓ | `''` | Where the self-hosted `libs/` and `fonts/` folders are, like `VOICE_FILES`. |
 | `ALLOW_CDN` ✓ | `true` | `false` never loads code, models or fonts from CDNs (cdnjs, jsDelivr, Hugging Face, Google Fonts): everything must be self-hosted. |
 | `REVERB_VOICES` ✓ | `[]` | Reverb voices from this site's recordings, listed first among Reverb's voices: `[{"name": "Narrator", "url": "/voices/narrator.wav", "text": "The words said in it.", "language": "en"}]`. `text` left out: the words are read from a `.txt` of the same name beside the recording (`/voices/narrator.txt`). `language` is the recording's, one of `en de fr es it pl pt` (default `en`). An address on this site, or on another that allows cross-origin reads; a recording replaced at the same address (a new ETag or date) makes a new voice. A bad entry is left out with a warning in the console. Not in Settings: readers add their own under "Your voices". |
-| `REVERB` ✓ | `true` | `false` takes the Reverb voice away (its option says "off on this site"): its weights are CC BY-NC 4.0, so turn it off on a commercial site. |
+| `REVERB` ✓ | `false` | `true` offers the Reverb voice. Off by default: its weights are CC BY-NC 4.0 (non-commercial only, with attribution), so turn it on only where that licence fits. Not in Settings. |
 | `ALLOW_REMOTE_CONTENT` ✓ ⚙ | `false` | `true` lets book pages load images, media, stylesheets and fonts from other sites (which can tell when a book is being read), and drops the book pages' security policy. Readers can turn it on for themselves in Settings unless a folder's config lists it in `LOCKED`; the reader policy from `nginx.conf.example` also blocks other sites whatever the reader chooses. |
 | `ALLOW_EXTERNAL_LINKS` ✓ ⚙ | `true` | `false` turns a book's web and e-mail links into plain text. |
 | `EDITING` ✓ | `true` | `false` hides the Edit button: no editing documents or starting new ones (`?edit=` opens the document to read). |

@@ -790,7 +790,7 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| [E-50](#e-50-reverb-tts-a-voice-in-the-browser-and-on-the-server) | Reverb-TTS: a voice in the browser (runntime, WebGPU; int4, fp16 with full precision) and on the server; custom voices with their words; weights non-commercial (on by default, a site can turn it off) | Enhancement |
+| [E-50](#e-50-reverb-tts-a-voice-in-the-browser-and-on-the-server) | Reverb-TTS: a voice in the browser (runntime, WebGPU; int4, fp16 with full precision) and on the server; custom voices with their words; weights non-commercial (off by default, a site can turn it on) | Enhancement |
 | [E-42](#e-42-skippable-parts-in-publisher-narration) | Publisher narration: skip footnotes, page numbers and the like (Media Overlays skippability) | Enhancement |
 | [E-43](#e-43-publisher-narration-as-an-audiobook) | Audiobook export from the publisher's own narration, not only a natural voice | Enhancement |
 | [E-44](#e-44-narration-across-files-and-without-text) | Publisher narration: clips whose text is in another file, and audio-only clips, shown | Enhancement |
@@ -870,9 +870,9 @@ whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache
   the site by a `fetch-reverb.sh` into `reverb/models/`. Downloads: int4 (about 385 MB with the codec, half ZONOS3's) by
   default; with `FULL_PRECISION`, fp16 weights and math (about 790 MB) where the GPU has `shader-f16`, else int8. Text
   spelled out first by Verbalis (numbers, dates, money, units) in all 7 languages. Offered for books in its languages;
-  its built-in voices, the book's language first; saved speech keyed by model, voice and language. Offered by
-  default, as the other voices are (your decision); a site can turn it off (`REVERB: false` in reader-config.json), and
-  the README states the weights' licence.
+  its built-in voices, the book's language first; saved speech keyed by model, voice and language. Off by
+  default, for its non-commercial licence (your decision, reversing the first one); a site turns it on with
+  `REVERB: true` in reader-config.json, and the README states the weights' licence.
 - **Custom voices** (E-48's three ways), each needing what was said: a recording made in Settings reads a passage
   shown, so its words are known; an upload or a site recording takes its words beside it (Settings: a box for them;
   `REVERB_VOICES` entries with a `text`, or a `.txt` of the same name next to the recording). The voice (codec codes,
@@ -889,7 +889,7 @@ whole, about 165x real time on an RTX 5090, 20x on an Apple M4 Pro). Code Apache
   checked in headless Chromium (WebGPU on SwiftShader) with the int4 model served from the site: it loaded (about 90 s
   there) and spoke a preset voice, the text spelled out by Verbalis.
   **In the reader** (`a5ecbb1`, and the commit after it, below): "Reverb" in the read-aloud bar, for books in its 7
-  languages with WebGPU (the option says why not otherwise, or "off on this site" with `REVERB: false`); its 16 preset
+  languages with WebGPU (the option says why not otherwise; off, and hidden, unless a site sets `REVERB: true`); its 16 preset
   voices listed at once, the book's language first; agreement to the download with its size, which follows
   `FULL_PRECISION` (on, the reader's default: fp16 where the GPU has `shader-f16`, int8 otherwise; off: int4); the files
   from `reverb/models/` when `fetch-reverb.sh` finished with those weights (default: fp16 and int8; `--int4`, `--all`),

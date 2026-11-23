@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.0217</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261123.0306</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -6970,7 +6970,7 @@ async function zonosSpeak(text, v, lang, ctl, opts, t0){
    files come from reverb/models/ (fetch-reverb.sh) or Hugging Face, at pinned revisions, and are kept in the browser
    (runntime's cache, in the origin's private file system). int4 weights (about 370 MB with the codec), or with
    FULL_PRECISION fp16 weights and math (about 750 MB) on a GPU with shader-f16, int8 otherwise. The weights are
-   CC BY-NC 4.0 (non-commercial): a site can turn the voice off (REVERB: false). */
+   CC BY-NC 4.0 (non-commercial), so the voice is off unless a site turns it on (REVERB: true in reader-config.json). */
 const REVERB = {
   rev: 'f5759ca1b6c4efc4a5b7113068560323730628a5',        // software-mansion/Reverb-TTS (fetch-reverb.sh's REV)
   codecRev: 'e0d9ccd2935d7f953764a83b09444dc0677a44a0',   // its codec (CODEC_REV)
@@ -6987,7 +6987,7 @@ const REVERB_LANGS = ['en', 'de', 'fr', 'es', 'it', 'pl', 'pt'];
 const REVERB_VOICES = ['en_female_narrator', 'en_male_narrator_1', 'en_male_narrator_2', 'en_female_whisper', 'en_male_angry',
   'de_female_standard', 'de_male_standard', 'fr_female_standard', 'fr_male_standard', 'es_male_standard_1', 'es_male_standard_2',
   'it_male_standard', 'it_male_expressive', 'pl_male_standard', 'pt_female_standard', 'pt_male_standard'];
-let REVERB_ON = true;   // reader-config.json REVERB: false turns it off
+let REVERB_ON = false;   // off by default (its weights are non-commercial); reader-config.json REVERB: true turns it on
 const reverbLang = (tag = bookLang()) => { const p = String(tag).toLowerCase().split(/[-_]/)[0]; return REVERB_LANGS.includes(p) ? p : null; };
 const reverbFits = () => REVERB_ON && !!navigator.gpu && !!reverbLang();
 function rvVoiceOf(id){
@@ -9267,7 +9267,7 @@ const CONFIG_SETTINGS = {   // name: [type, apply]
   VOICE_FILES: ['string', v => { VOICE_FILES = v; }],
   LIB_FILES: ['string', v => { LIB_FILES = v; }],
   ALLOW_CDN: ['boolean', v => { ALLOW_CDN = v; }],
-  REVERB: ['boolean', v => { REVERB_ON = v; }],
+  REVERB: ['boolean', v => { REVERB_ON = v; }],   // (on: the Reverb voice, where its non-commercial licence fits: E-50)
   REVERB_VOICES: ['object', v => { REVERB_VOICES_SITE = rvVoicesConfig(v); }],   // (custom voices from the site's recordings: E-50)   // (off: no Reverb voice, for a site its non-commercial licence doesn't fit: E-50)
   TTS_SERVER: ['object', v => {
     if (typeof v.api !== 'string' || typeof v.voices !== 'string') throw new Error('needs "api" and "voices" paths');

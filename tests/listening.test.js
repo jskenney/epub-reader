@@ -103,7 +103,7 @@ test('by default the read-aloud bar is compact: short voice names, no sleep time
   await h.openReader(page, `${h.READER}?book=books/long.epub`, serverVoice);
   await startReading(page);
   const names = await page.$$eval('#ttsEngine option:not([hidden])', os => os.map(o => o.textContent));
-  assert.deepEqual(names.filter(n => n !== 'Publisher narration'), ['Device', 'Kokoro', 'Pocket', 'ZONOS3', 'Reverb', 'Server']);
+  assert.deepEqual(names.filter(n => n !== 'Publisher narration'), ['Device', 'Kokoro', 'Pocket', 'ZONOS3', 'Server']);
   assert.equal(await page.isVisible('#ttsSleep'), false);
   await page.waitForTimeout(1500);
   assert.equal((await page.textContent('#timeLeft')).trim(), '');

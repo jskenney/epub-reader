@@ -330,12 +330,17 @@ def main():
         if done:
             (models / "NOTICE.txt").write_text("fetch-reverb.sh\n")
         os.symlink(REPO / "index.html", SITE / folder / "index.html")
-        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/"}))
+        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB": True}))
+    # Reverb turned on (it is off by default: E-50), and on with ALLOW_CDN off and nothing self-hosted.
+    for folder, cfg in (("reverb-on", {}), ("reverb-nocdn", {"ALLOW_CDN": False, "VOICE_FILES": "/novoices/"})):
+        (SITE / folder).mkdir()
+        os.symlink(REPO / "index.html", SITE / folder / "index.html")
+        (SITE / folder / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "VOICE_FILES": "/reader/", "REVERB": True, **cfg}))
     # Site voices from recordings (REVERB_VOICES): one with its words, one with a .txt beside it, one with neither.
     (SITE / "reverb-voices").mkdir()
     os.symlink(REPO / "index.html", SITE / "reverb-voices" / "index.html")
     (SITE / "tts-voices" / "teller.txt").write_text("Words beside the teller.\n")
-    (SITE / "reverb-voices" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB_VOICES": [
+    (SITE / "reverb-voices" / "reader-config.json").write_text(json.dumps({"LIB_FILES": "/reader/", "REVERB": True, "REVERB_VOICES": [
         {"name": "Site narrator", "url": "/tts-voices/narrator.wav", "text": "The narrator's words.", "language": "fr"},
         {"name": "Teller", "url": "/tts-voices/teller.wav"}, {"name": "No words", "url": "/tts-voices/second.wav"},
         {"name": "Bad", "url": "ftp://x/y.wav"}, {"name": "Klingon", "url": "/x.wav", "language": "tlh"}]}))

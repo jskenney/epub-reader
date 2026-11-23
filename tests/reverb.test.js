@@ -9,9 +9,11 @@ const h = require('./helpers');
 test.afterEach(h.closePages);
 test.after(h.close);
 
-const LONG = `${h.READER}?book=books/long.epub`;
-const FRENCH = `${h.READER}?book=books/french.epub`;
-const LATIN = `${h.READER}?book=books/latin.epub`;
+// (Reverb is off unless a site turns it on, REVERB: true: reverb-on is the reader with that config.)
+const ON = `${h.SITE}/reverb-on/`;
+const LONG = `${ON}?book=/reader/books/long.epub`;
+const FRENCH = `${ON}?book=/reader/books/french.epub`;
+const LATIN = `${ON}?book=/reader/books/latin.epub`;
 const reverb = { 'spine:ttsEngine': 'reverb' };
 const HUB = 'https://huggingface.co/software-mansion/Reverb-TTS/resolve/f5759ca1b6c4efc4a5b7113068560323730628a5/';
 const CODEC = 'https://huggingface.co/software-mansion/higgs-audio-v2-tokenizer-Reverb/resolve/e0d9ccd2935d7f953764a83b09444dc0677a44a0/combined/safetensors/d8e8/model.safetensors';
@@ -45,10 +47,11 @@ async function openBar(p, url, settings) {
   await p.waitForSelector('#tts:not([hidden])');
 }
 
-test('Reverb is offered for books in its languages and with WebGPU, says why not otherwise, and a site can turn it off', async () => {
+test('Reverb is off unless a site turns it on; then offered for books in its languages and with WebGPU, saying why not otherwise', async () => {
   for (const [url, gpu, want] of [[LONG, undefined, ['Reverb', false, false]], [FRENCH, undefined, ['Reverb', false, false]],
     [LATIN, undefined, ['Reverb (en, de, fr, es, it, pl, pt)', true, false]], [LONG, false, ['Reverb (needs WebGPU)', true, false]],
-    [`${h.SITE}/reverb-off/?book=/reader/books/long.epub`, undefined, ['Reverb (off on this site)', true, true]]]) {
+    [`${h.SITE}/reverb-off/?book=/reader/books/long.epub`, undefined, ['Reverb (off on this site)', true, true]],
+    [`${h.READER}?book=books/long.epub`, undefined, ['Reverb (off on this site)', true, true]]]) {
     const p = await page({ gpu });
     await openBar(p, url, { 'spine:ttsEngine': 'device' });
     assert.deepEqual(await optionOf(p), want, `${url} ${gpu === false ? 'without' : 'with'} WebGPU`);
@@ -143,7 +146,7 @@ test('Reverb files are used from this site only when fetch-reverb.sh finished, a
 
 test('Reverb: without the files here and with ALLOW_CDN off, says to run fetch-reverb.sh', async () => {
   const p = await page();
-  await openBar(p, `${h.SITE}/folder-novoice/?book=/reader/books/long.epub`, { ...reverb, 'spine:agreed:reverb:full': true });
+  await openBar(p, `${h.SITE}/reverb-nocdn/?book=/reader/books/long.epub`, { ...reverb, 'spine:agreed:reverb:full': true });
   await p.waitForFunction(() => /Natural voice failed/.test(document.querySelector('#ttsStatus').textContent), null, { timeout: 20000 });
   assert.match(await status(p), /self-hosted Reverb files are missing \(run fetch-reverb\.sh\); ALLOW_CDN is off/);
   assert.equal((await fake(p))?.loads, undefined, 'nothing downloaded');
