@@ -1,8 +1,9 @@
-# Self-hosted natural-voice files, fetched by fetch-kokoro.sh, fetch-pocket.sh and fetch-zonos.sh (hundreds of MB;
+# Self-hosted natural-voice files, fetched by fetch-kokoro.sh, fetch-pocket.sh, fetch-zonos.sh and fetch-reverb.sh (hundreds of MB;
 # too big for git). ZONOS3's engine (zonos/engine/) is part of the reader and committed.
 /kokoro/
 /pocket/
 /zonos/models/
+/reverb/models/
 
 # Self-hosted libraries and fonts, fetched by fetch-libs.sh and fetch-fonts.sh
 /libs/
