@@ -20,13 +20,24 @@ const readerFn = (start, name) => {
 async function mdPage() { const p = await h.newPage(); await p.addInitScript(() => { window.SPINE_TEST = { mdProbeMs: 2000 }; }); return p; }
 const SLOW_NOTE = /shown as plain text: its Markdown would take too long to lay out/;
 test('Markdown marked would take minutes over opens in good time as plain text, with a note (round 40 review, H-59; round 42, H-66, H-67)', async () => {
-  for (const book of ['long-list.md', 'quote-list.md', 'fence-trick.md', 'item-html.md', 'long-emphasis.md']) {
+  // (long-emphasis.md, read in time but too many pieces to lay out, is a block shown as its text on its own now, without
+  // the note: round 45.)
+  for (const book of ['long-list.md', 'quote-list.md', 'fence-trick.md', 'item-html.md']) {
     const page = await mdPage();
     const t0 = Date.now();
     await h.openReader(page, `${h.READER}?book=books/${book}`);
     assert.ok(Date.now() - t0 < 15000, `${book}: took ${Date.now() - t0} ms`);
     assert.ok(await h.waitFor(async () => SLOW_NOTE.test(await frameText(page)), 10000), `${book}: the note`);
     assert.equal(await page.evaluate(() => 1 + 1), 2);
+    await page.close();
+  }
+  {
+    const page = await mdPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/long-emphasis.md`);
+    assert.ok(Date.now() - t0 < 15000, `long-emphasis.md: took ${Date.now() - t0} ms`);
+    assert.ok(await h.waitFor(async () => (await frameText(page)).length > 1000, 10000), 'long-emphasis.md: shown');
+    assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('em').length < 100), 'long-emphasis.md: its long block as text');
     await page.close();
   }
   // A large ordinary document stays Markdown.
