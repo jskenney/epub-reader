@@ -17,6 +17,12 @@ const readerFn = (start, name) => {
 
 // (Markdown marked would take too long over is shown as plain text once the worker's check runs out: round 42; the
 // check given 2 s here.)
+
+// (No nesting: nothing inside a mask, clip path, marker or pattern has an effect, as the browser computed it: round 48.)
+const NESTED = doc => [...doc.querySelectorAll('mask *, clipPath *, marker *, pattern *')].filter(el => {
+  const cs = getComputedStyle(el);
+  return [cs.maskImage, cs.webkitMaskImage, cs.clipPath, cs.markerStart, cs.markerMid, cs.markerEnd].some(v => v && v !== 'none') || (!el.closest('mask') && cs.filter !== 'none');
+}).length;
 async function mdPage() { const p = await h.newPage(); await p.addInitScript(() => { window.SPINE_TEST = { mdProbeMs: 2000 }; }); return p; }
 const SLOW_NOTE = /shown as plain text: its Markdown would take too long to lay out/;
 test('Markdown marked would take minutes over opens in good time as plain text, with a note (round 40 review, H-59; round 42, H-66, H-67)', async () => {
@@ -308,8 +314,8 @@ test('markers and masks that would draw too much are dropped, inline and in pict
   assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
   assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 10000));
   assert.equal(await h.inFrame(page, doc => doc.querySelector('line[marker-end]')?.getAttribute('marker-end')), 'url(#arrow)', 'the plain arrow kept');
-  // (The outermost references, which would draw hundreds of thousands of times, dropped: round 46.)
-  assert.deepEqual(await h.inFrame(page, doc => [...doc.querySelectorAll('svg > polyline, svg > rect')].map(el => el.getAttribute('marker-mid') || el.getAttribute('mask'))), [null, null], 'the outermost references dropped');
+  // (Nothing nested: round 48.)
+  assert.equal(await h.inFrame(page, NESTED), 0, 'nothing inside a marker or mask has an effect');
   await page.close();
   page = await h.newPage();
   const t1 = Date.now();
@@ -401,12 +407,8 @@ test('masks nested deep by -webkit-mask, mask-image, escapes, custom properties,
   await h.openReader(page, `${h.READER}?book=books/effect-tricks.html`);
   assert.ok(await h.waitFor(async () => /After the tricks/.test(await frameText(page)), 15000));
   assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
-  const got = await h.inFrame(page, doc => Object.fromEntries([...doc.querySelectorAll('div[class^="t-"]')].map(d => {
-    const top = d.querySelector('svg > rect'), cs = getComputedStyle(top);
-    return [d.className, [cs.maskImage, cs.webkitMaskImage].join(' ')];
-  })));
-  // (The animation removed, what it would have nested is one level deep, and kept.)
-  for (const [k, v] of Object.entries(got)) if (k !== 't-smil') assert.doesNotMatch(v, /url\(/, `${k}: ${v}`);
+  // (Nothing nested, by whatever channel: round 48.)
+  assert.equal(await h.inFrame(page, NESTED), 0);
   assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('set').length), 0, 'the animation that sets a mask removed');
 });
 
@@ -422,8 +424,7 @@ test('masks nested by var() fallbacks, @scope, imports, selectors on what the re
     const ms = await paintMs(page);
     assert.ok(ms < 5000, `${k}: painted in ${ms} ms`);
     assert.ok(Date.now() - t0 < 25000, `${k}: took ${Date.now() - t0} ms`);
-    const top = await h.inFrame(page, doc => [...doc.querySelectorAll('svg > rect, svg > polyline')].map(el => { const cs = getComputedStyle(el); return [cs.maskImage, cs.markerMid].join(' '); }));
-    for (const v of top) assert.doesNotMatch(v, /url\(/, `${k}: ${v}`);
+    assert.equal(await h.inFrame(page, NESTED), 0, `${k}: nothing nested`);
     await page.close();
   }
   const page = await h.newPage();
@@ -433,8 +434,9 @@ test('masks nested by var() fallbacks, @scope, imports, selectors on what the re
   assert.equal(srcs.length, 2);
   for (const u of srcs) {
     const svg = await page.evaluate(async u => (await fetch(u)).text(), u);
-    // (The outermost rect lost its mask, by whatever channel.)
-    assert.doesNotMatch(svg.match(/<rect[^>]*\/>\s*<\/svg>\s*$/)?.[0] || svg.slice(-200), /k6/, u);
+    // (Nothing inside a mask keeps an effect: round 48.)
+    const loose = await page.evaluate(t => [...new DOMParser().parseFromString(t, 'image/svg+xml').querySelectorAll('mask *')].filter(e => !/mask: none !important/.test(e.getAttribute('style') || '')).length, svg);
+    assert.equal(loose, 0, u);
   }
   assert.ok((await paintMs(page)) < 5000, 'pictures painted in good time');
 });
@@ -495,7 +497,7 @@ test('Markdown with a block shown as its text is edited in Raw only, its source 
 test('<use> copies of a heavy marker, vertices of "z", a mask nested in another\'s element and many large filters are capped; painted in good time (round 47 review, H-86 to H-88, H-90)', async () => {
   for (const k of ['use', 'zz', 'nested', 'blur']) {
     const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
-    const warns = []; page.on('console', m => { if (/draw too much/.test(m.text())) warns.push(m.text()); });
+    const warns = []; page.on('console', m => { if (/draw too much|aren't shown/.test(m.text())) warns.push(m.text()); });
     await h.openReader(page, `${h.READER}?book=books/draws-${k}.html`);
     assert.ok(await h.waitFor(async () => /After the drawing/.test(await frameText(page)), 20000), `${k}: opened`);
     const ms = await paintMs(page);
@@ -514,7 +516,7 @@ test('a heavy picture shown 40 times is charged each time; 21,000 clip paths use
   assert.ok((await paintMs(page)) < 8000);
   await page.close();
   page = await h.newPage();
-  const warns = []; page.on('console', m => { if (/draw too much/.test(m.text())) warns.push(m.text()); });
+  const warns = []; page.on('console', m => { if (/draw too much|aren't shown/.test(m.text())) warns.push(m.text()); });
   await h.openReader(page, `${h.READER}?book=books/many-clips.html`);
   assert.ok(await h.waitFor(async () => /After the clips/.test(await frameText(page)), 30000));
   assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('rect[clip-path]').length), 21000);
@@ -550,4 +552,70 @@ test('Raw-only Markdown is offered WYSIWYG again once its block is fixed in Raw 
   await page.waitForFunction(() => document.querySelector('[data-mode="wysiwyg"]').disabled, null, { timeout: 10000 });
   await page.evaluate(() => { const cm = document.querySelector('.CodeMirror').CodeMirror; cm.setValue(cm.getValue().replace(/(\*x\* )+/g, 'short ')); });
   await page.waitForFunction(() => !document.querySelector('[data-mode="wysiwyg"]').disabled, null, { timeout: 15000 });
+});
+
+// Round 48.
+test('the Markdown worker\'s source, made from a template string, compiles with its escapes intact (rounds 45 to 47 lost \\s, \\n and \\b)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const a = src.indexOf('new Blob([await r.text(), `') + 'new Blob([await r.text(), '.length, b = src.indexOf("`], { type: 'text/javascript' }", a);
+  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, function mdParaStart(){}, function mdInlineMath(){}, function mdTokenizers(){});
+  assert.doesNotThrow(() => new Function(out), 'compiles');
+  assert.doesNotMatch(out, /[\x00-\x08\x0b\x0c\x0e-\x1f]/, 'no control characters');
+  for (const s of ['/^<\\/?w?br\\b/i', '[^\\s]{200,}', '\\p{M}', "'</p>'"]) assert.ok(out.includes(s), s);
+});
+
+test('effects through custom properties, @scope, a repeated filter, feMorphology, CSS blur and backdrop-filter are capped as the browser computes them; painted in good time (round 48 review, H-95 to H-98)', async () => {
+  for (const k of ['var', 'scope', 'repeat', 'morph', 'cssblur', 'backdrop']) {
+    const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+    const warns = []; page.on('console', m => { if (/aren't shown/.test(m.text())) warns.push(m.text()); });
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/fx48-${k}.html`);
+    assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 20000), `${k}: opened`);
+    const ms = await paintMs(page);
+    assert.ok(ms < 8000, `${k}: painted in ${ms} ms`);
+    assert.ok(Date.now() - t0 < 30000, `${k}: took ${Date.now() - t0} ms`);
+    assert.ok(warns.length, `${k}: effects set off`);
+    await page.close();
+  }
+});
+
+test('another file\'s filter is set off; a heavy picture as a sheet background on 40 sizes is charged per element (round 48 review, H-93, H-94)', async () => {
+  const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/fx48-files.epub`);
+  assert.ok(await h.waitFor(async () => /After the file effects/.test(await frameText(page)), 20000));
+  assert.ok((await paintMs(page)) < 8000, 'file filter painted in good time');
+  assert.equal(await h.inFrame(page, doc => [...doc.querySelectorAll('.f')].filter(e => getComputedStyle(e).filter !== 'none').length), 0, 'no filter from another file');
+  await page.evaluate(() => document.querySelectorAll('#tocList a')[1].click());
+  assert.ok(await h.waitFor(async () => /After the backgrounds/.test(await frameText(page)), 15000));
+  assert.ok((await paintMs(page)) < 8000, 'backgrounds painted in good time');
+  const shown = await h.inFrame(page, doc => [...doc.querySelectorAll('.h')].filter(e => getComputedStyle(e).backgroundImage !== 'none').length);
+  assert.ok(shown < 40, `backgrounds shown: ${shown}`);
+});
+
+test('everyday effects are kept: drop shadows on 200 small circles by attribute and by class, an arrowhead beside a <use> loop (round 48 review, M-247, L-485)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/fx48-kept.html`);
+  assert.ok(await h.waitFor(async () => /After the kept effects/.test(await frameText(page)), 10000));
+  const got = await h.inFrame(page, doc => [[...doc.querySelectorAll('circle')].filter(c => getComputedStyle(c).filter !== 'none').length, getComputedStyle(doc.querySelector('line.m')).markerEnd]);
+  assert.equal(got[0], 400, 'every shadow kept');
+  assert.match(got[1], /url\(/, 'the arrowhead kept');
+});
+
+test('HTML blocks in Markdown render (a table, a <div> of paragraphs, a comment, an SVG); a long paragraph shown as text and 60,000 <wbr> open in good time (round 48 review, H-99, M-248, M-249)', async () => {
+  let page = await mdPage();
+  await h.openReader(page, `${h.READER}?book=books/html-blocks.md`);
+  assert.ok(await h.waitFor(async () => (await h.inFrame(page, doc => doc.querySelectorAll('td').length)) > 0, 20000), 'opened');
+  const got = await h.inFrame(page, doc => [doc.querySelectorAll('td').length, doc.querySelectorAll('br').length, /<tr>|<!--/.test(doc.body.textContent)]);
+  assert.deepEqual(got, [12000, 600, false]);
+  await page.close();
+  for (const [book, text] of [['long-fallback.md', /abcdefghijklmnopq<br>/], ['many-wbr.md', /abc/]]) {
+    page = await mdPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(await h.waitFor(async () => text.test(await frameText(page)), 20000), `${book}: opened`);
+    const ms = await paintMs(page);
+    assert.ok(ms < 5000, `${book}: painted in ${ms} ms`);
+    assert.ok(Date.now() - t0 < 25000, `${book}: took ${Date.now() - t0} ms`);
+    await page.close();
+  }
 });

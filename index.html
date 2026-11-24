@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261124.1514</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261124.2235</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1963,7 +1963,8 @@ const mdLexed = new Map();
 // What is known of a text: { ok, tokens (null: read it on the page), blocks } or undefined while it is being read.
 // (A short document is read on the page, unless it has more line breaks than a block may: 9,900 in 19.8 KB froze the tab
 // for 9 s: round 47 review, M-244.)
-const mdSmall = md => md.length < MD_PROBE_MIN && (md.match(/\\\n| {2,}\n|<\/?br\b/gi) || []).length <= MD_BLOCK_BREAKS;
+// (Code blocks left out, and trailing spaces counted only after text: round 48 review, L-487.)
+const mdSmall = md => md.length < MD_PROBE_MIN && (md.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, '').match(/\\\n|\S {2,}\n|<\/?w?br\b/gi) || []).length <= MD_BLOCK_BREAKS;
 const mdLexResult = md => mdSmall(md) ? { ok: true, tokens: null } : mdLexed.get(md)?.result;
 // (What was read and drawn let go when another book opens: kept, a closed document's tokens held tens of MB: L-483.)
 function mdForget(){ if (mdDrawn) { mdDrawn.tokens = null; mdDrawn.spent = true; mdDrawn = null; } mdLexed.clear(); }
@@ -2008,21 +2009,45 @@ onmessage = e => {
     // (A line break, the costliest piece to lay out, counted on its own: more than ${MD_BLOCK_BREAKS} in a block are too many
     // (5,000 took 5 s, 10,000 a minute): round 46 review, H-85.)
     // (</br> too, which browsers read as <br>: round 47 review, H-91.)
-    const isBreak = t => t.type === 'br' || (t.type === 'html' && /^<\\/?br\\b/i.test(t.text || ''));
+    const isBreak = t => t.type === 'br' || (t.type === 'html' && /^<\\/?w?br\\b/i.test(t.text || ''));   // (<wbr> too: M-249)
     const weight = t => t.type === 'text' || t.type === 'escape' ? 0 : isBreak(t) ? 1 : t.type === 'html' ? 0.25 : 1;
     const inline = list => { let n = 0; for (const t of list || []) { n += weight(t) + inline(t.tokens); if (n > ${MD_BLOCK_PIECES}) break; } return n; };
     const breaks = list => { let n = 0; for (const t of list || []) { n += (isBreak(t) ? 1 : 0) + breaks(t.tokens); if (n > ${MD_BLOCK_BREAKS}) break; } return n; };
     const tooMany = list => inline(list) > ${MD_BLOCK_PIECES} || breaks(list) > ${MD_BLOCK_BREAKS};
     let plainBlocks = false;
     const esc = v => v.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    // (Shown as its text in short paragraphs, its lines run together and long words given breaks: as one long paragraph
+    // it froze the browser's paint: round 48 review, M-248.)
+    const chunks = v => {
+      const out = [];
+      for (let at = 0; at < v.length;) {
+        let end = Math.min(v.length, at + 2000);
+        if (end < v.length) {
+          const sp = v.lastIndexOf(' ', end);
+          if (sp > at + 1000) end = sp + 1;
+          else {
+            const amp = v.lastIndexOf('&', end);
+            if (amp > at && amp > end - 10 && v.indexOf(';', amp) >= end) end = amp;
+            while (end < v.length && (/\\p{M}/u.test(v[end]) || (v.charCodeAt(end) & 0xfc00) === 0xdc00)) end++;
+          }
+        }
+        out.push(v.slice(at, end));
+        at = end;
+      }
+      return out;
+    };
+    const breakWords = v => v.replace(/[^\\s]{200,}/gu, w => w.match(/(?:&[a-z0-9#]+;|[^&]\\p{M}*){1,100}/giu).join('<wbr>'));
     const plain = t => ({ type: 'html', block: true, pre: false, raw: t.raw,
-      text: '<p>' + esc(t.raw).replace(/[^\\s]{1000,}/gu, w => w.match(/(?:&[a-z0-9#]+;|[^&]\\p{M}*){1,200}/giu).join('<wbr>')) + '</p>\\n' });
+      text: chunks(esc(t.raw).replace(/\\s*\\n\\s*/g, ' ')).map(c => '<p>' + breakWords(c) + '</p>').join('\\n') + '\\n' });
     const fix = list => { (list || []).forEach((t, i) => {
       if (/^(paragraph|heading|text)$/.test(t.type)) { if (tooMany(t.tokens)) { list[i] = plain(t); plainBlocks = true; } return; }
-      // (An HTML block's breaks and tags, never counted before: round 47 review, H-92.)
+      // (An HTML block's breaks and tags, never counted before (round 47 review, H-92), counted within each of its
+      // paragraphs, cells and the like, its comments, SVG and math left out: counted whole, an HTML table, a <div> of
+      // paragraphs or an inline SVG was shown as its markup: round 48 review, H-99.)
       if (t.type === 'html') {
-        const text = t.text || '';
-        if ((text.match(/<\\/?br\\b/gi) || []).length > ${MD_BLOCK_BREAKS} || (text.match(/</g) || []).length > ${MD_BLOCK_PIECES}) { list[i] = plain(t); plainBlocks = true; }
+        const text = (t.text || '').replace(/<!--[\\s\\S]*?-->/g, '').replace(/<svg[\\s>][\\s\\S]*?<\\/svg>|<math[\\s>][\\s\\S]*?<\\/math>/gi, '');
+        const segs = text.split(/<\\/?(?:p|div|li|td|th|tr|h[1-6]|blockquote|pre|section|article|table|tbody|thead|tfoot|ul|ol|dl|dd|dt|figure|figcaption|header|footer|aside|nav|main|details|summary)\\b[^>]*>/i);
+        if (segs.some(sg => (sg.match(/<\\/?w?br\\b/gi) || []).length > ${MD_BLOCK_BREAKS} || (sg.match(/</g) || []).length > 2 * ${MD_BLOCK_PIECES})) { list[i] = plain(t); plainBlocks = true; }
         return;
       }
       fix(t.tokens);
@@ -3077,7 +3102,7 @@ async function svgClean(t, path, type, b = book){
   }
   await Promise.all(jobs);
   if (book !== b) return null;
-  const draws = svgEffectCap(d, d.documentElement, path);   // (after its sheets are rewritten, imports pasted in: H-70, H-81)
+  const draws = svgPictureEffects(d, path);   // (after its sheets are rewritten, imports pasted in: H-70, H-81)
   // (As UTF-8, which it now is, whatever its declaration said: round 25 review, L-291.)
   const u = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(d).replace(/^<\?xml[^>]*\?>\s*/, '')], { type: `${type};charset=utf-8` }));
   (b.svgBlobs ||= []).push(u);
@@ -3153,80 +3178,25 @@ function dataPictureFits(v){
 // more, its <use> elements are dropped (many uses of small symbols, as MathJax's glyphs, stay: round 41). Counted with
 // a stack of its own, so a page nested however deep is counted (L-474), and only where there is a <use> (L-470).
 // wantSizes (an SVG file, for its sprites): returns the size of each element with an id, and the whole file's ('').
-/* Markers, masks, clip paths, filters and patterns draw what they point to wherever they are used, as <use> does: a
-   marker on each of a polyline's 30 vertices, holding such polylines four deep (1.8 KB), is 810,000 drawings and ran the
-   tab out of memory; masks six deep took 35 s (round 43 review, H-70); one marker of 500 circles on a line of 20,000
-   vertices, 24.7 s; masks two deep of 3,000 rects each, 4.4 s (round 46, H-83). So the drawings are estimated, not the
-   depth: what an element points to costs its target's drawings, times its vertices for a marker in the middle, its
-   subpaths at the ends, and for a custom property every element that inherits it; a target's drawings are its own
-   elements plus what is pointed to inside it (a reference to itself or to what holds it the browser ignores, and so is
-   not counted: H-84). References are charged in document order, and those past SVG_DRAWS dropped.
-   Every way of pointing is read (rounds 45, 46): any attribute or declaration with url(#…), read from its text so a
-   var() fallback counts (H-78), escapes decoded; href on <use>, <feImage>, patterns and gradients (L-478); and style
-   sheets. A sheet's rule is not trusted to reach only what its selector matches now (the reader adds attributes later,
-   and :has(), @scope and nesting change what matches: H-79, H-80): it reaches every element matching the last part of its
-   selector with pseudo-classes and attributes left out, and every element at all when inherited (markers, custom
-   properties), nested, scoped, in keyframes or an @property. It runs on the finished page, after its sheets are pasted
-   in and its ids cleaned (H-81, H-82). Animations that would set a reference, a class or a style are removed. */
-const SVG_DRAWS = 500000;
-// The ids a value points to with url(…), its CSS escapes decoded as the browser decodes them.
-function svgFragIds(v){
-  if (!v || !/url|\\/i.test(v)) return [];
-  const t = v.replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?|\\([^\n])/gi, (m, h, c) => c ?? String.fromCodePoint(parseInt(h, 16) > 0x10ffff || parseInt(h, 16) === 0 ? 0xfffd : parseInt(h, 16)));
-  const out = [];
-  for (const m of t.matchAll(/url\(\s*(['"]?)([^'")]*)\1\s*\)?/gi)) {
-    const i = m[2].indexOf('#');
-    if (i < 0) continue;
-    let id = m[2].slice(i + 1).trim();
-    try { id = decodeURIComponent(id); } catch {}
-    out.push(id);
-  }
-  return out;
-}
-// A declaration block's [name, value] pairs, from its text: a shorthand holding var() is kept whole there, where its
-// longhands read as empty (H-78).
-function svgDecls(style){
-  const t = style.cssText, out = [];
-  let depth = 0, q = null, at = 0;
-  for (let i = 0; i <= t.length; i++) {
-    const c = t[i];
-    if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
-    if (c === '\\') { i++; continue; }
-    if (c === '"' || c === "'") q = c;
-    else if (c === '(') depth++;
-    else if (c === ')') depth--;
-    else if (i === t.length || (c === ';' && depth <= 0)) {
-      const d = t.slice(at, i), k = d.indexOf(':');
-      at = i + 1;
-      if (k > 0) out.push([d.slice(0, k).trim(), d.slice(k + 1)]);
-    }
-  }
-  return out;
-}
-// The elements a selector may reach: the last compound of each of its selectors, its pseudo-classes and attribute
-// tests left out; null for every element.
-function svgSelectorReach(doc, sel){
-  const parts = [];
-  let depth = 0, q = null, cur = '', compound = '';
-  const flush = () => { parts.push(compound + cur); cur = ''; compound = ''; };
-  for (let i = 0; i < sel.length; i++) {
-    const c = sel[i];
-    if (q) { if (c === '\\') { cur += c + (sel[++i] ?? ''); continue; } if (c === q) q = null; continue; }
-    if (c === '\\') { cur += c + (sel[++i] ?? ''); continue; }
-    if (depth) { if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; if ((c === '"' || c === "'")) q = c; continue; }
-    if (c === '[') { depth = 1; continue; }
-    if (c === ':') { while (sel[i + 1] === ':' ) i++; while (i + 1 < sel.length && /[\w-]/.test(sel[i + 1])) i++; if (sel[i + 1] === '(') { i++; depth = 1; } continue; }
-    if (c === ',') { flush(); continue; }
-    if (/[\s>+~]/.test(c)) { cur = ''; continue; }
-    if (c === '&') return null;
-    cur += c;
-  }
-  flush();
-  if (parts.some(p => !p.trim() || p.trim() === '*' || /^\*?$/.test(p.trim()))) return null;
-  // (Keyed by what is left, so rules alike share their reach: round 47 review, M-243.)
-  const key = parts.map(p => p.trim()).join(',');
-  try { return { key, els: [...doc.querySelectorAll(key)] }; } catch { return null; }
-}
+/* Markers, masks, clip paths, filters and patterns draw what they point to wherever they are used, and filters cost by
+   the area they cover: nested or fanned out, a few KB froze or crashed the tab (rounds 43 to 48: H-70, H-83, H-86 to H-98).
+   Five rounds of estimating the drawings from the markup were each got round by the next review, through the many ways
+   CSS can apply a property. So, your decision (round 48), blunt limits, with the browser itself reading the CSS:
+   - No nesting: nothing inside a mask, clip path, marker or pattern, nor what a <use> or <feImage> there shows, may use
+     another such effect (svgNoNest: set off on each, in its style attribute, which no style sheet overrides). A mask may
+     hold filtered shapes.
+   - Effects that would come later (:hover and the like, keyframes, animations of them) are removed (svgStillEffects).
+   - An SVG picture whose effects could draw more than SVG_DRAWS, by a blunt count (every vertex a marker's, every shape a
+     mask's), is shown without them.
+   - A page is laid out hidden, and the effects each element has, as the browser computed them, are counted: filters by
+     their area, the rest by what they draw, pictures with effects each time they are shown; past the budget, an
+     element's effects are set off (pageEffectCap), and only then is the page shown. */
+const SVG_DRAWS = 500000, PAGE_FILTER_SCREENS = 60;
+const SVG_NS_ = 'http://www.w3.org/2000/svg';
+const FX_DRAWERS = ['mask', 'clipPath', 'marker', 'pattern'];
+const FX_PROPS = ['filter', 'backdrop-filter', '-webkit-backdrop-filter', 'mask', '-webkit-mask', '-webkit-mask-box-image', 'clip-path', 'marker', 'shape-outside'];
+const FX_PROP_RE = /^(-webkit-)?(filter|backdrop-filter|mask(-.*)?|mask-box-image(-.*)?|clip-path|marker(-start|-mid|-end)?|shape-outside)$/i;
+const fxOff = (el, keepFilter = false) => { if (el.style) for (const p of FX_PROPS) if (!(keepFilter && p === 'filter')) el.style.setProperty(p, 'none', 'important'); };
 // A path's vertices and subpaths, by its commands: each "z" is a vertex with no numbers, "h" and "v" take one (round 47
 // review, H-87). (An arc's flags may run together, so it is taken as four numbers: more vertices, not fewer.)
 function svgPathCounts(d){
@@ -3239,235 +3209,201 @@ function svgPathCounts(d){
   end();
   return [v, Math.max(1, sub)];
 }
-const SVG_EFFECT_PROP = /^(mask|mask-image|-webkit-mask|-webkit-mask-image|-webkit-mask-box-image|-webkit-mask-box-image-source|clip-path|filter|marker|marker-start|marker-mid|marker-end)$/i;
-const SVG_FILTER_COST = 1000, SVG_EVERY_MAX = 1000;
-// Returns the drawings charged (an SVG file's are kept, and charged to each page for each time it is shown: H-89).
-function svgEffectCap(doc, root, where){
-  const SVG_NS = 'http://www.w3.org/2000/svg';
-  const drawers = ['mask', 'clipPath', 'marker', 'filter', 'pattern'];
-  if (!drawers.some(n => doc.getElementsByTagNameNS(SVG_NS, n).length)) return 0;
-  doc.querySelectorAll('set, animate, animateTransform, animateMotion, animateColor').forEach(e => {
-    if (/^(class|id|style|href|xlink:href)$/i.test(e.getAttribute('attributeName') || '') || ['to', 'from', 'by', 'values'].some(a => /url|\\/i.test(e.getAttribute(a) || ''))) e.remove();
-  });
-  const all = [doc.documentElement, ...doc.documentElement.getElementsByTagName('*')], n = all.length;
-  const index = new Map(all.map((e, i) => [e, i])), parent = new Int32Array(n);
-  for (let i = 1; i < n; i++) parent[i] = index.get(all[i].parentElement) ?? 0;
+// No nesting: everything inside a mask, clip path, marker or pattern, and what a <use> or <feImage> there shows, has its
+// effects set off (a mask's shapes may keep a filter).
+function svgNoNest(doc){
+  const drawers = FX_DRAWERS.flatMap(n => [...doc.getElementsByTagNameNS(SVG_NS_, n)]);
+  if (!drawers.length) return;
   const byId = new Map();
-  for (const el of all) if (el.id && !byId.has(el.id)) byId.set(el.id, el);
-  const isDrawer = e => e.namespaceURI === SVG_NS && drawers.includes(e.localName);
-  // Each element's own count of SVG elements, vertices and subpaths, with its descendants' (HTML elements count for
-  // nothing: L-481).
-  const cnt = new Float64Array(n), vtx = new Float64Array(n), sub = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    const e = all[i], nm = e.localName;
-    if (e.namespaceURI !== SVG_NS) continue;
-    cnt[i] = 1;
-    if (nm === 'line') { vtx[i] = 2; sub[i] = 1; }
-    else if (nm === 'polyline' || nm === 'polygon') { vtx[i] = Math.ceil(((e.getAttribute('points') || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || []).length / 2); sub[i] = 1; }
-    else if (nm === 'path') [vtx[i], sub[i]] = svgPathCounts(e.getAttribute('d') || '');
-  }
-  const upward = arr => { for (let i = n - 1; i > 0; i--) arr[parent[i]] += arr[i]; };
-  upward(cnt); upward(vtx); upward(sub);
-  // (A <use> holds its target's elements, vertices and subpaths as its own, so markers or masks it inherits, and what
-  // holds it, are counted for each use: round 47 review, H-86.)
-  const useTarget = u => { const v = (u.getAttribute('href') ?? u.getAttribute('xlink:href') ?? '').trim(), k = v.indexOf('#'); if (k < 0) return null; let id = v.slice(k + 1); try { id = decodeURIComponent(id); } catch {} return byId.get(id) || null; };
-  // (Worked out in passes over the page, one per level of <use> within <use>; a use still growing after a dozen, in a
-  // loop, counts as huge.)
-  const uses = all.filter(e => e.localName === 'use' && e.namespaceURI === SVG_NS), BIG = 1e12;
-  if (uses.length) {
-    const ui = uses.map(u => index.get(u)), ti = uses.map((u, k) => { const t = useTarget(u); return t && t !== u && !t.contains(u) ? index.get(t) : -1; });
-    const m = uses.length, xc = new Float64Array(m), xv = new Float64Array(m), xs = new Float64Array(m);
-    let ac, av, as;
-    for (let round = 0; ; round++) {
-      ac = new Float64Array(n); av = new Float64Array(n); as = new Float64Array(n);
-      for (let k = 0; k < m; k++) { ac[ui[k]] += xc[k]; av[ui[k]] += xv[k]; as[ui[k]] += xs[k]; }
-      upward(ac); upward(av); upward(as);
-      let changed = false;
-      for (let k = 0; k < m; k++) {
-        const t = ti[k];
-        if (t < 0) continue;
-        const c = Math.min(BIG, cnt[t] + ac[t]), v = Math.min(BIG, vtx[t] + av[t]), sv = Math.min(BIG, sub[t] + as[t]);
-        if (c !== xc[k] || v !== xv[k] || sv !== xs[k]) { changed = true; if (round >= 12) { xc[k] = xv[k] = xs[k] = BIG; } else { xc[k] = c; xv[k] = v; xs[k] = sv; } }
+  for (const el of doc.querySelectorAll('[id]')) if (!byId.has(el.id)) byId.set(el.id, el);
+  const done = new Set();
+  const off = (root, keepFilter) => {
+    const stack = [root];
+    while (stack.length) {
+      const el = stack.pop();
+      if (done.has(el)) continue;
+      done.add(el);
+      fxOff(el, keepFilter);
+      for (const c of el.children) stack.push(c);
+      if (/^(use|feImage)$/.test(el.localName)) {
+        const v = (el.getAttribute('href') ?? el.getAttribute('xlink:href') ?? '').trim(), k = v.indexOf('#');
+        let id = k >= 0 ? v.slice(k + 1) : '';
+        try { id = decodeURIComponent(id); } catch {}
+        const t = byId.get(id);
+        if (t) stack.push(t);
       }
-      if (!changed || round > 12) break;
-    }
-    for (let i = 0; i < n; i++) { cnt[i] = Math.min(BIG, cnt[i] + ac[i]); vtx[i] = Math.min(BIG, vtx[i] + av[i]); sub[i] = Math.min(BIG, sub[i] + as[i]); }
-  }
-  // What each kind of reference multiplies by, for the elements of a subtree.
-  let inheritAll = false;
-  const noteInherit = (p, v) => { if (/^\s*inherit\s*$/i.test(v) && SVG_EFFECT_PROP.test(p)) inheritAll = true; };
-  const kindOf = p => /^marker(-mid)?$/i.test(p) ? 'mid' : /^marker-(start|end)$/i.test(p) ? 'end' : p.startsWith('--') ? 'var' : 'plain';
-  const inherited = k => k !== 'plain' || inheritAll;
-  const agg = (i, k) => k === 'mid' ? vtx[i] : k === 'end' ? 2 * sub[i] : k === 'var' || inheritAll ? cnt[i] : 1;
-  // References: { t (target), k (kind), drop, href } in groups: one element's ({ el }), a sheet selector's ({ els, counts }),
-  // or every element's ({ every: true }, one reference per target and kind).
-  const groups = [], own = new Map(), keyed = new Map(), every = { every: true, refs: [] }, everyBy = new Map();
-  const note = (ids, k, drop, into) => { for (const id of ids) { const t = byId.get(id); if (t) into.push({ t, k, drop }); } };
-  const noteEvery = (ids, k, drop) => {
-    for (const id of ids) {
-      const t = byId.get(id);
-      if (!t || !isDrawer(t)) continue;
-      const key = id + '\n' + k;
-      if (!everyBy.has(key)) {
-        // (Past SVG_EVERY_MAX distinct targets, dropped outright: no picture points so many ways from every element: M-241.)
-        if (everyBy.size >= SVG_EVERY_MAX) { drop(); dropped++; continue; }
-        const ref = { t, k, drops: [] };
-        ref.drop = () => ref.drops.forEach(f => f());
-        everyBy.set(key, ref); every.refs.push(ref);
-      }
-      everyBy.get(key).drops.push(drop);
     }
   };
-  let dropped = 0;
-  for (const el of all) {
-    const refs = [];
-    for (const a of [...el.attributes]) {
-      const nm = a.name.toLowerCase();
-      if (nm === 'style' || nm === 'id' || nm === 'class') continue;
-      noteInherit(nm, a.value);
-      if ((nm === 'href' || nm === 'xlink:href') && /^(use|feImage|pattern|linearGradient|radialGradient)$/.test(el.localName)) {
-        const t = el.localName === 'use' ? useTarget(el) : (() => { const v = a.value.trim(), k = v.indexOf('#'); if (k < 0) return null; let id = v.slice(k + 1); try { id = decodeURIComponent(id); } catch {} return byId.get(id) || null; })();
-        if (t) refs.push({ t, k: 'plain', href: true, drop: () => el.removeAttribute(a.name) });
-        continue;
-      }
-      note(svgFragIds(a.value), kindOf(nm), () => el.removeAttribute(a.name), refs);
-    }
-    if (el.hasAttribute('style') && el.style) for (const [p, v] of svgDecls(el.style)) {
-      noteInherit(p, v);
-      note(svgFragIds(v), kindOf(p), () => el.style.removeProperty(p), refs);
-    }
-    if (refs.length) { const g = { el, refs }; groups.push(g); own.set(el, g); }
+  for (const d of drawers) {
+    // (The drawer itself keeps what applies to it; its contents don't.)
+    for (const c of d.children) off(c, d.localName === 'mask');
   }
-  const dirty = new Set(), deleted = new Set();
+  for (const f of doc.getElementsByTagNameNS(SVG_NS_, 'filter')) for (const c of f.getElementsByTagNameNS(SVG_NS_, 'feImage')) off(c, false);
+}
+// Effects that would come later, which nothing counts beforehand: in rules for :hover and the like, in keyframes, and in
+// animations: removed. (Custom properties set there that hold a function too, which effects could take.)
+const FX_LATER = /:(hover|active|focus|focus-within|focus-visible|target|target-within|visited|link|any-link|checked|indeterminate|valid|invalid|user-valid|user-invalid|placeholder-shown|autofill|enabled|disabled|playing|paused|open|popover-open|modal|fullscreen|default|in-range|out-of-range|required|optional|read-only|read-write|state)\b/i;
+function svgStillEffects(doc){
+  doc.querySelectorAll('set, animate, animateTransform, animateMotion, animateColor').forEach(e => {
+    const a = e.getAttribute('attributeName') || '';
+    if (/^(class|id|style|href|xlink:href)$/i.test(a) || FX_PROP_RE.test(a) || ['to', 'from', 'by', 'values'].some(x => /url|\\/i.test(e.getAttribute(x) || ''))) e.remove();
+  });
   for (const st of doc.getElementsByTagName('style')) {
     const text = st.textContent;
-    if (!/url|\\/i.test(text)) continue;
+    if (!/:|@keyframes|@-webkit-keyframes/i.test(text)) continue;
     const sheet = new CSSStyleSheet();
     try { sheet.replaceSync(text); } catch { continue; }
-    const touched = () => { dirty.add(st); st._sheet = sheet; };
-    const walk = (rules, anywhere) => {
+    let changed = false;
+    const walk = (rules, later) => {
       for (const r of rules) {
-        if (typeof CSSPropertyRule !== 'undefined' && r instanceof CSSPropertyRule) {   // (L-482)
-          // (Removed together when the sheet is written again, not one by one: 10,000 took 5 s: M-241.)
-          noteEvery(svgFragIds(r.initialValue), 'var', () => { if (r.parentRule) { const i = [...r.parentRule.cssRules].indexOf(r); if (i >= 0) r.parentRule.deleteRule(i); } else deleted.add(r); touched(); });
-          continue;
+        const here = later || r instanceof CSSKeyframesRule || (r.selectorText != null && FX_LATER.test(r.selectorText));
+        if (here && r.style) for (let i = r.style.length - 1; i >= 0; i--) {
+          const p = r.style[i];
+          if (FX_PROP_RE.test(p) || p === 'animation' || p === 'animation-name' || p === 'transition' || (p.startsWith('--') && r.style.getPropertyValue(p).includes('('))) { r.style.removeProperty(p); changed = true; }
         }
-        if (r.style) {
-          const scoped = anywhere || r.selectorText == null || /&|:scope/i.test(r.selectorText);
-          for (const [p, v] of svgDecls(r.style)) {
-            noteInherit(p, v);
-            const ids = svgFragIds(v).filter(id => byId.has(id) && isDrawer(byId.get(id)));   // (gradients: nothing to count: M-243)
-            if (!ids.length) continue;
-            const k = kindOf(p), drop = () => { r.style.removeProperty(p); touched(); };
-            const reach = !scoped && !inherited(k) ? svgSelectorReach(doc, r.selectorText) : null;
-            if (!reach) { noteEvery(ids, k, drop); continue; }
-            if (!keyed.has(reach.key)) keyed.set(reach.key, { els: reach.els, refs: [] });
-            note(ids, k, drop, keyed.get(reach.key).refs);
-          }
-        }
-        if (r.cssRules) walk(r.cssRules, anywhere || !!r.style || r instanceof CSSKeyframesRule || (typeof CSSScopeRule !== 'undefined' && r instanceof CSSScopeRule));
+        if (r.cssRules) walk(r.cssRules, here);
       }
     };
     walk(sheet.cssRules, false);
+    if (changed) st.textContent = [...sheet.cssRules].map(r => r.cssText).join('\n');
   }
-  groups.push(...keyed.values(), every);
-  // (For each target, how many of a selector group's elements are inside it: found by walking up from each, not with an
-  // array the size of the page for each group: M-243.)
-  const targets = new Set(groups.flatMap(g => g.refs.map(r => r.t))), reaching = new Map();
-  for (const g of keyed.values()) {
-    g.counts = new Map();
-    for (const e of g.els) for (let a = e; a; a = a.parentElement) if (targets.has(a)) g.counts.set(a, (g.counts.get(a) || 0) + 1);
-    for (const t of g.counts.keys()) { if (!reaching.has(t)) reaching.set(t, []); reaching.get(t).push(g); }
-  }
-  // (A reference applies in t: by an element inside it, or inherited from one round it.)
-  const inside = (g, ref, i) => {
-    if (g.every) return ref.k === 'plain' ? cnt[i] : agg(i, ref.k);   // (every element of it)
-    if (g.els) return g.counts.get(all[i]) || 0;
-    const j = index.get(g.el);
-    if (j === i || all[i].contains(g.el)) return ref.href ? 1 : agg(j, ref.k);
-    if (inherited(ref.k) && g.el.contains(all[i])) return agg(i, ref.k);
-    return 0;
-  };
-  const drawn = ref => ref.href || drawers.includes(ref.t.localName);
-  // (A reference to t, or to what holds it, that the browser draws as part of what it points to: a loop it ignores. A mask
-  // or the like nested inside what is pointed to isn't drawn as part of it, so a reference across one counts: H-88.)
-  const ignored = (target, t) => {
-    if (target === t) return true;
-    if (!target.contains(t)) return false;
-    for (let a = t; a && a !== target; a = a.parentElement) if (isDrawer(a)) return false;
-    return true;
-  };
-  const memo = new Map(), busy = new Set();
-  let steps = 0;
-  // A target's drawings: its elements (a filter's primitives cost SVG_FILTER_COST each, being drawn by area: H-90), and
-  // what is pointed to inside it. (A loop the browser breaks: not counted, and what was worked out inside one not kept.)
-  const draws = t => {
-    if (memo.has(t)) return { v: memo.get(t), loop: false };
-    if (busy.has(t)) return { v: 0, loop: true };
-    if (++steps > 20000 || busy.size > 200) return { v: Infinity, loop: false };   // (past any picture's chains)
-    busy.add(t);
-    const i = index.get(t);
-    let v = t.localName === 'filter' && t.namespaceURI === SVG_NS ? SVG_FILTER_COST * Math.max(1, cnt[i] - 1) : cnt[i], loop = false;
-    const look = g => { for (const ref of g.refs) {
-      if (v === Infinity || !drawn(ref) || ignored(ref.t, t)) continue;
-      const m = inside(g, ref, i);
-      if (!m) continue;
-      const r = draws(ref.t);
-      loop ||= r.loop;
-      v += m * r.v;
-    } };
-    for (const g of reaching.get(t) || []) look(g);
-    look(every);
-    // (The elements' own references: by its elements, or by the referring elements, whichever are fewer.)
-    const within = t.getElementsByTagName('*');
-    if (within.length < own.size) { if (own.has(t)) look(own.get(t)); for (const e of within) if (own.has(e)) look(own.get(e)); }
-    else for (const [e, g] of own) if (e === t || t.contains(e)) look(g);
-    for (let a = t.parentElement; a; a = a.parentElement) if (own.has(a)) look(own.get(a));
-    busy.delete(t);
-    if (!loop) memo.set(t, v);
-    return { v, loop };
-  };
-  // References charged in document order (a sheet's after the elements'). A <use> is charged the effects inside what it
-  // shows (its elements are svgUseCap's to count: H-86); the step count is each charge's own (M-242).
-  let spent = 0;
-  for (const g of groups) for (const ref of g.refs) {
-    if (!drawn(ref)) continue;
-    steps = 0;
-    const r = draws(ref.t);
-    let cost;
-    if (r.v === Infinity) cost = Infinity;
-    else if (g.el) cost = ref.href ? (ref.t.localName === 'pattern' || /Gradient$/.test(ref.t.localName) ? r.v : Math.max(0, r.v - cnt[index.get(ref.t)])) : agg(index.get(g.el), ref.k) * r.v;
-    else cost = (g.els ? g.els.length : inside(g, ref, 0)) * r.v;
-    if (cost === Infinity || spent + cost > SVG_DRAWS) { ref.drop(); dropped++; }
-    else spent += cost;
-  }
-  const serialize = rules => [...rules].filter(r => !deleted.has(r)).map(r => r.cssText).join('\n');
-  for (const st of dirty) { st.textContent = serialize(st._sheet.cssRules); delete st._sheet; }
-  if (dropped) console.warn(`${where}: markers, masks, clip paths, filters or patterns that would draw too much aren't shown (${dropped})`);
-  return spent;
 }
-// A page's pictures with markers, masks and the like, charged for each time it shows them (a picture is drawn again at
-// each size: one under the budget shown 40 times took 29 s: round 47 review, H-89). Past the budget, left out.
-function svgPictureCap(doc, costs, spent, where){
-  if (!costs?.size) return;
-  const heavy = [...costs].filter(([, c]) => c > 0);
-  if (!heavy.length) return;
-  let dropped = 0;
-  const charge = (text, set, isStyle) => {
-    let out = text;
-    for (const [u, c] of heavy) {
-      const k = out.split(u).length - 1;
-      if (!k) continue;
-      if (spent + k * c > SVG_DRAWS) { out = isStyle ? out.split(u).join('data:,') : ''; dropped += k; if (!isStyle) break; }
-      else spent += k * c;
-    }
-    if (out !== text) set(out);
-  };
-  for (const el of [doc.documentElement, ...doc.documentElement.getElementsByTagName('*')]) {
-    for (const a of [...el.attributes]) if (a.value.includes('blob:')) charge(a.value, v => v ? el.setAttribute(a.name, v) : el.removeAttribute(a.name), a.name === 'style' || a.name === 'srcset');
-    if (el.localName === 'style' && el.textContent.includes('blob:')) charge(el.textContent, v => { el.textContent = v; }, true);
+// An SVG picture: no nesting, nothing later; and its effects set off altogether when they could draw too much, counted
+// bluntly (every vertex outside the drawers a marker's largest, every shape a mask's or clip's largest, every shape a
+// filter's). Returns what it may draw each time it is shown (charged to pages: H-89).
+function svgPictureEffects(doc, where){
+  svgNoNest(doc);
+  svgStillEffects(doc);
+  const root = doc.documentElement;
+  const drawers = [...FX_DRAWERS, 'filter'].flatMap(n => [...doc.getElementsByTagNameNS(SVG_NS_, n)]);
+  if (!drawers.length && !/filter|mask|clip-path|marker/i.test(root.outerHTML.slice(0, 2e6))) return 0;
+  const inDrawer = new Set(drawers.flatMap(d => [d, ...d.getElementsByTagName('*')]));
+  let shapes = 0, vtx = 0;
+  for (const el of root.getElementsByTagName('*')) {
+    if (inDrawer.has(el)) continue;
+    shapes++;
+    if (el.localName === 'path') vtx += svgPathCounts(el.getAttribute('d') || '')[0];
+    else if (el.localName === 'polyline' || el.localName === 'polygon') vtx += ((el.getAttribute('points') || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || []).length / 2;
+    else if (el.localName === 'line') vtx += 2;
   }
-  if (dropped) console.warn(`${where}: pictures with markers, masks or filters shown too many times aren't shown (${dropped})`);
+  const uses = root.getElementsByTagName('use').length;
+  const size = n => Math.max(0, ...drawers.filter(d => d.localName === n).map(d => d.getElementsByTagName('*').length + 1));
+  const draws = (vtx + shapes * (1 + uses)) * size('marker') + shapes * (1 + uses) * Math.max(size('mask'), size('clipPath'), size('pattern')) + shapes * (1 + uses) * 200 * size('filter');
+  if (draws <= SVG_DRAWS) return draws;
+  for (const el of [root, ...root.getElementsByTagName('*')]) fxOff(el);
+  console.warn(`${where}: markers, masks, clip paths and filters aren't shown: they could draw too much`);
+  return 0;
+}
+// The page's effects, as the browser computed them, counted while it is hidden; past the budget, set off. Filters cost
+// their area times their passes (PAGE_FILTER_SCREENS frames' worth in all); masks, clip paths, markers and patterns what
+// they draw, a marker for each vertex; pictures with effects what they draw each time they are shown; a <use> what the
+// effects inside what it shows cost. An effect taken from another file (url(file.svg#f)) is set off.
+function pageEffectCap(doc, where){
+  const win = doc.defaultView;
+  if (!win || !doc.documentElement) return;
+  const all = [doc.documentElement, ...doc.documentElement.getElementsByTagName('*')];
+  const heavy = new Map([...(book?.svgDraws || [])].filter(([, c]) => c > 0));
+  const screen = Math.max(1, win.innerWidth * win.innerHeight);
+  const base = doc.URL.split('#')[0];
+  const byId = new Map();
+  for (const el of all) if (el.id && !byId.has(el.id)) byId.set(el.id, el);
+  const urls = v => [...(v || '').matchAll(/url\("((?:[^"\\]|\\.)*)"\)/g)].map(m => m[1]);
+  // (A local target, by its id; null for another file's.)
+  const local = u => { const k = u.indexOf('#'); if (k < 0) return undefined; const head = u.slice(0, k); if (head && head !== base && head !== 'about:srcdoc') return null; let id = u.slice(k + 1); try { id = decodeURIComponent(id); } catch {} return byId.get(id); };
+  const pictureCost = u => { for (const [b, c] of heavy) if (u.startsWith(b)) return c; return 0; };
+  const sizeMemo = new Map();
+  // (What a drawer draws: its elements, and what the <use>s in it show.)
+  const size = t => {
+    if (sizeMemo.has(t)) return sizeMemo.get(t);
+    let n = 1 + t.getElementsByTagName('*').length;
+    for (const u of t.getElementsByTagName('use')) { const r = local(u.getAttribute('href') || u.getAttribute('xlink:href') || ''); if (r && r !== t && !r.contains(t)) n += 1 + r.getElementsByTagName('*').length; }
+    sizeMemo.set(t, n);
+    return n;
+  };
+  const passes = t => { let n = 0; for (const c of t.children) { if (!c.localName.startsWith('fe')) continue; n++; if (c.localName === 'feMorphology') n += Math.min(1000, (parseFloat((c.getAttribute('radius') || '0').split(/[\s,]+/).sort((a, b) => b - a)[0]) || 0) / 4); } return Math.max(1, n); };
+  const geom = el => el.namespaceURI === SVG_NS_ && /^(path|line|polyline|polygon)$/.test(el.localName);
+  const shapeCounts = el => {
+    if (el.localName === 'path') return svgPathCounts(el.getAttribute('d') || '');
+    if (el.localName === 'line') return [2, 1];
+    const n = ((el.getAttribute('points') || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || []).length / 2;
+    return [n, 1];
+  };
+  const unrendered = el => { for (let a = el.parentElement; a; a = a.parentElement) if (a.namespaceURI === SVG_NS_ && /^(defs|symbol|mask|clipPath|marker|pattern|filter)$/.test(a.localName)) return true; return false; };
+  // Each element's own cost: { draw, pix, other (another file's effect) }.
+  const costs = new Map();
+  const pseudo = heavy.size > 0;
+  for (const el of all) {
+    let cs;
+    try { cs = win.getComputedStyle(el); } catch { continue; }
+    let draw = 0, pix = 0, other = false, area = -1;
+    const areaOf = () => { if (area < 0) { const r = el.getBoundingClientRect(); area = Math.min(screen, Math.max(1, r.width) * Math.max(1, r.height)); } return area; };
+    const filterPasses = v => {
+      if (!v || v === 'none') return 0;
+      let n = (v.replace(/url\("(?:[^"\\]|\\.)*"\)/g, '').match(/[a-z-]+\(/gi) || []).length;
+      for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t?.localName === 'filter') n += passes(t); else n++; }
+      return n;
+    };
+    const f = filterPasses(cs.filter) + filterPasses(cs.backdropFilter) + filterPasses(cs.webkitBackdropFilter);
+    if (f) pix += f * areaOf();
+    for (const v of [cs.maskImage, cs.webkitMaskImage, cs.webkitMaskBoxImageSource, cs.clipPath, cs.shapeOutside]) {
+      if (!v || v === 'none') continue;
+      for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t) draw += size(t); else draw += pictureCost(u); }
+      const path = /(?:path|polygon)\(/.test(v) ? (v.match(/[-+]?(?:\d+\.?\d*|\.\d+)/g) || []).length / 2 : 0;
+      draw += path;
+    }
+    if (geom(el) || el.localName === 'use') {
+      const [v, sub] = el.localName === 'use' ? [0, 0] : shapeCounts(el);
+      for (const [p, mult] of [[cs.markerMid, v], [cs.markerStart, sub], [cs.markerEnd, sub]]) {
+        if (!p || p === 'none') continue;
+        for (const u of urls(p)) { const t = local(u); if (t === null) other = true; else if (t) draw += Math.max(1, mult) * size(t); }
+      }
+    }
+    for (const v of [cs.fill, cs.stroke]) for (const u of urls(v)) { const t = local(u); if (t?.localName === 'pattern') draw += size(t); }
+    for (const v of [cs.backgroundImage, cs.listStyleImage, cs.borderImageSource]) for (const u of urls(v)) draw += pictureCost(u);
+    if (pseudo) for (const pe of ['::before', '::after', '::marker']) { const ps = win.getComputedStyle(el, pe); for (const v of [ps.content, ps.backgroundImage]) for (const u of urls(v)) draw += pictureCost(u); }
+    if (el.localName === 'img') draw += pictureCost(el.currentSrc || el.src || '');
+    if (/^(image|feImage)$/.test(el.localName) && el.namespaceURI === SVG_NS_) draw += pictureCost(el.getAttribute('href') || el.getAttribute('xlink:href') || '');
+    if (draw || pix || other) costs.set(el, { draw, pix, other });
+  }
+  // (A <use>: the effects inside what it shows, each time.)
+  const useMemo = new Map(), busy = new Set();
+  const inside = t => {
+    if (useMemo.has(t)) return useMemo.get(t);
+    if (busy.has(t) || busy.size > 50) return { draw: 0, pix: 0 };   // (a loop draws nothing)
+    busy.add(t);
+    const r = { draw: 0, pix: 0 };
+    for (const e of [t, ...t.getElementsByTagName('*')]) {
+      const c = costs.get(e);
+      if (c) { r.draw += c.draw; r.pix += c.pix; }
+      if (e.localName === 'use') { const tt = local(e.getAttribute('href') || e.getAttribute('xlink:href') || ''); if (tt && !tt.contains(e)) { const x = inside(tt); r.draw += x.draw; r.pix += x.pix; } }
+    }
+    busy.delete(t);
+    useMemo.set(t, r);
+    return r;
+  };
+  let draws = 0, pixels = 0, off = 0;
+  const limit = PAGE_FILTER_SCREENS * screen;
+  for (const el of all) {
+    if (unrendered(el)) continue;
+    const c = { ...(costs.get(el) || { draw: 0, pix: 0, other: false }) };
+    if (el.localName === 'use') { const t = local(el.getAttribute('href') || el.getAttribute('xlink:href') || ''); if (t && !t.contains(el)) { const x = inside(t); c.draw += x.draw; c.pix += x.pix; } }
+    if (!c.draw && !c.pix && !c.other) continue;
+    if (c.other || draws + c.draw > SVG_DRAWS || pixels + c.pix > limit) {
+      fxOff(el);
+      el.setAttribute('data-spine-fx-off', '');
+      if (el.localName === 'img' && pictureCost(el.currentSrc || el.src || '')) { el.removeAttribute('srcset'); el.removeAttribute('src'); }
+      if (/^(image|feImage|use)$/.test(el.localName) && el.namespaceURI === SVG_NS_ && (el.localName === 'use' || pictureCost(el.getAttribute('href') || el.getAttribute('xlink:href') || ''))) { el.removeAttribute('href'); el.removeAttribute('xlink:href'); }
+      for (const p of ['background-image', 'list-style-image', 'border-image-source']) if (pictureCost(win.getComputedStyle(el).getPropertyValue(p))) el.style.setProperty(p, 'none', 'important');
+      off++;
+    } else { draws += c.draw; pixels += c.pix; }
+  }
+  if (off) {
+    // (Its ::before and ::after too, in a layer of their own ahead of the book's, whose !important rules it outranks.)
+    const st = doc.createElement('style');
+    st.textContent = `@layer spine-fx-${Math.random().toString(36).slice(2, 8)}{[data-spine-fx-off]::before,[data-spine-fx-off]::after,[data-spine-fx-off]::marker{content:none!important;background-image:none!important;filter:none!important;backdrop-filter:none!important;mask:none!important;clip-path:none!important}}`;
+    doc.head?.prepend(st);
+    console.warn(`${where}: effects on ${off} element${off > 1 ? 's' : ''} aren't shown: the page would take too long to draw`);
+  }
 }
 const SVG_USES = 50000;
 function svgUseCap(doc, root, where, wantSizes = false){
@@ -4254,7 +4190,12 @@ async function showPartner(i, token){
     const src = await chapterSource(book.spine[p]);
     const html = await buildPage(src, src.readerPath, book.spine[p]);
     if (token !== renderToken) return;
-    await new Promise(res => { const t = setTimeout(res, 6000); frame2.addEventListener('load', () => { clearTimeout(t); res(); }, { once: true }); frame2.srcdoc = html; frame2.hidden = false; });
+    await new Promise(res => {
+      const shown = () => { try { if (frame2.contentDocument) pageEffectCap(frame2.contentDocument, 'This page'); } catch (err) { console.warn(err); } frame2.style.visibility = ''; res(); };
+      const t = setTimeout(shown, 6000);
+      frame2.style.visibility = 'hidden';
+      frame2.addEventListener('load', () => { clearTimeout(t); shown(); }, { once: true }); frame2.srcdoc = html; frame2.hidden = false;
+    });
     if (token !== renderToken) return;
     const d = frame2.contentDocument;
     if (!fxlOf(d)) { frame2.hidden = true; cur.spreadOther = -1; cur.spreadFailed = p; return; }   // (its size wasn't found: one page)
@@ -4468,7 +4409,7 @@ async function buildPage(src, path, item){
   stripRemote(page);
   await localize(page, path, budget);
   markLinks(page, path);
-  svgPictureCap(page, book.svgDraws, svgEffectCap(page, page.documentElement, path), path);   // (on the finished page: its sheets pasted in, its ids cleaned: H-81, H-82; its pictures: H-89)
+  svgNoNest(page); svgStillEffects(page);   // (on the finished page: its sheets pasted in, its ids cleaned: H-81, H-82; the rest is counted as it is shown: pageEffectCap)
   // The frame parses the page from its text, and some markup reads back differently from the tree that was
   // cleaned (nested forms, raw text in an XHTML <style>: "mutation"), bringing back what was removed. So read
   // the cleaned page as the frame will, and clean again until it reads back the same; a page that keeps
@@ -4482,7 +4423,7 @@ async function buildPage(src, path, item){
     // (Everything the first round did, the address rewriting too: markup that only appears on reading back
     // must not keep styles, srcset or relative addresses that were never seen: round 13 review.)
     sanitize(page); stripRemote(page); await localize(page, path, cssBudget()); markLinks(page, path);
-    svgPictureCap(page, book.svgDraws, svgEffectCap(page, page.documentElement, path), path);
+    svgNoNest(page); svgStillEffects(page);
   }
   pointLinksHere(page);
   if (!ALLOW_REMOTE_CONTENT) {   // and have the browser refuse anything that isn't part of the book
@@ -4518,10 +4459,13 @@ function bookPolicy(){
     `base-uri 'none'`, `form-action 'none'`].map(d => d.replace(/\s+/g, ' ').trim()).join('; ');
 }
 
+// (Laid out hidden, its effects counted and capped, then shown: pageEffectCap.)
 function loadFrame(html){
   return new Promise(res => {
-    const t = setTimeout(res, 6000);
-    frame.addEventListener('load', () => { clearTimeout(t); res(); }, { once: true });
+    const shown = () => { try { if (frame.contentDocument) pageEffectCap(frame.contentDocument, 'This page'); } catch (err) { console.warn(err); } frame.style.visibility = ''; res(); };
+    const t = setTimeout(shown, 6000);
+    frame.style.visibility = 'hidden';
+    frame.addEventListener('load', () => { clearTimeout(t); shown(); }, { once: true });
     frame.srcdoc = html;
   });
 }

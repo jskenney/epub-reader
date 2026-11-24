@@ -1854,6 +1854,38 @@ def main():
     (books / "end-breaks.md").write_text("# End breaks\n\n" + "a</br>" * 40000 + "\n\nAfter the end breaks.\n")
     (books / "block-breaks.md").write_text("# Block breaks\n\n<div>\n" + "a<br>" * 40000 + "\n</div>\n\nAfter the block breaks.\n")
     (books / "short-breaks.md").write_text("a" + "\\\n" * 9900 + "\nAfter the short breaks.\n")
+    # Round 48.
+    # (H-93 to H-98) Effects the estimate missed: a heavy picture as a sheet background on 40 sizes; another file's filter;
+    # a blur through a custom property and @scope on 1,500 divs; one filter named 100 times; feMorphology; CSS blur and
+    # backdrop-filter with no SVG.
+    stacked = "position:absolute;left:0;top:0;width:900px;height:600px"
+    fx48 = {
+        "var": '<svg width="0" height="0"><filter id="b48"><feGaussianBlur stdDeviation="30"/></filter></svg><style>:root{--f:url(#b48)} .d{filter:var(--f);' + stacked + '}</style>' + '<div class="d">x</div>' * 1500,
+        "scope": '<svg width="0" height="0"><filter id="b48"><feGaussianBlur stdDeviation="30"/></filter></svg><style>@scope (body){ .d{filter:url(#b48)} } .d{' + stacked + '}</style>' + '<div class="d">x</div>' * 1500,
+        "repeat": f'<svg {SV} width="900" height="600"><defs><filter id="b48"><feGaussianBlur stdDeviation="20"/></filter></defs><style>@scope (svg){{ rect{{filter:' + ' '.join(['url(#b48)'] * 100) + '}} }}</style>' + '<rect width="900" height="600" fill="teal"/>' * 50 + '</svg>',
+        "morph": f'<svg {SV} width="900" height="600"><defs><filter id="mo"><feMorphology operator="dilate" radius="400"/></filter></defs>' + '<rect width="900" height="600" fill="teal" filter="url(#mo)"/>' * 400 + '</svg>',
+        "cssblur": '<style>.d{filter:' + ' '.join(['blur(30px)'] * 20) + ';' + stacked + ';background:teal}</style>' + '<div class="d">x</div>' * 50,
+        "backdrop": '<style>.d{backdrop-filter:blur(40px);' + stacked + '}</style>' + '<div class="d">x</div>' * 300,
+    }
+    for k, v in fx48.items():
+        (books / f"fx48-{k}.html").write_text(f"<!doctype html><html><head><title>Effects {k}</title></head><body><h1>Effects {k}</h1>{v}<p>After the effects.</p></body></html>")
+    filt = f'<svg {SV}><defs><filter id="f">' + '<feGaussianBlur stdDeviation="20"/>' * 50 + '</filter></defs></svg>'
+    epub_items(books / "fx48-files.epub", "Effects From Files", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", ""), ("f", "filt.svg", "image/svg+xml", ""), ("h", "heavy.svg", "image/svg+xml", "")], ["c1", "c2"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><style>.f{filter:url(filt.svg#f);' + stacked + ';background:teal}</style>' + '<div class="f">x</div>' * 300 + '<p>After the file effects.</p>'),
+                "c2.xhtml": xhtml("Two", '<h1>Two</h1><style>.h{background:url(heavy.svg) no-repeat;background-size:contain}</style>' + "".join(f'<div class="h" style="width:{20 + i}px;height:{20 + i}px"></div>' for i in range(40)) + '<p>After the backgrounds.</p>'),
+                "filt.svg": filt, "heavy.svg": heavy_svg}, "urn:fx48-files")
+    # (M-247, L-485) Everyday effects kept: Inkscape's drop shadow on 200 small circles, by attribute and by class; a <use>
+    # loop beside a sheet arrowhead.
+    shadow = '<filter id="sh" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceAlpha" stdDeviation="1"/><feOffset dx="1" dy="1" result="o"/><feFlood flood-color="#000" flood-opacity=".5"/><feComposite in2="o" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+    kept48 = (f'<svg {SV} width="400" height="200"><defs>{shadow}</defs>' + "".join(f'<circle cx="{10 + (i % 20) * 19}" cy="{10 + (i // 20) * 19}" r="5" filter="url(#sh)"/>' for i in range(200)) + '</svg>'
+              f'<svg {SV} width="400" height="200"><style>.s{{filter:url(#sh2)}}</style><defs>{shadow.replace("id=\"sh\"", "id=\"sh2\"")}</defs>' + "".join(f'<circle class="s" cx="{10 + (i % 20) * 19}" cy="{10 + (i // 20) * 19}" r="5"/>' for i in range(200)) + '</svg>'
+              f'<svg {SV} width="60" height="20"><style>.m{{marker-end:url(#a48)}}</style><defs><marker id="a48"><path d="M0,0 L4,2 L0,4 z"/></marker><g id="x48"><path d="M0 0L1 1"/><use href="#y48"/></g><g id="y48"><use href="#x48"/></g></defs><line class="m" stroke="black" x1="2" y1="10" x2="50" y2="10"/></svg>')
+    (books / "fx48-kept.html").write_text(f"<!doctype html><html><head><title>Kept effects</title></head><body><h1>Kept</h1>{kept48}<p>After the kept effects.</p></body></html>")
+    # (H-99, M-248, M-249) HTML blocks that must render; a long paragraph shown as text; 60,000 <wbr>.
+    pad48 = "".join(f"Paragraph {i} of padding.\n\n" for i in range(1000))
+    (books / "html-blocks.md").write_text("# HTML blocks\n\n" + pad48 + "<table>\n" + "".join(f"<tr><td>r{i}</td><td>a</td><td>b</td><td>c</td></tr>\n" for i in range(3000)) + "</table>\n\n<div>\n" + "".join(f"<p>line one<br>line two {i}</p>\n" for i in range(600)) + "</div>\n\n<!-- " + "<b>x</b>" * 12000 + " -->\n\n" + f'<svg {SV} width="100" height="10">' + '<rect width="1" height="1"/>' * 21000 + "</svg>\n\nAfter the HTML blocks.\n")
+    (books / "long-fallback.md").write_text("# Long fallback\n\n" + "abcdefghijklmnopq<br>" * 40000 + "\n\nAfter the fallback.\n")
+    (books / "many-wbr.md").write_text("# Many wbr\n\n" + "abc<wbr>" * 60000 + "\n\nAfter the wbr.\n")
     print(f"Built {SITE}")
 
 
