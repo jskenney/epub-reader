@@ -1742,6 +1742,26 @@ def main():
     (books / "long-cjk.txt").write_text("Long CJK\n\n" + ("一" * 199 + "𠮷") * 8 + "\n")
     # An SVG <use> by about:srcdoc, the page itself, with remote content on.
     (SITE / "folder-remote" / "srcdoc-use.html").write_text("<!doctype html><html><head><title>Srcdoc use</title></head><body><h1>Srcdoc</h1>" + fanout(6).replace('href="#', 'href="about:srcdoc#') + "<p>After the srcdoc picture.</p></body></html>")
+    # Round 44.
+    # (H-71) A slow list inside a footnote: the worker reads footnotes as the page does.
+    (books / "fn-slow.md").write_text("# Footnote slow\n\nSee the note.[^1]\n\n[^1]: - a\n" + "x\n" * 60000)
+    # A long document with footnotes, math and emoji, read from the worker's tokens: drawn as before.
+    body = "".join(f"## Part {i}\n\nParagraph {i} with a note[^n{i}], math $a_{i}+b$ and :smile: here.\n\n[^n{i}]: The note of part {i}.\n\n" for i in range(400))
+    (books / "long-extras.md").write_text("# Long extras\n\n" + body)
+    # (H-70) Markers nested in markers, and masks in masks, inline and as a picture; and a plain marker, kept.
+    def markers(n=30, k=4):
+        pts = " ".join(f"{i % 7},{(i * 3) % 5}" for i in range(n))
+        defs = f'<marker id="m0" markerWidth="1" markerHeight="1"><circle r="0.5"/></marker>' + "".join(
+            f'<marker id="m{j}" markerWidth="8" markerHeight="8"><polyline points="{pts}" marker-mid="url(#m{j - 1})" fill="none" stroke="black"/></marker>' for j in range(1, k))
+        return f'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><defs>{defs}</defs><polyline points="{pts}" marker-mid="url(#m{k - 1})" fill="none" stroke="black"/></svg>'
+    def masks(k=7):
+        defs = '<mask id="k0"><rect width="10" height="10" fill="white"/></mask>' + "".join(f'<mask id="k{j}">' + f'<rect width="10" height="10" fill="white" mask="url(#k{j - 1})"/>' * 10 + "</mask>" for j in range(1, k))
+        return f'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><defs>{defs}</defs><rect width="20" height="20" mask="url(#k{k - 1})"/></svg>'
+    plain = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><defs><marker id="arrow" markerWidth="4" markerHeight="4"><path d="M0,0 L4,2 L0,4 z"/></marker></defs><line x1="0" y1="10" x2="30" y2="10" stroke="black" marker-end="url(#arrow)"/></svg>'
+    (books / "nested-effects.html").write_text(f"<!doctype html><html><head><title>Nested effects</title></head><body><h1>Effects</h1>{markers()}{masks()}{plain}<p>After the effects.</p></body></html>")
+    epub_items(books / "nested-effects.epub", "Nested Effects Pictures", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("m", "markers.svg", "image/svg+xml", ""), ("k", "masks.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="markers" src="markers.svg"/><img alt="masks" src="masks.svg"/><p>After the effect pictures.</p>'),
+                "markers.svg": markers(), "masks.svg": masks()}, "urn:nested-effects")
     print(f"Built {SITE}")
 
 

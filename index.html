@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261123.1814</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261124.0229</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1933,60 +1933,88 @@ async function markdownToHtml(md){
       .catch(err => console.warn(`Emoji: ${err.message}`));
   }
   // (Markdown that marked would take too long over is shown as plain text, with a note: round 42 review.)
-  if (!await mdProbe(md)) { const t = textToHtml(md); return { ...t, ...meta, slow: true, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
-  return { html: mdAlerts(mdMarked().parse(md)), ...meta };
+  const lexed = await mdLex(md);
+  if (!lexed.ok) { const t = textToHtml(md); return { ...t, ...meta, slow: true, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
+  // (Long Markdown parsed from the worker's tokens: read once, there, not again here: round 43 review, M-233.)
+  return { html: mdAlerts(lexed.tokens ? mdParseTokens(lexed.tokens, md) : mdMarked().parse(md)), ...meta };
 }
 /* Some Markdown takes marked time with the square of its size (a list item followed by many lines without a blank one,
    a long line of emphasis, and others): a document of a few hundred KB froze the tab for minutes. Three rounds of
    guessing which, in a pre-pass, were each got round by the next review (rounds 40 to 42). Instead, a document over
-   MD_PROBE_MIN characters is first read by marked in a worker (the same file the page loaded, its hash checked), given
-   MD_PROBE_MS: past it the worker is stopped and the document shown as plain text, with a note (round 42 review, H-66,
-   H-67, L-471, L-472). The editor's line matching reads it only when that check passed. */
-const MD_PROBE_MIN = 20000, MD_PROBE_MS = Number(window.SPINE_TEST?.mdProbeMs) || 5000, MD_NO_PROBE_MAX = 200000;
+   MD_PROBE_MIN characters is read by marked in a worker (the same file the page loaded, its hash checked), with the
+   reader's own tokenizers for math, emoji and footnotes (mdTokenizers), given MD_PROBE_MS: past it the worker is stopped
+   and the document shown as plain text, with a note (round 42 review, H-66, H-67; round 43, H-71). Within it, its tokens
+   are what the page parses: the page doesn't read the document again (M-233). The editor's line matching uses them too.
+   An error in the worker (nesting past its stack) is a failure; with no worker at all, a document past MD_NO_PROBE_MAX is
+   shown as plain text (round 43). One reading per text, the last few kept. */
+const MD_PROBE_MIN = 20000, MD_PROBE_MS = Number(window.SPINE_TEST?.mdProbeMs) || 5000, MD_NO_PROBE_MAX = 200000, MD_BLOCK_PIECES = 20000;
 const MD_SLOW_NOTE = 'This document is shown as plain text: its Markdown would take too long to lay out.';
-let mdProbeCode = null;
-// (One check per text, however often it is asked for, and the last few results kept: the editor asked on every scroll,
-// starting a worker each time: round 43 review.)
-const mdProbes = new Map();
-const mdProbeResult = md => md.length < MD_PROBE_MIN ? true : mdProbes.get(md)?.result;
-function mdProbe(md){
-  if (md.length < MD_PROBE_MIN) return Promise.resolve(true);
-  let e = mdProbes.get(md);
+let mdLexCode = null;
+const mdLexed = new Map();
+// What is known of a text: { ok, tokens (null: read it on the page), blocks } or undefined while it is being read.
+const mdLexResult = md => md.length < MD_PROBE_MIN ? { ok: true, tokens: null } : mdLexed.get(md)?.result;
+function mdLex(md){
+  if (md.length < MD_PROBE_MIN) return Promise.resolve({ ok: true, tokens: null });
+  let e = mdLexed.get(md);
   if (!e) {
     e = { result: undefined };
-    e.job = mdProbeRun(md).then(ok => (e.result = ok));
-    mdProbes.set(md, e);
-    while (mdProbes.size > 4) mdProbes.delete(mdProbes.keys().next().value);
+    e.job = mdLexRun(md).then(r => (e.result = r));
+    mdLexed.set(md, e);
+    while (mdLexed.size > 3) mdLexed.delete(mdLexed.keys().next().value);
   }
   return e.job;
 }
-async function mdProbeRun(md){
+// (Old entry points, as the editor knew them.)
+const mdProbe = md => mdLex(md).then(r => r.ok);
+async function mdLexRun(md){
+  const unchecked = { ok: md.length <= MD_NO_PROBE_MAX, tokens: null };
   let w = null, ready = false;
   try {
-    mdProbeCode ??= (async () => {
+    mdLexCode ??= (async () => {
       const r = await fetch(libsFrom.marked || new URL(LIBS.marked.file, folderBase(LIB_FILES)).href, { integrity: LIBS.marked.integrity });
       if (!r.ok) throw new Error(String(r.status));
-      // (An error, nesting deeper than the worker's stack say, is a failure: the page's own reading has a deeper stack,
-      // and a document starting so could turn the check off: round 43 review.)
-      return URL.createObjectURL(new Blob([await r.text(),
-        '\n;postMessage("ready"); onmessage = e => { try { marked.lexer(e.data, { gfm: true }); postMessage(true); } catch (err) { postMessage(false); } };'], { type: 'text/javascript' }));
-    })().catch(err => { mdProbeCode = null; throw err; });
-    w = new Worker(await mdProbeCode);
+      return URL.createObjectURL(new Blob([await r.text(), `
+;${mdParaStart};${mdInlineMath};${mdTokenizers};
+postMessage("ready");
+onmessage = e => {
+  const names = e.data.emoji ? new Set(e.data.emoji) : null, fn = { defs: new Map() };
+  try {
+    const m = new marked.Marked({ gfm: true });
+    m.use({ extensions: mdTokenizers(fn, { ready: () => !!names, has: k => !!names && names.has(k) }) });
+    const tokens = m.lexer(e.data.md);
+    // (A block of more pieces than any book has, 100,000 emphasised letters in one paragraph say, read in time but took the
+    // browser 50 s to lay out: shown as plain text too.)
+    // (Counted within each paragraph, heading or line of text, not across a list's items: a list of 100,000 items is a
+    // book's.)
+    const inline = list => { let n = 0; for (const t of list || []) { n += 1 + inline(t.tokens); if (n > ${MD_BLOCK_PIECES}) break; } return n; };
+    const tooMany = list => (list || []).some(t => /^(paragraph|heading|text)$/.test(t.type) ? inline(t.tokens) > ${MD_BLOCK_PIECES}
+      : tooMany(t.tokens) || (t.items || []).some(it => tooMany(it.tokens)));
+    if (tooMany(tokens)) return postMessage({ ok: false });
+    postMessage({ ok: true, tokens });
+  } catch (err) { postMessage({ ok: false }); }
+};`], { type: 'text/javascript' }));
+    })().catch(err => { mdLexCode = null; throw err; });
+    w = new Worker(await mdLexCode);
     return await new Promise(res => {
       // (The clock starts once the worker is ready, not while it compiles marked; a worker that never starts counts as
       // none.)
-      let timer = setTimeout(() => res(md.length <= MD_NO_PROBE_MAX), 10000);
+      let timer = setTimeout(() => res(unchecked), 10000);
       w.onmessage = ({ data }) => {
-        if (data === 'ready') { ready = true; clearTimeout(timer); timer = setTimeout(() => res(false), MD_PROBE_MS); w.postMessage(md); return; }
-        clearTimeout(timer); res(data === true);
+        if (data === 'ready') {
+          ready = true; clearTimeout(timer); timer = setTimeout(() => res({ ok: false }), MD_PROBE_MS);
+          w.postMessage({ md, emoji: mdEmoji ? [...mdEmoji.keys()] : null });
+          return;
+        }
+        clearTimeout(timer);
+        if (!data?.ok) return res({ ok: false });
+        // (The lines each top-level block takes, for the editor's line matching.)
+        res({ ok: true, tokens: data.tokens, blocks: data.tokens.map(t => [t.type, (t.raw.match(/\n/g) || []).length]) });
       };
-      w.onerror = () => { clearTimeout(timer); res(ready ? false : md.length <= MD_NO_PROBE_MAX); };
+      w.onerror = () => { clearTimeout(timer); res(ready ? { ok: false } : unchecked); };
     });
   } catch (err) {
-    // (No worker here (a policy without blob: workers, marked not fetchable): a document past MD_NO_PROBE_MAX is shown as
-    // plain text rather than read unchecked: round 43 review.)
     console.warn(`Markdown check: ${err.message}`);
-    return md.length <= MD_NO_PROBE_MAX;
+    return unchecked;
   } finally { w?.terminate(); }
 }
 /* GitHub's additions to Markdown beyond GFM: math (E-31), footnotes (E-32) and alerts (E-33). */
@@ -2209,8 +2237,7 @@ function mdMarked(){
   if (mdParser) return mdParser;
   const fn = { defs: new Map(), used: [], seen: new Map() };
   const m = new window.marked.Marked({ gfm: true });
-  m.use({
-    hooks: {
+  const hooks = {
       preprocess(src){ fn.defs = new Map(); fn.used = []; fn.seen = new Map(); mathBudgetReset(); hlReset(); return src; },
       // The notes, after the document: those referred to in the order they first were, then any never referred to
       // (kept, so the editor writes them back), each with links back to where it is referred to.
@@ -2226,7 +2253,29 @@ function mdMarked(){
         });
         return `${html}<section class="md-footnotes" data-md-own="${MD_OWN}" data-footnotes="" role="doc-endnotes"><hr><ol>${items.join('')}</ol></section>\n`;
       }
+  };
+  // (The renderers of the extensions; their tokenizers are mdTokenizers', shared with the worker: round 44.)
+  const renderers = {
+    mathBlock: t => mdMath(t.text, true, t.raw.replace(/\n+$/, '')) + '\n',
+    emoji: t => `<span class="md-emoji" data-md-own="${MD_OWN}" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>`,
+    math: t => mdMath(t.text, t.display, t.raw),
+    // (Where the note was written, a hidden mark the editor writes it back at; a second note of the same label,
+    // which GitHub doesn't show, kept as it was written: round 28 review, M-164.)
+    footnoteDef(t){
+      const d = fn.defs.get(t.key);
+      if (d?.tok !== t) return `<div hidden="" data-md-own="${MD_OWN}" data-fn-raw="${escHtml(t.raw.replace(/\n+$/, ''))}"></div>\n`;
+      d.html = this.parser.parse(t.tokens);
+      return `<div hidden="" data-md-own="${MD_OWN}" data-fn-at="${escHtml(t.key)}"></div>\n`;
     },
+    footnoteRef(t){
+      if (!fn.used.includes(t.key)) fn.used.push(t.key);
+      const n = fn.used.indexOf(t.key) + 1, k = (fn.seen.get(t.key) || 0) + 1, sl = fnSlug(t.key);
+      fn.seen.set(t.key, k);
+      return `<sup class="md-fnref" data-md-own="${MD_OWN}" data-fn-ref="${escHtml(t.id)}"><a id="fnref-${sl}${k > 1 ? '-' + k : ''}" href="#fn-${sl}" role="doc-noteref">${n}</a></sup>`;
+    }
+  };
+  m.use({
+    hooks,
     renderer: {
       // (An HTML block followed by its line break, as marked 15 and GitHub give it, so two pictures in blocks of their own
       // don't touch: marked 18 leaves it out: round 31 review.)
@@ -2245,15 +2294,33 @@ function mdMarked(){
         return false;
       }
     },
-    extensions: [
+    extensions: mdTokenizers(fn, { ready: () => !!mdEmoji, has: k => !!mdEmoji?.has(k) }).map(x => ({ ...x, renderer: renderers[x.name] }))
+  });
+  m.spine = { fn, hooks };
+  return mdParser = m;
+}
+// Tokens a worker made, parsed as the page would have read them: the notes' list made from them, then the hooks around
+// the parse, as marked runs them (round 44).
+function mdParseTokens(tokens, md){
+  const m = mdMarked(), { fn, hooks } = m.spine;
+  hooks.preprocess(md);
+  const walk = list => { for (const t of list || []) { if (t.type === 'footnoteDef' && !fn.defs.has(t.key)) fn.defs.set(t.key, { tok: t }); if (t.tokens && t.type !== 'footnoteDef') walk(t.tokens); } };
+  walk(tokens);
+  return hooks.postprocess(m.parser(tokens));
+}
+/* The extensions' tokenizers (math, emoji, footnotes), on their own: used by the page's marked and, as source, by the
+   worker that reads long Markdown, so both read a document alike (a footnote's body was read only on the page, and a
+   slow list there got past the worker's check: round 43 review, H-71). Only plain helpers in them (mdParaStart,
+   mdInlineMath), which the worker is given too. fn.defs: the notes found so far; emoji: what names there are. */
+function mdTokenizers(fn, emoji){
+  return [
       { name: 'mathBlock', level: 'block', start: s => mdParaStart(s, /^ {0,3}\$\$/m),
         tokenizer(src){
           const open = /^ {0,3}\$\$/.exec(src); if (!open) return;
           const e = src.indexOf('$$', open[0].length); if (e < 0) return;
           const after = /^[ \t]*(?:\n+|$)/.exec(src.slice(e + 2)); if (!after) return;
           return { type: 'mathBlock', raw: src.slice(0, e + 2 + after[0].length), text: src.slice(open[0].length, e).trim() };
-        },
-        renderer: t => mdMath(t.text, true, t.raw.replace(/\n+$/, '')) + '\n' },
+        } },
       // :name: as its emoji, for the names GitHub knows (E-34); outside code, which is read before.
       // (Stopping only where a :name: could be, not at every colon: at "https:" it kept bare addresses from being
       // linked: round 28 review, M-165.)
@@ -2261,14 +2328,12 @@ function mdMarked(){
       // would take, at each stop marked makes, took time with the square of a paragraph's length: round 29 review,
       // M-170; and only so far ahead: a stop where there is nothing just leaves the text in two. Not at every ":",
       // which cut bare addresses short: M-165.)
-      { name: 'emoji', level: 'inline', start: s => { if (!mdEmoji) return; const i = s.slice(0, 4096).search(/:[a-z0-9_+-]{1,50}:/); return i >= 0 ? i : s.length > 4096 ? 4000 : undefined; },
+      { name: 'emoji', level: 'inline', start: s => { if (!emoji.ready()) return; const i = s.slice(0, 4096).search(/:[a-z0-9_+-]{1,50}:/); return i >= 0 ? i : s.length > 4096 ? 4000 : undefined; },
         // (A name of digits only, beside a digit, is a time ("10:30:45"), not an emoji: L-381; others are emoji, digit
         // after or not: round 29 review, L-384.)
-        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):/.exec(src); if (r && mdEmoji?.has(r[1]) && !(/^\d+$/.test(r[1]) && /\d/.test(src[r[0].length] || ''))) return { type: 'emoji', raw: r[0], name: r[1] }; },
-        renderer: t => `<span class="md-emoji" data-md-own="${MD_OWN}" data-emoji="${escHtml(t.name)}" role="img" aria-label="${escHtml(t.name.replace(/_/g, ' '))}">${mdEmoji.get(t.name)}</span>` },
+        tokenizer(src){ const r = /^:([a-z0-9_+-]{1,50}):/.exec(src); if (r && emoji.has(r[1]) && !(/^\d+$/.test(r[1]) && /\d/.test(src[r[0].length] || ''))) return { type: 'emoji', raw: r[0], name: r[1] }; } },
       { name: 'math', level: 'inline', start: s => { const i = s.indexOf('$'); return i < 0 ? undefined : i; },
-        tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; },
-        renderer: t => mdMath(t.text, t.display, t.raw) },
+        tokenizer(src){ const r = mdInlineMath(src); if (r && r.text) return { type: 'math', ...r }; } },
       // [^label]: the note, with following lines indented (or a blank line and an indented one) as more of it.
       { name: 'footnoteDef', level: 'block', start: s => mdParaStart(s, /^\[\^[^\]\s]{1,100}\]:/m),
         tokenizer(src){
@@ -2295,27 +2360,11 @@ function mdMarked(){
           this.lexer.blockTokens(body.join('\n'), tok.tokens);
           if (!fn.defs.has(tok.key)) fn.defs.set(tok.key, { tok });
           return tok;
-        },
-        // (Where the note was written, a hidden mark the editor writes it back at; a second note of the same label,
-        // which GitHub doesn't show, kept as it was written: round 28 review, M-164.)
-        renderer(t){
-          const d = fn.defs.get(t.key);
-          if (d?.tok !== t) return `<div hidden="" data-md-own="${MD_OWN}" data-fn-raw="${escHtml(t.raw.replace(/\n+$/, ''))}"></div>\n`;
-          d.html = this.parser.parse(t.tokens);
-          return `<div hidden="" data-md-own="${MD_OWN}" data-fn-at="${escHtml(t.key)}"></div>\n`;
         } },
       // (Looked for only so far ahead, as emoji are: text full of "[" made it scan the rest at each stop: round 30, H-46.)
       { name: 'footnoteRef', level: 'inline', start: s => { const i = s.slice(0, 4096).indexOf('[^'); return i >= 0 ? i : s.length > 4096 ? 4000 : undefined; },
-        tokenizer(src){ const r = /^\[\^([^\]\s]{1,100})\]/.exec(src); if (r && fn.defs.has(r[1].toLowerCase())) return { type: 'footnoteRef', raw: r[0], id: r[1], key: r[1].toLowerCase() }; },
-        renderer(t){
-          if (!fn.used.includes(t.key)) fn.used.push(t.key);
-          const n = fn.used.indexOf(t.key) + 1, k = (fn.seen.get(t.key) || 0) + 1, s = fnSlug(t.key);
-          fn.seen.set(t.key, k);
-          return `<sup class="md-fnref" data-md-own="${MD_OWN}" data-fn-ref="${escHtml(t.id)}"><a id="fnref-${s}${k > 1 ? '-' + k : ''}" href="#fn-${s}" role="doc-noteref">${n}</a></sup>`;
-        } }
-    ]
-  });
-  return mdParser = m;
+        tokenizer(src){ const r = /^\[\^([^\]\s]{1,100})\]/.exec(src); if (r && fn.defs.has(r[1].toLowerCase())) return { type: 'footnoteRef', raw: r[0], id: r[1], key: r[1].toLowerCase() }; } }
+  ];
 }
 // Alerts: a quotation whose first line is [!NOTE] (or TIP, IMPORTANT, WARNING, CAUTION) as a note set apart, with
 // its title.
@@ -2952,6 +3001,7 @@ async function svgClean(t, path, type, b = book){
   // (Processing instructions, <?xml-stylesheet?> say, and animations that set an address: round 25 review, L-292.)
   for (const n of [...d.childNodes]) if (n.nodeType === 7) n.remove();
   d.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
+  svgEffectCap(d, d.documentElement, path);   // (H-70)
   const useSizes = svgUseCap(d, d.documentElement, path, true);
   const jobs = [], budget = cssBudget(), paint = ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end', 'cursor'];
   for (const el of d.getElementsByTagName('*')) {
@@ -3039,6 +3089,39 @@ function dataPictureFits(v){
 // more, its <use> elements are dropped (many uses of small symbols, as MathJax's glyphs, stay: round 41). Counted with
 // a stack of its own, so a page nested however deep is counted (L-474), and only where there is a <use> (L-470).
 // wantSizes (an SVG file, for its sprites): returns the size of each element with an id, and the whole file's ('').
+/* Markers, masks, clip paths and filters draw what they point to wherever they are used, as <use> does: a marker on
+   each of a polyline's 30 vertices, holding such polylines four deep (1.8 KB), is 810,000 drawings and ran the tab out of
+   memory; masks six deep took 35 s (round 43 review, H-70). So such a reference (an attribute, or in a style attribute)
+   is dropped when what it points to holds references of its own, or a <use>: one level each, never nested. (Marker
+   properties in style sheets are dropped as the sheets are cleaned: rewriteCss.) */
+const SVG_EFFECTS = ['marker-start', 'marker-mid', 'marker-end', 'marker', 'mask', 'clip-path', 'filter'];
+const SVG_EFFECT_STYLE = /(?:^|;)\s*(?:marker(?:-start|-mid|-end)?|mask|clip-path|filter)\s*:[^;]*url\(/i;
+function svgEffectCap(doc, root, where){
+  const users = [...root.querySelectorAll('[marker-start],[marker-mid],[marker-end],[marker],[mask],[clip-path],[filter],[style*="url" i]')];
+  if (!users.length) return;
+  const byId = new Map();
+  for (const el of doc.querySelectorAll('[id]')) if (!byId.has(el.id)) byId.set(el.id, el);
+  const refs = el => SVG_EFFECTS.some(a => /url\(/i.test(el.getAttribute(a) || '')) || SVG_EFFECT_STYLE.test(el.getAttribute('style') || '') || el.localName === 'use';
+  const nested = new Map();
+  const isNested = t => {
+    if (!nested.has(t)) nested.set(t, refs(t) || [...t.getElementsByTagName('*')].some(refs));
+    return nested.get(t);
+  };
+  const target = v => { const m = /url\(\s*['"]?\s*#([^'")\s]+)/i.exec(urlText(v)); if (!m) return null; let id = m[1]; try { id = decodeURIComponent(id); } catch {} return byId.get(id) || byId.get(m[1]) || null; };
+  let dropped = 0;
+  for (const el of users) {
+    for (const a of SVG_EFFECTS) {
+      const v = el.getAttribute(a), t = v && target(v);
+      if (t && isNested(t)) { el.removeAttribute(a); dropped++; }
+    }
+    const st = el.getAttribute('style');
+    if (st && SVG_EFFECT_STYLE.test(st)) {
+      const kept = st.split(';').filter(d => { const m = /^\s*(marker(?:-start|-mid|-end)?|mask|clip-path|filter)\s*:(.*)$/i.exec(d); const t = m && target(m[2]); if (t && isNested(t)) { dropped++; return false; } return true; }).join(';');
+      if (kept !== st) el.setAttribute('style', kept);
+    }
+  }
+  if (dropped) console.warn(`${where}: markers, masks or filters nested in one another aren't shown (${dropped})`);
+}
 const SVG_USES = 50000;
 function svgUseCap(doc, root, where, wantSizes = false){
   const uses = root.getElementsByTagName('use');
@@ -3427,6 +3510,9 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
       // (A fragment, such as an SVG sprite's view, is kept as attributes keep it: REVIEW.md L-84.)
       text = u ? cssUrl(u + frag) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
     } else if (r.svgData) { const u = done.get(r.clean); text = u ? cssUrl(u) : NO_IMAGE; }
+    // (A marker property in a sheet, which can reach the shapes inside markers and nest them: H-70. The property's name
+    // read with its escapes decoded, as the browser reads it.)
+    else if (r.kind === 'image' && r.clean.startsWith('#') && /marker(?:-start|-mid|-end)?\s*:\s*$/i.test(css.slice(Math.max(0, r.s - 64), r.s).replace(/\\([0-9a-f]{1,6})\s?/gi, (m, h) => String.fromCodePoint(parseInt(h, 16) || 0xfffd)).replace(/\\(.)/g, '$1').replace(/\/\*[\s\S]*?\*\//g, ''))) text = 'none';
     else if (r.tooLarge) text = NO_IMAGE;
     else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
     if (text === null) continue;
@@ -3843,7 +3929,7 @@ function sanitize(doc){
   // (Animations that set an address get round link handling, remote content on or off; and a link left without an
   // address keeps no target: round 25 review, L-303.)
   doc.querySelectorAll('set, animate').forEach(e => { if (/href/i.test(e.getAttribute('attributeName') || '')) e.remove(); });
-  if (doc.body) svgUseCap(doc, doc.body, 'a page');   // (inline SVG: H-60)
+  if (doc.body) { svgUseCap(doc, doc.body, 'a page'); svgEffectCap(doc, doc.body, 'a page'); }   // (inline SVG: H-60, H-70)
   for (const el of doc.body.querySelectorAll('*')) {
     // (A name, or id, that would hide one of the page's own methods (document.getElementById, say), which the
     // reader uses: dropped (round 25 review, L-288). A named img, form or embed shows on the document (an img by its
@@ -10124,13 +10210,14 @@ function editBlocks(){
   if (fm) { line = fm[0].split('\n').length - 1; text = text.slice(fm[0].length); }
   // (Long Markdown only once the worker's check of this very text passed: marked could freeze the editor on each
   // change: round 42 review, H-66.)
-  // (Never a check of its own: the page's (its preview's) check of this text, once passed: round 43 review.)
-  if (mdProbeResult(text) !== true) return null;
+  // (Long Markdown from the page's own reading of this text, in the worker, never a reading of its own: rounds 43, 44.)
+  const known = mdLexResult(text);
+  if (!known?.ok || (text.length >= MD_PROBE_MIN && !known.blocks)) return null;
   const out = [];
   try {
-    for (const t of window.marked.lexer(text, { gfm: true })) {
-      if (t.type !== 'space' && t.type !== 'def') out.push(line);
-      line += (t.raw.match(/\n/g) || []).length;
+    for (const [type, lines] of known.blocks || window.marked.lexer(text, { gfm: true }).map(t => [t.type, (t.raw.match(/\n/g) || []).length])) {
+      if (type !== 'space' && type !== 'def') out.push(line);
+      line += lines;
     }
   } catch { return null; }
   ed.blocks = out; ed.blocksFor = ed.text;

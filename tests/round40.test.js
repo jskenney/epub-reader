@@ -264,3 +264,50 @@ test('breaks in long plain-text words never split a character (round 43 review, 
   assert.equal((t.match(/𠮷/gu) || []).length, 8);
   assert.doesNotMatch(t, /�/);
 });
+
+// Round 44.
+test('a slow list inside a footnote is caught by the worker, which reads footnotes as the page does (round 43 review, H-71)', async () => {
+  const page = await mdPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/fn-slow.md`);
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.waitFor(async () => SLOW_NOTE.test(await frameText(page)), 10000));
+});
+
+test('long Markdown is drawn from the worker\'s reading, footnotes, math and emoji as before, without reading it again on the page (round 43 review, M-233)', async () => {
+  const page = await h.newPage();
+  await page.addInitScript(() => {
+    // (Count marked's lexer runs on the page: none for a long document now.)
+    window.pageLexes = 0;
+    const hook = () => { if (!window.marked?.Lexer || window.marked.Lexer.__counted) return; const lex = window.marked.Lexer.prototype.lex; window.marked.Lexer.prototype.lex = function (...a) { if (a[0]?.length > 20000) window.pageLexes++; return lex.apply(this, a); }; window.marked.Lexer.__counted = true; };
+    setInterval(hook, 5);
+  });
+  await h.openReader(page, `${h.READER}?book=books/long-extras.md`);
+  assert.doesNotMatch(await frameText(page), SLOW_NOTE);
+  const got = await h.inFrame(page, doc => [doc.querySelectorAll('sup.md-fnref').length, !!doc.querySelector('section.md-footnotes li'), doc.querySelectorAll('math').length > 0, doc.querySelectorAll('h2').length > 0]);
+  assert.deepEqual(got.slice(1), [true, true, true], JSON.stringify(got));
+  assert.ok(got[0] > 0, 'note references');
+  assert.equal(await page.evaluate(() => window.pageLexes), 0, 'not read again on the page');
+});
+
+test('markers and masks nested in one another are dropped, inline and in pictures; a plain marker stays (round 43 review, H-70)', async () => {
+  let page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/nested-effects.html`);
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 10000));
+  assert.equal(await h.inFrame(page, doc => doc.querySelector('line[marker-end]')?.getAttribute('marker-end')), 'url(#arrow)', 'the plain arrow kept');
+  // (Never nested: no reference points to something that holds references of its own.)
+  assert.equal(await h.inFrame(page, doc => [...doc.querySelectorAll('[marker-mid],[mask]')].filter(el => {
+    const id = /#([^)'"]+)/.exec(el.getAttribute('marker-mid') || el.getAttribute('mask') || '')?.[1], t = id && doc.getElementById(id);
+    return t && t.querySelector('[marker-mid],[mask]');
+  }).length), 0, 'no reference to a marker or mask that holds references');
+  await page.close();
+  page = await h.newPage();
+  const t1 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/nested-effects.epub`);
+  assert.ok(await h.waitFor(async () => /After the effect pictures/.test(await frameText(page)), 15000));
+  assert.ok(Date.now() - t1 < 20000, `took ${Date.now() - t1} ms`);
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => 1 + 1), 2, 'the tab still answers');
+});
