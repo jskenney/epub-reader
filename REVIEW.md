@@ -1015,7 +1015,7 @@ commit after `86673b9`, each with a test:
   are counted; only the block (or cell) past the limit is shown as its text, long words given breaks, and text and
   inline HTML count for little.
 
-**Tests.** See the run recorded with this round's commit.
+**Tests.** 612 tests at `e469b5d`: 605 pass, six need `SLOW=1` or `NETWORK=1`, and one failed: H-59's test still expected `long-emphasis.md` to be shown whole as plain text with the note; it now expects only its long block as text (`6cb48c0`, passing).
 
 ## Summary
 
@@ -1167,14 +1167,14 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
-| H-75 | Long Markdown with a note defined in a list item, quote or note stopped opening (round 45). Notes found in the page's reading order; missing ones tolerated. | round 45 |
-| H-76 | Sheet marker properties dropped, CSS arrowheads lost (round 45, regression). Rule removed. | round 45 |
-| H-77 | Ways round H-70: -webkit-mask, escapes, animations, custom properties, sheet classes (round 45). Depth counted over every way of pointing. | round 45 |
-| M-235 | H-70's check dropped one-level masks and clips (round 45). Two deep allowed. | round 45 |
-| M-236 | Emoji missing when the worker read before their names loaded; editor escaped them (round 45). Worker waits; reading redone. | round 45 |
-| M-237 | Token trees of three documents kept (round 45). Let go once drawn. | round 45 |
-| M-238 | 30,000 notes took 13 s (round 45). Numbers in a map. | round 45 |
-| L-477 | Piece limit missed table cells and made the whole document plain (round 45). Cells counted; only the block shown as text. | round 45 |
+| H-75 | Long Markdown with a note defined in a list item, quote or note stopped opening (round 45). Notes found in the page's reading order; missing ones tolerated. | `e469b5d` |
+| H-76 | Sheet marker properties dropped, CSS arrowheads lost (round 45, regression). Rule removed. | `e469b5d` |
+| H-77 | Ways round H-70: -webkit-mask, escapes, animations, custom properties, sheet classes (round 45). Depth counted over every way of pointing. | `e469b5d` |
+| M-235 | H-70's check dropped one-level masks and clips (round 45). Two deep allowed. | `e469b5d` |
+| M-236 | Emoji missing when the worker read before their names loaded; editor escaped them (round 45). Worker waits; reading redone. | `e469b5d` |
+| M-237 | Token trees of three documents kept (round 45). Let go once drawn. | `e469b5d` |
+| M-238 | 30,000 notes took 13 s (round 45). Numbers in a map. | `e469b5d` |
+| L-477 | Piece limit missed table cells and made the whole document plain (round 45). Cells counted; only the block shown as text. | `e469b5d` |
 | H-70 | Nested markers and masks multiplied drawing (round 43). References to targets holding references of their own dropped; sheet marker properties dropped. | `ad11b83` |
 | H-71 | A footnote's body wasn't read by the worker's check (round 43). The worker uses the page's tokenizers. | `ad11b83` |
 | M-233 | The page lexed long Markdown again after the check (round 43). The page parses the worker's tokens. | `ad11b83` |
