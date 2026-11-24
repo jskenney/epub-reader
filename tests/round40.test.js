@@ -490,3 +490,64 @@ test('Markdown with a block shown as its text is edited in Raw only, its source 
   for (const m of ['wysiwyg', 'raw', 'wysiwyg', 'raw']) { await p2.click(`[data-mode="${m}"]`); await p2.waitForTimeout(800); }
   assert.ok(await p2.evaluate(() => window.workersMade) - before <= 2, `reads: ${await p2.evaluate(() => window.workersMade) - before}`);
 });
+
+// Round 47.
+test('<use> copies of a heavy marker, vertices of "z", a mask nested in another\'s element and many large filters are capped; painted in good time (round 47 review, H-86 to H-88, H-90)', async () => {
+  for (const k of ['use', 'zz', 'nested', 'blur']) {
+    const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+    const warns = []; page.on('console', m => { if (/draw too much/.test(m.text())) warns.push(m.text()); });
+    await h.openReader(page, `${h.READER}?book=books/draws-${k}.html`);
+    assert.ok(await h.waitFor(async () => /After the drawing/.test(await frameText(page)), 20000), `${k}: opened`);
+    const ms = await paintMs(page);
+    assert.ok(ms < 8000, `${k}: painted in ${ms} ms`);
+    assert.ok(warns.length, `${k}: something dropped`);
+    await page.close();
+  }
+});
+
+test('a heavy picture shown 40 times is charged each time; 21,000 clip paths used once each are all kept (round 47 review, H-89, M-242)', async () => {
+  let page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/heavy-pictures.epub`);
+  assert.ok(await h.waitFor(async () => /After the heavy pictures/.test(await frameText(page)), 15000));
+  const shown = await h.inFrame(page, doc => [...doc.querySelectorAll('img')].filter(i => i.getAttribute('src')).length);
+  assert.ok(shown >= 1 && shown < 40, `shown: ${shown}`);
+  assert.ok((await paintMs(page)) < 8000);
+  await page.close();
+  page = await h.newPage();
+  const warns = []; page.on('console', m => { if (/draw too much/.test(m.text())) warns.push(m.text()); });
+  await h.openReader(page, `${h.READER}?book=books/many-clips.html`);
+  assert.ok(await h.waitFor(async () => /After the clips/.test(await frameText(page)), 30000));
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('rect[clip-path]').length), 21000);
+  assert.deepEqual(warns, []);
+});
+
+test('20,000 small rules before the text open on the text, not a blank part (round 47 review, M-245)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/many-rules.html`);
+  assert.ok(await h.waitFor(async () => /After the rules/.test(await frameText(page)), 15000));
+});
+
+test('</br>, breaks in an HTML block, and backslash breaks in a short document are capped (round 47 review, H-91, H-92, M-244)', async () => {
+  for (const book of ['end-breaks.md', 'block-breaks.md', 'short-breaks.md']) {
+    const page = await mdPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(await h.waitFor(async () => (await frameText(page)).length > 1000, 15000), `${book}: opened`);
+    assert.ok(Date.now() - t0 < 20000, `${book}: took ${Date.now() - t0} ms`);
+    assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('br').length < 100), `${book}: no breaks drawn`);
+    assert.ok((await paintMs(page)) < 5000, book);
+    await page.close();
+  }
+});
+
+test('Raw-only Markdown is offered WYSIWYG again once its block is fixed in Raw (round 47 review, L-484)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(() => { window.SPINE_TEST = { mdProbeMs: 4000 }; });
+  await h.openReader(page, `${h.READER}?book=books/one-slow-block.md`, { 'spine:editMode': 'raw', 'spine:editSplit': true });
+  assert.ok(await h.waitFor(async () => /After, emphasis stays/.test(await frameText(page)), 15000));
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  await page.waitForFunction(() => document.querySelector('[data-mode="wysiwyg"]').disabled, null, { timeout: 10000 });
+  await page.evaluate(() => { const cm = document.querySelector('.CodeMirror').CodeMirror; cm.setValue(cm.getValue().replace(/(\*x\* )+/g, 'short ')); });
+  await page.waitForFunction(() => !document.querySelector('[data-mode="wysiwyg"]').disabled, null, { timeout: 15000 });
+});

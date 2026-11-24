@@ -1830,6 +1830,30 @@ def main():
     (books / "effects-everyday.html").write_text(f"<!doctype html><html><head><title>Everyday effects</title><style>svg{{--g:url(#lg)}}</style></head><body><h1>Everyday</h1>{legit}<p>After the everyday effects.</p></body></html>")
     # (H-85) 40,000 line breaks in one Markdown paragraph.
     (books / "many-breaks.md").write_text("# Breaks\n\n" + "a<br>" * 40000 + "\n\nAfter the breaks, **bold** stays.\n")
+    # Round 47.
+    # (H-86 to H-90) <use> copies of a heavy marker; vertices of "z"; a mask nested in another's element; a heavy picture
+    # shown 40 times; 2,000 large blurred rects. And (M-242) 21,000 clip paths, each used once: all kept.
+    poly = " ".join(f"{i % 97},{(i * 7) % 89}" for i in range(1000))
+    heavy_marker = '<marker id="hm" markerWidth="4" markerHeight="4">' + '<circle r="1"/>' * 400 + '</marker>'
+    r47 = {
+        "use": f'<svg {SV} width="100" height="100"><defs>{heavy_marker}<g id="hg"><polyline fill="none" stroke="black" points="{poly}" marker-mid="url(#hm)"/></g></defs>' + '<use href="#hg"/>' * 100 + '</svg>',
+        "zz": f'<svg {SV} width="100" height="100"><defs><marker id="zm" markerWidth="4" markerHeight="4">' + '<circle r="1"/>' * 500 + '</marker></defs><path stroke="black" d="M1 1' + 'z' * 20000 + '" marker-mid="url(#zm)"/></svg>',
+        "nested": f'<svg {SV} width="100" height="100"><defs><mask id="B">' + '<rect width="10" height="10" fill="white"/>' * 1000 + '<mask id="A">' + '<rect width="10" height="10" fill="white" mask="url(#B)"/>' * 200 + '</mask></mask></defs>' + '<rect width="90" height="90" mask="url(#A)"/>' * 300 + '</svg>',
+        "blur": f'<svg {SV} width="900" height="600"><defs><filter id="bl"><feGaussianBlur stdDeviation="40"/></filter></defs>' + '<rect width="900" height="600" fill="teal" filter="url(#bl)"/>' * 2000 + '</svg>',
+    }
+    for k, v in r47.items():
+        (books / f"draws-{k}.html").write_text(f"<!doctype html><html><head><title>Draws {k}</title></head><body><h1>Draws {k}</h1>{v}<p>After the drawing.</p></body></html>")
+    clips = f'<svg {SV} width="200" height="200"><defs>' + "".join(f'<clipPath id="cp{i}"><rect width="{i % 50 + 1}" height="9"/></clipPath>' for i in range(21000)) + '</defs>' + "".join(f'<rect width="9" height="9" clip-path="url(#cp{i})"/>' for i in range(21000)) + '</svg>'
+    (books / "many-clips.html").write_text(f"<!doctype html><html><head><title>Many clips</title></head><body><h1>Clips</h1>{clips}<p>After the clips.</p></body></html>")
+    heavy_svg = f'<svg {SV} width="100" height="100"><defs>{heavy_marker}</defs><polyline fill="none" stroke="black" points="{poly}" marker-mid="url(#hm)"/></svg>'
+    epub_items(books / "heavy-pictures.epub", "Heavy Pictures", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("h", "heavy.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1>' + "".join(f'<img alt="h{i}" width="{20 + i}" src="heavy.svg"/>' for i in range(40)) + '<p>After the heavy pictures.</p>'), "heavy.svg": heavy_svg}, "urn:heavy-pictures")
+    # (M-245) 20,000 small rules before the text.
+    (books / "many-rules.html").write_text("<!doctype html><html><head><title>Many rules</title></head><body><style>" + "".join(f".c{i}{{color:red}}" for i in range(20000)) + "</style><p>After the rules.</p></body></html>")
+    # (H-91, H-92, M-244) Breaks as </br>, in an HTML block, and as backslashes in a short document.
+    (books / "end-breaks.md").write_text("# End breaks\n\n" + "a</br>" * 40000 + "\n\nAfter the end breaks.\n")
+    (books / "block-breaks.md").write_text("# Block breaks\n\n<div>\n" + "a<br>" * 40000 + "\n</div>\n\nAfter the block breaks.\n")
+    (books / "short-breaks.md").write_text("a" + "\\\n" * 9900 + "\nAfter the short breaks.\n")
     print(f"Built {SITE}")
 
 
