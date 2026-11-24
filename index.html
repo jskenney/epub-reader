@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261124.1234</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261124.1316</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1935,10 +1935,15 @@ async function markdownToHtml(md){
   while (lexed.spent) lexed = await mdLex(md, true);
   if (!lexed.ok) { const t = textToHtml(md); return { ...t, ...meta, slow: true, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
   // (Long Markdown parsed from the worker's tokens: read once, there, not again here: round 43 review, M-233.)
-  // (Its tokens let go once used: kept, three large documents' held over a GB: round 45 review. Its block lines stay, for
-  // the editor.)
+  // (Only the document drawn last keeps its tokens, so the editor's redraws read it no more: three large documents' held
+  // over a GB: round 45 review; let go after each drawing, each switch of mode read it again: round 46, L-480. Block lines
+  // stay, for the editor.)
   let html;
-  if (lexed.tokens) { html = mdParseTokens(lexed.tokens, md); lexed.tokens = null; lexed.spent = true; }
+  if (lexed.tokens) {
+    if (mdDrawn && mdDrawn !== lexed) { mdDrawn.tokens = null; mdDrawn.spent = true; }
+    mdDrawn = lexed;
+    html = mdParseTokens(lexed.tokens, md);
+  }
   else html = mdMarked().parse(md);
   return { html: mdAlerts(html), ...meta, plainBlocks: !!lexed.plainBlocks };
 }
@@ -1953,7 +1958,7 @@ async function markdownToHtml(md){
    shown as plain text (round 43). One reading per text, the last few kept. */
 const MD_PROBE_MIN = 20000, MD_PROBE_MS = Number(window.SPINE_TEST?.mdProbeMs) || 5000, MD_NO_PROBE_MAX = 200000, MD_BLOCK_PIECES = 20000, MD_BLOCK_BREAKS = 500;
 const MD_SLOW_NOTE = 'This document is shown as plain text: its Markdown would take too long to lay out.';
-let mdLexCode = null;
+let mdLexCode = null, mdDrawn = null;
 const mdLexed = new Map();
 // What is known of a text: { ok, tokens (null: read it on the page), blocks } or undefined while it is being read.
 const mdLexResult = md => md.length < MD_PROBE_MIN ? { ok: true, tokens: null } : mdLexed.get(md)?.result;
@@ -1997,7 +2002,7 @@ onmessage = e => {
     // text on its own, its long words given breaks; the rest of the document as it is: round 45 review.)
     // (A line break, the costliest piece to lay out, counted on its own: more than ${MD_BLOCK_BREAKS} in a block are too many
     // (5,000 took 5 s, 10,000 a minute): round 46 review, H-85.)
-    const isBreak = t => t.type === 'br' || (t.type === 'html' && /^<br\b/i.test(t.text || ''));
+    const isBreak = t => t.type === 'br' || (t.type === 'html' && /^<br\\b/i.test(t.text || ''));
     const weight = t => t.type === 'text' || t.type === 'escape' ? 0 : isBreak(t) ? 1 : t.type === 'html' ? 0.25 : 1;
     const inline = list => { let n = 0; for (const t of list || []) { n += weight(t) + inline(t.tokens); if (n > ${MD_BLOCK_PIECES}) break; } return n; };
     const breaks = list => { let n = 0; for (const t of list || []) { n += (isBreak(t) ? 1 : 0) + breaks(t.tokens); if (n > ${MD_BLOCK_BREAKS}) break; } return n; };
