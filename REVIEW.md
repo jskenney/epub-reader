@@ -1084,6 +1084,8 @@ opened blank. Found while fixing: the editor's own rebuilds let go of what was r
 round 46's test); and checking the new estimate on a chain of 2,000 nested `<use>` took 1.2 s until it was worked out in
 passes over the page.
 
+**Tests.** 621 tests at `d397e27`: 615 pass, none fail, six need `SLOW=1` or `NETWORK=1`.
+
 The direction taken: count `<use>` instances by their target's effect drawings, and give a `<use>` its target's vertices
 and elements for inherited references; count path vertices by commands; skip a reference to an element holding the target
 only when no mask, clip path, marker, pattern or filter lies between them; charge pages for each use of a picture
