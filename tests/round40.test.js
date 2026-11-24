@@ -301,21 +301,15 @@ test('long Markdown is drawn from the worker\'s reading, footnotes, math and emo
   assert.equal(await page.evaluate(() => window.pageLexes), 0, 'not read again on the page');
 });
 
-test('markers and masks nested more than two deep are dropped, inline and in pictures; a plain marker stays (round 43 review, H-70; round 45)', async () => {
+test('markers and masks that would draw too much are dropped, inline and in pictures; a plain marker stays (round 43 review, H-70; rounds 45, 46)', async () => {
   let page = await h.newPage();
   const t0 = Date.now();
   await h.openReader(page, `${h.READER}?book=books/nested-effects.html`);
   assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
   assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 10000));
   assert.equal(await h.inFrame(page, doc => doc.querySelector('line[marker-end]')?.getAttribute('marker-end')), 'url(#arrow)', 'the plain arrow kept');
-  // (No more than two deep, a marker counting two: round 45.)
-  assert.equal(await h.inFrame(page, doc => {
-    const w = { marker: 2, mask: 1 }, memo = new Map();
-    const depth = t => { if (memo.has(t)) return memo.get(t); memo.set(t, 99); let inner = 0;
-      for (const el of [t, ...t.querySelectorAll('*')]) for (const a of ['marker-mid', 'mask']) { const id = /#([^)'"]+)/.exec(el.getAttribute(a) || '')?.[1], r = id && doc.getElementById(id); if (r) inner = Math.max(inner, depth(r)); }
-      const v = (w[t.localName] || 0) + inner; memo.set(t, v); return v; };
-    return [...doc.querySelectorAll('[marker-mid],[mask]')].filter(el => { const id = /#([^)'"]+)/.exec(el.getAttribute('marker-mid') || el.getAttribute('mask'))?.[1], t = id && doc.getElementById(id); return t && depth(t) > 2; }).length;
-  }), 0, 'nothing points more than two deep');
+  // (The outermost references, which would draw hundreds of thousands of times, dropped: round 46.)
+  assert.deepEqual(await h.inFrame(page, doc => [...doc.querySelectorAll('svg > polyline, svg > rect')].map(el => el.getAttribute('marker-mid') || el.getAttribute('mask'))), [null, null], 'the outermost references dropped');
   await page.close();
   page = await h.newPage();
   const t1 = Date.now();
@@ -414,4 +408,85 @@ test('masks nested deep by -webkit-mask, mask-image, escapes, custom properties,
   // (The animation removed, what it would have nested is one level deep, and kept.)
   for (const [k, v] of Object.entries(got)) if (k !== 't-smil') assert.doesNotMatch(v, /url\(/, `${k}: ${v}`);
   assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('set').length), 0, 'the animation that sets a mask removed');
+});
+
+// Round 46.
+// (Painted, not only laid out: a screenshot waits for the frame to be drawn.)
+async function paintMs(page) { const t = Date.now(); await page.screenshot(); return Date.now() - t; }
+test('masks nested by var() fallbacks, @scope, imports, selectors on what the reader adds, or ids cleaned later, and costs no depth bounds, are capped; painted in good time (round 46 review, H-78 to H-83)', async () => {
+  for (const k of ['varfb', 'scope', 'import', 'mark', 'alias', 'marker-fan', 'mask-fan']) {
+    const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/bypass-${k}.html`);
+    assert.ok(await h.waitFor(async () => /After the bypass/.test(await frameText(page)), 15000), `${k}: opened`);
+    const ms = await paintMs(page);
+    assert.ok(ms < 5000, `${k}: painted in ${ms} ms`);
+    assert.ok(Date.now() - t0 < 25000, `${k}: took ${Date.now() - t0} ms`);
+    const top = await h.inFrame(page, doc => [...doc.querySelectorAll('svg > rect, svg > polyline')].map(el => { const cs = getComputedStyle(el); return [cs.maskImage, cs.markerMid].join(' '); }));
+    for (const v of top) assert.doesNotMatch(v, /url\(/, `${k}: ${v}`);
+    await page.close();
+  }
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/bypass-pictures.epub`);
+  assert.ok(await h.waitFor(async () => /After the bypass pictures/.test(await frameText(page)), 15000));
+  const srcs = await h.inFrame(page, doc => [...doc.querySelectorAll('img')].map(i => i.src));
+  assert.equal(srcs.length, 2);
+  for (const u of srcs) {
+    const svg = await page.evaluate(async u => (await fetch(u)).text(), u);
+    // (The outermost rect lost its mask, by whatever channel.)
+    assert.doesNotMatch(svg.match(/<rect[^>]*\/>\s*<\/svg>\s*$/)?.[0] || svg.slice(-200), /k6/, u);
+  }
+  assert.ok((await paintMs(page)) < 5000, 'pictures painted in good time');
+});
+
+test('references to their own target, keyframes, nested rules, start and end markers in a sheet and custom properties on the root keep every effect (round 46 review, H-84)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/effects-everyday.html`);
+  assert.ok(await h.waitFor(async () => /After the everyday effects/.test(await frameText(page)), 10000));
+  const got = await h.inFrame(page, doc => {
+    const cs = sel => getComputedStyle(doc.querySelector(sel));
+    return { start: cs('line.both').markerStart, end: cs('line.both').markerEnd, clip: cs('rect.pulse').clipPath, g: doc.querySelector('g[marker-end]')?.getAttribute('marker-end'), y: cs('rect.y').fill };
+  });
+  for (const [k, v] of Object.entries(got)) assert.match(String(v), /url\(|lg/, `${k}: ${JSON.stringify(got)}`);
+});
+
+test('40,000 line breaks in a Markdown paragraph open in good time, the paragraph as its text (round 46 review, H-85)', async () => {
+  const page = await mdPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/many-breaks.md`);
+  assert.ok(await h.waitFor(async () => /After the breaks/.test(await frameText(page)), 15000), 'opened');
+  assert.ok(Date.now() - t0 < 20000, `took ${Date.now() - t0} ms`);
+  assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('br').length < 100 && !!doc.querySelector('strong')), 'the breaks as text, the rest formatted');
+  assert.ok((await paintMs(page)) < 5000);
+});
+
+test('Markdown with a block shown as its text is edited in Raw only, its source never rewritten; switching reads it no more (round 46 review, M-240, L-480)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(() => {
+    window.SPINE_TEST = { mdProbeMs: 4000 };
+    const W = window.Worker; window.workersMade = 0;
+    window.Worker = function (...a) { window.workersMade++; return new W(...a); };
+  });
+  await h.openReader(page, `${h.READER}?book=books/one-slow-block.md`, { 'spine:editMode': 'wysiwyg', 'spine:editSplit': true });
+  assert.ok(await h.waitFor(async () => /After, emphasis stays/.test(await frameText(page)), 15000));
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  await page.waitForFunction(() => document.querySelector('[data-mode="raw"]').getAttribute('aria-pressed') === 'true', null, { timeout: 10000 });
+  assert.equal(await page.evaluate(() => document.querySelector('[data-mode="wysiwyg"]').disabled), true, 'WYSIWYG not offered');
+  const src = await page.evaluate(() => document.querySelector('.CodeMirror').CodeMirror.getValue());
+  assert.doesNotMatch(src, /\\\*/);
+  // (big-normal.md: switching modes reads it no more.)
+  const p2 = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await p2.addInitScript(() => {
+    window.SPINE_TEST = { mdProbeMs: 4000 };
+    const W = window.Worker; window.workersMade = 0;
+    window.Worker = function (...a) { window.workersMade++; return new W(...a); };
+  });
+  await h.openReader(p2, `${h.READER}?book=books/big-normal.md`, { 'spine:editMode': 'raw', 'spine:editSplit': true });
+  assert.ok(await h.waitFor(async () => /Part 0/.test(await frameText(p2)), 15000));
+  await p2.click('#editBtn'); await p2.click('#editThis');
+  await p2.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  const before = await p2.evaluate(() => window.workersMade);
+  for (const m of ['wysiwyg', 'raw', 'wysiwyg', 'raw']) { await p2.click(`[data-mode="${m}"]`); await p2.waitForTimeout(800); }
+  assert.ok(await p2.evaluate(() => window.workersMade) - before <= 2, `reads: ${await p2.evaluate(() => window.workersMade) - before}`);
 });

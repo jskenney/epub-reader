@@ -1799,6 +1799,37 @@ def main():
     smil = '<mask id="k0"><rect width="10" height="10" fill="white"/></mask>' + "".join(f'<mask id="s{j}"><rect width="10" height="10"><set attributeName="mask" to="url(#k0)"/></rect></mask>' for j in range(3))
     tricks["smil"] = f'<svg {SV} width="20" height="20"><defs>{smil}</defs><rect width="20" height="20" mask="url(#s2)"/></svg>'
     (books / "effect-tricks.html").write_text("<!doctype html><html><head><title>Effect tricks</title></head><body><h1>Tricks</h1>" + "".join(f'<div class="t-{k}">{v}</div>' for k, v in tricks.items()) + "<p>After the tricks.</p></body></html>")
+    # Round 46.
+    # (H-78 to H-83) Ways round round 45's check, each a chain of masks seven deep, or a cost no depth bounds.
+    by = {
+        "varfb": chain(7, lambda j: f'style="mask:var(--n, url(#k{j}))"'),
+        "scope": chain(7, lambda j: f'class="a{j}"', extra="<style>" + "".join(f"@scope (.a{j}) {{ :scope {{ mask: url(#k{j}) }} }}" for j in range(7)) + "</style>"),
+        "import": '<style>@import url("bypass-imp.css");</style>' + chain(7, lambda j: f'class="c{j}"'),
+        "mark": '<p><a href="#top">top</a></p>' + chain(7, lambda j: f'class="c{j}"', extra="<style>" + "".join(f"html:has([data-spine-path]) .c{j}{{mask:url(#k{j})}}" for j in range(7)) + "</style>"),
+    }
+    names = ["open", "close", "write", "writeln", "hasFocus", "getElementById", "createElement"]
+    adefs = f'<mask id="{names[0]}"><rect width="10" height="10" fill="white"/></mask>' + "".join(f'<mask id="{names[j]}">' + f'<rect width="10" height="10" fill="white" mask="url(#{names[j - 1]})"/>' * 10 + "</mask>" for j in range(1, 7))
+    by["alias"] = "".join(f'<img name="pic" id="{nm}" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">' for nm in names) + f'<svg {SV} width="20" height="20"><defs>{adefs}</defs><rect width="20" height="20" mask="url(#{names[6]})"/></svg>'
+    (books / "bypass-imp.css").write_text("".join(f".c{j}{{mask:url(#k{j})}}" for j in range(7)))
+    pts = " ".join(f"{i % 97},{(i * 7) % 89}" for i in range(20000))
+    by["marker-fan"] = f'<svg {SV} width="100" height="100"><defs><marker id="busy" markerWidth="4" markerHeight="4">' + '<circle r="1"/>' * 500 + f'</marker></defs><polyline fill="none" stroke="black" points="{pts}" marker-mid="url(#busy)"/></svg>'
+    fan = '<mask id="f0"><rect width="10" height="10" fill="white"/></mask><mask id="f1">' + '<rect width="10" height="10" fill="white" mask="url(#f0)"/>' * 3000 + '</mask><mask id="f2">' + '<rect width="10" height="10" fill="white" mask="url(#f1)"/>' * 3000 + '</mask>'
+    by["mask-fan"] = f'<svg {SV} width="20" height="20"><defs>{fan}</defs>' + '<rect width="20" height="20" mask="url(#f2)"/>' * 30 + '</svg>'
+    for k, v in by.items():
+        (books / f"bypass-{k}.html").write_text(f"<!doctype html><html><head><title>Bypass {k}</title></head><body><h1 id='top'>Bypass {k}</h1>{v}<p>After the bypass.</p></body></html>")
+    svgimp = chain(7, lambda j: f'class="c{j}"', extra='<style>@import url("imp.css");</style>')
+    svgvar = chain(7, lambda j: f'style="mask:var(--n, url(#k{j}))"')
+    epub_items(books / "bypass-pictures.epub", "Bypass Pictures", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("a", "imp.svg", "image/svg+xml", ""), ("v", "var.svg", "image/svg+xml", ""), ("css", "imp.css", "text/css", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="imp" src="imp.svg"/><img alt="var" src="var.svg"/><p>After the bypass pictures.</p>'),
+                "imp.svg": svgimp, "var.svg": svgvar, "imp.css": "".join(f".c{j}{{mask:url(#k{j})}}" for j in range(7))}, "urn:bypass-pictures")
+    # (H-84) References that reach their own target, which the browser ignores, and everyday sheets: all kept.
+    legit = (f'<svg {SV} width="60" height="40"><style>@keyframes pulse{{to{{fill:url(#lg)}}}} .pulse{{animation:pulse 1s}} .both{{marker-start:url(#ma);marker-end:url(#mb)}} .x{{& .y{{fill:url(#lg)}}}}</style>'
+             '<defs><linearGradient id="lg"><stop offset="0" stop-color="red"/></linearGradient><marker id="ma"><path d="M0,0 L4,2 L0,4 z"/></marker><marker id="mb"><path d="M0,0 L4,2 L0,4 z"/></marker><clipPath id="cl"><rect width="9" height="9"/></clipPath></defs>'
+             '<line class="both" stroke="black" x1="2" y1="10" x2="50" y2="10"/><rect class="pulse" width="9" height="9" clip-path="url(#cl)"/><g class="x"><rect class="y" x="20" width="9" height="9"/></g></svg>'
+             f'<svg {SV} width="60" height="20"><g marker-end="url(#ga)"><defs><marker id="ga"><path d="M0,0 L4,2 L0,4 z"/></marker></defs><line stroke="black" x1="2" y1="10" x2="50" y2="10"/></g></svg>')
+    (books / "effects-everyday.html").write_text(f"<!doctype html><html><head><title>Everyday effects</title><style>svg{{--g:url(#lg)}}</style></head><body><h1>Everyday</h1>{legit}<p>After the everyday effects.</p></body></html>")
+    # (H-85) 40,000 line breaks in one Markdown paragraph.
+    (books / "many-breaks.md").write_text("# Breaks\n\n" + "a<br>" * 40000 + "\n\nAfter the breaks, **bold** stays.\n")
     print(f"Built {SITE}")
 
 
