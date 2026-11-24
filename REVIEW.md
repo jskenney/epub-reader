@@ -984,6 +984,8 @@ Your request: fix H-70, H-71 and M-233. **Fixed** in the commit after `962cf9c`,
   properties in style sheets are dropped as sheets are cleaned (they could reach the shapes inside markers). Masks, clip
   paths and filters set by a style sheet's selectors are not counted: they would need the selectors matched.
 
+**Tests.** 605 tests at `ad11b83`: 599 pass, none fail, six need `SLOW=1` or `NETWORK=1`.
+
 ## Summary
 
 Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475. Open (below): those, T-68, T-69,
@@ -1134,9 +1136,9 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
-| H-70 | Nested markers and masks multiplied drawing (round 43). References to targets holding references of their own dropped; sheet marker properties dropped. | (the commit after `962cf9c`) |
-| H-71 | A footnote's body wasn't read by the worker's check (round 43). The worker uses the page's tokenizers. | (the commit after `962cf9c`) |
-| M-233 | The page lexed long Markdown again after the check (round 43). The page parses the worker's tokens. | (the commit after `962cf9c`) |
+| H-70 | Nested markers and masks multiplied drawing (round 43). References to targets holding references of their own dropped; sheet marker properties dropped. | `ad11b83` |
+| H-71 | A footnote's body wasn't read by the worker's check (round 43). The worker uses the page's tokenizers. | `ad11b83` |
+| M-233 | The page lexed long Markdown again after the check (round 43). The page parses the worker's tokens. | `ad11b83` |
 | H-68 | WYSIWYG editing of long Markdown shown as plain text wrote the plain view back over the file (round 43, regression). Raw only for it; the plain view never serialized. | `153eff1`, `4d65a91` |
 | H-69 | A JPEG with stray bytes before its size marker, or the marker past 512 KB, wasn't sized and crashed the tab (round 43). Stray bytes skipped; a JPEG or AVIF without a size in its first 512 KB left out. | `153eff1`, `4d65a91` |
 | H-72 | A worker error counted as a pass (round 43). A failure. | `153eff1`, `4d65a91` |
