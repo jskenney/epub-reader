@@ -1041,7 +1041,12 @@ here). **Open**, in the table below:
 - Tests: none of the above is covered; the effect tests time until text appears, not until painted (T-70). Round 45's
   note that "every way of pointing is read" overstated it (D-48).
 
-Suggested direction for the SVG items (the reviewer's, which I agree with): stop trusting selector matching, counting
+**Fixed** (your go-ahead) in `1318844` and `9a3319c`, each with a test: the SVG check estimates drawings instead of depth
+and reads every channel above; the Markdown worker caps line breaks per block and flags blocks shown as text, which make
+the document Raw-only; the document drawn last keeps its tokens. Found while fixing: a backslash in the worker's source
+(a template string) lost again (`\b` read as a backspace), which left the break cap doing nothing; caught by the test.
+
+The direction taken (the reviewer's): stop trusting selector matching, counting
 any reference made in a style sheet as reaching every element, without counting a reference to its own target or an
 ancestor as a loop (the browser ignores those); read declarations from their serialized text too; run the check on the
 final page (after imports, link marking and id clean-up); and estimate the number of drawings (uses times the target's
@@ -1049,7 +1054,7 @@ cost, a marker's uses its vertices) rather than depth.
 
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: open. Open (below): those, round 46's, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1059,21 +1064,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-84 | Round 45's SVG check counts a reference that can reach its own target as a loop, then drops every effect on the page (sheet arrowheads, keyframes, nested rules, gradients): regression (round 46). | High |
-| H-85 | 40,000 `<br>` in one Markdown paragraph hang the tab (a break weighs 0.25 of a piece; 10,000 got past before): round 46. | High |
-| H-78 | SVG nesting by `var()` with a fallback in a shorthand isn't seen (22.8 s inline, 14.9 s as a picture): round 46. | High |
-| H-79 | SVG nesting by `@scope` rules isn't seen (22.5 s): round 46. | High |
-| H-80 | SVG nesting by selectors matching only after the check (attributes the reader adds, `:has()`): 33 s (round 46). | High |
-| H-81 | SVG nesting by `@import` in a body or SVG-file `<style>`, pasted in after the check (7.6 s, 15.3 s): round 46. | High |
-| H-82 | SVG nesting through an id `sanitize` removes after the check, so references reach a later element (15.4 s): round 46. | High |
-| H-83 | Depth doesn't bound drawing: one marker level on a 20,000-vertex line, 24.7 s; two-deep masks of 3,000 rects, 4.4 s (round 46). Fix: estimate drawings. | High |
-| M-240 | A Markdown block shown as plain text is written back escaped after a WYSIWYG edit (regression of round 43's Raw-only guard): round 46. | Medium |
-| M-239 | The SVG check grows with sheet rules × matched elements (200 KB page: 16.5 s): round 46. | Medium |
-| L-480 | Each Raw/WYSIWYG switch reads long Markdown again in the worker (round 46). Keep `ok` and blocks in a used entry. | Low |
-| L-478 | SVG pattern `href` inheritance isn't counted (round 46). | Low |
-| L-479 | A nested `@property` with a url can't be removed, yet is counted as dropped (round 46). | Low |
-| T-70 | No tests for round 46's items; the SVG tests time until text, not paint (round 46). | Tests |
-| D-48 | Round 45 said every way of pointing is read: it isn't (round 46). | Docs |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | L-475 | The check's 5 s budget is fixed: a legitimate large document can show as plain text on a slow device, and differently from visit to visit (positions and contents then differ); reading aloud and the audiobook speak the note and the raw markup (round 43). Fix: a budget scaled by a calibration sample; a "show as Markdown anyway" action; the note kept out of what is spoken. | Low |
@@ -1212,6 +1202,21 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-84 | Round 45's SVG check counts a reference that can reach its own target as a loop, then drops every effect on the page (sheet arrowheads, keyframes, nested rules, gradients): regression (round 46). References to their own target or to what holds them aren't counted (the browser ignores them). | `9a3319c` |
+| H-85 | 40,000 `<br>` in one Markdown paragraph hang the tab (a break weighs 0.25 of a piece; 10,000 got past before): round 46. More than 500 line breaks in a block: the block shown as its text. | `9a3319c` |
+| H-78 | SVG nesting by `var()` with a fallback in a shorthand isn't seen (22.8 s inline, 14.9 s as a picture): round 46. Declarations read from their text, so a var() fallback counts. | `9a3319c` |
+| H-79 | SVG nesting by `@scope` rules isn't seen (22.5 s): round 46. Scoped, nested and keyframe rules count as reaching every element. | `9a3319c` |
+| H-80 | SVG nesting by selectors matching only after the check (attributes the reader adds, `:has()`): 33 s (round 46). A rule reaches every element matching its selector's last part, pseudo-classes and attributes left out; inherited declarations reach everything. | `9a3319c` |
+| H-81 | SVG nesting by `@import` in a body or SVG-file `<style>`, pasted in after the check (7.6 s, 15.3 s): round 46. The check runs on the finished page, after imports are pasted in, and in SVG files after their sheets are rewritten. | `9a3319c` |
+| H-82 | SVG nesting through an id `sanitize` removes after the check, so references reach a later element (15.4 s): round 46. The check runs after ids are cleaned. | `9a3319c` |
+| H-83 | Depth doesn't bound drawing: one marker level on a 20,000-vertex line, 24.7 s; two-deep masks of 3,000 rects, 4.4 s (round 46). Fix: estimate drawings. Drawings estimated (vertices for markers, elements inheriting custom properties) instead of depth; past 500,000, references dropped. | `9a3319c` |
+| M-240 | A Markdown block shown as plain text is written back escaped after a WYSIWYG edit (regression of round 43's Raw-only guard): round 46. A block shown as its text makes the document Raw-only, as a slow one. | `9a3319c` |
+| M-239 | The SVG check grows with sheet rules × matched elements (200 KB page: 16.5 s): round 46. Selector groups indexed by the targets they reach; 200 KB page 2.8 s (was 16.5 s), 3,000 classes 0.4 s. | `9a3319c` |
+| L-480 | Each Raw/WYSIWYG switch reads long Markdown again in the worker (round 46). Keep `ok` and blocks in a used entry. The document drawn last keeps its tokens; the editor's checks answer from a used reading. | `9a3319c` |
+| L-478 | SVG pattern `href` inheritance isn't counted (round 46). href on patterns and gradients counted. | `9a3319c` |
+| L-479 | A nested `@property` with a url can't be removed, yet is counted as dropped (round 46). A nested @property removed from its parent rule. | `9a3319c` |
+| T-70 | No tests for round 46's items; the SVG tests time until text, not paint (round 46). Tests for each, timing paint (a screenshot) as well as text. | `9a3319c` |
+| D-48 | Round 45 said every way of pointing is read: it isn't (round 46). Round 46's notes say what is read. | `9a3319c` |
 | H-75 | Long Markdown with a note defined in a list item, quote or note stopped opening (round 45). Notes found in the page's reading order; missing ones tolerated. | `e469b5d` |
 | H-76 | Sheet marker properties dropped, CSS arrowheads lost (round 45, regression). Rule removed. | `e469b5d` |
 | H-77 | Ways round H-70: -webkit-mask, escapes, animations, custom properties, sheet classes (round 45). Depth counted over every way of pointing. | `e469b5d` |
