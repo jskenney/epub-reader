@@ -986,9 +986,40 @@ Your request: fix H-70, H-71 and M-233. **Fixed** in the commit after `962cf9c`,
 
 **Tests.** 605 tests at `ad11b83`: 599 pass, none fail, six need `SLOW=1` or `NETWORK=1`.
 
+### Round 45
+
+A review of round 44's fixes (two reviewers). It found regressions in them and ways round H-70, all **fixed** in the
+commit after `86673b9`, each with a test:
+- H-75 (High): long Markdown with a note defined inside a list item, a quote or another note stopped opening, or lost the
+  note: the page looked for notes only among top-level blocks of the worker's tokens. They are found now in the order
+  the page's own reading finds them (inside lists, quotes and tables, a note's own notes before it), and a reference to a
+  missing note no longer stops the document.
+- H-76 (High, regression): marker properties were dropped from every style sheet, so CSS arrowheads disappeared. That
+  sheet rule is gone; sheets are counted with the rest (H-77).
+- H-77 (High): ways round H-70's check: `-webkit-mask` and `mask-image` in a style attribute, CSS escapes in the fragment
+  (`url(#\6b 1)`), an animation that sets a mask, custom properties (`--m: url(#k0); mask: var(--m)`), and masks set by
+  style-sheet classes. The check now counts depth over every way of pointing, read as the browser reads it: any
+  attribute or declaration with `url(#…)` (escapes decoded, shorthands expanded, custom properties), `<use>` and
+  `<feImage>`, style-sheet rules matched to the elements they reach (a selector depending on the reader, `:hover`
+  say, matched without it; keyframes and nested rules reach everything), and what is inherited (markers, custom
+  properties). Animations that would set a reference, class or style are removed. Masks, clip paths and filters may
+  be two deep; a marker counts two. What points deeper is dropped.
+- M-235: round 44's check dropped legitimate masks and clips (Sketch's mask holding a `<use>`, a clip path of a clipped
+  shape, Illustrator's mask holding a filter). One level of nesting is kept now (H-77).
+- M-236: emoji were missing when the worker read a document before the emoji names had loaded, and the editor then wrote
+  `\:tada:`. The worker waits for the names, and a reading made without them is redone once they are there.
+- M-237: the last three documents' token trees were kept (137 MB for 7 MB of Markdown). Tokens are let go once drawn
+  (the editor's block lines kept); a second drawing reads again.
+- M-238: footnote numbers were looked up in a list: 30,000 notes took 13 s. A map now (about 4 s to open).
+- L-477: the 20,000-piece limit missed table cells, and one such block turned the whole document into plain text. Cells
+  are counted; only the block (or cell) past the limit is shown as its text, long words given breaks, and text and
+  inline HTML count for little.
+
+**Tests.** See the run recorded with this round's commit.
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475. Open (below): those, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1136,6 +1167,14 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-75 | Long Markdown with a note defined in a list item, quote or note stopped opening (round 45). Notes found in the page's reading order; missing ones tolerated. | round 45 |
+| H-76 | Sheet marker properties dropped, CSS arrowheads lost (round 45, regression). Rule removed. | round 45 |
+| H-77 | Ways round H-70: -webkit-mask, escapes, animations, custom properties, sheet classes (round 45). Depth counted over every way of pointing. | round 45 |
+| M-235 | H-70's check dropped one-level masks and clips (round 45). Two deep allowed. | round 45 |
+| M-236 | Emoji missing when the worker read before their names loaded; editor escaped them (round 45). Worker waits; reading redone. | round 45 |
+| M-237 | Token trees of three documents kept (round 45). Let go once drawn. | round 45 |
+| M-238 | 30,000 notes took 13 s (round 45). Numbers in a map. | round 45 |
+| L-477 | Piece limit missed table cells and made the whole document plain (round 45). Cells counted; only the block shown as text. | round 45 |
 | H-70 | Nested markers and masks multiplied drawing (round 43). References to targets holding references of their own dropped; sheet marker properties dropped. | `ad11b83` |
 | H-71 | A footnote's body wasn't read by the worker's check (round 43). The worker uses the page's tokenizers. | `ad11b83` |
 | M-233 | The page lexed long Markdown again after the check (round 43). The page parses the worker's tokens. | `ad11b83` |

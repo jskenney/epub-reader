@@ -737,7 +737,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261124.0229</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261124.0342</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1928,15 +1928,19 @@ async function markdownToHtml(md){
   if (!window.temml && (md.includes('$') || /^ {0,3}(`{3,}|~{3,})[ \t]*math\b/im.test(md))) await loadLib('temml').catch(err => console.warn(`Math: ${err.message}`));
   // (highlight.js for a code block that names a language; the emoji names for a :name: in the text.)
   if (!window.hljs && /^ {0,3}(`{3,}|~{3,})[ \t]*(?!math\b)[\w+#.-]+/im.test(md)) await loadLib('hljs').catch(err => console.warn(`Highlighting: ${err.message}`));
-  if (!mdEmoji && mdShortcodeAt(md) >= 0) {   // (not a time, 10:30:45: L-381)
-    await loadData('emoji').then(list => { mdEmoji = new Map(); for (const e of list) for (const a of e.aliases || []) if (!mdEmoji.has(a)) mdEmoji.set(a, e.emoji); })
-      .catch(err => console.warn(`Emoji: ${err.message}`));
-  }
+  await mdLoadEmoji(md);
   // (Markdown that marked would take too long over is shown as plain text, with a note: round 42 review.)
-  const lexed = await mdLex(md);
+  let lexed = await mdLex(md);
+  // (Its tokens used by another reading meanwhile: read again.)
+  while (lexed.spent) lexed = await mdLex(md);
   if (!lexed.ok) { const t = textToHtml(md); return { ...t, ...meta, slow: true, html: `<p><em>${MD_SLOW_NOTE}</em></p>` + t.html }; }
   // (Long Markdown parsed from the worker's tokens: read once, there, not again here: round 43 review, M-233.)
-  return { html: mdAlerts(lexed.tokens ? mdParseTokens(lexed.tokens, md) : mdMarked().parse(md)), ...meta };
+  // (Its tokens let go once used: kept, three large documents' held over a GB: round 45 review. Its block lines stay, for
+  // the editor.)
+  let html;
+  if (lexed.tokens) { html = mdParseTokens(lexed.tokens, md); lexed.tokens = null; lexed.spent = true; }
+  else html = mdMarked().parse(md);
+  return { html: mdAlerts(html), ...meta };
 }
 /* Some Markdown takes marked time with the square of its size (a list item followed by many lines without a blank one,
    a long line of emphasis, and others): a document of a few hundred KB froze the tab for minutes. Three rounds of
@@ -1956,9 +1960,11 @@ const mdLexResult = md => md.length < MD_PROBE_MIN ? { ok: true, tokens: null } 
 function mdLex(md){
   if (md.length < MD_PROBE_MIN) return Promise.resolve({ ok: true, tokens: null });
   let e = mdLexed.get(md);
+  // (Read again when its tokens were used and let go, or when it was read before the emoji names were there: round 45.)
+  if (e?.result && (e.result.spent || (e.emoji !== !!mdEmoji && mdShortcodeAt(md) >= 0))) { mdLexed.delete(md); e = null; }
   if (!e) {
     e = { result: undefined };
-    e.job = mdLexRun(md).then(r => (e.result = r));
+    e.job = mdLoadEmoji(md).then(() => { e.emoji = !!mdEmoji; return mdLexRun(md); }).then(r => (e.result = r));
     mdLexed.set(md, e);
     while (mdLexed.size > 3) mdLexed.delete(mdLexed.keys().next().value);
   }
@@ -1984,12 +1990,21 @@ onmessage = e => {
     const tokens = m.lexer(e.data.md);
     // (A block of more pieces than any book has, 100,000 emphasised letters in one paragraph say, read in time but took the
     // browser 50 s to lay out: shown as plain text too.)
-    // (Counted within each paragraph, heading or line of text, not across a list's items: a list of 100,000 items is a
-    // book's.)
-    const inline = list => { let n = 0; for (const t of list || []) { n += 1 + inline(t.tokens); if (n > ${MD_BLOCK_PIECES}) break; } return n; };
-    const tooMany = list => (list || []).some(t => /^(paragraph|heading|text)$/.test(t.type) ? inline(t.tokens) > ${MD_BLOCK_PIECES}
-      : tooMany(t.tokens) || (t.items || []).some(it => tooMany(it.tokens)));
-    if (tooMany(tokens)) return postMessage({ ok: false });
+    // (Counted within each paragraph, heading, line of text or table cell, not across a list's items: a list of 100,000
+    // items is a book's. Text and inline HTML count for little, elements fully. A block past the limit is shown as plain
+    // text on its own, its long words given breaks; the rest of the document as it is: round 45 review.)
+    const weight = t => t.type === 'text' || t.type === 'escape' ? 0 : t.type === 'html' || t.type === 'br' ? 0.25 : 1;
+    const inline = list => { let n = 0; for (const t of list || []) { n += weight(t) + inline(t.tokens); if (n > ${MD_BLOCK_PIECES}) break; } return n; };
+    const esc = v => v.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const plain = t => ({ type: 'html', block: true, pre: false, raw: t.raw,
+      text: '<p>' + esc(t.raw).replace(/[^\\s]{1000,}/gu, w => w.match(/(?:&[a-z0-9#]+;|[^&]\\p{M}*){1,200}/giu).join('<wbr>')) + '</p>\\n' });
+    const fix = list => { (list || []).forEach((t, i) => {
+      if (/^(paragraph|heading|text)$/.test(t.type)) { if (inline(t.tokens) > ${MD_BLOCK_PIECES}) list[i] = plain(t); return; }
+      fix(t.tokens);
+      for (const it of t.items || []) fix(it.tokens);
+      for (const c of [...(t.header || []), ...(t.rows || []).flat()]) if (c && inline(c.tokens) > ${MD_BLOCK_PIECES}) c.tokens = [{ type: 'text', raw: c.text, text: c.text, escaped: false }];
+    }); };
+    fix(tokens);
     postMessage({ ok: true, tokens });
   } catch (err) { postMessage({ ok: false }); }
 };`], { type: 'text/javascript' }));
@@ -2238,18 +2253,19 @@ function mdMarked(){
   const fn = { defs: new Map(), used: [], seen: new Map() };
   const m = new window.marked.Marked({ gfm: true });
   const hooks = {
-      preprocess(src){ fn.defs = new Map(); fn.used = []; fn.seen = new Map(); mathBudgetReset(); hlReset(); return src; },
+      preprocess(src){ fn.defs = new Map(); fn.used = []; fn.usedNo = new Map(); fn.seen = new Map(); mathBudgetReset(); hlReset(); return src; },
       // The notes, after the document: those referred to in the order they first were, then any never referred to
       // (kept, so the editor writes them back), each with links back to where it is referred to.
       postprocess(html){
         if (!fn.defs.size) return html;
-        const ids = [...fn.used, ...[...fn.defs.keys()].filter(id => !fn.used.includes(id))];
+        // (Numbers kept in a map: looked up in the list, 30,000 notes took 13 s: round 45 review.)
+        const ids = [...fn.used, ...[...fn.defs.keys()].filter(id => !fn.usedNo.has(id))];
         const items = ids.map((id, k) => {
           const s = fnSlug(id), n = fn.seen.get(id) || 0;
           const back = Array.from({ length: n }, (_, j) => `<a href="#fnref-${s}${j ? '-' + (j + 1) : ''}" class="md-fnback" data-fn-back="" role="doc-backlink" aria-label="Back to reference ${k + 1}${n > 1 ? '-' + (j + 1) : ''}">↩</a>`).join(' ');
-          let body = fn.defs.get(id).html || '';
+          let body = fn.defs.get(id)?.html || '';
           body = back && body.trimEnd().endsWith('</p>') ? body.trimEnd().slice(0, -4) + ' ' + back + '</p>' : body + back;
-          return `<li id="fn-${s}" data-md-own="${MD_OWN}" data-fn="${escHtml(fn.defs.get(id).tok.id)}" data-fn-key="${escHtml(id)}">${body}</li>`;
+          return `<li id="fn-${s}" data-md-own="${MD_OWN}" data-fn="${escHtml(fn.defs.get(id)?.tok.id ?? id)}" data-fn-key="${escHtml(id)}">${body}</li>`;
         });
         return `${html}<section class="md-footnotes" data-md-own="${MD_OWN}" data-footnotes="" role="doc-endnotes"><hr><ol>${items.join('')}</ol></section>\n`;
       }
@@ -2268,8 +2284,8 @@ function mdMarked(){
       return `<div hidden="" data-md-own="${MD_OWN}" data-fn-at="${escHtml(t.key)}"></div>\n`;
     },
     footnoteRef(t){
-      if (!fn.used.includes(t.key)) fn.used.push(t.key);
-      const n = fn.used.indexOf(t.key) + 1, k = (fn.seen.get(t.key) || 0) + 1, sl = fnSlug(t.key);
+      if (!fn.usedNo.has(t.key)) { fn.used.push(t.key); fn.usedNo.set(t.key, fn.used.length); }
+      const n = fn.usedNo.get(t.key), k = (fn.seen.get(t.key) || 0) + 1, sl = fnSlug(t.key);
       fn.seen.set(t.key, k);
       return `<sup class="md-fnref" data-md-own="${MD_OWN}" data-fn-ref="${escHtml(t.id)}"><a id="fnref-${sl}${k > 1 ? '-' + k : ''}" href="#fn-${sl}" role="doc-noteref">${n}</a></sup>`;
     }
@@ -2301,10 +2317,27 @@ function mdMarked(){
 }
 // Tokens a worker made, parsed as the page would have read them: the notes' list made from them, then the hooks around
 // the parse, as marked runs them (round 44).
+// The emoji names, for a text with a :name: in it (not a time, 10:30:45: L-381). Before the worker reads a text too: read
+// without them, a long document's emoji stayed as written and the editor then escaped them (round 45 review).
+async function mdLoadEmoji(md){
+  if (mdEmoji || mdShortcodeAt(md) < 0) return;
+  await loadData('emoji').then(list => { mdEmoji = new Map(); for (const e of list) for (const a of e.aliases || []) if (!mdEmoji.has(a)) mdEmoji.set(a, e.emoji); })
+    .catch(err => console.warn(`Emoji: ${err.message}`));
+}
 function mdParseTokens(tokens, md){
   const m = mdMarked(), { fn, hooks } = m.spine;
   hooks.preprocess(md);
-  const walk = list => { for (const t of list || []) { if (t.type === 'footnoteDef' && !fn.defs.has(t.key)) fn.defs.set(t.key, { tok: t }); if (t.tokens && t.type !== 'footnoteDef') walk(t.tokens); } };
+  // (In the order the page's tokenizer would have found them: inside lists, quotes and tables too, and a note's own notes
+  // before it, as its body is read first; walking only blocks' tokens lost notes defined in a list item, and a reference
+  // to one stopped the document opening: round 45 review.)
+  const walk = list => {
+    for (const t of list || []) {
+      walk(t.tokens);
+      for (const it of t.items || []) walk(it.tokens);
+      for (const c of [...(t.header || []), ...(t.rows || []).flat()]) walk(c?.tokens);
+      if (t.type === 'footnoteDef' && !fn.defs.has(t.key)) fn.defs.set(t.key, { tok: t });
+    }
+  };
   walk(tokens);
   return hooks.postprocess(m.parser(tokens));
 }
@@ -3091,36 +3124,135 @@ function dataPictureFits(v){
 // wantSizes (an SVG file, for its sprites): returns the size of each element with an id, and the whole file's ('').
 /* Markers, masks, clip paths and filters draw what they point to wherever they are used, as <use> does: a marker on
    each of a polyline's 30 vertices, holding such polylines four deep (1.8 KB), is 810,000 drawings and ran the tab out of
-   memory; masks six deep took 35 s (round 43 review, H-70). So such a reference (an attribute, or in a style attribute)
-   is dropped when what it points to holds references of its own, or a <use>: one level each, never nested. (Marker
-   properties in style sheets are dropped as the sheets are cleaned: rewriteCss.) */
-const SVG_EFFECTS = ['marker-start', 'marker-mid', 'marker-end', 'marker', 'mask', 'clip-path', 'filter'];
-const SVG_EFFECT_STYLE = /(?:^|;)\s*(?:marker(?:-start|-mid|-end)?|mask|clip-path|filter)\s*:[^;]*url\(/i;
+   memory; masks six deep took 35 s (round 43 review, H-70). So they are kept to two deep: a mask may hold a filter, a
+   clip path a <use> of a clipped shape, but a mask in a mask in a mask is dropped. A marker, drawn on every vertex,
+   counts two: it holds none of the others. Every way of pointing is read, as the browser reads it (round 45 review):
+   any attribute or declaration with url(#…), escapes and all (-webkit-mask, custom properties, shorthands), a <use> or
+   <feImage>, style sheet rules matched to the elements they reach, and what is inherited (markers, custom properties).
+   Animations that would set a reference, a class or a style are removed. What points too deep is dropped. */
+const SVG_HOLDERS = { mask: 1, clipPath: 1, filter: 1, marker: 2 }, SVG_DEPTH = 2;
+const SVG_DYNAMIC = /:(?:hover|active|focus(?:-within|-visible)?|target(?:-within)?|visited|link|any-link|local-link|checked|indeterminate|default|valid|invalid|user-valid|user-invalid|in-range|out-of-range|required|optional|read-only|read-write|placeholder-shown|autofill|enabled|disabled|playing|paused|seeking|buffering|stalled|muted|volume-locked|fullscreen|picture-in-picture|modal|open|closed|popover-open|defined|current|past|future|state)\b/gi;
+// The ids a value points to with url(…), its CSS escapes decoded as the browser decodes them.
+function svgFragIds(v){
+  if (!v || !/url|\\/i.test(v)) return [];
+  const t = v.replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?|\\([^\n])/gi, (m, h, c) => c ?? String.fromCodePoint(parseInt(h, 16) > 0x10ffff || parseInt(h, 16) === 0 ? 0xfffd : parseInt(h, 16)));
+  const out = [];
+  for (const m of t.matchAll(/url\(\s*(['"]?)([^'")]*)\1\s*\)?/gi)) {
+    const i = m[2].indexOf('#');
+    if (i < 0) continue;
+    let id = m[2].slice(i + 1).trim();
+    try { id = decodeURIComponent(id); } catch {}
+    out.push(id);
+  }
+  return out;
+}
 function svgEffectCap(doc, root, where){
-  const users = [...root.querySelectorAll('[marker-start],[marker-mid],[marker-end],[marker],[mask],[clip-path],[filter],[style*="url" i]')];
-  if (!users.length) return;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const holders = Object.keys(SVG_HOLDERS).flatMap(n => [...doc.getElementsByTagNameNS(SVG_NS, n)]);
+  if (!holders.length) return;
+  doc.querySelectorAll('set, animate, animateTransform, animateMotion, animateColor').forEach(e => {
+    if (/^(class|id|style|href|xlink:href)$/i.test(e.getAttribute('attributeName') || '') || ['to', 'from', 'by', 'values'].some(a => /url|\\/i.test(e.getAttribute(a) || ''))) e.remove();
+  });
   const byId = new Map();
   for (const el of doc.querySelectorAll('[id]')) if (!byId.has(el.id)) byId.set(el.id, el);
-  const refs = el => SVG_EFFECTS.some(a => /url\(/i.test(el.getAttribute(a) || '')) || SVG_EFFECT_STYLE.test(el.getAttribute('style') || '') || el.localName === 'use';
-  const nested = new Map();
-  const isNested = t => {
-    if (!nested.has(t)) nested.set(t, refs(t) || [...t.getElementsByTagName('*')].some(refs));
-    return nested.get(t);
+  // Each element's references: [target, inherited, drop()].
+  const refs = new Map(), star = [], sheetsDirty = new Set();
+  let inheritAll = false;
+  const add = (el, ids, inherited, drop) => {
+    for (const id of ids) {
+      const t = byId.get(id);
+      if (!t) continue;
+      if (!refs.has(el)) refs.set(el, []);
+      refs.get(el).push([t, inherited, drop]);
+    }
   };
-  const target = v => { const m = /url\(\s*['"]?\s*#([^'")\s]+)/i.exec(urlText(v)); if (!m) return null; let id = m[1]; try { id = decodeURIComponent(id); } catch {} return byId.get(id) || byId.get(m[1]) || null; };
-  let dropped = 0;
-  for (const el of users) {
-    for (const a of SVG_EFFECTS) {
-      const v = el.getAttribute(a), t = v && target(v);
-      if (t && isNested(t)) { el.removeAttribute(a); dropped++; }
+  const inherits = p => /^(--|marker)/i.test(p);
+  const decls = (style, onEl, onDrop) => {
+    for (let i = 0; i < style.length; i++) {
+      const p = style[i], v = style.getPropertyValue(p);
+      if (/^\s*inherit\s*$/i.test(v) && /mask|clip|filter|marker/i.test(p)) inheritAll = true;
+      const ids = svgFragIds(v);
+      if (ids.length) onEl(ids, inherits(p), () => onDrop(p));
     }
-    const st = el.getAttribute('style');
-    if (st && SVG_EFFECT_STYLE.test(st)) {
-      const kept = st.split(';').filter(d => { const m = /^\s*(marker(?:-start|-mid|-end)?|mask|clip-path|filter)\s*:(.*)$/i.exec(d); const t = m && target(m[2]); if (t && isNested(t)) { dropped++; return false; } return true; }).join(';');
-      if (kept !== st) el.setAttribute('style', kept);
+  };
+  const all = [doc.documentElement, ...doc.documentElement.getElementsByTagName('*')];
+  for (const el of all) {
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase();
+      if (n === 'style' || n === 'id' || n === 'class') continue;
+      if ((n === 'href' || n === 'xlink:href') && /^(use|feImage)$/.test(el.localName)) {
+        const v = a.value.trim(), i = v.indexOf('#');
+        if (i >= 0) { let id = v.slice(i + 1); try { id = decodeURIComponent(id); } catch {} add(el, [id], false, () => el.removeAttribute(a.name)); }
+        continue;
+      }
+      if (/^\s*inherit\s*$/i.test(a.value) && /mask|clip|filter|marker/i.test(n)) inheritAll = true;
+      add(el, svgFragIds(a.value), inherits(n), () => el.removeAttribute(a.name));
     }
+    if (el.hasAttribute('style') && el.style) decls(el.style, (ids, inh, drop) => add(el, ids, inh, drop), p => el.style.removeProperty(p));
   }
-  if (dropped) console.warn(`${where}: markers, masks or filters nested in one another aren't shown (${dropped})`);
+  // (Style sheet rules, matched to the elements they reach. A selector that depends on what the reader does (:hover)
+  // reaches whatever it would reach without that; one that can't be matched so, or a rule not tied to a selector
+  // (keyframes, nested rules), reaches everything.)
+  const match = sel => {
+    let s = sel.replace(/::?(?:before|after|first-line|first-letter|marker|placeholder|selection|backdrop|file-selector-button|cue|part|slotted|highlight|view-transition[\w-]*)(?:\([^)]*\))?/gi, '');
+    if (/\(/.test(s) && SVG_DYNAMIC.test(s)) s = '*';
+    else s = s.replace(SVG_DYNAMIC, ':is(*)').replace(/:is\(\*\)\([^)]*\)/g, ':is(*)');
+    SVG_DYNAMIC.lastIndex = 0;
+    try { return [...doc.querySelectorAll(s.trim() || '*')]; } catch { return all; }
+  };
+  for (const st of doc.getElementsByTagName('style')) {
+    const text = st.textContent;
+    if (!/url|\\/i.test(text)) continue;
+    const sheet = new CSSStyleSheet();
+    try { sheet.replaceSync(text); } catch { continue; }
+    const walk = (rules, anywhere) => {
+      for (const r of rules) {
+        if (r.style && r.cssText && /url|\\/i.test(r.cssText)) {
+          let els = null;
+          decls(r.style, (ids, inh, drop) => {
+            els ??= anywhere || r.selectorText == null ? all : match(r.selectorText);
+            // (A rule that reaches most of the page counts as reaching every element, held once.)
+            if (els.length * 2 > all.length) { for (const id of ids) if (byId.has(id)) star.push([byId.get(id), inh, drop]); }
+            else for (const el of els) add(el, ids, inh, drop);
+          },
+            p => { r.style.removeProperty(p); sheetsDirty.add(st); st._rules = sheet; });
+        }
+        if (r.initialValue) for (const id of svgFragIds(r.initialValue)) if (byId.has(id)) star.push([byId.get(id), true, () => { const i = [...sheet.cssRules].indexOf(r); if (i >= 0) sheet.deleteRule(i); sheetsDirty.add(st); st._rules = sheet; }]);
+        if (r.cssRules) walk(r.cssRules, anywhere || !!r.style || r instanceof CSSKeyframesRule);
+      }
+    };
+    walk(sheet.cssRules, false);
+  }
+  // Which elements have references inside them (or are such an element).
+  const holds = new Set();
+  for (const el of refs.keys()) for (let n = el; n && !holds.has(n); n = n.parentElement) holds.add(n);
+  const depth = new Map(), busy = new Set();
+  let frames = 0;
+  const TOO_DEEP = SVG_DEPTH + 1;
+  const d = t => {
+    if (depth.has(t)) return depth.get(t);
+    if (busy.has(t) || frames > 200) return TOO_DEEP;   // (a loop, or a chain past any picture's)
+    busy.add(t); frames++;
+    let inner = 0;
+    const consider = (el, onlyInherited) => { for (const [r, inh] of refs.get(el) || []) if ((!onlyInherited || inh || inheritAll) && inner < TOO_DEEP) inner = Math.max(inner, d(r)); };
+    for (const [r] of star) if (inner < TOO_DEEP) inner = Math.max(inner, d(r));
+    // (The references inside it: by its elements, or by the referring elements, whichever are fewer.)
+    if (holds.has(t)) {
+      const inside = t.getElementsByTagName('*');
+      if (inside.length < refs.size) { consider(t, false); for (const el of inside) if (inner < TOO_DEEP && refs.has(el)) consider(el, false); }
+      else for (const el of refs.keys()) if (inner < TOO_DEEP && (el === t || t.contains(el))) consider(el, false);
+    }
+    for (let a = t.parentElement; a && inner < TOO_DEEP; a = a.parentElement) consider(a, true);
+    const v = Math.min(TOO_DEEP, (t.namespaceURI === SVG_NS && SVG_HOLDERS[t.localName] || 0) + inner);
+    busy.delete(t); frames--;
+    depth.set(t, v);
+    return v;
+  };
+  let dropped = 0;
+  for (const [, list] of refs) for (const [t, , drop] of list) if (d(t) > SVG_DEPTH) { drop(); dropped++; }
+  for (const [t, , drop] of star) if (d(t) > SVG_DEPTH) { drop(); dropped++; }
+  for (const st of sheetsDirty) { st.textContent = [...st._rules.cssRules].map(r => r.cssText).join('\n'); delete st._rules; }
+  if (dropped) console.warn(`${where}: markers, masks, clip paths or filters nested more than ${SVG_DEPTH} deep aren't shown (${dropped})`);
 }
 const SVG_USES = 50000;
 function svgUseCap(doc, root, where, wantSizes = false){
@@ -3510,9 +3642,6 @@ async function rewriteCss(css, cssPath, { depth = 0, again = true, budget = cssB
       // (A fragment, such as an SVG sprite's view, is kept as attributes keep it: REVIEW.md L-84.)
       text = u ? cssUrl(u + frag) : NO_IMAGE;   // a file the book doesn't have: no image, rather than a request elsewhere
     } else if (r.svgData) { const u = done.get(r.clean); text = u ? cssUrl(u) : NO_IMAGE; }
-    // (A marker property in a sheet, which can reach the shapes inside markers and nest them: H-70. The property's name
-    // read with its escapes decoded, as the browser reads it.)
-    else if (r.kind === 'image' && r.clean.startsWith('#') && /marker(?:-start|-mid|-end)?\s*:\s*$/i.test(css.slice(Math.max(0, r.s - 64), r.s).replace(/\\([0-9a-f]{1,6})\s?/gi, (m, h) => String.fromCodePoint(parseInt(h, 16) || 0xfffd)).replace(/\\(.)/g, '$1').replace(/\/\*[\s\S]*?\*\//g, ''))) text = 'none';
     else if (r.tooLarge) text = NO_IMAGE;
     else if (isRemote(r.clean) && !ALLOW_REMOTE_CONTENT) text = NO_IMAGE;
     if (text === null) continue;

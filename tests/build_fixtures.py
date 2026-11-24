@@ -1762,6 +1762,43 @@ def main():
     epub_items(books / "nested-effects.epub", "Nested Effects Pictures", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("m", "markers.svg", "image/svg+xml", ""), ("k", "masks.svg", "image/svg+xml", "")], ["c1"],
                {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="markers" src="markers.svg"/><img alt="masks" src="masks.svg"/><p>After the effect pictures.</p>'),
                 "markers.svg": markers(), "masks.svg": masks()}, "urn:nested-effects")
+    # Round 45.
+    # A long document with notes defined inside a list item and inside a quote, and a note's own note.
+    pad = "".join(f"Paragraph {i} of padding text that makes the document long.\n\n" for i in range(500))
+    (books / "fn-list-long.md").write_text("# Notes in lists\n\nSee the list note[^a], the quote note[^b] and the outer note[^c].\n\n" + pad
+        + "- an item\n\n  [^a]: The list note.\n\n> a quote\n>\n> [^b]: The quote note.\n\n[^c]: The outer note, with its own[^d].\n\n[^d]: The inner note.\n")
+    # 30,000 notes.
+    (books / "notes-30k.md").write_text("# Many notes\n\n" + "".join(f"Note {i}[^n{i}].\n\n" for i in range(30000)) + "".join(f"[^n{i}]: Body {i}.\n\n" for i in range(30000)))
+    # A table cell past the piece limit, and a paragraph after it that keeps its formatting.
+    (books / "table-cell.md").write_text("# Table cell\n\n| a | b |\n|---|---|\n| " + "*x* " * 25000 + "| fine |\n\nAfter the table, **bold** stays.\n")
+    # A paragraph past the piece limit among ordinary ones: only it is shown as plain text.
+    (books / "one-slow-block.md").write_text("# One slow block\n\nBefore, **bold** stays.\n\n" + "*x* " * 25000 + "\n\nAfter, *emphasis* stays.\n")
+    # (H-70) Arrowheads, kept: Inkscape's style attributes, and a marker set in a style sheet; masks and clips one level
+    # deep, kept; and the ways round the depth count, each capped.
+    SV = 'xmlns="http://www.w3.org/2000/svg"'
+    inkscape = f'<svg {SV} width="60" height="20"><defs><marker id="Arrow1Lend" style="overflow:visible" orient="auto"><path style="fill-rule:evenodd;stroke:#000" d="M0,0 L-4,2 L-4,-2 z"/></marker></defs><path style="fill:none;stroke:#000;marker-end:url(#Arrow1Lend)" d="M2,10 H50"/></svg>'
+    sheet_arrow = f'<svg {SV} width="60" height="20"><style>.arrow{{marker-end:url(#ah);stroke:#000}}</style><defs><marker id="ah" orient="auto"><path d="M0,0 L4,2 L0,4 z"/></marker></defs><line class="arrow" x1="2" y1="10" x2="50" y2="10"/></svg>'
+    (books / "arrows.html").write_text(f"<!doctype html><html><head><title>Arrows</title><style>.css-arrow{{marker-end:url(#cah)}}</style></head><body><h1>Arrows</h1>{inkscape}{sheet_arrow}<svg {SV} width=\"60\" height=\"20\"><defs><marker id=\"cah\"><path d=\"M0,0 L4,2 L0,4 z\"/></marker></defs><line class=\"css-arrow\" stroke=\"black\" x1=\"2\" y1=\"10\" x2=\"50\" y2=\"10\"/></svg><p>After the arrows.</p></body></html>")
+    epub_items(books / "arrows.epub", "Arrow Pictures", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("a", "ink.svg", "image/svg+xml", ""), ("b", "sheet.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><img alt="ink" src="ink.svg"/><img alt="sheet" src="sheet.svg"/><p>After the arrow pictures.</p>'), "ink.svg": inkscape, "sheet.svg": sheet_arrow}, "urn:arrows")
+    kept = (f'<svg {SV} width="20" height="20"><defs><path id="sp" d="M0 0h10v10z"/><mask id="sketch" fill="white"><use href="#sp"/></mask></defs><g mask="url(#sketch)"><use href="#sp" fill="red"/></g></svg>'
+        f'<svg {SV} width="20" height="20"><defs><clipPath id="c0"><rect width="5" height="5"/></clipPath><path id="cp" d="M0 0h10v10z" clip-path="url(#c0)"/><clipPath id="c1"><use href="#cp"/></clipPath></defs><rect width="9" height="9" clip-path="url(#c1)"/></svg>'
+        f'<svg {SV} width="20" height="20"><defs><filter id="blur"><feGaussianBlur stdDeviation="2"/></filter><mask id="ai"><rect width="9" height="9" fill="white" filter="url(#blur)"/></mask></defs><rect width="9" height="9" mask="url(#ai)"/></svg>')
+    (books / "effects-kept.html").write_text(f"<!doctype html><html><head><title>Effects kept</title></head><body><h1>Kept</h1>{kept}<p>After the kept effects.</p></body></html>")
+    def chain(n, ref, top=None, extra=""):
+        # Masks k0..k{n-1}, each holding ten rects that point to the one before; the top rect to the last.
+        defs = '<mask id="k0"><rect width="10" height="10" fill="white"/></mask>' + "".join(f'<mask id="k{j}">' + f'<rect width="10" height="10" fill="white" {ref(j - 1)}/>' * 10 + "</mask>" for j in range(1, n))
+        return f'<svg {SV} width="20" height="20">{extra}<defs>{defs}</defs><rect width="20" height="20" {(top or ref)(n - 1)}/></svg>'
+    tricks = {
+        "webkit": chain(7, lambda j: f'style="-webkit-mask:url(#k{j})"'),
+        "image": chain(7, lambda j: f'style="mask-image:url(#k{j})"'),
+        "escaped": chain(7, lambda j: f'mask="url(#\\6b {j})"'),
+        "vars": chain(7, lambda j: f'style="--m:url(#k{j});mask:var(--m)"'),
+        "sheet": chain(7, lambda j: f'class="c{j}"', extra="<style>" + "".join(f".c{j}{{mask:url(#k{j})}}" for j in range(7)) + "</style>"),
+    }
+    smil = '<mask id="k0"><rect width="10" height="10" fill="white"/></mask>' + "".join(f'<mask id="s{j}"><rect width="10" height="10"><set attributeName="mask" to="url(#k0)"/></rect></mask>' for j in range(3))
+    tricks["smil"] = f'<svg {SV} width="20" height="20"><defs>{smil}</defs><rect width="20" height="20" mask="url(#s2)"/></svg>'
+    (books / "effect-tricks.html").write_text("<!doctype html><html><head><title>Effect tricks</title></head><body><h1>Tricks</h1>" + "".join(f'<div class="t-{k}">{v}</div>' for k, v in tricks.items()) + "<p>After the tricks.</p></body></html>")
     print(f"Built {SITE}")
 
 

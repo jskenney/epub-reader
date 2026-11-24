@@ -290,18 +290,21 @@ test('long Markdown is drawn from the worker\'s reading, footnotes, math and emo
   assert.equal(await page.evaluate(() => window.pageLexes), 0, 'not read again on the page');
 });
 
-test('markers and masks nested in one another are dropped, inline and in pictures; a plain marker stays (round 43 review, H-70)', async () => {
+test('markers and masks nested more than two deep are dropped, inline and in pictures; a plain marker stays (round 43 review, H-70; round 45)', async () => {
   let page = await h.newPage();
   const t0 = Date.now();
   await h.openReader(page, `${h.READER}?book=books/nested-effects.html`);
   assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
   assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 10000));
   assert.equal(await h.inFrame(page, doc => doc.querySelector('line[marker-end]')?.getAttribute('marker-end')), 'url(#arrow)', 'the plain arrow kept');
-  // (Never nested: no reference points to something that holds references of its own.)
-  assert.equal(await h.inFrame(page, doc => [...doc.querySelectorAll('[marker-mid],[mask]')].filter(el => {
-    const id = /#([^)'"]+)/.exec(el.getAttribute('marker-mid') || el.getAttribute('mask') || '')?.[1], t = id && doc.getElementById(id);
-    return t && t.querySelector('[marker-mid],[mask]');
-  }).length), 0, 'no reference to a marker or mask that holds references');
+  // (No more than two deep, a marker counting two: round 45.)
+  assert.equal(await h.inFrame(page, doc => {
+    const w = { marker: 2, mask: 1 }, memo = new Map();
+    const depth = t => { if (memo.has(t)) return memo.get(t); memo.set(t, 99); let inner = 0;
+      for (const el of [t, ...t.querySelectorAll('*')]) for (const a of ['marker-mid', 'mask']) { const id = /#([^)'"]+)/.exec(el.getAttribute(a) || '')?.[1], r = id && doc.getElementById(id); if (r) inner = Math.max(inner, depth(r)); }
+      const v = (w[t.localName] || 0) + inner; memo.set(t, v); return v; };
+    return [...doc.querySelectorAll('[marker-mid],[mask]')].filter(el => { const id = /#([^)'"]+)/.exec(el.getAttribute('marker-mid') || el.getAttribute('mask'))?.[1], t = id && doc.getElementById(id); return t && depth(t) > 2; }).length;
+  }), 0, 'nothing points more than two deep');
   await page.close();
   page = await h.newPage();
   const t1 = Date.now();
@@ -310,4 +313,94 @@ test('markers and masks nested in one another are dropped, inline and in picture
   assert.ok(Date.now() - t1 < 20000, `took ${Date.now() - t1} ms`);
   await page.waitForTimeout(1500);
   assert.equal(await page.evaluate(() => 1 + 1), 2, 'the tab still answers');
+});
+
+// Round 45.
+test('long Markdown with notes defined in a list item, a quote, or another note opens with every note (round 45 review)', async () => {
+  const page = await mdPage();
+  await h.openReader(page, `${h.READER}?book=books/fn-list-long.md`);
+  assert.ok(await h.waitFor(async () => /The inner note/.test(await frameText(page)), 15000), 'opened, with the inner note');
+  const text = await frameText(page);
+  for (const t of ['The list note', 'The quote note', 'The outer note']) assert.match(text, new RegExp(t));
+  assert.doesNotMatch(text, SLOW_NOTE);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('section.md-footnotes li').length), 4);
+});
+
+test('30,000 notes open in good time (round 45 review)', async () => {
+  const page = await mdPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/notes-30k.md`);
+  assert.ok(await h.waitFor(async () => (await h.inFrame(page, doc => doc.querySelectorAll('sup.md-fnref').length)) > 0, 20000), 'drawn with its notes');
+  assert.ok(Date.now() - t0 < 20000, `took ${Date.now() - t0} ms`);
+  assert.deepEqual(await h.inFrame(page, doc => [...doc.querySelectorAll('sup.md-fnref')].slice(0, 3).map(s => s.textContent)), ['1', '2', '3']);
+});
+
+test('a paragraph or table cell past the piece limit is shown as plain text on its own; the rest keeps its formatting (round 45 review)', async () => {
+  for (const [book, keep] of [['table-cell.md', 'After the table'], ['one-slow-block.md', 'After,']]) {
+    const page = await mdPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(await h.waitFor(async () => new RegExp(keep).test(await frameText(page)), 15000), `${book}: opened`);
+    assert.ok(Date.now() - t0 < 20000, `${book}: took ${Date.now() - t0} ms`);
+    const text = await frameText(page);
+    assert.doesNotMatch(text, SLOW_NOTE, book);
+    assert.match(text, /\*x\* \*x\*/, `${book}: the long block as its text`);
+    assert.ok(await h.inFrame(page, doc => !!doc.querySelector('strong') && doc.querySelectorAll('em').length < 5), `${book}: the rest formatted, the long block not`);
+    await page.close();
+  }
+});
+
+test('emoji in long Markdown show although their names load slowly, and the editor keeps the shortcodes (round 45 review)', async () => {
+  const page = await h.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(() => { window.SPINE_TEST = { mdProbeMs: 4000 }; });
+  await page.route('**/libs/emoji.json', async r => { await new Promise(res => setTimeout(res, 2500)); r.continue(); });
+  await h.openReader(page, `${h.READER}?book=books/long-extras.md`, { 'spine:editMode': 'raw', 'spine:editSplit': true });
+  assert.ok(await h.waitFor(async () => /\u{1F604}/u.test(await frameText(page)), 15000), 'emoji shown');
+  await page.click('#editBtn'); await page.click('#editThis');
+  await page.waitForFunction(() => document.querySelector('#editBar').hasAttribute('data-ready'));
+  await page.click('[data-mode="wysiwyg"]');
+  await page.waitForTimeout(1500);
+  await page.click('[data-mode="raw"]');
+  await page.waitForTimeout(500);
+  const src = await page.evaluate(() => document.querySelector('.CodeMirror').CodeMirror.getValue());
+  assert.match(src, /:smile:/);
+  assert.doesNotMatch(src, /\\:smile:/);
+});
+
+test('arrowheads in style attributes and style sheets are kept, inline and in pictures (round 45 review)', async () => {
+  let page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/arrows.html`);
+  assert.ok(await h.waitFor(async () => /After the arrows/.test(await frameText(page)), 10000));
+  const ends = await h.inFrame(page, doc => [...doc.querySelectorAll('svg > path[style], line')].map(el => getComputedStyle(el).markerEnd));
+  assert.equal(ends.length, 3);
+  for (const e of ends) assert.match(e, /url\(/, JSON.stringify(ends));
+  await page.close();
+  page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/arrows.epub`);
+  assert.ok(await h.waitFor(async () => /After the arrow pictures/.test(await frameText(page)), 15000));
+  const srcs = await h.inFrame(page, doc => [...doc.querySelectorAll('img')].map(i => i.src));
+  for (const u of srcs) assert.match(await page.evaluate(async u => (await fetch(u)).text(), u), /marker-end/, u);
+});
+
+test('masks and clip paths one level deep are kept: Sketch\'s, a clip of a clipped shape, a mask holding a filter (round 45 review)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/effects-kept.html`);
+  assert.ok(await h.waitFor(async () => /After the kept effects/.test(await frameText(page)), 10000));
+  const got = await h.inFrame(page, doc => [getComputedStyle(doc.querySelector('g')).maskImage, getComputedStyle(doc.querySelector('rect[clip-path]')).clipPath, getComputedStyle(doc.querySelector('rect[mask]')).maskImage, getComputedStyle(doc.querySelector('mask rect')).filter]);
+  for (const v of got) assert.match(v, /url\(/, JSON.stringify(got));
+});
+
+test('masks nested deep by -webkit-mask, mask-image, escapes, custom properties, sheet classes or animations are capped (round 45 review)', async () => {
+  const page = await h.newPage();
+  const t0 = Date.now();
+  await h.openReader(page, `${h.READER}?book=books/effect-tricks.html`);
+  assert.ok(await h.waitFor(async () => /After the tricks/.test(await frameText(page)), 15000));
+  assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  const got = await h.inFrame(page, doc => Object.fromEntries([...doc.querySelectorAll('div[class^="t-"]')].map(d => {
+    const top = d.querySelector('svg > rect'), cs = getComputedStyle(top);
+    return [d.className, [cs.maskImage, cs.webkitMaskImage].join(' ')];
+  })));
+  // (The animation removed, what it would have nested is one level deep, and kept.)
+  for (const [k, v] of Object.entries(got)) if (k !== 't-smil') assert.doesNotMatch(v, /url\(/, `${k}: ${v}`);
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('set').length), 0, 'the animation that sets a mask removed');
 });
