@@ -1046,6 +1046,8 @@ and reads every channel above; the Markdown worker caps line breaks per block an
 the document Raw-only; the document drawn last keeps its tokens. Found while fixing: a backslash in the worker's source
 (a template string) lost again (`\b` read as a backspace), which left the break cap doing nothing; caught by the test.
 
+**Tests.** 616 tests at `bb3530e`: 610 pass, none fail, six need `SLOW=1` or `NETWORK=1`.
+
 The direction taken (the reviewer's): stop trusting selector matching, counting
 any reference made in a style sheet as reaching every element, without counting a reference to its own target or an
 ancestor as a loop (the browser ignores those); read declarations from their serialized text too; run the check on the
