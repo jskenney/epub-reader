@@ -1870,10 +1870,10 @@ def main():
     for k, v in fx48.items():
         (books / f"fx48-{k}.html").write_text(f"<!doctype html><html><head><title>Effects {k}</title></head><body><h1>Effects {k}</h1>{v}<p>After the effects.</p></body></html>")
     filt = f'<svg {SV}><defs><filter id="f">' + '<feGaussianBlur stdDeviation="20"/>' * 50 + '</filter></defs></svg>'
-    epub_items(books / "fx48-files.epub", "Effects From Files", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("c2", "c2.xhtml", "application/xhtml+xml", ""), ("f", "filt.svg", "image/svg+xml", ""), ("h", "heavy.svg", "image/svg+xml", "")], ["c1", "c2"],
-               {"c1.xhtml": xhtml("One", '<h1>One</h1><style>.f{filter:url(filt.svg#f);' + stacked + ';background:teal}</style>' + '<div class="f">x</div>' * 300 + '<p>After the file effects.</p>'),
-                "c2.xhtml": xhtml("Two", '<h1>Two</h1><style>.h{background:url(heavy.svg) no-repeat;background-size:contain}</style>' + "".join(f'<div class="h" style="width:{20 + i}px;height:{20 + i}px"></div>' for i in range(40)) + '<p>After the backgrounds.</p>'),
-                "filt.svg": filt, "heavy.svg": heavy_svg}, "urn:fx48-files")
+    epub_items(books / "fx48-file.epub", "Effects From Files", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("f", "filt.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><style>.f{filter:url(filt.svg#f);' + stacked + ';background:teal}</style>' + '<div class="f">x</div>' * 300 + '<p>After the file effects.</p>'), "filt.svg": filt}, "urn:fx48-file")
+    epub_items(books / "fx48-backgrounds.epub", "Heavy Backgrounds", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("h", "heavy.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1><style>.h{background:url(heavy.svg) no-repeat;background-size:contain}</style>' + "".join(f'<div class="h" style="width:{20 + i}px;height:{20 + i}px"></div>' for i in range(40)) + '<p>After the backgrounds.</p>'), "heavy.svg": heavy_svg}, "urn:fx48-backgrounds")
     # (M-247, L-485) Everyday effects kept: Inkscape's drop shadow on 200 small circles, by attribute and by class; a <use>
     # loop beside a sheet arrowhead.
     shadow = '<filter id="sh" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceAlpha" stdDeviation="1"/><feOffset dx="1" dy="1" result="o"/><feFlood flood-color="#000" flood-opacity=".5"/><feComposite in2="o" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>'

@@ -502,7 +502,9 @@ test('<use> copies of a heavy marker, vertices of "z", a mask nested in another\
     assert.ok(await h.waitFor(async () => /After the drawing/.test(await frameText(page)), 20000), `${k}: opened`);
     const ms = await paintMs(page);
     assert.ok(ms < 8000, `${k}: painted in ${ms} ms`);
-    assert.ok(warns.length, `${k}: something dropped`);
+    // (A mask nested in another's element is simply not nested now: round 48.)
+    if (k === 'nested') assert.equal(await h.inFrame(page, NESTED), 0, 'nothing nested');
+    else assert.ok(warns.length, `${k}: something dropped`);
     await page.close();
   }
 });
@@ -580,12 +582,14 @@ test('effects through custom properties, @scope, a repeated filter, feMorphology
 });
 
 test('another file\'s filter is set off; a heavy picture as a sheet background on 40 sizes is charged per element (round 48 review, H-93, H-94)', async () => {
-  const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
-  await h.openReader(page, `${h.READER}?book=books/fx48-files.epub`);
+  let page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/fx48-file.epub`);
   assert.ok(await h.waitFor(async () => /After the file effects/.test(await frameText(page)), 20000));
   assert.ok((await paintMs(page)) < 8000, 'file filter painted in good time');
   assert.equal(await h.inFrame(page, doc => [...doc.querySelectorAll('.f')].filter(e => getComputedStyle(e).filter !== 'none').length), 0, 'no filter from another file');
-  await page.evaluate(() => document.querySelectorAll('#tocList a')[1].click());
+  await page.close();
+  page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/fx48-backgrounds.epub`);
   assert.ok(await h.waitFor(async () => /After the backgrounds/.test(await frameText(page)), 15000));
   assert.ok((await paintMs(page)) < 8000, 'backgrounds painted in good time');
   const shown = await h.inFrame(page, doc => [...doc.querySelectorAll('.h')].filter(e => getComputedStyle(e).backgroundImage !== 'none').length);
