@@ -1078,7 +1078,13 @@ below:
   100 s (8,000 opened in 0.9 s): something superlinear elsewhere in the CSS pipeline (M-245).
 - Tests: none of the above is covered (T-71).
 
-Suggested direction: count `<use>` instances by their target's effect drawings, and give a `<use>` its target's vertices
+**Fixed** (your go-ahead) in `b8a300f` and `d397e27`, each with a test, as suggested below. M-245 proved not to be a
+freeze: the document was split with the style sheet's 363 KB counted as text, so its first part held only the sheet and
+opened blank. Found while fixing: the editor's own rebuilds let go of what was read, so each switch read again (caught by
+round 46's test); and checking the new estimate on a chain of 2,000 nested `<use>` took 1.2 s until it was worked out in
+passes over the page.
+
+The direction taken: count `<use>` instances by their target's effect drawings, and give a `<use>` its target's vertices
 and elements for inherited references; count path vertices by commands; skip a reference to an element holding the target
 only when no mask, clip path, marker, pattern or filter lies between them; charge pages for each use of a picture
 (keeping each file's drawings with its size); weight filter applications heavily; collapse page-wide references to
@@ -1087,7 +1093,7 @@ For Markdown: count `<\/?br`, count breaks in HTML blocks, and send short docume
 
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: open. Open (below): those, round 47's, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1097,23 +1103,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-86 | `<use>` instances aren't multiplied in the SVG estimate: 100 uses of a group with a heavy marker crashed the tab (round 47). | High |
-| H-87 | SVG path vertices counted by numbers: `z` (none) and `h`/`v` (one) undercount; 20,000 `z` painted in 8 s (round 47). | High |
-| H-88 | A reference to an element holding the target is skipped as a loop, though Chrome draws masks nested in masks: 44 s (round 47). | High |
-| H-89 | The SVG drawing budget is per file: one picture shown 40 times at different sizes took 29 s (round 47). | High |
-| H-90 | SVG filters cost by area, not count: 8,000 large blurred rects, 48 s (round 47). | High |
-| H-91 | `</br>` isn't counted as a Markdown break: 40,000 froze the tab over 90 s (round 47). | High |
-| H-92 | Breaks inside a Markdown HTML block are never counted: over 90 s (round 47). | High |
-| M-244 | Markdown under 20,000 characters skips every check: 9,900 backslash breaks froze 9 s (round 47). | Medium |
-| M-241 | The SVG check is quadratic in targets × page-wide references (20,000: 26 s), and in `@property` drops (round 47). | Medium |
-| M-242 | The SVG check's global step limit drops legitimate clip paths on pages of over 20,000 (round 47). | Medium |
-| M-243 | The SVG check builds a page-sized array per selector, gradients too (4,000 classes: 3 s, 1.3 GB): round 47. | Medium |
-| M-245 | 20,000 small custom-property rules on a page without SVG effects didn't open in 100 s (8,000: 0.9 s): not yet looked into (round 47). | Medium |
-| L-481 | `inherit` on `clip-rule` and the like turns on page-wide inheritance in the SVG check, counting HTML elements too (round 47). | Low |
-| L-482 | `CSSPropertyRule` unguarded: on Firefox ESR 115 or Safari before 16.4 a page with SVG effects and a sheet fails to open (round 47). | Low |
-| L-483 | The last drawn Markdown document's tokens are kept after its book is closed (about 43 MB): round 47. | Low |
-| L-484 | Markdown Raw-only isn't lifted when its block is fixed in Raw, until the editor is reopened (round 47). | Low |
-| T-71 | No tests for round 47's items (round 47). | Tests |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | L-475 | The check's 5 s budget is fixed: a legitimate large document can show as plain text on a slow device, and differently from visit to visit (positions and contents then differ); reading aloud and the audiobook speak the note and the raw markup (round 43). Fix: a budget scaled by a calibration sample; a "show as Markdown anyway" action; the note kept out of what is spoken. | Low |
@@ -1252,6 +1241,23 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-86 | `<use>` instances aren't multiplied in the SVG estimate: 100 uses of a group with a heavy marker crashed the tab (round 47). A `<use>` holds its target's elements and vertices, and each is charged the effects inside what it shows. | `d397e27` |
+| H-87 | SVG path vertices counted by numbers: `z` (none) and `h`/`v` (one) undercount; 20,000 `z` painted in 8 s (round 47). Vertices counted by path commands (each `z` one, `h`/`v` one number). | `d397e27` |
+| H-88 | A reference to an element holding the target is skipped as a loop, though Chrome draws masks nested in masks: 44 s (round 47). A reference across a nested mask, clip path, marker, pattern or filter counts. | `d397e27` |
+| H-89 | The SVG drawing budget is per file: one picture shown 40 times at different sizes took 29 s (round 47). Each SVG file's drawings kept; a page is charged for each time it shows one, past the budget left out. | `d397e27` |
+| H-90 | SVG filters cost by area, not count: 8,000 large blurred rects, 48 s (round 47). Each filter application costs 1,000 drawings a primitive. | `d397e27` |
+| H-91 | `</br>` isn't counted as a Markdown break: 40,000 froze the tab over 90 s (round 47). `</br>` counted as a break. | `d397e27` |
+| H-92 | Breaks inside a Markdown HTML block are never counted: over 90 s (round 47). An HTML block's breaks and tags counted; past the limits, shown as its text. | `d397e27` |
+| M-244 | Markdown under 20,000 characters skips every check: 9,900 backslash breaks froze 9 s (round 47). A short document with more breaks than a block may have is read by the worker too. | `d397e27` |
+| M-241 | The SVG check is quadratic in targets × page-wide references (20,000: 26 s), and in `@property` drops (round 47). Page-wide references kept once per target and kind (at most 1,000 targets); `@property` rules removed in one pass. | `d397e27` |
+| M-242 | The SVG check's global step limit drops legitimate clip paths on pages of over 20,000 (round 47). The step limit is each reference's own. | `d397e27` |
+| M-243 | The SVG check builds a page-sized array per selector, gradients too (4,000 classes: 3 s, 1.3 GB): round 47. Non-drawing targets skipped before a selector is matched; groups keyed by what is left of the selector; no page-sized arrays. | `d397e27` |
+| M-245 | 20,000 small custom-property rules on a page without SVG effects didn't open in 100 s (8,000: 0.9 s): not yet looked into (round 47). A long style sheet counted as text when a document was split, so its text began on the second part: a sheet's text no longer counts. | `d397e27` |
+| L-481 | `inherit` on `clip-rule` and the like turns on page-wide inheritance in the SVG check, counting HTML elements too (round 47). Exact property names; HTML elements count for nothing. | `d397e27` |
+| L-482 | `CSSPropertyRule` unguarded: on Firefox ESR 115 or Safari before 16.4 a page with SVG effects and a sheet fails to open (round 47). Guarded. | `d397e27` |
+| L-483 | The last drawn Markdown document's tokens are kept after its book is closed (about 43 MB): round 47. Let go when another document or book opens. | `d397e27` |
+| L-484 | Markdown Raw-only isn't lifted when its block is fixed in Raw, until the editor is reopened (round 47). Looked at again after edits in Raw. | `d397e27` |
+| T-71 | No tests for round 47's items (round 47). Tests for each. | `d397e27` |
 | H-84 | Round 45's SVG check counts a reference that can reach its own target as a loop, then drops every effect on the page (sheet arrowheads, keyframes, nested rules, gradients): regression (round 46). References to their own target or to what holds them aren't counted (the browser ignores them). | `9a3319c` |
 | H-85 | 40,000 `<br>` in one Markdown paragraph hang the tab (a break weighs 0.25 of a piece; 10,000 got past before): round 46. More than 500 line breaks in a block: the block shown as its text. | `9a3319c` |
 | H-78 | SVG nesting by `var()` with a fallback in a shorthand isn't seen (22.8 s inline, 14.9 s as a picture): round 46. Declarations read from their text, so a var() fallback counts. | `9a3319c` |
