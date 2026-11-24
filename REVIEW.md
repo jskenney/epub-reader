@@ -1093,9 +1093,31 @@ only when no mask, clip path, marker, pattern or filter lies between them; charg
 distinct targets, reset the step count per charge, and skip non-drawing targets before working out a selector's reach.
 For Markdown: count `<\/?br`, count breaks in HTML blocks, and send short documents with many breaks to the worker too.
 
+### Round 48
+
+A review of round 47's fixes at `f877961` (two reviewers, each finding reproduced in Chromium). **Open**, in the table
+below:
+- SVG drawing estimate: pictures are charged per time their address is written, not per time they are drawn: one sheet
+  rule giving 40 elements a heavy background took 18 s; `::before` content 31 s; a `<symbol>` of the picture used 40 times
+  12 s; a pattern of it filling 100 rects 70 s (H-93). Effects inside the book's SVG files (`filter:url(filt.svg#f)`,
+  markers, masks) are never charged: 300 divs with a file's 50-blur filter didn't paint in 120 s (H-94). Since HTML elements
+  count nothing (L-481), page-wide references (custom properties, `@scope`) cost nothing on HTML: a blur on 1,500 divs, 30 to
+  42 s (H-95). A value naming one target many times (`filter:url(#f) url(#f)…`) is charged once (H-96). `feMorphology` costs
+  by radius: 400 rects, 39 s, under budget (H-97). And CSS alone, no SVG: repeated `filter: blur()` functions and
+  `backdrop-filter` on large stacked divs, 14 s to over 120 s (H-98). The check is slow with many selectors on a deep tree
+  (41 KB, 16 s: M-246). The flat filter cost drops ordinary shadows: Inkscape's drop shadow on 200 small circles, all
+  dropped through a class (M-247). A harmless `<use>` loop elsewhere drops plain sheet arrowheads (L-485); a picture named
+  twice in a sheet loses both when one would fit (L-486).
+- Markdown: the HTML-block check (H-92) counts the whole block, so an HTML table of 3,000 rows, a `<div>` of 600 paragraphs
+  with breaks, an inline SVG or a large HTML comment is shown as raw markup text, and the document made Raw-only: a
+  regression (H-99). Older, seen again: a long paragraph shown as text (one long word broken every 200 characters) freezes
+  in the browser's paint, over 90 s (M-248); 60,000 `<wbr>` in a paragraph, 96 s (M-249). The short-document check counts
+  trailing spaces and `<br` in code too, sending code-heavy documents to the worker needlessly (L-487).
+- Tests: none for the above; none that legitimate HTML blocks still render (T-72).
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Open (below): those, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: open. Open (below): those, round 48's, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1105,6 +1127,21 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-99 | The Markdown HTML-block check shows ordinary HTML (a big table, a `<div>` of paragraphs, inline SVG, a comment) as raw text: regression (round 48). | High |
+| H-93 | Pictures with effects charged per address written, not per drawing: sheet backgrounds, `::before`, symbols, patterns (12 to 70 s): round 48. | High |
+| H-94 | Effects inside the book's SVG files (`filter:url(file.svg#f)`) never charged: over 120 s (round 48). | High |
+| H-95 | Page-wide SVG effect references cost nothing on HTML elements (custom properties, `@scope`): 30 to 42 s (round 48). | High |
+| H-96 | A value naming one SVG target many times is charged once (round 48). | High |
+| H-97 | `feMorphology` costs by radius: 400 rects, 39 s, under budget (round 48). | High |
+| H-98 | CSS filter functions and `backdrop-filter`, no SVG, on large stacked elements: 14 s to over 120 s (round 48). | High |
+| M-248 | A long Markdown paragraph shown as text freezes the browser's paint (over 90 s): older (round 48). | Medium |
+| M-249 | 60,000 `<wbr>` in a Markdown paragraph: 96 s (round 48). | Medium |
+| M-246 | The SVG check is slow with many selectors on a deep tree (41 KB, 16 s): round 48. | Medium |
+| M-247 | The flat filter cost drops ordinary small shadows (Inkscape drop shadows on 200 circles): round 48. | Medium |
+| L-485 | A harmless `<use>` loop drops plain sheet arrowheads elsewhere on the page (round 48). | Low |
+| L-486 | A picture named twice in a sheet loses both when one would fit (round 48). | Low |
+| L-487 | The short-Markdown check counts trailing spaces and `<br` in code, sending such documents to the worker (round 48). | Low |
+| T-72 | No tests for round 48's items, nor that legitimate HTML blocks still render (round 48). | Tests |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | L-475 | The check's 5 s budget is fixed: a legitimate large document can show as plain text on a slow device, and differently from visit to visit (positions and contents then differ); reading aloud and the audiobook speak the note and the raw markup (round 43). Fix: a budget scaled by a calibration sample; a "show as Markdown anyway" action; the note kept out of what is spoken. | Low |
