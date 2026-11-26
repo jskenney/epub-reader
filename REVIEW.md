@@ -1263,6 +1263,14 @@ audio-only clips (no text) shown as such in the read-aloud bar, rather than igno
 On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
 whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
 
+### E-51. Book statistics
+
+**Built** (your request). I (or the Information panel) shows Statistics under the book's details: the file's size and
+its size unpacked; words, divided as the book's language divides them (`Intl.Segmenter`, so Chinese, Japanese and Thai
+count right); characters; pictures; sections, with the average and the longest; printed pages (275 words each); reading
+time (238 words a minute); and how much is read and left from the current place. The text is the pages' own (as search
+gathers it), counted once per book when the panel first opens, again after an edit. Comics show pages instead.
+
 ### E-50. Reverb-TTS: a voice in the browser and on the server
 [Reverb-TTS](https://github.com/software-mansion-labs/Reverb-TTS) (Software Mansion, November 2026): a 297M-parameter
 voice-cloning model, 7 languages (English, German, French, Spanish, Italian, Polish, Portuguese), 16 built-in voices,

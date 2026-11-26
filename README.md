@@ -409,6 +409,12 @@ site as the reader.
   language, fixed or reflowable layout, reading direction, and package
   details. Fields the book doesn't provide are left out. A collapsible
   Description under the title shows the book's blurb as plain text.
+  Statistics under it (I opens it): the file's size and its size unpacked,
+  words (divided as the book's language divides them, so Chinese, Japanese
+  and Thai count right), characters, pictures, sections and the longest one,
+  printed pages (about 275 words each), reading time (238 words a minute) and
+  how much is read and left from where you are. The text is counted once per
+  book, when the panel first opens.
 - Read aloud with the device's voices (the speaker button, or R). Reading
   starts at your text selection if there is one, otherwise at the first word
   on the current page; while the read-aloud bar is open, clicking any word

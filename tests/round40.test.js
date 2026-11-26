@@ -623,3 +623,19 @@ test('HTML blocks in Markdown render (a table, a <div> of paragraphs, a comment,
     await page.close();
   }
 });
+
+// E-51.
+test('I shows the book\'s statistics: size, words, characters, reading time and what is left (E-51)', async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/stats-words.txt`);
+  assert.ok(await h.waitFor(async () => /alpha beta/.test(await frameText(page)), 10000));
+  await page.keyboard.press('i');
+  await page.waitForFunction(() => /^[\d,]+$/.test(document.querySelector('#statsWords')?.textContent || ''), null, { timeout: 15000 });
+  const got = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#statsList dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent])));
+  assert.equal(got.Words, '2,001');
+  assert.match(got['File size'], /KB/);
+  assert.equal(got['Reading time'], 'about 8 min');
+  assert.equal(got.Printed, 'about 7 pages');
+  assert.match(got['Read so far'], /^\d+%, about \d+ min left$/);
+  assert.equal(await page.isVisible('#statsList'), true);
+});

@@ -169,6 +169,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .pkg{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font:12px/1.4 var(--font-mono);margin:0}
 .pkg dt{color:var(--muted)}
 .pkg dd{margin:0;overflow-wrap:anywhere;min-width:0}
+.stats-head{margin-top:18px}
 
 .reader{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;position:relative}
 #page{flex:1;min-height:0;width:100%;border:1px solid var(--rule);border-radius:4px;background:var(--page-bg);box-shadow:var(--shadow);display:block}
@@ -543,6 +544,8 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
       <section aria-labelledby="infoHead" id="infoSection" hidden>
         <h2 class="label" id="infoHead">Information</h2>
         <dl class="pkg" id="infoList"></dl>
+        <h3 class="label stats-head" id="statsHead">Statistics</h3>
+        <dl class="pkg" id="statsList" aria-labelledby="statsHead" aria-live="polite"></dl>
       </section>
     </aside>
 
@@ -737,7 +740,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261124.2240</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261126.2042</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -5371,6 +5374,7 @@ function renderMeta(){
     dt.textContent = k; dd.textContent = v; if (id) dd.id = id;
     return [dt, dd];
   }));
+  if (!$('#infoSection').hidden) renderStats(); else $('#statsList').replaceChildren();
   const r = $('#ribbon');
   r.style.setProperty('--n', book.spine.length);
   r.classList.toggle('dense', book.spine.length > 80);
@@ -5649,7 +5653,77 @@ function setToc(open){
 function toggleInfo(){
   const sec = $('#infoSection'), show = sec.hidden || !tocIsOpen();
   sec.hidden = !show;
-  if (show) { if (!tocIsOpen()) setToc(true); sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  if (show) { if (!tocIsOpen()) setToc(true); sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); renderStats(); }
+}
+/* ---------- statistics (I: E-51) ---------- */
+// The book's size, words, characters and pictures, counted once for each book from the text its pages show (as search
+// gathers it), only when Information is opened; and from them how long it takes to read at READ_WPM words a minute,
+// how many printed pages it would fill, and how much is left from here.
+const READ_WPM = 238, PRINT_WORDS = 275;
+function formatBytes(n){ return n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`; }
+function formatMinutes(min){ min = Math.max(1, Math.round(min)); const h = Math.floor(min / 60), m = min % 60; return h ? `${h} h ${m} min` : `${m} min`; }
+// (Words as the language divides them: Chinese, Japanese and Thai have no spaces between theirs.)
+function wordCounter(lang){
+  try { const seg = new Intl.Segmenter(lang, { granularity: 'word' }); return t => { let n = 0; for (const x of seg.segment(t)) if (x.isWordLike) n++; return n; }; }
+  catch { return t => (t.match(/[\p{L}\p{N}][\p{L}\p{M}\p{N}'’-]*/gu) || []).length; }
+}
+function bookStats(){
+  const b = book;
+  if (!b) return Promise.resolve(null);
+  b.stats ??= (async () => {
+    const per = [];
+    for (let i = 0; i < b.spine.length; i++) {
+      if (book !== b) return null;
+      const row = { words: 0, chars: 0, pictures: 0 };
+      if (!b.comic) try {
+        const doc = await chapterDoc(i), count = wordCounter(docLang(doc));
+        for (const blk of textBlocks(doc, SEARCH_SKIP)) { const t = blk.text.replace(/\s+/g, ' ').trim(); if (t) { row.words += count(t); row.chars += t.length; } }
+        row.pictures = doc.querySelectorAll('img').length + [...doc.querySelectorAll('svg')].filter(v => !v.parentElement?.closest('svg')).length;
+      } catch {}
+      per.push(row);
+      if (i % 4 === 3) { if (!$('#infoSection').hidden && book === b) $('#statsWords') && ($('#statsWords').textContent = `Counting… ${Math.round((i + 1) / b.spine.length * 100)}%`); await new Promise(r => setTimeout(r)); }
+    }
+    return per;
+  })();
+  return b.stats;
+}
+// The contents entry naming a section, or its file's name.
+function sectionName(i){
+  const path = book.spine[i]?.path || '', find = list => { for (const e of list) { if (e.path === path) return e.label; const c = find(e.children || []); if (c) return c; } return null; };
+  return find(book.toc || []) || path.split('/').pop() || `Section ${i + 1}`;
+}
+async function renderStats(){
+  const list = $('#statsList'), b = book;
+  if (!list || !b) return;
+  const put = rows => list.replaceChildren(...rows.filter(([, v]) => v != null && v !== '').flatMap(([k, v, id]) => {
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k; dd.textContent = v; if (id) dd.id = id;
+    return [dt, dd];
+  }));
+  // (The book's own size, and what its files come to unpacked.)
+  let unpacked = 0;
+  if (b.src.raw?.files) for (const it of b.manifest?.values() || []) unpacked += entrySize(b.src.raw, it.path);
+  else if (b.src.files) for (const v of b.src.files.values()) unpacked += typeof v === 'string' ? new Blob([v]).size : v?.byteLength ?? v?.size ?? 0;
+  const head = [['File size', b.size ? formatBytes(b.size) : null], ['Unpacked', unpacked && unpacked !== b.size ? formatBytes(unpacked) : null]];
+  if (b.comic) {
+    put([...head, ['Pages', (b.pageCount ?? b.spine.length).toLocaleString()], ['Sections', b.spine.length.toLocaleString()]]);
+    return;
+  }
+  put([...head, ['Words', 'Counting…', 'statsWords']]);
+  const per = await bookStats();
+  if (book !== b || !per) return;
+  const sum = k => per.reduce((a, r) => a + r[k], 0), words = sum('words'), chars = sum('chars'), pictures = sum('pictures');
+  const read = per.slice(0, cur.i).reduce((a, r) => a + r.words, 0) + (per[cur.i]?.words || 0) * readFraction();
+  const left = Math.max(0, words - read), longest = per.reduce((m, r, i) => r.words > per[m].words ? i : m, 0);
+  put([...head,
+    ['Words', words.toLocaleString(), 'statsWords'],
+    ['Characters', chars.toLocaleString()],
+    ['Pictures', pictures ? pictures.toLocaleString() : null],
+    ['Sections', `${b.spine.length.toLocaleString()} (${Math.round(words / Math.max(1, b.spine.length)).toLocaleString()} words on average)`],
+    ['Longest', words ? `${sectionName(longest)} (${per[longest].words.toLocaleString()} words)` : null],
+    ['Printed', words ? `about ${plural(Math.max(1, Math.round(words / PRINT_WORDS)), 'page').replace(/^\d+/, n => Number(n).toLocaleString())}` : null],
+    ['Reading time', words ? `about ${formatMinutes(words / READ_WPM)}` : null],
+    ['Read so far', words ? `${Math.round(read / words * 100)}%, about ${formatMinutes(left / READ_WPM)} left` : null, 'statsLeft']]);
 }
 const tocIsOpen = () => narrow.matches ? $('#toc').classList.contains('open') : !$('#toc').classList.contains('collapsed');
 // C and the Contents button: on a wide screen, the choice is kept (SHOW_CONTENTS); on a narrow one, where the
@@ -10299,7 +10373,7 @@ async function editRebuild({ frag = '', fraction: f = 0 } = {}){
   b.src.files = built.files; b.spine = built.spine; b.toc = built.toc;
   b.manifest = new Map(built.spine.map(x => [x.id, x])); b.byPath = new Map(built.spine.map(x => [x.path, x]));
   b.title = built.title; b.language = built.language;
-  b.search = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;   // (made from the text before)
+  b.search = null; b.stats = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;   // (made from the text before)
   renderMeta(); renderToc(); editTitle();
   const i = frag && built.where.has(frag) ? built.where.get(frag) : 0;
   await renderChapter(i, frag ? { frag } : { fraction: f });
@@ -10315,7 +10389,7 @@ async function editRebuildChapter({ frag = '', fraction: f = 0 } = {}){
   const t = wys ? await editMarkupText() : ed.text;
   if (book !== b || !ed.on) return;
   (b.live ??= new Map()).set(ed.epub.path, t);
-  b.search = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
+  b.search = null; b.stats = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
   editTitle();
   await renderChapter(i, frag ? { frag } : { fraction: f });
   if (book !== b) return;
@@ -10799,7 +10873,7 @@ async function editDiscard(){
     editQuit();
     b.live?.delete(p);
     if (last === b.archive.get(p)) b.over?.delete(p); else (b.over ??= new Map()).set(p, last);
-    b.unsaved?.delete(p); b.search = null; n.chapBook = null; ed.epub = null;
+    b.unsaved?.delete(p); b.search = null; b.stats = null; n.chapBook = null; ed.epub = null;
     $('#editBtn').focus();
     await renderChapter(i, frag ? { frag } : {});
     return;
@@ -10820,7 +10894,7 @@ async function editDoneChapter(){
   if (text === (b.archive.get(p))) b.over?.delete(p); else (b.over ??= new Map()).set(p, text);
   (b.unsaved ??= new Set())[text !== last ? 'add' : 'delete'](p);
   if (text === last) draftDel(key);
-  b.search = null; n.chapBook = null; ed.epub = null;
+  b.search = null; b.stats = null; n.chapBook = null; ed.epub = null;
   $('#editBtn').focus();
   await renderChapter(i, frag ? { frag } : {});
   if (book === b && b.unsaved.size) showNotice(`${b.unsaved.size} chapter${b.unsaved.size > 1 ? 's' : ''} changed and not saved yet: Edit, then Save, saves the book.`, 'info', { label: 'OK', run(){} });
@@ -11526,7 +11600,7 @@ async function editRefreshFiles(){
   const b = book, text = ed.text;
   const built = await buildDocument(text, ed.name, ed.kind, { whole: true }).catch(() => null);
   if (!built || book !== b || !ed.on || ed.text !== text) return;
-  b.src.files = built.files; b.search = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
+  b.src.files = built.files; b.search = null; b.stats = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
 }
 // Reading aloud while the page is edited goes on: the sentences are found again, and it carries on from the one
 // it was at (the sentence being spoken finishes as it was; the ones after are read as they now are).

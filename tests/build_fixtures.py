@@ -1886,6 +1886,8 @@ def main():
     (books / "html-blocks.md").write_text("# HTML blocks\n\n" + pad48 + "<table>\n" + "".join(f"<tr><td>r{i}</td><td>a</td><td>b</td><td>c</td></tr>\n" for i in range(3000)) + "</table>\n\n<div>\n" + "".join(f"<p>line one<br>line two {i}</p>\n" for i in range(600)) + "</div>\n\n<!-- " + "<b>x</b>" * 12000 + " -->\n\n" + f'<svg {SV} width="100" height="10">' + '<rect width="1" height="1"/>' * 21000 + "</svg>\n\nAfter the HTML blocks.\n")
     (books / "long-fallback.md").write_text("# Long fallback\n\n" + "abcdefghijklmnopq<br>" * 40000 + "\n\nAfter the fallback.\n")
     (books / "many-wbr.md").write_text("# Many wbr\n\n" + "abc<wbr>" * 60000 + "\n\nAfter the wbr.\n")
+    # (E-51) Statistics: a text of a known number of words.
+    (books / "stats-words.txt").write_text("Stats\n\n" + "alpha beta gamma delta epsilon. " * 400 + "\n")
     print(f"Built {SITE}")
 
 
