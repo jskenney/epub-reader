@@ -1888,6 +1888,34 @@ def main():
     (books / "many-wbr.md").write_text("# Many wbr\n\n" + "abc<wbr>" * 60000 + "\n\nAfter the wbr.\n")
     # (E-51) Statistics: a text of a known number of words.
     (books / "stats-words.txt").write_text("Stats\n\n" + "alpha beta gamma delta epsilon. " * 400 + "\n")
+    # Round 49.
+    # (H-101 to H-104, M-250) Effects the page check missed: a filter on a 1 px box with large children, or a large
+    # outline; filters on ::before; a filter that grows by animation; one that a wider window turns on; a <use> of a
+    # filtered rect in <defs>; large shadows.
+    blur20 = "filter:" + " ".join(["blur(30px)"] * 20)
+    big = "width:900px;height:600px;background:teal"
+    fx49 = {
+        "overflow": f'<div style="position:relative">' + f'<div style="{blur20};width:1px;height:1px;position:absolute;left:0;top:0"><div style="position:absolute;{big}"></div></div>' * 50 + '</div>',
+        "outline": f'<div style="position:relative">' + f'<div style="{blur20};width:1px;height:1px;outline:600px solid teal;position:absolute;left:300px;top:300px"></div>' * 50 + '</div>',
+        "pseudo": f'<style>.d::before{{content:"";position:absolute;left:0;top:0;{big};{blur20}}} .d{{position:relative}}</style>' + '<div class="d"></div>' * 50,
+        "grow": f'<style>.d{{{blur20};width:1px;height:1px;position:absolute;left:0;top:0;background:teal;animation:g .1s .5s forwards}} @keyframes g{{to{{width:900px;height:600px}}}}</style><div style="position:relative">' + '<div class="d"></div>' * 50 + '</div>',
+        "media": f'<style>@media (min-width:1100px){{.d{{{blur20}}}}} .d{{position:absolute;left:0;top:0;{big}}}</style><div style="position:relative">' + '<div class="d"></div>' * 50 + '</div>',
+        "usedefs": f'<svg {SV} width="900" height="600"><defs><rect id="r49" width="900" height="600" fill="teal" style="{blur20}"/></defs>' + '<use href="#r49"/>' * 50 + '</svg>',
+        "shadow": '<style>.d{position:absolute;left:0;top:0;' + big + ';box-shadow:' + ','.join(['0 0 300px teal'] * 60) + '}</style><div style="position:relative">' + '<div class="d"></div>' * 300 + '</div>',
+    }
+    for k, v in fx49.items():
+        (books / f"fx49-{k}.html").write_text(f"<!doctype html><html><head><title>Effects {k}</title></head><body><h1>Effects {k}</h1>{v}<p>After the effects.</p></body></html>")
+    # (H-105) A picture of 20 wide blurs shown 110 times.
+    picblur = f'<svg {SV} width="900" height="600"><defs><filter id="pb">' + '<feGaussianBlur stdDeviation="100"/>' * 20 + '</filter></defs><rect width="900" height="600" fill="teal" filter="url(#pb)"/></svg>'
+    epub_items(books / "fx49-picblur.epub", "Blurred Pictures", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("p", "pic.svg", "image/svg+xml", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1>' + "".join(f'<img alt="p{i}" width="{900 - i}" src="pic.svg"/>' for i in range(110)) + '<p>After the blurred pictures.</p>'), "pic.svg": picblur}, "urn:fx49-picblur")
+    # (M-251) Everyday filters, kept: 80 grayscale photos, 150 cards with a drop shadow, spread over the pages.
+    everyday = "<style>img.g{filter:grayscale(100%);width:600px;height:400px;display:block} .c{filter:drop-shadow(2px 2px 4px #0008);width:600px;height:300px;background:#eee;margin:20px 0}</style>" + '<img class="g" alt="" src="ok.png"/><p>Text.</p>' * 80 + '<div class="c">Card</div>' * 150
+    epub_items(books / "fx49-everyday.epub", "Everyday Filters", [("c1", "c1.xhtml", "application/xhtml+xml", ""), ("ok", "ok.png", "image/png", "")], ["c1"],
+               {"c1.xhtml": xhtml("One", '<h1>One</h1>' + everyday + '<p>After the everyday filters.</p>'), "ok.png": png(60, 40, (90, 90, 90))}, "urn:fx49-everyday")
+    # (H-110, L-490) Short documents whose breaks a fence-like line or a tab hid.
+    (books / "fence-trick-small.md").write_text("``` `\na" + "\\\n" * 9900 + "\n")
+    (books / "tab-breaks-small.md").write_text("b\t  \n" * 3960)
     print(f"Built {SITE}")
 
 

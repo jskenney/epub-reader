@@ -639,3 +639,80 @@ test('I shows the book\'s statistics: size, words, characters, reading time and 
   assert.match(got['Read so far'], /^\d+%, about \d+ min left$/);
   assert.equal(await page.isVisible('#statsList'), true);
 });
+
+// Round 49.
+test('the Markdown worker, run as built, sends past-limit HTML blocks and paragraphs to plain text, ordinary ones not (round 49 review, H-106 to H-109, T-73)', () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const fn = name => { const i = src.indexOf(`function ${name}(`), j = src.indexOf('\n}\n', i) + 3; return new Function(src.slice(i, j) + `; return ${name};`)(); };
+  const a = src.indexOf('new Blob([await r.text(), `') + 'new Blob([await r.text(), '.length, b = src.indexOf("`], { type: 'text/javascript' }", a);
+  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, fn('mdParaStart'), fn('mdInlineMath'), fn('mdTokenizers'));
+  const marked = fs.readFileSync(path.join(__dirname, '..', 'libs', 'marked.min.js'), 'utf8');
+  const run = md => { const sent = []; const ctx = { postMessage: m => sent.push(m), console }; vm.createContext(ctx); vm.runInContext(marked + '\n' + out, ctx); ctx.onmessage({ data: { md, emoji: null } }); return sent.at(-1); };
+  const brs = n => 'a<br>'.repeat(n);
+  for (const [md, plain] of [
+    [`<div>\n<svg>${brs(40000)}</svg>\n</div>\n`, true],
+    [`<div><!--> ${brs(40000)} <!-- --></div>\n`, true],
+    [`<div>\n${(brs(400) + '</div>').repeat(100)}\n`, true],
+    [`<math>${'<mi>x</mi>'.repeat(40000)}</math>\n`, true],
+    [`${'a</br>'.repeat(600)}\n`, true],
+    [`${'abc<wbr>'.repeat(600)}\n`, true],
+    [`<table>\n${Array.from({ length: 3000 }, (_, i) => `<tr><td>r${i}</td><td>a</td><td>b</td><td>c</td></tr>`).join('\n')}\n</table>\n`, false],
+    [`<div>\n${'<p>line one<br>line two</p>\n'.repeat(600)}</div>\n`, false],
+    ['# Heading\n\nA *plain* paragraph with a [link](x).\n', false],
+  ]) {
+    const r = run(md);
+    assert.equal(r.ok, true, md.slice(0, 40));
+    assert.equal(r.plainBlocks, plain, md.slice(0, 40));
+  }
+});
+
+test('a filter on a 1 px box with large children or a large outline, filters on ::before, one that grows by animation, one a wider window turns on, a <use> of a filtered rect, large shadows: capped or set off; painted in good time (round 49 review, H-101 to H-104, M-250)', async () => {
+  for (const k of ['overflow', 'outline', 'pseudo', 'grow', 'media', 'usedefs', 'shadow']) {
+    const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+    await h.openReader(page, `${h.READER}?book=books/fx49-${k}.html`);
+    assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 20000), `${k}: opened`);
+    let ms = await paintMs(page);
+    assert.ok(ms < 5000, `${k}: painted in ${ms} ms`);
+    if (k === 'grow') { await page.waitForTimeout(1200); ms = await paintMs(page); assert.ok(ms < 5000, `${k}: after the animation, ${ms} ms`); }
+    if (k === 'media') { await page.setViewportSize({ width: 1700, height: 900 }); await page.waitForTimeout(800); ms = await paintMs(page); assert.ok(ms < 5000, `${k}: after a resize, ${ms} ms`); }
+    await page.close();
+  }
+});
+
+test('a picture of 20 wide blurs shown 110 times is shown without them; everyday filters (grayscale photos, card shadows) are all kept (round 49 review, H-105, M-251)', async () => {
+  let page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/fx49-picblur.epub`);
+  assert.ok(await h.waitFor(async () => /After the blurred pictures/.test(await frameText(page)), 20000));
+  assert.ok((await paintMs(page)) < 5000);
+  await page.close();
+  page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/fx49-everyday.epub`);
+  assert.ok(await h.waitFor(async () => /Card/.test(await frameText(page)), 20000));
+  assert.deepEqual(await h.inFrame(page, doc => [[...doc.querySelectorAll('img.g')].filter(e => getComputedStyle(e).filter !== 'none').length, [...doc.querySelectorAll('.c')].filter(e => getComputedStyle(e).filter !== 'none').length]), [80, 150]);
+});
+
+test('resizing while a heavy page loads never shows it before its effects are counted (round 49 review, H-100)', async () => {
+  for (let run = 0; run < 3; run++) {
+    const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+    const going = h.openReader(page, `${h.READER}?book=books/fx48-cssblur.html`);
+    for (let i = 0; i < 6; i++) { await page.waitForTimeout(40); await page.setViewportSize({ width: 1000 + (i % 2 ? 40 : 0), height: 700 }).catch(() => {}); }
+    await going;
+    assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 20000));
+    const ms = await paintMs(page);
+    assert.ok(ms < 5000, `run ${run}: painted in ${ms} ms`);
+    await page.close();
+  }
+});
+
+test('Markdown: a line that only looks like a fence, and a tab before trailing spaces, no longer hide breaks in a short document (round 49 review, H-110, L-490)', async () => {
+  for (const book of ['fence-trick-small.md', 'tab-breaks-small.md']) {
+    const page = await mdPage();
+    const t0 = Date.now();
+    await h.openReader(page, `${h.READER}?book=books/${book}`);
+    assert.ok(await h.waitFor(async () => (await frameText(page)).length > 100, 15000), `${book}: opened`);
+    assert.ok(Date.now() - t0 < 15000, `${book}: took ${Date.now() - t0} ms`);
+    assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('br').length < 100), `${book}: no breaks drawn`);
+    await page.close();
+  }
+});

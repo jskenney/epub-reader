@@ -166,6 +166,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font:400 14px/1.45 var(--
 .desc summary:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
 #metaDescBody{display:flex;flex-direction:column;gap:8px;margin-top:8px;font-family:var(--font-read);font-size:13.5px;line-height:1.55;max-height:40vh;overflow:auto}
 #metaDescBody p{margin:0}
+iframe[data-fx-hold]{visibility:hidden !important}   /* (a page laid out, its effects not yet counted: pageEffectCap) */
 .pkg{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font:12px/1.4 var(--font-mono);margin:0}
 .pkg dt{color:var(--muted)}
 .pkg dd{margin:0;overflow-wrap:anywhere;min-width:0}
@@ -740,7 +741,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261126.2042</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261127.0419</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1966,8 +1967,9 @@ const mdLexed = new Map();
 // What is known of a text: { ok, tokens (null: read it on the page), blocks } or undefined while it is being read.
 // (A short document is read on the page, unless it has more line breaks than a block may: 9,900 in 19.8 KB froze the tab
 // for 9 s: round 47 review, M-244.)
-// (Code blocks left out, and trailing spaces counted only after text: round 48 review, L-487.)
-const mdSmall = md => md.length < MD_PROBE_MIN && (md.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, '').match(/\\\n|\S {2,}\n|<\/?w?br\b/gi) || []).length <= MD_BLOCK_BREAKS;
+// (Every possible break counted, code too: leaving code blocks out, a line that only looked like a fence hid the rest
+// (round 49 review, H-110, L-490); a short code-heavy document is read by the worker, at little cost.)
+const mdSmall = md => md.length < MD_PROBE_MIN && (md.match(/\\\n| {2,}\n|<\/?w?br\b/gi) || []).length <= MD_BLOCK_BREAKS;
 const mdLexResult = md => mdSmall(md) ? { ok: true, tokens: null } : mdLexed.get(md)?.result;
 // (What was read and drawn let go when another book opens: kept, a closed document's tokens held tens of MB: L-483.)
 function mdForget(){ if (mdDrawn) { mdDrawn.tokens = null; mdDrawn.spent = true; mdDrawn = null; } mdLexed.clear(); }
@@ -2021,19 +2023,22 @@ onmessage = e => {
     const esc = v => v.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
     // (Shown as its text in short paragraphs, its lines run together and long words given breaks: as one long paragraph
     // it froze the browser's paint: round 48 review, M-248.)
+    // (Cut between graphemes, so an emoji sequence or a Hangul syllable stays whole: round 49 review, L-491.)
+    const graphemes = (() => { try { return new Intl.Segmenter(undefined, { granularity: 'grapheme' }); } catch { return null; } })();
     const chunks = v => {
       const out = [];
+      if (graphemes) {
+        let cur = '';
+        for (const { segment } of graphemes.segment(v)) {
+          if (cur.length >= 2000 && (segment === ' ' || cur.length >= 2400)) { out.push(cur); cur = ''; }
+          cur += segment;
+        }
+        if (cur) out.push(cur);
+        return out;
+      }
       for (let at = 0; at < v.length;) {
         let end = Math.min(v.length, at + 2000);
-        if (end < v.length) {
-          const sp = v.lastIndexOf(' ', end);
-          if (sp > at + 1000) end = sp + 1;
-          else {
-            const amp = v.lastIndexOf('&', end);
-            if (amp > at && amp > end - 10 && v.indexOf(';', amp) >= end) end = amp;
-            while (end < v.length && (/\\p{M}/u.test(v[end]) || (v.charCodeAt(end) & 0xfc00) === 0xdc00)) end++;
-          }
-        }
+        while (end < v.length && (/\\p{M}/u.test(v[end]) || (v.charCodeAt(end) & 0xfc00) === 0xdc00)) end++;
         out.push(v.slice(at, end));
         at = end;
       }
@@ -2041,16 +2046,17 @@ onmessage = e => {
     };
     const breakWords = v => v.replace(/[^\\s]{200,}/gu, w => w.match(/(?:&[a-z0-9#]+;|[^&]\\p{M}*){1,100}/giu).join('<wbr>'));
     const plain = t => ({ type: 'html', block: true, pre: false, raw: t.raw,
-      text: chunks(esc(t.raw).replace(/\\s*\\n\\s*/g, ' ')).map(c => '<p>' + breakWords(c) + '</p>').join('\\n') + '\\n' });
+      // (Lines run together: with no space between two in Chinese or Japanese, which doesn't put one: L-491.)
+      text: chunks(t.raw.replace(/([\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}])\\s*\\n\\s*(?=[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}])/gu, '$1').replace(/\\s*\\n\\s*/g, ' ')).map(c => '<p>' + breakWords(esc(c)) + '</p>').join('\\n') + '\\n' });
     const fix = list => { (list || []).forEach((t, i) => {
       if (/^(paragraph|heading|text)$/.test(t.type)) { if (tooMany(t.tokens)) { list[i] = plain(t); plainBlocks = true; } return; }
-      // (An HTML block's breaks and tags, never counted before (round 47 review, H-92), counted within each of its
-      // paragraphs, cells and the like, its comments, SVG and math left out: counted whole, an HTML table, a <div> of
-      // paragraphs or an inline SVG was shown as its markup: round 48 review, H-99.)
+      // (An HTML block's breaks and elements, counted over the whole block, comments, SVG and math included: counted per
+      // paragraph or cell, with patterns standing in for the browser's parser, it was got round nine ways (round 49
+      // review, H-106 to H-109). The limits are generous: a table of thousands of rows, an inline SVG of 20,000 shapes or
+      // a <div> of hundreds of paragraphs with breaks pass.)
       if (t.type === 'html') {
-        const text = (t.text || '').replace(/<!--[\\s\\S]*?-->/g, '').replace(/<svg[\\s>][\\s\\S]*?<\\/svg>|<math[\\s>][\\s\\S]*?<\\/math>/gi, '');
-        const segs = text.split(/<\\/?(?:p|div|li|td|th|tr|h[1-6]|blockquote|pre|section|article|table|tbody|thead|tfoot|ul|ol|dl|dd|dt|figure|figcaption|header|footer|aside|nav|main|details|summary)\\b[^>]*>/i);
-        if (segs.some(sg => (sg.match(/<\\/?w?br\\b/gi) || []).length > ${MD_BLOCK_BREAKS} || (sg.match(/</g) || []).length > 2 * ${MD_BLOCK_PIECES})) { list[i] = plain(t); plainBlocks = true; }
+        const text = t.text || '';
+        if ((text.match(/<\\/?w?br\\b/gi) || []).length > ${MD_BLOCK_BREAKS} * 4 || (text.match(/<[a-z]/gi) || []).length > ${MD_BLOCK_PIECES} + 5000) { list[i] = plain(t); plainBlocks = true; }
         return;
       }
       fix(t.tokens);
@@ -3110,7 +3116,7 @@ async function svgClean(t, path, type, b = book){
   const u = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(d).replace(/^<\?xml[^>]*\?>\s*/, '')], { type: `${type};charset=utf-8` }));
   (b.svgBlobs ||= []).push(u);
   (b.svgSizes ||= new Map()).set(u, useSizes);   // (what a page's <use> of it costs: round 41)
-  (b.svgDraws ||= new Map()).set(u, draws);   // (and what each showing of it draws: round 47, H-89)
+  (b.svgDraws ||= new Map()).set(u, draws);   // (and what each showing of it draws: round 47, H-89; its filters' passes: round 49, H-105)
   return u;
 }
 // A data: address as bytes, read as browsers read it: whitespace before the type counts for nothing; base64 only when
@@ -3247,6 +3253,9 @@ function svgNoNest(doc){
 // animations: removed. (Custom properties set there that hold a function too, which effects could take.)
 const FX_LATER = /:(hover|active|focus|focus-within|focus-visible|target|target-within|visited|link|any-link|checked|indeterminate|valid|invalid|user-valid|user-invalid|placeholder-shown|autofill|enabled|disabled|playing|paused|open|popover-open|modal|fullscreen|default|in-range|out-of-range|required|optional|read-only|read-write|state)\b/i;
 function svgStillEffects(doc){
+  // (Animations and transitions in style attributes too, which the reader's blanket rule might not outrank: round 49
+  // review, H-103.)
+  for (const el of doc.querySelectorAll('[style*="anim" i], [style*="transit" i]')) for (const p of ['animation', 'transition', 'animation-name', 'transition-property']) el.style?.removeProperty(p);
   doc.querySelectorAll('set, animate, animateTransform, animateMotion, animateColor').forEach(e => {
     const a = e.getAttribute('attributeName') || '';
     if (/^(class|id|style|href|xlink:href)$/i.test(a) || FX_PROP_RE.test(a) || ['to', 'from', 'by', 'values'].some(x => /url|\\/i.test(e.getAttribute(x) || ''))) e.remove();
@@ -3279,7 +3288,7 @@ function svgPictureEffects(doc, where){
   svgStillEffects(doc);
   const root = doc.documentElement;
   const drawers = [...FX_DRAWERS, 'filter'].flatMap(n => [...doc.getElementsByTagNameNS(SVG_NS_, n)]);
-  if (!drawers.length && !/filter|mask|clip-path|marker/i.test(root.outerHTML.slice(0, 2e6))) return 0;
+  if (!drawers.length && !/filter|mask|clip-path|marker|shadow/i.test(root.outerHTML.slice(0, 2e6))) return { draws: 0, passes: 0 };
   const inDrawer = new Set(drawers.flatMap(d => [d, ...d.getElementsByTagName('*')]));
   let shapes = 0, vtx = 0;
   for (const el of root.getElementsByTagName('*')) {
@@ -3291,31 +3300,92 @@ function svgPictureEffects(doc, where){
   }
   const uses = root.getElementsByTagName('use').length;
   const size = n => Math.max(0, ...drawers.filter(d => d.localName === n).map(d => d.getElementsByTagName('*').length + 1));
-  const draws = (vtx + shapes * (1 + uses)) * size('marker') + shapes * (1 + uses) * Math.max(size('mask'), size('clipPath'), size('pattern')) + shapes * (1 + uses) * 200 * size('filter');
-  if (draws <= SVG_DRAWS) return draws;
+  const draws = (vtx + shapes * (1 + uses)) * size('marker') + shapes * (1 + uses) * Math.max(size('mask'), size('clipPath'), size('pattern'));
+  // (Its filters by their passes, blurs by their radius, as the page counts them, charged by the area it is shown at:
+  // counted as draws, a picture of 20 wide blurs shown 110 times blocked the tab for 152 s: round 49 review, H-105.)
+  const passes = drawers.filter(d => d.localName === 'filter').reduce((n, f) => n + fxFilterPasses(f), 0) + (/(box|text)-shadow|drop-shadow|blur\(/i.test(root.outerHTML.slice(0, 2e6)) ? 5 : 0);
+  if (draws <= SVG_DRAWS && passes <= 40) return { draws, passes };
   for (const el of [root, ...root.getElementsByTagName('*')]) fxOff(el);
   console.warn(`${where}: markers, masks, clip paths and filters aren't shown: they could draw too much`);
-  return 0;
+  return { draws: 0, passes: 0 };
 }
-// The page's effects, as the browser computed them, counted while it is hidden; past the budget, set off. Filters cost
-// their area times their passes (PAGE_FILTER_SCREENS frames' worth in all); masks, clip paths, markers and patterns what
-// they draw, a marker for each vertex; pictures with effects what they draw each time they are shown; a <use> what the
-// effects inside what it shows cost. An effect taken from another file (url(file.svg#f)) is set off.
+// An SVG filter's passes: one for each primitive, a blur or shadow weighed by its radius, a dilation by its radius.
+function fxFilterPasses(t){
+  const most = v => Math.max(0, ...String(v || '0').split(/[\s,]+/).map(parseFloat).filter(Number.isFinite));
+  let n = 0;
+  for (const c of t.children) {
+    if (!c.localName.startsWith('fe')) continue;
+    n++;
+    if (c.localName === 'feMorphology') n += Math.min(1000, most(c.getAttribute('radius')) / 4);
+    if (/^fe(GaussianBlur|DropShadow)$/.test(c.localName)) n += Math.min(1000, most(c.getAttribute('stdDeviation')) / 5);
+  }
+  return Math.max(1, n);
+}
+// A CSS filter list's (or shadow list's) passes: work done per pixel, colour functions and the like not counted; cheap
+// per-pixel filters (grayscale and the like) a quarter; blurs and shadows by their radius (round 49 review, M-250, M-251).
+const FX_CHEAP = /^(grayscale|sepia|opacity|brightness|contrast|saturate|invert|hue-rotate)$/i;
+const FX_NOT = /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|var|calc|min|max|clamp|env|url)$/i;
+const fxInner = (v, at) => { let d = 0; for (let i = at; i < v.length; i++) { if (v[i] === '(') d++; else if (v[i] === ')' && --d === 0) return v.slice(at + 1, i); } return v.slice(at + 1); };
+const fxPx = v => [...v.replace(/[a-z-]+\([^()]*(?:\([^()]*\)[^()]*)*\)/gi, ' ').matchAll(/(-?[\d.]+)px/g)].map(m => parseFloat(m[1]));
+// (fxCssSpread: how far it spreads what it draws, each blur three times its radius, which a box of 1 px blurred 20
+// times spreads to thousands: round 49.)
+function fxCssSpread(v){
+  if (!v || v === 'none') return 0;
+  let n = 0;
+  for (const m of v.matchAll(/(blur|drop-shadow)\(/gi)) { const inner = fxInner(v, m.index + m[1].length); if (/^blur$/i.test(m[1])) n += 3 * (parseFloat(inner) || 0); else { const px = fxPx(inner); n += 3 * (px[2] || 0) + Math.max(Math.abs(px[0] || 0), Math.abs(px[1] || 0)); } }
+  return Math.min(n, 1e5);
+}
+function fxCssPasses(v){
+  if (!v || v === 'none') return 0;
+  let n = 0;
+  for (const m of v.matchAll(/([a-z-]+)\(/gi)) {
+    const name = m[1];
+    if (FX_NOT.test(name)) continue;
+    const inner = fxInner(v, m.index + name.length);
+    if (FX_CHEAP.test(name)) n += 0.25;
+    else if (/^blur$/i.test(name)) n += 1 + Math.min(1000, (parseFloat(inner) || 0) / 5);
+    else if (/^drop-shadow$/i.test(name)) n += 1 + Math.min(1000, (fxPx(inner)[2] || 0) / 5);
+    else n += 1;
+  }
+  return n;
+}
+function fxShadowPasses(v){
+  if (!v || v === 'none') return [0, 0];
+  let n = 0, reach = 0, depth = 0, at = 0;
+  const layers = [];
+  for (let i = 0; i <= v.length; i++) { const c = v[i]; if (c === '(') depth++; else if (c === ')') depth--; else if (i === v.length || (c === ',' && !depth)) { layers.push(v.slice(at, i)); at = i + 1; } }
+  for (const l of layers) { const px = fxPx(l), blur = Math.min(1000, px[2] || 0); n += 0.25 + blur / 5; reach = Math.max(reach, blur + Math.abs(px[3] || 0) + Math.max(Math.abs(px[0] || 0), Math.abs(px[1] || 0))); }
+  return [n, reach];
+}
+// The page's effects, as the browser computed them, counted while it is hidden, and again when it may change (a resize,
+// a change of the reader's look, a media query); past the budget, set off. Each screen's worth of the page (a column
+// page, or a screen's height when scrolling) has its own budget, as the browser draws a screen at a time (round 49,
+// M-251). Filters, shadows and backdrop filters cost their passes times the area they draw, overflowing children and
+// outlines included (H-101), up to PAGE_FILTER_SCREENS screens; masks, clip paths, markers, patterns and pictures with
+// effects what they draw, up to SVG_DRAWS; a <use> what the effects inside what it shows cost, at its own size (H-104).
+// An effect taken from another file (url(file.svg#f)) is set off. Animations, transitions and effects on ::before and
+// ::after are set off for every page by the reader's own rules (pinCss: H-102, H-103).
 function pageEffectCap(doc, where){
   const win = doc.defaultView;
   if (!win || !doc.documentElement) return;
+  const heavy = new Map([...(book?.svgDraws || [])].filter(([, c]) => c.draws > 0 || c.passes > 0));
+  // (Nothing to count on most pages: their own styles mention no effect, and no picture with effects: M-252.)
+  if (doc.__fxNone ?? (doc.__fxNone = (() => {
+    const own = new Set([RID.override, RID.override + '-pin', RID.base]);
+    const css = [...doc.getElementsByTagName('style')].filter(e => !own.has(e.id) && !e.id.startsWith('spine-fx-')).map(e => e.textContent).join('\n') + [...doc.querySelectorAll('[style]')].map(e => e.getAttribute('style')).join('\n');
+    const html = heavy.size ? doc.documentElement.innerHTML : '';
+    return !/filter|mask|clip-path|marker|shadow|backdrop|reflect/i.test(css) && ![...FX_DRAWERS, 'filter'].some(n => doc.getElementsByTagNameNS(SVG_NS_, n).length)
+      && !doc.querySelector('[filter], [mask], [clip-path], [marker], [marker-start], [marker-mid], [marker-end]') && ![...heavy.keys()].some(u => html.includes(u));
+  })())) return;
   const all = [doc.documentElement, ...doc.documentElement.getElementsByTagName('*')];
-  const heavy = new Map([...(book?.svgDraws || [])].filter(([, c]) => c > 0));
-  const screen = Math.max(1, win.innerWidth * win.innerHeight);
+  const screen = Math.max(1, win.innerWidth * win.innerHeight), scroll = scrolling();
   const base = doc.URL.split('#')[0];
   const byId = new Map();
   for (const el of all) if (el.id && !byId.has(el.id)) byId.set(el.id, el);
   const urls = v => [...(v || '').matchAll(/url\("((?:[^"\\]|\\.)*)"\)/g)].map(m => m[1]);
-  // (A local target, by its id; null for another file's.)
   const local = u => { const k = u.indexOf('#'); if (k < 0) return undefined; const head = u.slice(0, k); if (head && head !== base && head !== 'about:srcdoc') return null; let id = u.slice(k + 1); try { id = decodeURIComponent(id); } catch {} return byId.get(id); };
-  const pictureCost = u => { for (const [b, c] of heavy) if (u.startsWith(b)) return c; return 0; };
+  const picture = u => { for (const [b, c] of heavy) if (u.startsWith(b)) return c; return null; };
   const sizeMemo = new Map();
-  // (What a drawer draws: its elements, and what the <use>s in it show.)
   const size = t => {
     if (sizeMemo.has(t)) return sizeMemo.get(t);
     let n = 1 + t.getElementsByTagName('*').length;
@@ -3323,41 +3393,52 @@ function pageEffectCap(doc, where){
     sizeMemo.set(t, n);
     return n;
   };
-  // (A filter's passes, a blur weighed by its radius, which it also spreads by: 20 blurs of 30 px on three large boxes
-  // took 3 s; a dilation by its radius: round 48 review, H-97, H-98.)
-  const most = v => Math.max(0, ...String(v || '0').split(/[\s,]+/).map(parseFloat).filter(Number.isFinite));
-  const passes = t => { let n = 0; for (const c of t.children) { if (!c.localName.startsWith('fe')) continue; n++; if (c.localName === 'feMorphology') n += Math.min(1000, most(c.getAttribute('radius')) / 4); if (/^fe(GaussianBlur|DropShadow)$/.test(c.localName)) n += Math.min(1000, most(c.getAttribute('stdDeviation')) / 5); } return Math.max(1, n); };
   const geom = el => el.namespaceURI === SVG_NS_ && /^(path|line|polyline|polygon)$/.test(el.localName);
   const shapeCounts = el => {
     if (el.localName === 'path') return svgPathCounts(el.getAttribute('d') || '');
     if (el.localName === 'line') return [2, 1];
-    const n = ((el.getAttribute('points') || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || []).length / 2;
-    return [n, 1];
+    return [((el.getAttribute('points') || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) || []).length / 2, 1];
   };
-  const unrendered = el => { for (let a = el.parentElement; a; a = a.parentElement) if (a.namespaceURI === SVG_NS_ && /^(defs|symbol|mask|clipPath|marker|pattern|filter)$/.test(a.localName)) return true; return false; };
-  // Each element's own cost: { draw, pix, other (another file's effect) }.
+  // (What isn't drawn where it is: inside defs, symbols and the effects themselves; found in one pass: M-252.)
+  const unrendered = new Set();
+  for (const c of doc.querySelectorAll('defs, symbol, mask, clipPath, marker, pattern, filter')) if (c.namespaceURI === SVG_NS_ && !unrendered.has(c)) for (const e of c.getElementsByTagName('*')) unrendered.add(e);
+  // (The area an element draws: its box with its outline, and its children's, which a filter draws with it: H-101.)
+  const areaOf = (el, grow = 0) => {
+    const box = el.getBoundingClientRect();
+    let l = box.left, t = box.top, r = box.right, b = box.bottom;
+    const out = parseFloat(win.getComputedStyle(el).outlineWidth) || 0;
+    const kids = el.getElementsByTagName('*');
+    if (kids.length > 200) return screen;
+    for (const k of kids) { const q = k.getBoundingClientRect(); if (q.width || q.height) { l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom); } }
+    const g = out + grow;
+    return Math.min(screen, Math.max(1, r - l + 2 * g) * Math.max(1, b - t + 2 * g));
+  };
+  const filterRegion = (t, el) => {
+    const box = el.getBoundingClientRect(), obb = (t.getAttribute('filterUnits') || 'objectBoundingBox') !== 'userSpaceOnUse';
+    const dim = (a, def, side) => { const v = (t.getAttribute(a) || def).trim(); const n = parseFloat(v) || 0; return v.endsWith('%') ? n / 100 * (obb ? side : side) : obb ? n * side : n; };
+    const w = Math.abs(dim('width', '120%', obb ? box.width : win.innerWidth)), h = Math.abs(dim('height', '120%', obb ? box.height : win.innerHeight));
+    return Math.min(screen, Math.max(1, w) * Math.max(1, h));
+  };
+  const bucketOf = el => { const q = el.getBoundingClientRect(); return scroll ? Math.floor((q.top + win.scrollY) / win.innerHeight) : Math.floor((q.left + win.scrollX) / win.innerWidth); };
+  // Each element's own cost: { draw, pix, passes (for the <use>s of it), other (another file's effect) }.
   const costs = new Map();
-  const pseudo = heavy.size > 0;
+  const readPseudo = heavy.size > 0 && [...heavy.keys()].some(u => doc.documentElement.innerHTML.includes(u));
   for (const el of all) {
     let cs;
     try { cs = win.getComputedStyle(el); } catch { continue; }
-    let draw = 0, pix = 0, other = false, area = -1;
-    const areaOf = () => { if (area < 0) { const r = el.getBoundingClientRect(); area = Math.min(screen, Math.max(1, r.width) * Math.max(1, r.height)); } return area; };
-    const filterPasses = v => {
-      if (!v || v === 'none') return 0;
-      const fns = v.replace(/url\("(?:[^"\\]|\\.)*"\)/g, '');
-      let n = (fns.match(/[a-z-]+\(/gi) || []).length;
-      for (const m of fns.matchAll(/blur\(\s*([\d.]+)px|drop-shadow\([^)]*?([\d.]+)px\s*\)/gi)) n += Math.min(1000, parseFloat(m[1] ?? m[2] ?? 0) / 5);
-      for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t?.localName === 'filter') n += passes(t); else n++; }
-      return n;
-    };
-    const f = filterPasses(cs.filter) + filterPasses(cs.backdropFilter) + filterPasses(cs.webkitBackdropFilter);
-    if (f) pix += f * areaOf();
+    let draw = 0, pix = 0, passes = 0, other = false;
+    let region = 0;
+    const svgPasses = v => { let n = 0; for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t?.localName === 'filter') { n += fxFilterPasses(t); region = Math.max(region, filterRegion(t, el)); } else if (t) n++; } return n; };
+    const svgF = svgPasses(cs.filter), f = fxCssPasses(cs.filter) + svgF + fxCssPasses(cs.backdropFilter) + fxCssPasses(cs.webkitBackdropFilter);
+    const [bs, reach] = fxShadowPasses(cs.boxShadow), [ts, treach] = fxShadowPasses(cs.textShadow);
+    // (An SVG filter draws within its region, which it sets: by default a tenth more than the element on each side.)
+    if (f) { passes += f; pix += f * Math.max(svgF ? region : 0, areaOf(el, fxCssSpread(cs.filter))); }
+    if (bs > 1 || reach > 8) pix += bs * areaOf(el, reach);
+    if (ts > 1 || treach > 8) pix += ts * areaOf(el, treach);
     for (const v of [cs.maskImage, cs.webkitMaskImage, cs.webkitMaskBoxImageSource, cs.clipPath, cs.shapeOutside]) {
       if (!v || v === 'none') continue;
-      for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t) draw += size(t); else draw += pictureCost(u); }
-      const path = /(?:path|polygon)\(/.test(v) ? (v.match(/[-+]?(?:\d+\.?\d*|\.\d+)/g) || []).length / 2 : 0;
-      draw += path;
+      for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t) draw += size(t); else { const p = picture(u); if (p) { draw += p.draws; pix += p.passes * areaOf(el); } } }
+      if (/(?:path|polygon)\(/.test(v)) draw += (v.match(/[-+]?(?:\d+\.?\d*|\.\d+)/g) || []).length / 2;
     }
     if (geom(el) || el.localName === 'use') {
       const [v, sub] = el.localName === 'use' ? [0, 0] : shapeCounts(el);
@@ -3367,52 +3448,69 @@ function pageEffectCap(doc, where){
       }
     }
     for (const v of [cs.fill, cs.stroke]) for (const u of urls(v)) { const t = local(u); if (t?.localName === 'pattern') draw += size(t); }
-    for (const v of [cs.backgroundImage, cs.listStyleImage, cs.borderImageSource]) for (const u of urls(v)) draw += pictureCost(u);
-    if (pseudo) for (const pe of ['::before', '::after', '::marker']) { const ps = win.getComputedStyle(el, pe); for (const v of [ps.content, ps.backgroundImage]) for (const u of urls(v)) draw += pictureCost(u); }
-    if (el.localName === 'img') draw += pictureCost(el.currentSrc || el.src || '');
-    if (/^(image|feImage)$/.test(el.localName) && el.namespaceURI === SVG_NS_) draw += pictureCost(el.getAttribute('href') || el.getAttribute('xlink:href') || '');
-    if (draw || pix || other) costs.set(el, { draw, pix, other });
+    const shows = [cs.backgroundImage, cs.listStyleImage, cs.borderImageSource].flatMap(urls);
+    if (readPseudo) for (const pe of ['::before', '::after', '::marker']) { const ps = win.getComputedStyle(el, pe); shows.push(...urls(ps.content), ...urls(ps.backgroundImage)); }
+    if (el.localName === 'img') shows.push(el.currentSrc || el.src || '');
+    if (/^(image|feImage)$/.test(el.localName) && el.namespaceURI === SVG_NS_) shows.push(el.getAttribute('href') || el.getAttribute('xlink:href') || '');
+    for (const u of shows) { const p = picture(u); if (p) { draw += p.draws; if (p.passes) pix += p.passes * areaOf(el); } }
+    if (draw || pix || other) costs.set(el, { draw, pix, passes, other });
   }
-  // (A <use>: the effects inside what it shows, each time.)
+  // (A <use>: the effects inside what it shows, each time, its filters at the <use>'s own size: H-104.)
   const useMemo = new Map(), busy = new Set();
   const inside = t => {
     if (useMemo.has(t)) return useMemo.get(t);
-    if (busy.has(t) || busy.size > 50) return { draw: 0, pix: 0 };   // (a loop draws nothing)
+    if (busy.has(t) || busy.size > 50) return { draw: 0, passes: 0 };   // (a loop draws nothing)
     busy.add(t);
-    const r = { draw: 0, pix: 0 };
+    const r = { draw: 0, passes: 0 };
     for (const e of [t, ...t.getElementsByTagName('*')]) {
       const c = costs.get(e);
-      if (c) { r.draw += c.draw; r.pix += c.pix; }
-      if (e.localName === 'use') { const tt = local(e.getAttribute('href') || e.getAttribute('xlink:href') || ''); if (tt && !tt.contains(e)) { const x = inside(tt); r.draw += x.draw; r.pix += x.pix; } }
+      if (c) { r.draw += c.draw; r.passes += c.passes + (c.pix && !c.passes ? 1 : 0); }
+      if (e.localName === 'use') { const tt = local(e.getAttribute('href') || e.getAttribute('xlink:href') || ''); if (tt && !tt.contains(e)) { const x = inside(tt); r.draw += x.draw; r.passes += x.passes; } }
     }
     busy.delete(t);
     useMemo.set(t, r);
     return r;
   };
-  let draws = 0, pixels = 0, off = 0;
-  const limit = PAGE_FILTER_SCREENS * screen;
+  const spent = new Map(), limit = PAGE_FILTER_SCREENS * screen;
+  let off = 0;
   for (const el of all) {
-    if (unrendered(el)) continue;
+    if (unrendered.has(el) || el.hasAttribute('data-spine-fx-off')) continue;
     const c = { ...(costs.get(el) || { draw: 0, pix: 0, other: false }) };
-    if (el.localName === 'use') { const t = local(el.getAttribute('href') || el.getAttribute('xlink:href') || ''); if (t && !t.contains(el)) { const x = inside(t); c.draw += x.draw; c.pix += x.pix; } }
+    if (el.localName === 'use') { const t = local(el.getAttribute('href') || el.getAttribute('xlink:href') || ''); if (t && !t.contains(el)) { const x = inside(t); c.draw += x.draw; if (x.passes) c.pix += x.passes * areaOf(el); } }
     if (!c.draw && !c.pix && !c.other) continue;
-    if (c.other || draws + c.draw > SVG_DRAWS || pixels + c.pix > limit) {
-      fxOff(el);
-      el.setAttribute('data-spine-fx-off', '');
-      if (el.localName === 'img' && pictureCost(el.currentSrc || el.src || '')) { el.removeAttribute('srcset'); el.removeAttribute('src'); }
-      if (/^(image|feImage|use)$/.test(el.localName) && el.namespaceURI === SVG_NS_ && (el.localName === 'use' || pictureCost(el.getAttribute('href') || el.getAttribute('xlink:href') || ''))) { el.removeAttribute('href'); el.removeAttribute('xlink:href'); }
-      for (const p of ['background-image', 'list-style-image', 'border-image-source']) if (urls(win.getComputedStyle(el).getPropertyValue(p)).some(pictureCost)) el.style.setProperty(p, 'none', 'important');
-      off++;
-    } else { draws += c.draw; pixels += c.pix; }
+    const k = bucketOf(el), s = spent.get(k) || { draws: 0, pixels: 0 };
+    if (c.other || s.draws + c.draw > SVG_DRAWS || s.pixels + c.pix > limit) { fxElementOff(el, win, picture, urls); off++; }
+    else { s.draws += c.draw; s.pixels += c.pix; spent.set(k, s); }
   }
   if (off) {
-    // (Its ::before and ::after too, in a layer of their own ahead of the book's, whose !important rules it outranks.)
-    const st = doc.createElement('style');
-    st.textContent = `@layer spine-fx-${Math.random().toString(36).slice(2, 8)}{[data-spine-fx-off]::before,[data-spine-fx-off]::after,[data-spine-fx-off]::marker{content:none!important;background-image:none!important;filter:none!important;backdrop-filter:none!important;mask:none!important;clip-path:none!important}}`;
-    doc.head?.prepend(st);
+    if (!doc.querySelector('style[id^="spine-fx-"]')) {
+      // (Its ::before and ::after too, in a layer of their own ahead of the book's, whose !important rules it outranks.)
+      const st = doc.createElement('style');
+      st.id = `spine-fx-${Math.random().toString(36).slice(2, 8)}`;
+      st.textContent = `@layer ${st.id}{[data-spine-fx-off]::before,[data-spine-fx-off]::after,[data-spine-fx-off]::marker{content:none!important;background-image:none!important}}`;
+      doc.head?.prepend(st);
+    }
     console.warn(`${where}: effects on ${off} element${off > 1 ? 's' : ''} aren't shown: the page would take too long to draw`);
   }
 }
+const FX_OFF_PROPS = ['box-shadow', 'text-shadow', '-webkit-box-reflect'];
+function fxElementOff(el, win, picture, urls){
+  fxOff(el);
+  for (const p of FX_OFF_PROPS) el.style?.setProperty(p, 'none', 'important');
+  el.setAttribute('data-spine-fx-off', '');
+  if (el.localName === 'img' && picture(el.currentSrc || el.src || '')) { el.removeAttribute('srcset'); el.removeAttribute('src'); }
+  if (/^(image|feImage|use)$/.test(el.localName) && el.namespaceURI === SVG_NS_ && (el.localName === 'use' || picture(el.getAttribute('href') || el.getAttribute('xlink:href') || ''))) { el.removeAttribute('href'); el.removeAttribute('xlink:href'); }
+  for (const p of ['background-image', 'list-style-image', 'border-image-source']) if (urls(win.getComputedStyle(el).getPropertyValue(p)).some(picture)) el.style.setProperty(p, 'none', 'important');
+}
+// (Should the count itself fail, the page's effects are set off altogether, not shown uncounted: round 49 review, L-488.)
+function fxAllOff(doc){
+  const st = doc.createElement('style');
+  st.id = `spine-fx-${Math.random().toString(36).slice(2, 8)}`;
+  st.textContent = `@layer ${st.id}{*,*::before,*::after{filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;mask:none!important;-webkit-mask:none!important;clip-path:none!important;box-shadow:none!important;text-shadow:none!important;marker:none!important;-webkit-box-reflect:none!important}}`;
+  doc.head?.prepend(st);
+  for (const el of doc.querySelectorAll('[style]')) { fxOff(el); for (const p of FX_OFF_PROPS) el.style?.setProperty(p, 'none', 'important'); }
+}
+function fxCheck(doc, where = 'This page'){ try { pageEffectCap(doc, where); } catch (err) { console.warn(err); try { fxAllOff(doc); } catch {} } }
 const SVG_USES = 50000;
 function svgUseCap(doc, root, where, wantSizes = false){
   const uses = root.getElementsByTagName('use');
@@ -4006,7 +4104,11 @@ ${layout === 'scroll' ? `.cbz-page{height:auto;break-after:auto;margin:0 auto 8p
 // (The layer and the page-turn variable named at random, as the reader's elements are: a book can't add rules to a
 // layer it can't name, nor register the variable (@property) to make its value invalid: round 28 review, H-38, H-39.)
 const PIN_LAYER = RID.override.replace(/^spine-override/, 'spine-pins'), PAGE_X = `--${RID.flow}-x`;
-const pinCss = css => `@layer ${PIN_LAYER}{\n${css}\n}`;
+// (With every page, ahead of the book's own layers, so its !important rules don't outrank these: no animations or
+// transitions, which would change a page after its effects were counted, and no effects on ::before and ::after, which
+// aren't counted: round 49 review, H-102, H-103.)
+const FX_BLANKET = '*,*::before,*::after,*::marker{animation:none!important;transition:none!important}\n*::before,*::after{filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;mask:none!important;-webkit-mask:none!important;clip-path:none!important;-webkit-box-reflect:none!important;box-shadow:none!important}';
+const pinCss = css => `@layer ${PIN_LAYER}{\n${FX_BLANKET}\n${css}\n}`;
 // layoutOnly: the rules the pages depend on (geometry, writing mode, line height, pictures' and code's fit), for the
 // layered copy: a book's own important colours and the rest of its look stay its own (round 28 review, L-376).
 function overrideCss(fx = null, layoutOnly = false){
@@ -4198,12 +4300,8 @@ async function showPartner(i, token){
     const src = await chapterSource(book.spine[p]);
     const html = await buildPage(src, src.readerPath, book.spine[p]);
     if (token !== renderToken) return;
-    await new Promise(res => {
-      const shown = () => { try { if (frame2.contentDocument) pageEffectCap(frame2.contentDocument, 'This page'); } catch (err) { console.warn(err); } frame2.style.visibility = ''; res(); };
-      const t = setTimeout(shown, 6000);
-      frame2.style.visibility = 'hidden';
-      frame2.addEventListener('load', () => { clearTimeout(t); shown(); }, { once: true }); frame2.srcdoc = html; frame2.hidden = false;
-    });
+    frame2.hidden = false;
+    await loadChecked(frame2, html);
     if (token !== renderToken) return;
     const d = frame2.contentDocument;
     if (!fxlOf(d)) { frame2.hidden = true; cur.spreadOther = -1; cur.spreadFailed = p; return; }   // (its size wasn't found: one page)
@@ -4468,14 +4566,43 @@ function bookPolicy(){
 }
 
 // (Laid out hidden, its effects counted and capped, then shown: pageEffectCap.)
-function loadFrame(html){
+function loadFrame(html){ return loadChecked(frame, html); }
+/* A page put in a frame: hidden (by an attribute the reader's own layout code leaves alone: round 49 review, H-100) until
+   it has loaded and its effects are counted, then shown. The page carries a nonce, so only its own load is taken: a late
+   load of the page before, or a check at the 6 s timeout, can't show a page unchecked; past the timeout the reader goes
+   on, the page staying hidden until it loads (L-489). Its effects are counted again when its size, the reader's look or a
+   media query changes (H-103). */
+function loadChecked(f, html){
+  const nonce = Math.random().toString(36).slice(2, 10);
+  html = html.replace(/<head(\s[^>]*)?>/i, m => `${m}<meta name="spine-load" content="${nonce}">`);
+  if (f._fxLoad) f.removeEventListener('load', f._fxLoad);
+  f.setAttribute('data-fx-hold', '');
   return new Promise(res => {
-    const shown = () => { try { if (frame.contentDocument) pageEffectCap(frame.contentDocument, 'This page'); } catch (err) { console.warn(err); } frame.style.visibility = ''; res(); };
-    const t = setTimeout(shown, 6000);
-    frame.style.visibility = 'hidden';
-    frame.addEventListener('load', () => { clearTimeout(t); shown(); }, { once: true });
-    frame.srcdoc = html;
+    const mine = () => f.contentDocument?.querySelector('meta[name="spine-load"]')?.content === nonce;
+    const onload = () => {
+      if (!mine()) return;
+      f.removeEventListener('load', onload); f._fxLoad = null; clearTimeout(t);
+      const doc = f.contentDocument;
+      fxCheck(doc);
+      fxWatch(f, doc);
+      f.removeAttribute('data-fx-hold');
+      res();
+    };
+    f._fxLoad = onload;
+    f.addEventListener('load', onload);
+    const t = setTimeout(res, 6000);
+    f.srcdoc = html;
   });
+}
+// (Counted again, before it is drawn, when the frame's size or a media query changes, and on the reader's relayout.)
+function fxWatch(f, doc){
+  const win = doc.defaultView;
+  if (!win) return;
+  const again = () => { if (f.contentDocument === doc) fxCheck(doc); };
+  win.addEventListener('resize', again);
+  for (const q of ['(prefers-color-scheme: dark)', '(prefers-contrast: more)', '(prefers-contrast: less)', '(orientation: portrait)', '(prefers-reduced-motion: reduce)', '(forced-colors: active)', 'print']) {
+    try { win.matchMedia(q).addEventListener('change', again); } catch {}
+  }
 }
 
 // Comics: each page image becomes an in-memory copy while its section is shown. Free the copies for every
@@ -4745,6 +4872,7 @@ function position(frag, f){
 }
 function relayout(){
   comicOrder(); fxlFit();
+  for (const f of [frame, frame2]) if (!f.hasAttribute('data-fx-hold') && f.contentDocument?.querySelector('meta[name="spine-load"]')) fxCheck(f.contentDocument);   // (H-103)
   if (frame.contentDocument) unspan(frame.contentDocument);   // (boxes as laid out now: M-196)
   if (!book || cur.f == null) return;
   // (A fixed page whose spread now shows, or no longer does, after a layout change or a resize: shown again.)
