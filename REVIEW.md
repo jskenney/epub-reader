@@ -1171,7 +1171,9 @@ table below:
   count every possible break; the text fallback cuts between graphemes.
 - Found while fixing: 20 chained blurs spread a 1 px box over thousands of pixels and crashed the renderer before any
   check could count it, until the spread was counted; charging every SVG filter a screen set off Inkscape shadows, until
-  filter regions were read; the skip for pages with no effects missed effects set as SVG attributes.
+  filter regions were read; the skip for pages with no effects missed effects set as SVG attributes. The page's load nonce first went in a `<meta name>`, which the name cleaning flagged, and only into pages with a `<head>`, so a failed chapter's blank page stayed hidden: both caught by the suite, fixed in `a623eb9`.
+
+**Tests.** 632 tests at `a623eb9`: 626 pass, none fail, six need `SLOW=1` or `NETWORK=1`.
 
 ## Summary
 
