@@ -716,3 +716,18 @@ test('Markdown: a line that only looks like a fence, and a tab before trailing s
     await page.close();
   }
 });
+
+// E-52.
+test('a PTVB1 voices file\'s record names are read by walking its records (E-52)', () => {
+  const ptvbNames = readerFn('function ptvbNames(buf){', 'ptvbNames');
+  const enc = new TextEncoder(), parts = [enc.encode('PTVB1'), new Uint8Array(new Uint32Array([2]).buffer)];
+  const u16 = n => new Uint8Array(new Uint16Array([n]).buffer), u32 = n => new Uint8Array(new Uint32Array([n]).buffer);
+  for (const [name, tensors] of [['site:a', 2], ['site:b', 0]]) {
+    parts.push(u16(enc.encode(name).length), enc.encode(name), u16(tensors));
+    for (let t = 0; t < tensors; t++) parts.push(u16(1), enc.encode('k'), new Uint8Array([0, 2]), u32(2), u32(3), u32(24), new Uint8Array(24));
+  }
+  const buf = new Uint8Array(parts.reduce((a, p) => a + p.length, 0)); let at = 0; for (const p of parts) { buf.set(p, at); at += p.length; }
+  assert.deepEqual(ptvbNames(buf.buffer), ['site:a', 'site:b']);
+  assert.throws(() => ptvbNames(buf.buffer.slice(0, buf.length - 10)), /cut short/);
+  assert.throws(() => ptvbNames(new TextEncoder().encode('NOPE!xxxx').buffer), /not a PTVB1/);
+});

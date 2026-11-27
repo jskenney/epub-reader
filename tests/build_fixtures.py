@@ -1643,7 +1643,30 @@ def main():
         {"id": "described", "name": "Described", "ref_audio": f"{REMOTE}/clip2.wav", "ref_text": "x", "instruction": "A calm voice."},
         {"id": "up", "name": "Up a folder", "ref_audio": "../reader/books/clip.wav", "ref_text": "x"},
         {"id": "encoded", "name": "Encoded dots", "ref_audio": "%2e%2e/reader/clip.wav", "ref_text": "x"},
-        {"id": "rooted", "name": "From the root", "ref_audio": "/clip.wav", "ref_text": "x"}]}))
+        {"id": "rooted", "name": "From the root", "ref_audio": "/clip.wav", "ref_text": "x"},
+        # (E-52) A Pocket browser voice from a Pocket voice server's studio: in Pocket's list, not the server voice's.
+        {"id": "site-anna", "name": "Site Anna", "pocket": {"english_2026-04": "pocket/english_2026-04/site-anna.ptvb"}}]}))
+    # Its merged file: a real voice state (a built-in voice of the self-hosted bundle, when fetched) renamed site:site-anna.
+    own = REPO / "pocket" / "model" / "english_2026-04" / "voices.bin"
+    if own.exists():
+        data = own.read_bytes()
+        at, rec = 9, None
+        for _ in range(struct.unpack_from("<I", data, 5)[0]):
+            start = at
+            nl = struct.unpack_from("<H", data, at)[0]; at += 2 + nl
+            tc = struct.unpack_from("<H", data, at)[0]; at += 2
+            for _ in range(tc):
+                kl = struct.unpack_from("<H", data, at)[0]; at += 2 + kl
+                rank = data[at + 1]; at += 2 + 4 * rank
+                at += 4 + struct.unpack_from("<I", data, at)[0]
+            rec = (start, nl, at)
+            if data[start + 2:start + 2 + nl] == b"jean":
+                break
+        start, nl, end = rec
+        name = b"site:site-anna"
+        (SITE / "tts-voices" / "pocket" / "english_2026-04").mkdir(parents=True, exist_ok=True)
+        (SITE / "tts-voices" / "pocket" / "english_2026-04" / "voices.bin").write_bytes(
+            b"PTVB1" + struct.pack("<I", 1) + struct.pack("<H", len(name)) + name + data[start + 2 + nl:end])
     # Round 40 review: hostile files that froze or crashed the tab.
     # (H-59) A list item followed by 100,000 lines without a blank one: quadratic in marked.
     (books / "long-list.md").write_text("# Long list\n\n- a\n" + "b\n" * 100000 + "\nAfter the long list.\n")

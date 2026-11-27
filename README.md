@@ -451,7 +451,12 @@ site as the reader.
   [pocket-tts-js](https://www.npmjs.com/package/pocket-tts-js), running on
   the CPU (WebAssembly) in a Web Worker. Unlike Kokoro it reads English,
   German, Italian, Portuguese and Spanish books, with 8 built-in
-  voices per language. Each language is a one-time download of the
+  voices per language, and the site's own voices when it runs a Pocket voice
+  server ([epub-reader-tts-server-pocket](https://github.com/jskenney/epub-reader-tts-server-pocket)):
+  its studio exports each saved voice for the browser, and they are listed after
+  the built-in ones, by their names. A site with French voices of its own also
+  gets Pocket for French books (French's model is larger: about 1.25 GB, or 340 MB
+  with 8-bit models, and has no built-in voices). Each language is a one-time download of the
   full-precision models (about 430 MB) after pressing
   Download. It has no speed control of
   its own, so the speed setting changes playback instantly with pitch
@@ -524,14 +529,17 @@ site as the reader.
   the recording. The first time a voice is used, its recording becomes a voice on the GPU (a second or two) and the
   reader keeps it in the browser, so it isn't made again; changing its words makes it again. 5–15 seconds of clean
   speech from one speaker works best, its words exactly as said.
-- Server voice ("Server" in the read-aloud bar): a voice server on your own GPU behind the same website,
-  any of three with the same API:
+- Server voice ("Server" in the read-aloud bar): a voice server on your own machine behind the same website,
+  any of four with the same API:
   - Breeze TTS 2 ([jskenney/epub-reader-tts-server](https://github.com/jskenney/epub-reader-tts-server)):
     English and Chinese; the model and its output are for non-commercial use.
   - ZONOS3-Mini ([jskenney/epub-reader-tts-server-zonos3](https://github.com/jskenney/epub-reader-tts-server-zonos3)):
     43 languages, built-in voices, numbers and dates read properly; MIT and Apache-2.0.
   - Reverb-TTS ([jskenney/epub-reader-tts-server-reverb](https://github.com/jskenney/epub-reader-tts-server-reverb)):
     7 languages, 16 preset voices, voices cloned from a clip and its transcript; the weights are for non-commercial use.
+  - Pocket TTS ([jskenney/epub-reader-tts-server-pocket](https://github.com/jskenney/epub-reader-tts-server-pocket)):
+    7 languages on the CPU (no GPU), 27 catalog voices, voices cloned from a clip (with Kyutai's gated weights); CC BY 4.0.
+    Its studio also makes the site's voices for the in-browser Pocket voice (above).
 
   It appears in the read-aloud bar when `/tts/health` on the site root answers, for books in the languages the
   server lists there (English and Chinese for a server that lists none, as Breeze); the book's language is sent with
@@ -796,6 +804,7 @@ To upgrade one:
 ./fetch-pocket.sh            # English (about 430 MB)
 ./fetch-pocket.sh en de it   # several languages
 ./fetch-pocket.sh all        # en de it pt es
+./fetch-pocket.sh fr         # French (about 1.25 GB): only with the site's own French voices
 ./fetch-pocket.sh --int8 en  # 8-bit models instead (for FULL_PRECISION = false)
 ```
 
@@ -810,9 +819,12 @@ comes from the CDN, so a download that stopped partway doesn't break the voice.
 Re-runs skip finished files, every file is checked against
 `checksums/pocket.sha256`, and `pocket/` is git-ignored.
 
-French isn't offered: its model bundle at this revision has no built-in
-voices (`voices.bin`), so it can't speak. French books are read by device
-voices, ZONOS3 or Reverb in the browser (with WebGPU), or the server voice when its server lists French (as a ZONOS3 server does); Kokoro reads only English.
+French has no built-in voices at this revision (its only bundle is the
+24-layer `french_24l`, with no `voices.bin`), so Pocket reads French books
+only with the site's own French voices, which a Pocket voice server's studio
+makes (it writes `/tts-voices/pocket/<bundle>/voices.bin` for each bundle;
+the reader adds those voices to the bundle's own). Otherwise French books are read by device
+voices, ZONOS3 or Reverb in the browser (with WebGPU), or the server voice when its server lists French (as a ZONOS3 or Pocket server does); Kokoro reads only English.
 
 ## Self-hosting ZONOS3
 

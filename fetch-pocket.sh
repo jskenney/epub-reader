@@ -5,7 +5,9 @@
 #   ./fetch-pocket.sh                  English only (about 430 MB)
 #   ./fetch-pocket.sh en de it         the listed languages
 #   ./fetch-pocket.sh all              English, German, Italian, Portuguese and Spanish
-#   (French isn't offered: its model bundle has no built-in voices at this revision, so it can't speak.)
+#   ./fetch-pocket.sh fr               French (french_24l, about 1.25 GB; 340 MB with --int8): it has no built-in
+#                                      voices, so the reader offers it only with the site's own French voices, from
+#                                      a Pocket voice server (epub-reader-tts-server-pocket); "all" leaves it out
 #   ./fetch-pocket.sh --int8 en        the 8-bit models instead (about 170 MB per language), for a
 #                                      reader with FULL_PRECISION set to false in index.html
 #
@@ -32,8 +34,8 @@ bundle_for() {   # language code -> model bundle (keep in sync with POCKET_LANGS
   case "$1" in
     en) echo english_2026-04 ;; de) echo german ;;
     it) echo italian ;; pt) echo portuguese ;; es) echo spanish ;;
-    fr) echo "French isn't available: its model bundle has no built-in voices at this revision" >&2; exit 1 ;;
-    *) echo "Unknown language '$1' (use en, de, it, pt, es or all)" >&2; exit 1 ;;
+    fr) echo french_24l ;;
+    *) echo "Unknown language '$1' (use en, de, it, pt, es, fr or all)" >&2; exit 1 ;;
   esac
 }
 # Arguments, in any order: language codes (or all), and the options
@@ -113,7 +115,9 @@ for lang in "${langs[@]}"; do
   say "Model: $b"
   # the four models (full precision, or 8-bit with --int8) plus the built-in voices;
   # the voice-cloning encoder isn't used
-  for f in bundle.json tokenizer.model voices.bin text_conditioner$suffix.onnx flow_lm_main$suffix.onnx \
+  # (french_24l has no built-in voices: the site's own come from its Pocket voice server.)
+  voices=voices.bin; [ "$b" = french_24l ] && voices=
+  for f in bundle.json tokenizer.model $voices text_conditioner$suffix.onnx flow_lm_main$suffix.onnx \
            flow_lm_flow$suffix.onnx mimi_decoder$suffix.onnx; do
     get "$HF/$b/$f" "model/$b/$f"
   done

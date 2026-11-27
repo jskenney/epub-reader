@@ -741,7 +741,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261127.0451</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261127.1506</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -6645,7 +6645,7 @@ function ttsOpen(){
   if (!synth && !book?.hasOverlays) { showNotice("This browser doesn't support speech, so the book can't be read aloud.", 'error'); return false; }
   if (tts.open) return true;
   tts.open = true; $('#tts').hidden = false; $('#ttsBtn').setAttribute('aria-pressed', 'true');
-  ttsFillVoices(); ttsMeasureBar(); svProbe();
+  ttsFillVoices(); ttsMeasureBar(); svProbe(); pkSiteProbe();
   return true;
 }
 function ttsStopAudio(){ ++tts.token; synth?.cancel(); nStop(); moAudio.pause(); moClearClasses(); }
@@ -6899,7 +6899,7 @@ function ttsFillVoices(){
     sel.dataset.kind = 'pocket:' + (pkReady() ? pk.lang : '');
     if (!pkReady()) { sel.replaceChildren(new Option('Voices load with the model', '')); sel.disabled = true; return; }
     sel.disabled = false;
-    sel.replaceChildren(...pk.voices.map(v => { const o = new Option(v[0].toUpperCase() + v.slice(1), v); o.selected = v === pkVoice(); return o; }));
+    sel.replaceChildren(...pk.voices.map(v => { const o = new Option(pk.siteNames.get(v) || v[0].toUpperCase() + v.slice(1), v); o.selected = v === pkVoice(); return o; }));
     return;
   }
   if (!tts.mo && neuralEngine() === NEURAL.zonos) {
@@ -7234,15 +7234,93 @@ const POCKET = {
   // Self-hosted copies (fetched by fetch-pocket.sh) under VOICE_FILES: pocket/lib/, pocket/ort/, pocket/model/<bundle>/
   local: new URL('pocket/', voiceFilesBase()).href
 };
-const POCKET_LANGS = {   // book language -> [model bundle, MB to download (full precision, int8), name]
-  // (French is left out: its model bundle has no built-in voices at the pinned revision, so it can't speak.)
+const POCKET_LANGS = {   // book language -> [model bundle, MB to download (full precision, int8), name, site voices only]
   en: ['english_2026-04', [431, 170], 'English'], de: ['german', [431, 170], 'German'],
-  it: ['italian', [431, 170], 'Italian'], pt: ['portuguese', [431, 170], 'Portuguese'], es: ['spanish', [431, 170], 'Spanish']
+  it: ['italian', [431, 170], 'Italian'], pt: ['portuguese', [431, 170], 'Portuguese'], es: ['spanish', [431, 170], 'Spanish'],
+  // (French's only bundle at the pinned revision is its 24-layer model, with no built-in voices: offered only when the
+  // site has French voices of its own, from its Pocket voice server: E-52.)
+  fr: ['french_24l', [1247, 338], 'French', true]
 };
-const pocketMB = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[1][FULL_PRECISION ? 0 : 1] || 431;
-const pocketLang = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]]?.[0] || null;
+const pocketEntry = () => POCKET_LANGS[bookLang().toLowerCase().split(/[-_]/)[0]];
+const pocketMB = () => pocketEntry()?.[1][FULL_PRECISION ? 0 : 1] || 431;
+const pocketLang = () => { const e = pocketEntry(); return e && (!e[3] || pkSite.bundles.has(e[0])) ? e[0] : null; };
 const pk = { state: 'idle', worker: null, lang: '', voices: [], refs: new Map(), pending: new Map(), nextId: 1, queue: Promise.resolve(),
-  collect: null, files: {}, progressText: '', error: '', wantPlay: false, voice: store.get('spine:pocketVoice') || '' };
+  collect: null, files: {}, progressText: '', error: '', wantPlay: false, voice: store.get('spine:pocketVoice') || '',
+  siteNames: new Map(), siteVersion: '', voicesBlob: '' };
+/* The site's own Pocket voices (E-52): a Pocket voice server's studio (epub-reader-tts-server-pocket) exports each saved
+   voice for the browser's model bundles and merges them, one file per bundle, at <voices>/pocket/<bundle>/voices.bin
+   (records named "site:<id>"), listing each voice's bundles in voices.json ("pocket": {"<bundle>": "<file>"}). When the
+   model loads, that file's records are added to the bundle's own voices.bin and the engine is given the result; the
+   voices are listed by their names in voices.json, after the built-in ones. Read when the read-aloud bar opens, and
+   again when the model loads. */
+const pkSite = { probe: null, checkedAt: 0, list: [], bundles: new Set() };
+function pkSiteProbe(maxAge = 60000){
+  if (pkSite.probe && Date.now() - pkSite.checkedAt < maxAge) return pkSite.probe;
+  pkSite.checkedAt = Date.now();
+  pkSite.probe = (async () => {
+    let list = [];
+    try {
+      const { r, json } = await svFetchJson(TTS_SERVER.voices + 'voices.json');
+      if (r.ok && Array.isArray(json?.voices)) list = json.voices.filter(v => typeof v?.id === 'string' && v.pocket && typeof v.pocket === 'object')
+        .map(v => ({ id: v.id, name: typeof v.name === 'string' && v.name.trim() ? v.name.trim() : v.id, bundles: Object.keys(v.pocket).filter(b => /^[a-z0-9][a-z0-9_.-]*$/.test(b)) }));
+    } catch {}
+    const before = [...pkSite.bundles].join();
+    pkSite.list = list; pkSite.bundles = new Set(list.flatMap(v => v.bundles));
+    if (before !== [...pkSite.bundles].join() && tts.open) ttsUpdateBar();
+    return pkSite;
+  })();
+  return pkSite.probe;
+}
+// A PTVB1 file's voice count and record names (its records walked, nothing copied).
+function ptvbNames(buf){
+  const v = new DataView(buf), dec = new TextDecoder(), names = [];
+  if (buf.byteLength < 9 || dec.decode(new Uint8Array(buf, 0, 5)) !== 'PTVB1') throw new Error('not a PTVB1 file');
+  let at = 9;
+  try { for (let i = v.getUint32(5, true); i > 0; i--) {
+    const nl = v.getUint16(at, true); names.push(dec.decode(new Uint8Array(buf, at + 2, nl))); at += 2 + nl;
+    let a = at + 2;
+    for (let t = v.getUint16(at, true); t > 0; t--) { a += 2 + v.getUint16(a, true); const rank = v.getUint8(a + 1); a += 2 + 4 * rank; a += 4 + v.getUint32(a, true); }
+    at = a;
+    if (at > buf.byteLength) throw new RangeError();
+  } } catch (e) { if (e instanceof RangeError) throw new Error('a PTVB1 file cut short'); throw e; }
+  return names;
+}
+// The bundle's own voices.bin (from the engine's cache when it has it, as the engine keeps it there by its address)
+// with the site's records added after it: a blob address for the engine's voicesUrl. Null when the site has none.
+async function pkSiteVoices(lang, modelBase){
+  await pkSiteProbe(0);
+  const mine = pkSite.list.filter(v => v.bundles.includes(lang));
+  pk.siteNames = new Map(); pk.siteVersion = '';
+  if (!mine.length) return null;
+  const siteUrl = new URL(`pocket/${lang}/voices.bin`, TTS_SERVER.voices).href;
+  let site, version;
+  try {
+    const r = await fetch(siteUrl, { cache: 'no-cache' });
+    if (!r.ok) throw new Error(String(r.status));
+    version = r.headers.get('etag') || r.headers.get('last-modified') || '';
+    site = await r.arrayBuffer();
+    version ||= String(site.byteLength);
+  } catch (e) { console.warn(`Pocket TTS: the site's voices for ${lang} couldn't be read (${e.message})`); return null; }
+  let names;
+  try { names = ptvbNames(site); } catch (e) { console.warn(`Pocket TTS: ${siteUrl}: ${e.message}`); return null; }
+  const builtinUrl = `${modelBase}/${lang}/voices.bin`;
+  let own = null;
+  if (!pocketEntry()?.[3]) {
+    const cache = await caches?.open('pocket-tts-js-v1').catch(() => null);
+    const hit = await cache?.match(builtinUrl).catch(() => null);
+    const res = hit || await fetch(builtinUrl).catch(() => null);
+    if (res?.ok) { if (!hit) cache?.put(builtinUrl, res.clone()).catch(() => {}); own = await res.arrayBuffer(); }
+    if (!own) return null;   // (the engine reports the bundle's own missing voices as it would have)
+  }
+  const ownCount = own ? new DataView(own).getUint32(5, true) : 0, head = new Uint8Array(9);
+  head.set(new TextEncoder().encode('PTVB1')); new DataView(head.buffer).setUint32(5, ownCount + names.length, true);
+  const named = new Map(mine.map(v => [`site:${v.id}`, v.name]));
+  for (const n of names) if (named.has(n)) pk.siteNames.set(n, named.get(n));
+  pk.siteVersion = version;
+  if (pk.voicesBlob) URL.revokeObjectURL(pk.voicesBlob);
+  pk.voicesBlob = URL.createObjectURL(new Blob([head, own ? new Uint8Array(own, 9) : new Uint8Array(0), new Uint8Array(site, 9)]));
+  return pk.voicesBlob;
+}
 const pkReady = () => pk.state === 'ready' && pk.lang === pocketLang();
 const pkVoice = () => pk.voices.includes(pk.voice) ? pk.voice : pk.voices[0];
 function pkWorker(lib){
@@ -7290,7 +7368,7 @@ async function pkLoad(){
   const q = FULL_PRECISION ? '' : '_int8';
   const [lib, ort, model] = await Promise.all([allReal(POCKET.local + 'lib/', ['worker.js', 'binary.js', 'tokenizer.js']),
     allReal(POCKET.local + 'ort/', ['ort.min.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']),
-    allReal(POCKET.local + `model/${lang}/`, ['bundle.json', 'tokenizer.model', 'voices.bin',
+    allReal(POCKET.local + `model/${lang}/`, ['bundle.json', 'tokenizer.model', ...(pocketEntry()?.[3] ? [] : ['voices.bin']),
       ...['text_conditioner', 'flow_lm_main', 'flow_lm_flow', 'mimi_decoder'].map(f => f + q + '.onnx')])]);
   pk.local = lib || ort || model;
   if (!ALLOW_CDN && !(lib && ort && model)) {
@@ -7310,10 +7388,13 @@ async function pkLoad(){
     pk.collect = null; pk.onChunk = null;
     pk.worker?.terminate(); pk.pending.clear(); pk.refs.clear(); pk.queue = Promise.resolve();
     pk.worker = pkWorker(lib ? POCKET.local + 'lib/' : POCKET.lib);
+    const modelBase = model ? POCKET.local + 'model' : POCKET.model, voicesUrl = await pkSiteVoices(lang, modelBase);
+    if (pocketEntry()?.[3] && !voicesUrl) throw new Error(`this site's ${pocketEntry()[2]} voices couldn't be read`);
     await pkRequest('init', { language: lang, quantized: !FULL_PRECISION, voiceCloning: false,
-      modelBaseUrl: model ? POCKET.local + 'model' : POCKET.model, ortBaseUrl: ort ? POCKET.local + 'ort/' : POCKET.ort,
-      voicesUrl: null, maxThreads: 8, cache: true, cacheName: 'pocket-tts-js-v1' });
-    pk.voices = pk.bundle?.predefinedVoices || [];
+      modelBaseUrl: modelBase, ortBaseUrl: ort ? POCKET.local + 'ort/' : POCKET.ort,
+      voicesUrl, maxThreads: 8, cache: true, cacheName: 'pocket-tts-js-v1' });
+    // (The bundle's built-in voices, unless it has none (French), then the site's: E-52.)
+    pk.voices = [...(pocketEntry()?.[3] ? [] : pk.bundle?.predefinedVoices || []), ...pk.siteNames.keys()];
     pk.state = 'ready'; pk.lang = lang;
     store.set(`spine:agreed:pocket:${lang}:${FULL_PRECISION ? 'fp32' : 'int8'}`, true);   // the reader agreed to this download once
   } catch (e) {
@@ -8370,7 +8451,8 @@ const NEURAL = {
     generate: kGenerate, key: () => `kokoro|${FULL_PRECISION ? 'fp32' : 'q8'}|${k.voice}|${tts.rate}` },
   pocket: { name: 'Pocket TTS', st: pk, ready: pkReady, load: () => pkLoad(), size: () => `~${pocketMB()} MB`, playbackSpeed: true, stream: true,
     agreed: () => !!store.get(`spine:agreed:pocket:${pocketLang()}:${FULL_PRECISION ? 'fp32' : 'int8'}`),
-    generate: pkGenerate, key: () => `pocket|${FULL_PRECISION ? 'fp32' : 'int8'}|${pk.lang}|${pkVoice()}` },
+    // (A site voice's saved speech made again when the site's voices file changes: E-52.)
+    generate: pkGenerate, key: () => `pocket|${FULL_PRECISION ? 'fp32' : 'int8'}|${pk.lang}|${pkVoice()}${pkVoice()?.startsWith('site:') ? '|' + pk.siteVersion : ''}` },
   zonos: { name: 'ZONOS3', st: zn, ready: znReady, load: () => znLoad(), size: () => `~${ZONOS.mb} MB`, playbackSpeed: true, stream: true,
     agreed: () => !!store.get('spine:agreed:zonos'),
     generate: znGenerate, key: () => { const v = znVoice(); return `zonos|${ZONOS.commit.slice(0, 7)}|t${ZN_TEXT_V}|${zonosLang()}|${v?.id}${v?.url ? '|' + v.version : ''}`; } },

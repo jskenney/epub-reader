@@ -249,6 +249,20 @@ for (const [engine, folder] of [['kokoro', 'kokoro'], ['pocket', 'pocket']]) {
   });
 }
 
+test('pocket: the site\'s own Pocket voices, from a Pocket voice server, are listed after the built-in ones and speak (E-52)', { skip: slow || (!fs.existsSync(path.join(__dirname, '..', 'pocket', 'model', 'english_2026-04', 'voices.bin')) && 'pocket/ not fetched'), timeout: 600000 }, async () => {
+  const page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/long.epub`, { 'spine:ttsEngine': 'pocket', 'spine:pocketVoice': 'site:site-anna' });
+  await page.keyboard.press('r');
+  await page.click('#ttsDownload').catch(() => {});
+  assert.ok(await h.waitFor(() => h.spokenWord(page), 540000, 1000), await page.textContent('#ttsStatus'));
+  const opts = await page.$$eval('#ttsVoice option', os => os.map(o => [o.value, o.textContent]));
+  assert.deepEqual(opts.at(-1), ['site:site-anna', 'Site Anna'], JSON.stringify(opts));
+  assert.ok(opts.length > 1 && opts[0][0] !== 'site:site-anna', 'the built-in voices first');
+  assert.equal(await page.$eval('#ttsVoice', s => s.value), 'site:site-anna', 'the site voice chosen and speaking');
+  assert.deepEqual(page.blocked, []);
+  assert.deepEqual(page.cspViolations, []);
+});
+
 test('server voice: a chapter in another language is made ahead in its own, once (round 34 review, L-433)', async () => {
   await h.clearBreezeLog();
   await fetch(`${h.SITE}/__breeze?langs=en,fr`);

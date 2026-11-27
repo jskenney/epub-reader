@@ -1306,6 +1306,20 @@ audio-only clips (no text) shown as such in the read-aloud bar, rather than igno
 On a two-page fixed-layout spread, the passage being narrated highlighted (and given the book's active class) on
 whichever page holds it, the facing page too, and the spread turned when the narration moves past it.
 
+### E-52. The site's own voices for the in-browser Pocket voice
+
+**Built** (your request), with [epub-reader-tts-server-pocket](https://github.com/jskenney/epub-reader-tts-server-pocket),
+a Pocket TTS voice server whose studio exports each saved voice for the browser's model bundles and merges them, one
+file per bundle, at `/tts-voices/pocket/<bundle>/voices.bin` (records named `site:<voice id>`), listing each voice's
+bundles in `voices.json`. When the in-browser Pocket voice loads a model, the reader reads `voices.json`; if a voice has
+a browser voice for that bundle, it fetches the merged file (revalidated, not downloaded again when unchanged), adds its
+records to the bundle's own `voices.bin` (from the engine's cache when it has it), and gives pocket-tts-js the result as
+its `voicesUrl`. The site's voices are listed after the 8 built-in ones by their names; saved speech made with one is
+made again when the file changes. French, whose only bundle (`french_24l`, about 1.25 GB) has no built-in voices, is
+offered when the site has French voices; `fetch-pocket.sh fr` self-hosts it (checksums pinned from the model
+repository's listing). Checked with the real English model: a site voice (a real voice state) is listed and speaks; a
+state made by the Python package was checked to speak in pocket-tts-js earlier (fp32 and int8, transcribed exactly).
+
 ### E-51. Book statistics
 
 **Built** (your request). I (or the Information panel) shows Statistics under the book's details: the file's size and
