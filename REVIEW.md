@@ -1161,9 +1161,21 @@ table below:
 - Tests: none for these; round 48's worker-source test wouldn't catch a lost `\s` in a character class (T-73). The
   comment and REVIEW.md overstate what the limits cover (D-49).
 
+**Fixed** (your go-ahead) in `b350b71`, each with a test, along the three directions proposed:
+- Effects: every page carries rules in the reader's first layer (which outranks the book's own `!important` rules)
+  setting off animations, transitions and effects on `::before`/`::after`. A page is hidden by an attribute until counted,
+  loaded with a nonce, counted again on resize, relayout and media changes, and fails closed. Filters are charged with their
+  children, outlines and blur spread (an SVG filter by its region), shadows by their layers, each screen's worth on its own.
+  Everyday filters (80 grayscale photos, 150 card shadows, Inkscape drop shadows) are kept.
+- Markdown HTML blocks are counted whole again, with generous limits (2,000 breaks, 25,000 elements); short documents
+  count every possible break; the text fallback cuts between graphemes.
+- Found while fixing: 20 chained blurs spread a 1 px box over thousands of pixels and crashed the renderer before any
+  check could count it, until the spread was counted; charging every SVG filter a screen set off Inkscape shadows, until
+  filter regions were read; the skip for pages with no effects missed effects set as SVG attributes.
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: fixed by blunt limits, your decision. Round 49, a review of those, found H-100 to H-110, M-250 to M-252, L-488 to L-491, T-73 and D-49: open. Open (below): those, round 49's, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: fixed by blunt limits, your decision. Round 49, a review of those, found H-100 to H-110, M-250 to M-252, L-488 to L-491, T-73 and D-49: fixed. Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1173,26 +1185,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-100 | The reader's relayout unhides a page before its effect check (resize, fonts, startup): heavy pages paint unchecked (round 49). | High |
-| H-101 | A filter's area excludes overflowing descendants and outlines: over 60 s (round 49). | High |
-| H-102 | Effects on `::before`/`::after` aren't counted: over 60 s (round 49). | High |
-| H-103 | Effects that start or grow after the check (animations, media queries, restyles) aren't checked again (round 49). | High |
-| H-104 | A `<use>` of a filtered `<defs>` element is charged 1 px: over 60 s (round 49). | High |
-| H-105 | Filters in SVG pictures counted as draws, not area: 152 s (round 49). | High |
-| H-106 | Markdown: `<br>` inside `<svg>`/`<math>`, which the browser takes out, isn't counted: over 60 s (round 49). | High |
-| H-107 | Markdown: the comment pattern differs from the browser's: over 60 s (round 49). | High |
-| H-108 | Markdown: block tags that aren't blocks split the HTML-block count: over 60 s (round 49). | High |
-| H-109 | Markdown: MathML no longer counted: 100,000 `<mi>`, over 60 s (round 49). | High |
-| H-110 | Markdown: the short-document check skips the rest after a line that isn't a fence: 30 s (round 49, regression). | High |
-| M-250 | Box and text shadows aren't counted: over 60 s (round 49). | Medium |
-| M-251 | Everyday filters lose out: per-chapter budget, colour functions counted (grayscale photos, card shadows): round 49. | Medium |
-| M-252 | The page effect check costs 0.5 to 1.3 s on large pages, more when deeply nested (round 49). | Medium |
-| L-488 | An exception in the page effect check shows the page unchecked (round 49). | Low |
-| L-489 | The 6 s timeout and overlapping loads can show a page unchecked (round 49). | Low |
-| L-490 | Markdown: a tab before the two trailing spaces escapes the short-document check (round 49). | Low |
-| L-491 | Markdown: the text fallback can split grapheme clusters and spaces CJK lines (round 49). | Low |
-| T-73 | No tests for round 49's items; the worker-source test misses lost escapes in character classes (round 49). | Tests |
-| D-49 | The effect-limit comment and REVIEW.md overstate what is covered (round 49). | Docs |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | L-475 | The check's 5 s budget is fixed: a legitimate large document can show as plain text on a slow device, and differently from visit to visit (positions and contents then differ); reading aloud and the audiobook speak the note and the raw markup (round 43). Fix: a budget scaled by a calibration sample; a "show as Markdown anyway" action; the note kept out of what is spoken. | Low |
@@ -1339,6 +1331,26 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-100 | The reader's relayout unhides a page before its effect check (resize, fonts, startup): heavy pages paint unchecked (round 49). Hidden by an attribute the layout code leaves alone, removed only once counted. | `b350b71` |
+| H-101 | A filter's area excludes overflowing descendants and outlines: over 60 s (round 49). A filter's area includes its children, its outline and its blur's spread; an SVG filter's, its region. | `b350b71` |
+| H-102 | Effects on `::before`/`::after` aren't counted: over 60 s (round 49). The reader's first layer sets off effects on `::before`/`::after` for every page. | `b350b71` |
+| H-103 | Effects that start or grow after the check (animations, media queries, restyles) aren't checked again (round 49). No animations or transitions on any page (the reader's first layer, and style attributes cleaned); counted again on resize, relayout and media-query changes. | `b350b71` |
+| H-104 | A `<use>` of a filtered `<defs>` element is charged 1 px: over 60 s (round 49). A `<use>` charged at its own size. | `b350b71` |
+| H-105 | Filters in SVG pictures counted as draws, not area: 152 s (round 49). Picture filters kept as passes and charged by the area shown; over 40 passes, a picture's effects are set off. | `b350b71` |
+| H-106 | Markdown: `<br>` inside `<svg>`/`<math>`, which the browser takes out, isn't counted: over 60 s (round 49). HTML blocks counted whole, nothing left out. | `b350b71` |
+| H-107 | Markdown: the comment pattern differs from the browser's: over 60 s (round 49). Nothing is removed before counting. | `b350b71` |
+| H-108 | Markdown: block tags that aren't blocks split the HTML-block count: over 60 s (round 49). No splitting into segments. | `b350b71` |
+| H-109 | Markdown: MathML no longer counted: 100,000 `<mi>`, over 60 s (round 49). Elements counted over the whole block, MathML included. | `b350b71` |
+| H-110 | Markdown: the short-document check skips the rest after a line that isn't a fence: 30 s (round 49, regression). Every possible break counted, code too. | `b350b71` |
+| M-250 | Box and text shadows aren't counted: over 60 s (round 49). Shadows charged by layers, blur and reach. | `b350b71` |
+| M-251 | Everyday filters lose out: per-chapter budget, colour functions counted (grayscale photos, card shadows): round 49. A budget for each screen's worth; colour functions not counted, cheap filters a quarter; 80 grayscale photos and 150 card shadows kept. | `b350b71` |
+| M-252 | The page effect check costs 0.5 to 1.3 s on large pages, more when deeply nested (round 49). Pages whose styles mention no effect skipped; one pass for what isn't drawn; pseudo-elements read only when the page shows a picture with effects. | `b350b71` |
+| L-488 | An exception in the page effect check shows the page unchecked (round 49). Fails closed: every effect set off. | `b350b71` |
+| L-489 | The 6 s timeout and overlapping loads can show a page unchecked (round 49). Each page loads with a nonce; past the timeout it stays hidden until its own load. | `b350b71` |
+| L-490 | Markdown: a tab before the two trailing spaces escapes the short-document check (round 49). Counted. | `b350b71` |
+| L-491 | Markdown: the text fallback can split grapheme clusters and spaces CJK lines (round 49). Cut between graphemes; no space between CJK lines. | `b350b71` |
+| T-73 | No tests for round 49's items; the worker-source test misses lost escapes in character classes (round 49). Tests for each, and a Node test that runs the built worker on hostile and ordinary HTML blocks. | `b350b71` |
+| D-49 | The effect-limit comment and REVIEW.md overstate what is covered (round 49). The comments say what is covered and what is lost. | `b350b71` |
 | H-99 | The Markdown HTML-block check shows ordinary HTML (a big table, a `<div>` of paragraphs, inline SVG, a comment) as raw text: regression (round 48). Counted within each paragraph, cell and the like, comments, SVG and math left out. | `1ac2404` |
 | H-93 | Pictures with effects charged per address written, not per drawing: sheet backgrounds, `::before`, symbols, patterns (12 to 70 s): round 48. The page is counted as the browser computed it: each element showing a picture with effects is charged. | `1ac2404` |
 | H-94 | Effects inside the book's SVG files (`filter:url(file.svg#f)`) never charged: over 120 s (round 48). An effect taken from another file is set off. | `1ac2404` |
