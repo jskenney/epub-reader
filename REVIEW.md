@@ -1178,7 +1178,7 @@ table below:
 ### Round 50
 
 A review of round 49's fixes and of E-51 at `0cd102c` (two reviewers, each finding reproduced in Chromium). Normal reading
-is unchanged (page turns 33 ms before and after). All **fixed** (`COMMIT50`; see Resolved for how):
+is unchanged (page turns 33 ms before and after). All **fixed** (`de0a192`; see Resolved for how):
 - Effects: a property name written with CSS escapes (`f\69lter`) gets past the skip for pages with no effects, so the page
   isn't counted at all: 21 to 45 s (H-111); an escaped inline `\61nimation` outranks the blanket rule: frozen (H-112). SMIL
   animations of size or transform aren't removed and grow filtered shapes after the count: frozen (H-113). SVG filter
@@ -1372,30 +1372,30 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
-| H-111 | CSS-escaped property names get past the no-effects skip: the page isn't counted (21 to 45 s): round 50. Never skipped when its styles hold a backslash. | `COMMIT50` |
-| H-112 | An escaped inline `\61nimation` outranks the blanket rule: frozen (round 50). Animations and transitions removed from every style attribute, as the browser parsed it. | `COMMIT50` |
-| H-113 | SMIL animations of size or transform grow filtered shapes after the count: frozen (round 50). Every SVG animation element removed (set, animate, animateTransform, animateMotion, animateColor, discard). | `COMMIT50` |
-| H-114 | SVG filter lengths not converted to screen pixels (viewBox, objectBoundingBox units): 15 to 30 s (round 50). Filter lengths scaled by the element's screen transform, or its size for objectBoundingBox units; regions and pictures by their viewBox. | `COMMIT50` |
-| H-115 | Markdown: breaks spread over several HTML blocks bypass the per-block cap: over 100 s (round 50). HTML blocks in a row counted together, blank lines between them too. | `COMMIT50` |
-| H-116 | Markdown: costly elements spread over several HTML blocks bypass the cap (MathML: 25 s): round 50. Paragraphs of a thousand inline elements or more join the run. | `COMMIT50` |
-| M-253 | Drop-shadow offsets bring many columns' filtered boxes onto one screen: 8.6 s (round 50). Charged on every screen its box, grown by its offsets and blurs, reaches. | `COMMIT50` |
-| M-254 | Media queries outside the watched list turn effects on unchecked: 25 s (round 50). Every condition in the page's style sheets and media attributes watched. | `COMMIT50` |
-| M-255 | Everyday art loses some blurs and keeps others; the budget is about 50 times cautious (round 50). Blurs under 8 screen pixels count a quarter pass; a picture over budget loses all its effects. | `COMMIT50` |
-| M-256 | Markdown: large ordinary HTML over the caps is shown as its markup, with no note (round 50). Shown as its text, tags, comments and styles removed, references read, after a note. | `COMMIT50` |
-| L-492 | A page waiting on a slow picture is blank without a status until it loads (round 50). Shown at 6 s once its text is in, counted then and again on load. | `COMMIT50` |
-| L-493 | Resizing a page full of effects is slower; its check runs twice (round 50). Checks from resizes, media queries and relayouts coalesced into one before the next frame. | `COMMIT50` |
-| L-494 | Markdown: `<wbr>` splits grapheme clusters in long words (round 50). Long words broken every 100 graphemes, escaped afterwards. | `COMMIT50` |
-| L-495 | Markdown: the CJK line join misses lines ending in CJK punctuation (round 50). CJK punctuation and full-width forms join too. | `COMMIT50` |
-| L-496 | Markdown: the short-document count is quadratic on long runs of spaces (round 50). A run of spaces matched from its start only. | `COMMIT50` |
-| L-497 | Statistics: "Read so far" goes stale while the panel is open, and after an edit (round 50). Updated as pages turn; counted again and shown after an edit. | `COMMIT50` |
-| L-498 | Statistics: "100%, about 1 min left" (round 50). "all read" at the end; "under 1 min". | `COMMIT50` |
-| L-499 | Statistics: the live region announces every "Counting… N%" (round 50). No live region; aria-busy while counting. | `COMMIT50` |
-| L-500 | Statistics: text hidden by CSS is counted (round 50). Text in elements whose style attribute says display: none is skipped (search too). | `COMMIT50` |
-| L-501 | Statistics: "Unpacked" leaves out package files, and means nothing for a plain document (round 50). Every file in the archive summed; not shown for a plain document. | `COMMIT50` |
-| L-502 | Statistics: plurals, file names for sections, comics repeating details (round 50). Plural words; "Section N" in place of a file name; comics show only their sizes. | `COMMIT50` |
-| L-503 | Statistics: counting repeats search's work, and goes on over a replaced spine (round 50). Counted from search's text when gathered; given up when the sections are replaced. | `COMMIT50` |
-| T-74 | No tests for round 50's items (round 50). Tests for each but L-493 and L-503. | `COMMIT50` |
-| D-50 | The comments say animations are set off everywhere; SMIL and escaped inline ones weren't (round 50). The comments say what is set off, and how. | `COMMIT50` |
+| H-111 | CSS-escaped property names get past the no-effects skip: the page isn't counted (21 to 45 s): round 50. Never skipped when its styles hold a backslash. | `de0a192` |
+| H-112 | An escaped inline `\61nimation` outranks the blanket rule: frozen (round 50). Animations and transitions removed from every style attribute, as the browser parsed it. | `de0a192` |
+| H-113 | SMIL animations of size or transform grow filtered shapes after the count: frozen (round 50). Every SVG animation element removed (set, animate, animateTransform, animateMotion, animateColor, discard). | `de0a192` |
+| H-114 | SVG filter lengths not converted to screen pixels (viewBox, objectBoundingBox units): 15 to 30 s (round 50). Filter lengths scaled by the element's screen transform, or its size for objectBoundingBox units; regions and pictures by their viewBox. | `de0a192` |
+| H-115 | Markdown: breaks spread over several HTML blocks bypass the per-block cap: over 100 s (round 50). HTML blocks in a row counted together, blank lines between them too. | `de0a192` |
+| H-116 | Markdown: costly elements spread over several HTML blocks bypass the cap (MathML: 25 s): round 50. Paragraphs of a thousand inline elements or more join the run. | `de0a192` |
+| M-253 | Drop-shadow offsets bring many columns' filtered boxes onto one screen: 8.6 s (round 50). Charged on every screen its box, grown by its offsets and blurs, reaches. | `de0a192` |
+| M-254 | Media queries outside the watched list turn effects on unchecked: 25 s (round 50). Every condition in the page's style sheets and media attributes watched. | `de0a192` |
+| M-255 | Everyday art loses some blurs and keeps others; the budget is about 50 times cautious (round 50). Blurs under 8 screen pixels count a quarter pass; a picture over budget loses all its effects. | `de0a192` |
+| M-256 | Markdown: large ordinary HTML over the caps is shown as its markup, with no note (round 50). Shown as its text, tags, comments and styles removed, references read, after a note. | `de0a192` |
+| L-492 | A page waiting on a slow picture is blank without a status until it loads (round 50). Shown at 6 s once its text is in, counted then and again on load. | `de0a192` |
+| L-493 | Resizing a page full of effects is slower; its check runs twice (round 50). Checks from resizes, media queries and relayouts coalesced into one before the next frame. | `de0a192` |
+| L-494 | Markdown: `<wbr>` splits grapheme clusters in long words (round 50). Long words broken every 100 graphemes, escaped afterwards. | `de0a192` |
+| L-495 | Markdown: the CJK line join misses lines ending in CJK punctuation (round 50). CJK punctuation and full-width forms join too. | `de0a192` |
+| L-496 | Markdown: the short-document count is quadratic on long runs of spaces (round 50). A run of spaces matched from its start only. | `de0a192` |
+| L-497 | Statistics: "Read so far" goes stale while the panel is open, and after an edit (round 50). Updated as pages turn; counted again and shown after an edit. | `de0a192` |
+| L-498 | Statistics: "100%, about 1 min left" (round 50). "all read" at the end; "under 1 min". | `de0a192` |
+| L-499 | Statistics: the live region announces every "Counting… N%" (round 50). No live region; aria-busy while counting. | `de0a192` |
+| L-500 | Statistics: text hidden by CSS is counted (round 50). Text in elements whose style attribute says display: none is skipped (search too). | `de0a192` |
+| L-501 | Statistics: "Unpacked" leaves out package files, and means nothing for a plain document (round 50). Every file in the archive summed; not shown for a plain document. | `de0a192` |
+| L-502 | Statistics: plurals, file names for sections, comics repeating details (round 50). Plural words; "Section N" in place of a file name; comics show only their sizes. | `de0a192` |
+| L-503 | Statistics: counting repeats search's work, and goes on over a replaced spine (round 50). Counted from search's text when gathered; given up when the sections are replaced. | `de0a192` |
+| T-74 | No tests for round 50's items (round 50). Tests for each but L-493 and L-503. | `de0a192` |
+| D-50 | The comments say animations are set off everywhere; SMIL and escaped inline ones weren't (round 50). The comments say what is set off, and how. | `de0a192` |
 | H-100 | The reader's relayout unhides a page before its effect check (resize, fonts, startup): heavy pages paint unchecked (round 49). Hidden by an attribute the layout code leaves alone, removed only once counted. | `b350b71` |
 | H-101 | A filter's area excludes overflowing descendants and outlines: over 60 s (round 49). A filter's area includes its children, its outline and its blur's spread; an SVG filter's, its region. | `b350b71` |
 | H-102 | Effects on `::before`/`::after` aren't counted: over 60 s (round 49). The reader's first layer sets off effects on `::before`/`::after` for every page. | `b350b71` |
