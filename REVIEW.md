@@ -1200,9 +1200,35 @@ is unchanged (page turns 33 ms before and after). All **fixed** (`de0a192`; see 
 - Tests and docs: none for the above (T-74); the comments say animations are set off for every page, though SMIL and
   escaped inline ones weren't (D-50).
 
+### Round 51
+
+A review of round 50's fixes and of E-52 at `e3b6e75` (two reviewers, each finding reproduced in Chromium). Normal page
+turns are unchanged (30 to 100 ms). **Open**, in the table below:
+- Effects: a media query changing inside the page paints it once before the check, now put off to the next frame: 185 s
+  (H-117; round 50's L-493 coalescing). Small blurs chained (79 of 7 px) each count a quarter pass, and CSS transforms
+  don't scale them: 23 s, over 200 s scaled (H-118; round 50's M-255). A box spanning more than 50 screens loses its
+  effects: a long boxed section's shadow (M-258). Any backslash in a page's CSS (`content:"\201C"`) now runs the full
+  count (L-504).
+- Markdown: `<!--` in an attribute isn't a comment, but the run count strips it: 10,000 breaks, 25 s (H-119). A link
+  definition parts a run of bare HTML blocks: three of 1,999 breaks, 5.5 s; ten, over 400 s (H-120). Ordinary
+  paragraphs between MathML paragraphs part them too: 21.5 s (H-121). Separate wrapped blocks are summed though their
+  layout isn't: a poem of 350 stanzas of `<p>` with breaks is all plain text, a note on each (M-257).
+- Pocket site voices (E-52): a record with a bad tensor (dtype, length) passes the walk and breaks every voice, built-in
+  ones too (M-259); a site record named like a built-in voice replaces it, its speech saved under the built-in key, and
+  records voices.json doesn't list are added (M-260); on plain HTTP, `caches` is undefined and Pocket fails to load
+  (M-261). French with no matching record loads with no voices (L-505); `pocketEntry()` is read after awaits, for the
+  book open then (L-506); no size or count cap on the site's file (L-507); the version can repeat for a re-saved file of
+  the same size (L-508).
+- Statistics: without the live region, nothing announces the result, and an older count can clear `aria-busy` (L-509);
+  "about under 1 min", "(1 words)", "100%" when the rest has no words (L-510); `display:  none` spelt otherwise is
+  counted and searched (L-511).
+- Tests and docs: E-52's test runs only with SLOW=1; the statistics test checks `aria-busy` false only, and nothing
+  covers the search path, a recount after an edit or comics; the voices fixture names a file never written (T-75). E-51
+  and README describe the old statistics; the voices.json comment documents a file value the code ignores (D-51).
+
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: fixed by blunt limits, your decision. Round 49, a review of those, found H-100 to H-110, M-250 to M-252, L-488 to L-491, T-73 and D-49: fixed. Round 50, a review of those and of E-51, found H-111 to H-116, M-253 to M-256, L-492 to L-503, T-74 and D-50: fixed. Open (below): T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: fixed by blunt limits, your decision. Round 49, a review of those, found H-100 to H-110, M-250 to M-252, L-488 to L-491, T-73 and D-49: fixed. Round 50, a review of those and of E-51, found H-111 to H-116, M-253 to M-256, L-492 to L-503, T-74 and D-50: fixed. Round 51, a review of those and of E-52, found H-117 to H-121, M-257 to M-261, L-504 to L-511, T-75 and D-51: open. Open (below): those, T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1212,6 +1238,26 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
+| H-117 | A media query changing inside the page paints it once before its check, put off to the next frame: 185 s (round 51, regression). | High |
+| H-118 | Chained small blurs each count a quarter pass, unscaled by CSS transforms: 23 s, over 200 s scaled (round 51, regression). | High |
+| H-119 | Markdown: `<!--` in an attribute is stripped as a comment from the run count: 25 s (round 51, regression). | High |
+| H-120 | Markdown: a link definition parts a run of bare HTML blocks: over 400 s (round 51). | High |
+| H-121 | Markdown: ordinary paragraphs between MathML paragraphs part the run: 21.5 s (round 51). | High |
+| M-257 | Markdown: separate wrapped HTML blocks are summed; an ordinary poem of `<p>` stanzas is all plain text (round 51, regression). | Medium |
+| M-258 | A box spanning more than 50 screens loses its effects (a long section's shadow): round 51, regression. | Medium |
+| M-259 | Pocket: a site voice with a bad tensor breaks every voice, built-in ones too (round 51). | Medium |
+| M-260 | Pocket: a site record named like a built-in voice replaces it, cached under its key; unlisted records added (round 51). | Medium |
+| M-261 | Pocket: on plain HTTP `caches` is undefined and Pocket fails to load when the site has voices (round 51). | Medium |
+| L-504 | Any backslash in a page's CSS runs the full effect count (round 51). | Low |
+| L-505 | Pocket: French with no matching site record loads with no voices (round 51). | Low |
+| L-506 | Pocket: `pocketEntry()` read after awaits, for the book open then, not the bundle loading (round 51). | Low |
+| L-507 | Pocket: no size or count cap on the site's voices file (round 51). | Low |
+| L-508 | Pocket: the site voices' version can repeat for a re-saved file of the same size (round 51). | Low |
+| L-509 | Statistics: the result isn't announced; an older count can clear `aria-busy` (round 51). | Low |
+| L-510 | Statistics: "about under 1 min", "(1 words)", "100%" with words-free sections left (round 51). | Low |
+| L-511 | Statistics and search: `display:none` spelt with other spacing is counted (round 51). | Low |
+| T-75 | E-52's test only with SLOW=1; statistics test gaps; the voices fixture names a missing file (round 51). | Tests |
+| D-51 | E-51 and README describe the old statistics; the voices.json comment documents an ignored value (round 51). | Docs |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | L-475 | The check's 5 s budget is fixed: a legitimate large document can show as plain text on a slow device, and differently from visit to visit (positions and contents then differ); reading aloud and the audiobook speak the note and the raw markup (round 43). Fix: a budget scaled by a calibration sample; a "show as Markdown anyway" action; the note kept out of what is spoken. | Low |
