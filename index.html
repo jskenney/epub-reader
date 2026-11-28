@@ -546,7 +546,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
         <h2 class="label" id="infoHead">Information</h2>
         <dl class="pkg" id="infoList"></dl>
         <h3 class="label stats-head" id="statsHead">Statistics</h3>
-        <dl class="pkg" id="statsList" aria-labelledby="statsHead" aria-live="polite"></dl>
+        <dl class="pkg" id="statsList" aria-labelledby="statsHead"></dl>
       </section>
     </aside>
 
@@ -741,7 +741,7 @@ kbd{font:500 11px/1 var(--font-mono);border:1px solid var(--rule);border-bottom-
   <form id="setForm" method="dialog">
     <h2 id="setTitle">Settings</h2>
     <!-- (Written by tools/stamp-version.py: the date and time it was stamped, in UTC.) -->
-    <p class="set-version">Version <span id="setVer">20261127.1506</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
+    <p class="set-version">Version <span id="setVer">20261128.0218</span> <a href="https://github.com/jskenney/epub-reader" target="_blank" rel="noopener noreferrer" title="epub-reader on GitHub" aria-label="epub-reader on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a></p>
     <div class="set-body">
       <fieldset class="set-group"><legend>Theme</legend>
         <div class="set-themes">
@@ -1969,7 +1969,9 @@ const mdLexed = new Map();
 // for 9 s: round 47 review, M-244.)
 // (Every possible break counted, code too: leaving code blocks out, a line that only looked like a fence hid the rest
 // (round 49 review, H-110, L-490); a short code-heavy document is read by the worker, at little cost.)
-const mdSmall = md => md.length < MD_PROBE_MIN && (md.match(/\\\n| {2,}\n|<\/?w?br\b/gi) || []).length <= MD_BLOCK_BREAKS;
+// (A run of spaces tried once, from its start, not from each space in it: quadratic on a long run: round 50, L-496.)
+const mdSmall = md => md.length < MD_PROBE_MIN && (md.match(/\\\n|(?<! ) {2,}\n|<\/?w?br\b/gi) || []).length <= MD_BLOCK_BREAKS;
+const MD_PLAIN_NOTE = 'Shown as plain text: this part is too large to lay out.';
 const mdLexResult = md => mdSmall(md) ? { ok: true, tokens: null } : mdLexed.get(md)?.result;
 // (What was read and drawn let go when another book opens: kept, a closed document's tokens held tens of MB: L-483.)
 function mdForget(){ if (mdDrawn) { mdDrawn.tokens = null; mdDrawn.spent = true; mdDrawn = null; } mdLexed.clear(); }
@@ -2044,21 +2046,57 @@ onmessage = e => {
       }
       return out;
     };
-    const breakWords = v => v.replace(/[^\\s]{200,}/gu, w => w.match(/(?:&[a-z0-9#]+;|[^&]\\p{M}*){1,100}/giu).join('<wbr>'));
+    // (Long words broken every 100 graphemes, escaped after, so a break never falls inside an emoji sequence or a
+    // character reference: round 50 review, L-494.)
+    const groups = w => {
+      if (!graphemes) return w.match(/(?:[^]\\p{M}*){1,100}/gu) || [w];
+      const out = []; let cur = '', n = 0;
+      for (const { segment } of graphemes.segment(w)) { cur += segment; if (++n === 100) { out.push(cur); cur = ''; n = 0; } }
+      if (cur) out.push(cur);
+      return out;
+    };
+    const breakWords = v => v.split(/(\\S{200,})/u).map((part, i) => i % 2 ? groups(part).map(esc).join('<wbr>') : esc(part)).join('');
+    // (An HTML block's text, without its tags, comments, styles and scripts, its character references read: shown as its
+    // markup, a large table was unreadable: round 50 review, M-256.)
+    const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\\u00a0' };
+    const htmlText = v => v.replace(/<!--[^]*?(?:-->|$)/g, ' ').replace(/<(script|style|template)\\b[^]*?(?:<\\/\\1\\s*>|$)/gi, ' ')
+      .replace(/<\\/?(?:p|div|br|li|tr|h[1-6]|table|blockquote|pre|section|article|dd|dt)\\b[^>]*>/gi, '\\n').replace(/<[^>]*>?/g, ' ')
+      .replace(/&(?:#(\\d{1,7})|#x([\\da-f]{1,6})|([a-z]+));/gi, (m, d, x, n) => { const c = d ? +d : x ? parseInt(x, 16) : null; if (c !== null) { try { return String.fromCodePoint(c); } catch { return m; } } return ENT[n.toLowerCase()] ?? m; });
+    // (Lines run together: with no space between two in Chinese or Japanese, which doesn't put one: L-491; a line ending in
+    // their punctuation or full-width forms too: L-495.)
+    const CJK = '[\\\\p{scx=Han}\\\\p{scx=Hira}\\\\p{scx=Kana}\\\\u3000-\\\\u303f\\\\uff00-\\\\uffef]';
+    const cjkJoin = new RegExp('(' + CJK + ')\\\\s*\\\\n\\\\s*(?=' + CJK + ')', 'gu');
     const plain = t => ({ type: 'html', block: true, pre: false, raw: t.raw,
-      // (Lines run together: with no space between two in Chinese or Japanese, which doesn't put one: L-491.)
-      text: chunks(t.raw.replace(/([\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}])\\s*\\n\\s*(?=[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}])/gu, '$1').replace(/\\s*\\n\\s*/g, ' ')).map(c => '<p>' + breakWords(esc(c)) + '</p>').join('\\n') + '\\n' });
-    const fix = list => { (list || []).forEach((t, i) => {
+      text: '<p class="spine-md-plain"><em>${MD_PLAIN_NOTE}</em></p>\\n' + chunks((t.type === 'html' ? htmlText(t.text || t.raw) : t.raw).replace(cjkJoin, '$1').replace(/\\s*\\n\\s*/g, ' ').trim()).map(c => '<p>' + breakWords(c) + '</p>').join('\\n') + '\\n' });
+    // (HTML blocks in a row counted together: the browser lays them out as one, so ten of 1,999 breaks each froze it as one
+    // of 19,990 would (round 50 review, H-115), and elements likewise (H-116). Blank lines between them don't part them.)
+    // (Paragraphs of a thousand inline elements or more join a run too: MathML is lexed as paragraphs, four of 24,000
+    // elements took 25 s.)
+    const inlineTags = list => { let br = 0, tags = 0; const walk = l => { for (const t of l || []) { if (t.type === 'html') { if (isBreak(t)) br++; else if (/^<[a-z]/i.test(t.text || '')) tags++; } else if (t.type === 'br') br++; walk(t.tokens); } }; walk(list); return [br, tags]; };
+    const runCost = t => {
+      if (t.type === 'space') return [0, 0];
+      if (t.type === 'html') { const text = t.text || ''; return [(text.match(/<\\/?w?br\\b/gi) || []).length, (text.match(/<[a-z]/gi) || []).length]; }
+      if (t.type === 'paragraph') { const c = inlineTags(t.tokens); return c[1] >= 1000 ? c : null; }
+      return null;
+    };
+    const htmlRuns = list => {
+      for (let i = 0; i < (list || []).length;) {
+        const first = list[i].type === 'space' ? null : runCost(list[i]);
+        if (!first) { i++; continue; }
+        let j = i, br = 0, tags = 0;
+        for (let c; j < list.length && (c = runCost(list[j])); j++) { br += c[0]; tags += c[1]; }
+        if (j - i > 1 && (br > ${MD_BLOCK_BREAKS} * 4 || tags > ${MD_BLOCK_PIECES} + 5000)) { for (let k = i; k < j; k++) if (list[k].type !== 'space') list[k] = plain(list[k]); plainBlocks = true; }
+        else for (let k = i; k < j; k++) { const t = list[k]; if (t.type === 'html') { const [b1, t1] = runCost(t); if (b1 > ${MD_BLOCK_BREAKS} * 4 || t1 > ${MD_BLOCK_PIECES} + 5000) { list[k] = plain(t); plainBlocks = true; } } }
+        i = j;
+      }
+    };
+    const fix = list => { htmlRuns(list); (list || []).forEach((t, i) => {
       if (/^(paragraph|heading|text)$/.test(t.type)) { if (tooMany(t.tokens)) { list[i] = plain(t); plainBlocks = true; } return; }
       // (An HTML block's breaks and elements, counted over the whole block, comments, SVG and math included: counted per
       // paragraph or cell, with patterns standing in for the browser's parser, it was got round nine ways (round 49
       // review, H-106 to H-109). The limits are generous: a table of thousands of rows, an inline SVG of 20,000 shapes or
       // a <div> of hundreds of paragraphs with breaks pass.)
-      if (t.type === 'html') {
-        const text = t.text || '';
-        if ((text.match(/<\\/?w?br\\b/gi) || []).length > ${MD_BLOCK_BREAKS} * 4 || (text.match(/<[a-z]/gi) || []).length > ${MD_BLOCK_PIECES} + 5000) { list[i] = plain(t); plainBlocks = true; }
-        return;
-      }
+      if (t.type === 'html') return;   // (counted with the blocks beside it, above)
       fix(t.tokens);
       for (const it of t.items || []) fix(it.tokens);
       for (const c of [...(t.header || []), ...(t.rows || []).flat()]) if (c && tooMany(c.tokens)) { c.tokens = [{ type: 'text', raw: c.text, text: c.text, escaped: false }]; plainBlocks = true; }
@@ -3255,11 +3293,11 @@ const FX_LATER = /:(hover|active|focus|focus-within|focus-visible|target|target-
 function svgStillEffects(doc){
   // (Animations and transitions in style attributes too, which the reader's blanket rule might not outrank: round 49
   // review, H-103.)
-  for (const el of doc.querySelectorAll('[style*="anim" i], [style*="transit" i]')) for (const p of ['animation', 'transition', 'animation-name', 'transition-property']) el.style?.removeProperty(p);
-  doc.querySelectorAll('set, animate, animateTransform, animateMotion, animateColor').forEach(e => {
-    const a = e.getAttribute('attributeName') || '';
-    if (/^(class|id|style|href|xlink:href)$/i.test(a) || FX_PROP_RE.test(a) || ['to', 'from', 'by', 'values'].some(x => /url|\\/i.test(e.getAttribute(x) || ''))) e.remove();
-  });
+  // (Every style attribute, as the browser parsed it, escapes and all: matched by its text, "\\61nimation" got past:
+  // round 50 review, H-112.)
+  for (const el of doc.querySelectorAll('[style]')) if (el.style) for (const p of ['animation', 'transition', 'animation-name', 'transition-property']) el.style.removeProperty(p);
+  // (SVG's own animations, all of them: one growing a filtered shape after the count froze the tab: H-113.)
+  doc.querySelectorAll('set, animate, animateTransform, animateMotion, animateColor, discard').forEach(e => { if (e.namespaceURI === SVG_NS_) e.remove(); });
   for (const st of doc.getElementsByTagName('style')) {
     const text = st.textContent;
     if (!/:|@keyframes|@-webkit-keyframes/i.test(text)) continue;
@@ -3303,23 +3341,43 @@ function svgPictureEffects(doc, where){
   const draws = (vtx + shapes * (1 + uses)) * size('marker') + shapes * (1 + uses) * Math.max(size('mask'), size('clipPath'), size('pattern'));
   // (Its filters by their passes, blurs by their radius, as the page counts them, charged by the area it is shown at:
   // counted as draws, a picture of 20 wide blurs shown 110 times blocked the tab for 152 s: round 49 review, H-105.)
-  const passes = drawers.filter(d => d.localName === 'filter').reduce((n, f) => n + fxFilterPasses(f), 0) + (/(box|text)-shadow|drop-shadow|blur\(/i.test(root.outerHTML.slice(0, 2e6)) ? 5 : 0);
+  // (Lengths in the picture's units, scaled as it is drawn at its own size; fractions of the shape for
+  // objectBoundingBox units, taken as of the whole picture: round 50 review, H-114.)
+  const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number), pxSize = Math.max(parseFloat(root.getAttribute('width')) || 0, parseFloat(root.getAttribute('height')) || 0, 300);
+  const scale = vb.length === 4 && vb[2] > 0 && vb[3] > 0 ? Math.max((parseFloat(root.getAttribute('width')) || vb[2]) / vb[2], (parseFloat(root.getAttribute('height')) || vb[3]) / vb[3]) : 1;
+  const passes = drawers.filter(d => d.localName === 'filter').reduce((n, f) => n + fxFilterPasses(f, f.getAttribute('primitiveUnits') === 'objectBoundingBox' ? pxSize * scale : scale), 0) + (/(box|text)-shadow|drop-shadow|blur\(/i.test(root.outerHTML.slice(0, 2e6)) ? 5 : 0);
   if (draws <= SVG_DRAWS && passes <= 40) return { draws, passes };
   for (const el of [root, ...root.getElementsByTagName('*')]) fxOff(el);
   console.warn(`${where}: markers, masks, clip paths and filters aren't shown: they could draw too much`);
   return { draws: 0, passes: 0 };
 }
 // An SVG filter's passes: one for each primitive, a blur or shadow weighed by its radius, a dilation by its radius.
-function fxFilterPasses(t){
+// (px: how many screen pixels a length in the filter's units is: its element's scale, or its size for
+// primitiveUnits="objectBoundingBox", where lengths are fractions of it: round 50 review, H-114. A small blur, under 8
+// pixels, is cheap: everyday art's soft edges: M-255.)
+function fxFilterPasses(t, px = 1){
   const most = v => Math.max(0, ...String(v || '0').split(/[\s,]+/).map(parseFloat).filter(Number.isFinite));
   let n = 0;
   for (const c of t.children) {
     if (!c.localName.startsWith('fe')) continue;
-    n++;
-    if (c.localName === 'feMorphology') n += Math.min(1000, most(c.getAttribute('radius')) / 4);
-    if (/^fe(GaussianBlur|DropShadow)$/.test(c.localName)) n += Math.min(1000, most(c.getAttribute('stdDeviation')) / 5);
+    const blur = /^fe(GaussianBlur|DropShadow)$/.test(c.localName) ? most(c.getAttribute('stdDeviation')) * px : 0;
+    n += blur && blur < 8 ? 0.25 : 1;
+    if (c.localName === 'feMorphology') n += Math.min(1000, most(c.getAttribute('radius')) * px / 4);
+    if (blur >= 8) n += Math.min(1000, blur / 5);
   }
-  return Math.max(1, n);
+  return Math.max(0.25, n);
+}
+// (How far an SVG filter moves what it draws: its offsets and shadows, in its own units: round 50 review, M-253.)
+function fxFilterReach(t){
+  let n = 0;
+  for (const c of t.children) if (/^fe(Offset|DropShadow)$/.test(c.localName)) n = Math.max(n, Math.abs(parseFloat(c.getAttribute('dx')) || 0), Math.abs(parseFloat(c.getAttribute('dy')) || 0));
+  return n;
+}
+function fxUnitScale(t, el){
+  let scale = 1;
+  try { const m = el.getScreenCTM?.(); if (m) scale = Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d)) || 1; } catch {}
+  if (t.getAttribute('primitiveUnits') === 'objectBoundingBox') { const r = el.getBoundingClientRect(); return Math.max(r.width, r.height, 1); }
+  return scale;
 }
 // A CSS filter list's (or shadow list's) passes: work done per pixel, colour functions and the like not counted; cheap
 // per-pixel filters (grayscale and the like) a quarter; blurs and shadows by their radius (round 49 review, M-250, M-251).
@@ -3343,7 +3401,7 @@ function fxCssPasses(v){
     if (FX_NOT.test(name)) continue;
     const inner = fxInner(v, m.index + name.length);
     if (FX_CHEAP.test(name)) n += 0.25;
-    else if (/^blur$/i.test(name)) n += 1 + Math.min(1000, (parseFloat(inner) || 0) / 5);
+    else if (/^blur$/i.test(name)) { const b = parseFloat(inner) || 0; n += b < 8 ? 0.25 : 1 + Math.min(1000, b / 5); }   // (a soft edge is cheap: round 50, M-255)
     else if (/^drop-shadow$/i.test(name)) n += 1 + Math.min(1000, (fxPx(inner)[2] || 0) / 5);
     else n += 1;
   }
@@ -3364,7 +3422,10 @@ function fxShadowPasses(v){
 // outlines included (H-101), up to PAGE_FILTER_SCREENS screens; masks, clip paths, markers, patterns and pictures with
 // effects what they draw, up to SVG_DRAWS; a <use> what the effects inside what it shows cost, at its own size (H-104).
 // An effect taken from another file (url(file.svg#f)) is set off. Animations, transitions and effects on ::before and
-// ::after are set off for every page by the reader's own rules (pinCss: H-102, H-103).
+// ::after are set off for every page by the reader's own rules (pinCss: H-102, H-103); those in style attributes, which
+// the rules can't outrank, and SVG's own animations are removed from the page before it is shown (svgStillEffects:
+// round 50 review, H-112, H-113, D-50). Its effects are counted again, once a frame, when its size or a media query its
+// styles name changes (fxWatch: M-254, L-493).
 function pageEffectCap(doc, where){
   const win = doc.defaultView;
   if (!win || !doc.documentElement) return;
@@ -3374,7 +3435,9 @@ function pageEffectCap(doc, where){
     const own = new Set([RID.override, RID.override + '-pin', RID.base]);
     const css = [...doc.getElementsByTagName('style')].filter(e => !own.has(e.id) && !e.id.startsWith('spine-fx-')).map(e => e.textContent).join('\n') + [...doc.querySelectorAll('[style]')].map(e => e.getAttribute('style')).join('\n');
     const html = heavy.size ? doc.documentElement.innerHTML : '';
-    return !/filter|mask|clip-path|marker|shadow|backdrop|reflect/i.test(css) && ![...FX_DRAWERS, 'filter'].some(n => doc.getElementsByTagNameNS(SVG_NS_, n).length)
+    // (A backslash: a property's name may be written with escapes (f\\69lter), which the browser reads and this test
+    // wouldn't: never skipped then: round 50 review, H-111.)
+    return !/filter|mask|clip-path|marker|shadow|backdrop|reflect|\\/i.test(css) && ![...FX_DRAWERS, 'filter'].some(n => doc.getElementsByTagNameNS(SVG_NS_, n).length)
       && !doc.querySelector('[filter], [mask], [clip-path], [marker], [marker-start], [marker-mid], [marker-end]') && ![...heavy.keys()].some(u => html.includes(u));
   })())) return;
   const all = [doc.documentElement, ...doc.documentElement.getElementsByTagName('*')];
@@ -3416,10 +3479,17 @@ function pageEffectCap(doc, where){
   const filterRegion = (t, el) => {
     const box = el.getBoundingClientRect(), obb = (t.getAttribute('filterUnits') || 'objectBoundingBox') !== 'userSpaceOnUse';
     const dim = (a, def, side) => { const v = (t.getAttribute(a) || def).trim(); const n = parseFloat(v) || 0; return v.endsWith('%') ? n / 100 * (obb ? side : side) : obb ? n * side : n; };
-    const w = Math.abs(dim('width', '120%', obb ? box.width : win.innerWidth)), h = Math.abs(dim('height', '120%', obb ? box.height : win.innerHeight));
+    const k = obb ? 1 : fxUnitScale({ getAttribute: () => null }, el);   // (user units in screen pixels: H-114)
+    const w = Math.abs(dim('width', '120%', obb ? box.width : win.innerWidth)) * k, h = Math.abs(dim('height', '120%', obb ? box.height : win.innerHeight)) * k;
     return Math.min(screen, Math.max(1, w) * Math.max(1, h));
   };
-  const bucketOf = el => { const q = el.getBoundingClientRect(); return scroll ? Math.floor((q.top + win.scrollY) / win.innerHeight) : Math.floor((q.left + win.scrollX) / win.innerWidth); };
+  // (Every screen what it draws reaches, its box grown by its shadows' and filters' offsets and blurs: one moved onto
+  // another column's screen is charged there too: round 50 review, M-253.)
+  const bucketsOf = (el, grow = 0) => {
+    const q = el.getBoundingClientRect(), side = scroll ? win.innerHeight : win.innerWidth, at = scroll ? win.scrollY : win.scrollX;
+    const lo = Math.floor(((scroll ? q.top : q.left) - grow + at) / side), hi = Math.floor(((scroll ? q.bottom : q.right) + grow + at) / side);
+    return hi - lo > 50 ? null : Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+  };
   // Each element's own cost: { draw, pix, passes (for the <use>s of it), other (another file's effect) }.
   const costs = new Map();
   const readPseudo = heavy.size > 0 && [...heavy.keys()].some(u => doc.documentElement.innerHTML.includes(u));
@@ -3427,14 +3497,15 @@ function pageEffectCap(doc, where){
     let cs;
     try { cs = win.getComputedStyle(el); } catch { continue; }
     let draw = 0, pix = 0, passes = 0, other = false;
-    let region = 0;
-    const svgPasses = v => { let n = 0; for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t?.localName === 'filter') { n += fxFilterPasses(t); region = Math.max(region, filterRegion(t, el)); } else if (t) n++; } return n; };
+    let region = 0, grow = 0;
+    const svgPasses = v => { let n = 0; for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t?.localName === 'filter') { const k = fxUnitScale(t, el); n += fxFilterPasses(t, k); grow = Math.max(grow, fxFilterReach(t) * k); region = Math.max(region, filterRegion(t, el)); } else if (t) n++; } return n; };
     const svgF = svgPasses(cs.filter), f = fxCssPasses(cs.filter) + svgF + fxCssPasses(cs.backdropFilter) + fxCssPasses(cs.webkitBackdropFilter);
     const [bs, reach] = fxShadowPasses(cs.boxShadow), [ts, treach] = fxShadowPasses(cs.textShadow);
     // (An SVG filter draws within its region, which it sets: by default a tenth more than the element on each side.)
     if (f) { passes += f; pix += f * Math.max(svgF ? region : 0, areaOf(el, fxCssSpread(cs.filter))); }
     if (bs > 1 || reach > 8) pix += bs * areaOf(el, reach);
     if (ts > 1 || treach > 8) pix += ts * areaOf(el, treach);
+    if (pix) grow = Math.max(grow, fxCssSpread(cs.filter), fxCssSpread(cs.backdropFilter), reach, treach);
     for (const v of [cs.maskImage, cs.webkitMaskImage, cs.webkitMaskBoxImageSource, cs.clipPath, cs.shapeOutside]) {
       if (!v || v === 'none') continue;
       for (const u of urls(v)) { const t = local(u); if (t === null) other = true; else if (t) draw += size(t); else { const p = picture(u); if (p) { draw += p.draws; pix += p.passes * areaOf(el); } } }
@@ -3453,7 +3524,7 @@ function pageEffectCap(doc, where){
     if (el.localName === 'img') shows.push(el.currentSrc || el.src || '');
     if (/^(image|feImage)$/.test(el.localName) && el.namespaceURI === SVG_NS_) shows.push(el.getAttribute('href') || el.getAttribute('xlink:href') || '');
     for (const u of shows) { const p = picture(u); if (p) { draw += p.draws; if (p.passes) pix += p.passes * areaOf(el); } }
-    if (draw || pix || other) costs.set(el, { draw, pix, passes, other });
+    if (draw || pix || other) costs.set(el, { draw, pix, passes, other, grow });
   }
   // (A <use>: the effects inside what it shows, each time, its filters at the <use>'s own size: H-104.)
   const useMemo = new Map(), busy = new Set();
@@ -3473,14 +3544,23 @@ function pageEffectCap(doc, where){
   };
   const spent = new Map(), limit = PAGE_FILTER_SCREENS * screen;
   let off = 0;
+  // (A picture over budget loses all its effects, not some: half its blurs drawn looks broken: round 50 review, M-255.)
+  const outer = el => { let r = null; for (let p = el; p; p = p.parentElement) if (p.localName === 'svg' && p.namespaceURI === SVG_NS_) r = p; return r; };
+  const offSvgs = new Set();
+  const svgOff = el => {
+    const r = el.namespaceURI === SVG_NS_ && outer(el);
+    if (!r || offSvgs.has(r)) return;
+    offSvgs.add(r);
+    for (const e of [r, ...r.getElementsByTagName('*')]) if (costs.has(e) && !e.hasAttribute('data-spine-fx-off')) { fxElementOff(e, win, picture, urls); off++; }
+  };
   for (const el of all) {
     if (unrendered.has(el) || el.hasAttribute('data-spine-fx-off')) continue;
     const c = { ...(costs.get(el) || { draw: 0, pix: 0, other: false }) };
     if (el.localName === 'use') { const t = local(el.getAttribute('href') || el.getAttribute('xlink:href') || ''); if (t && !t.contains(el)) { const x = inside(t); c.draw += x.draw; if (x.passes) c.pix += x.passes * areaOf(el); } }
     if (!c.draw && !c.pix && !c.other) continue;
-    const k = bucketOf(el), s = spent.get(k) || { draws: 0, pixels: 0 };
-    if (c.other || s.draws + c.draw > SVG_DRAWS || s.pixels + c.pix > limit) { fxElementOff(el, win, picture, urls); off++; }
-    else { s.draws += c.draw; s.pixels += c.pix; spent.set(k, s); }
+    const ks = bucketsOf(el, c.grow || 0), ss = (ks || []).map(k => spent.get(k) || { draws: 0, pixels: 0 });
+    if (c.other || !ks || ss.some(s => s.draws + c.draw > SVG_DRAWS || s.pixels + c.pix > limit)) { fxElementOff(el, win, picture, urls); off++; svgOff(el); }
+    else ks.forEach((k, i) => { ss[i].draws += c.draw; ss[i].pixels += c.pix; spent.set(k, ss[i]); });
   }
   if (off) {
     if (!doc.querySelector('style[id^="spine-fx-"]')) {
@@ -3511,6 +3591,12 @@ function fxAllOff(doc){
   for (const el of doc.querySelectorAll('[style]')) { fxOff(el); for (const p of FX_OFF_PROPS) el.style?.setProperty(p, 'none', 'important'); }
 }
 function fxCheck(doc, where = 'This page'){ try { pageEffectCap(doc, where); } catch (err) { console.warn(err); try { fxAllOff(doc); } catch {} } }
+// (A resize, a media query and the reader's relayout together: one check, before the next frame is drawn, which the
+// browser runs after its resize and media query steps: round 50 review, L-493.)
+function fxCheckSoon(f, doc){
+  if (doc.__fxDue) return;
+  doc.__fxDue = requestAnimationFrame(() => { doc.__fxDue = 0; if (f.contentDocument === doc) fxCheck(doc); });
+}
 const SVG_USES = 50000;
 function svgUseCap(doc, root, where, wantSizes = false){
   const uses = root.getElementsByTagName('use');
@@ -4580,18 +4666,18 @@ function loadChecked(f, html){
   f.setAttribute('data-fx-hold', '');
   return new Promise(res => {
     const mine = () => f.contentDocument?.querySelector('meta[data-spine-load]')?.getAttribute('data-spine-load') === nonce;
+    const show = () => { const doc = f.contentDocument; fxCheck(doc); fxWatch(f, doc); f.removeAttribute('data-fx-hold'); };
     const onload = () => {
       if (!mine()) return;
       f.removeEventListener('load', onload); f._fxLoad = null; clearTimeout(t);
-      const doc = f.contentDocument;
-      fxCheck(doc);
-      fxWatch(f, doc);
-      f.removeAttribute('data-fx-hold');
+      show();
       res();
     };
     f._fxLoad = onload;
     f.addEventListener('load', onload);
-    const t = setTimeout(res, 6000);
+    // (Still loading a slow picture at 6 s: shown once its text is in, counted then and again when it loads, rather than
+    // left blank: round 50 review, L-492.)
+    const t = setTimeout(() => { if (mine() && f.contentDocument.readyState !== 'loading') show(); res(); }, 6000);
     f.srcdoc = html;
   });
 }
@@ -4599,9 +4685,24 @@ function loadChecked(f, html){
 function fxWatch(f, doc){
   const win = doc.defaultView;
   if (!win) return;
-  const again = () => { if (f.contentDocument === doc) fxCheck(doc); };
+  if (doc.__fxWatched) return;
+  doc.__fxWatched = true;
+  const again = () => fxCheckSoon(f, doc);
   win.addEventListener('resize', again);
-  for (const q of ['(prefers-color-scheme: dark)', '(prefers-contrast: more)', '(prefers-contrast: less)', '(orientation: portrait)', '(prefers-reduced-motion: reduce)', '(forced-colors: active)', 'print']) {
+  // (And every condition the page's own styles and pictures name: round 50 review, M-254.)
+  const qs = new Set(['(prefers-color-scheme: dark)', '(prefers-contrast: more)', '(prefers-contrast: less)', '(orientation: portrait)', '(prefers-reduced-motion: reduce)', '(forced-colors: active)', 'print']);
+  const walk = (rules, depth) => {
+    if (depth > 20 || qs.size > 500) return;
+    for (const r of rules || []) {
+      if (r.media?.mediaText) qs.add(r.media.mediaText);
+      if (r.conditionText && typeof CSSSupportsRule !== 'undefined' && !(r instanceof CSSSupportsRule)) qs.add(r.conditionText);
+      try { if (r.styleSheet) walk(r.styleSheet.cssRules, depth + 1); } catch {}
+      try { if (r.cssRules) walk(r.cssRules, depth + 1); } catch {}
+    }
+  };
+  for (const sh of doc.styleSheets) { try { if (sh.media?.mediaText) qs.add(sh.media.mediaText); walk(sh.cssRules, 0); } catch {} }
+  for (const e of doc.querySelectorAll('[media]')) qs.add(e.getAttribute('media'));
+  for (const q of qs) {
     try { win.matchMedia(q).addEventListener('change', again); } catch {}
   }
 }
@@ -4873,7 +4974,7 @@ function position(frag, f){
 }
 function relayout(){
   comicOrder(); fxlFit();
-  for (const f of [frame, frame2]) if (!f.hasAttribute('data-fx-hold') && f.contentDocument?.querySelector('meta[data-spine-load]')) fxCheck(f.contentDocument);   // (H-103)
+  for (const f of [frame, frame2]) if (!f.hasAttribute('data-fx-hold') && f.contentDocument?.querySelector('meta[data-spine-load]')) fxCheckSoon(f, f.contentDocument);   // (H-103; once a frame: L-493)
   if (frame.contentDocument) unspan(frame.contentDocument);   // (boxes as laid out now: M-196)
   if (!book || cur.f == null) return;
   // (A fixed page whose spread now shows, or no longer does, after a layout change or a resize: shown again.)
@@ -5602,6 +5703,7 @@ function updateProgress(){
   if (!book) return;
   updateSection();
   turnedPage();
+  statsLeftUpdate();   // (L-497)
   updateTimeLeft();
   // (A fixed-layout page counts as read once shown, in any layout: progress reaches 100% on the last one.)
   // (A two-page spread: its later page is read too.)
@@ -5790,36 +5892,62 @@ function toggleInfo(){
 // how many printed pages it would fill, and how much is left from here.
 const READ_WPM = 238, PRINT_WORDS = 275;
 function formatBytes(n){ return n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`; }
-function formatMinutes(min){ min = Math.max(1, Math.round(min)); const h = Math.floor(min / 60), m = min % 60; return h ? `${h} h ${m} min` : `${m} min`; }
+function formatMinutes(min){ if (min < 0.5) return 'under 1 min'; min = Math.max(1, Math.round(min)); const h = Math.floor(min / 60), m = min % 60; return h ? `${h} h ${m} min` : `${m} min`; }
 // (Words as the language divides them: Chinese, Japanese and Thai have no spaces between theirs.)
 function wordCounter(lang){
   try { const seg = new Intl.Segmenter(lang, { granularity: 'word' }); return t => { let n = 0; for (const x of seg.segment(t)) if (x.isWordLike) n++; return n; }; }
   catch { return t => (t.match(/[\p{L}\p{N}][\p{L}\p{M}\p{N}'’-]*/gu) || []).length; }
 }
+// (From search's text when it has gathered it, rather than reading every chapter again; given up when an edit replaces
+// the book's sections, whose counts are made again: round 50 review, L-503.)
 function bookStats(){
   const b = book;
   if (!b) return Promise.resolve(null);
-  b.stats ??= (async () => {
+  if (b.stats) return b.stats;
+  const spine = b.spine, run = (async () => {
+    const gone = () => book !== b || b.spine !== spine || b.stats !== run;
+    const index = b.search && !b.searchBusy && !b.searchFailed?.size ? await b.search : null;
     const per = [];
-    for (let i = 0; i < b.spine.length; i++) {
-      if (book !== b) return null;
+    for (let i = 0; i < spine.length; i++) {
       const row = { words: 0, chars: 0, pictures: 0 };
+      const add = (texts, lang) => { const count = wordCounter(lang); for (const x of texts) { const t = x.replace(/\s+/g, ' ').trim(); if (t) { row.words += count(t); row.chars += t.length; } } };
       if (!b.comic) try {
-        const doc = await chapterDoc(i), count = wordCounter(docLang(doc));
-        for (const blk of textBlocks(doc, SEARCH_SKIP)) { const t = blk.text.replace(/\s+/g, ' ').trim(); if (t) { row.words += count(t); row.chars += t.length; } }
-        row.pictures = doc.querySelectorAll('img').length + [...doc.querySelectorAll('svg')].filter(v => !v.parentElement?.closest('svg')).length;
+        if (index?.[i]?.lang) { add(index[i].map(e => e.text), index[i].lang); row.pictures = index[i].pictures; }
+        else { const doc = await chapterDoc(i); add(textBlocks(doc, SEARCH_SKIP).map(x => x.text), docLang(doc)); row.pictures = pictureCount(doc); }
       } catch {}
+      if (gone()) return null;
       per.push(row);
-      if (i % 4 === 3) { if (!$('#infoSection').hidden && book === b) $('#statsWords') && ($('#statsWords').textContent = `Counting… ${Math.round((i + 1) / b.spine.length * 100)}%`); await new Promise(r => setTimeout(r)); }
+      if (i % 4 === 3) { if (!$('#infoSection').hidden) $('#statsWords') && ($('#statsWords').textContent = `Counting… ${Math.round((i + 1) / spine.length * 100)}%`); await new Promise(r => setTimeout(r)); if (gone()) return null; }
     }
+    b.statsPer = per;
     return per;
   })();
-  return b.stats;
+  b.stats = run;
+  return run;
+}
+// (After an edit: counted again, and shown so if Information is open: round 50 review, L-497.)
+function statsReset(b){
+  b.stats = null; b.statsPer = null;
+  setTimeout(() => { if (book === b && !$('#infoSection').hidden) renderStats(); });
+}
+// "Read so far", from the counts, as the reader turns pages (L-497); "all read" at the end (L-498).
+function statsLeftText(per){
+  const words = per.reduce((a, r) => a + r.words, 0);
+  if (!words) return null;
+  const read = per.slice(0, cur.i).reduce((a, r) => a + r.words, 0) + (per[cur.i]?.words || 0) * readFraction();
+  const left = Math.max(0, words - read), pct = Math.min(100, Math.round(read / words * 100));
+  return left < 1 || (pct >= 100 && cur.i >= per.length - 1) ? 'all read' : `${pct}%, about ${formatMinutes(left / READ_WPM)} left`;
+}
+function statsLeftUpdate(){
+  const el = $('#statsLeft'), per = book?.statsPer;
+  if (!el || !per || $('#infoSection').hidden || per.length !== book.spine.length) return;
+  const t = statsLeftText(per);
+  if (t && el.textContent !== t) el.textContent = t;
 }
 // The contents entry naming a section, or its file's name.
 function sectionName(i){
   const path = book.spine[i]?.path || '', find = list => { for (const e of list) { if (e.path === path) return e.label; const c = find(e.children || []); if (c) return c; } return null; };
-  return find(book.toc || []) || path.split('/').pop() || `Section ${i + 1}`;
+  return find(book.toc || []) || `Section ${i + 1}`;   // (not its file's name: round 50 review, L-502)
 }
 async function renderStats(){
   const list = $('#statsList'), b = book;
@@ -5829,30 +5957,27 @@ async function renderStats(){
     dt.textContent = k; dd.textContent = v; if (id) dd.id = id;
     return [dt, dd];
   }));
-  // (The book's own size, and what its files come to unpacked.)
+  // (The book's own size, and what every file in the archive comes to unpacked, the package's own too; for an archive
+  // only: round 50 review, L-501.)
   let unpacked = 0;
-  if (b.src.raw?.files) for (const it of b.manifest?.values() || []) unpacked += entrySize(b.src.raw, it.path);
-  else if (b.src.files) for (const v of b.src.files.values()) unpacked += typeof v === 'string' ? new Blob([v]).size : v?.byteLength ?? v?.size ?? 0;
+  if (b.src.raw?.files) for (const f of Object.values(b.src.raw.files)) if (!f.dir) unpacked += f.size ?? f._data?.uncompressedSize ?? 0;
   const head = [['File size', b.size ? formatBytes(b.size) : null], ['Unpacked', unpacked && unpacked !== b.size ? formatBytes(unpacked) : null]];
-  if (b.comic) {
-    put([...head, ['Pages', (b.pageCount ?? b.spine.length).toLocaleString()], ['Sections', b.spine.length.toLocaleString()]]);
-    return;
-  }
+  if (b.comic) { put(head); return; }   // (its pages and sections are in the details above: L-502)
   put([...head, ['Words', 'Counting…', 'statsWords']]);
-  const per = await bookStats();
+  list.setAttribute('aria-busy', 'true');   // (read when done, not at every "Counting…": L-499)
+  const per = await bookStats().finally(() => list.setAttribute('aria-busy', 'false'));
   if (book !== b || !per) return;
   const sum = k => per.reduce((a, r) => a + r[k], 0), words = sum('words'), chars = sum('chars'), pictures = sum('pictures');
-  const read = per.slice(0, cur.i).reduce((a, r) => a + r.words, 0) + (per[cur.i]?.words || 0) * readFraction();
-  const left = Math.max(0, words - read), longest = per.reduce((m, r, i) => r.words > per[m].words ? i : m, 0);
+  const longest = per.reduce((m, r, i) => r.words > per[m].words ? i : m, 0);
   put([...head,
     ['Words', words.toLocaleString(), 'statsWords'],
     ['Characters', chars.toLocaleString()],
     ['Pictures', pictures ? pictures.toLocaleString() : null],
-    ['Sections', `${b.spine.length.toLocaleString()} (${Math.round(words / Math.max(1, b.spine.length)).toLocaleString()} words on average)`],
+    ['Sections', `${b.spine.length.toLocaleString()} (${plural(Math.round(words / Math.max(1, b.spine.length)), 'word').replace(/^\d+/, n => Number(n).toLocaleString())} on average)`],
     ['Longest', words ? `${sectionName(longest)} (${per[longest].words.toLocaleString()} words)` : null],
     ['Printed', words ? `about ${plural(Math.max(1, Math.round(words / PRINT_WORDS)), 'page').replace(/^\d+/, n => Number(n).toLocaleString())}` : null],
     ['Reading time', words ? `about ${formatMinutes(words / READ_WPM)}` : null],
-    ['Read so far', words ? `${Math.round(read / words * 100)}%, about ${formatMinutes(left / READ_WPM)} left` : null, 'statsLeft']]);
+    ['Read so far', statsLeftText(per), 'statsLeft']]);
 }
 const tocIsOpen = () => narrow.matches ? $('#toc').classList.contains('open') : !$('#toc').classList.contains('collapsed');
 // C and the Contents button: on a wide screen, the choice is kept (SHOW_CONTENTS); on a narrow one, where the
@@ -9881,7 +10006,8 @@ window.addEventListener('beforeunload', e => { if (ab.running) { e.preventDefaul
    splits the page in the frame) and searched ignoring case, accents and curly-vs-straight quotes. A match
    is kept as (chapter, block, offset), so after the chapter renders the same block in the frame gives its
    DOM range: matches in the chapter are highlighted, the chosen one more strongly, and the page turns to it. */
-const SEARCH_SKIP = 'script,style,noscript,template,annotation,[hidden],[data-spine-note],[data-ed-keep],#' + RID.end;
+// (And text its own style hides: round 50 review, L-500.)
+const SEARCH_SKIP = 'script,style,noscript,template,annotation,[hidden],[data-spine-note],[data-ed-keep],[style*="display:none" i],[style*="display: none" i],#' + RID.end;
 let SEARCH_MAX = 500;
 const search = { q: '', hits: [], cur: -1, token: 0, timer: 0, shown: false };
 const foldMap = new Map();
@@ -9902,6 +10028,9 @@ function fold(t){
   }
   return o;
 }
+// (What statistics want besides the text, kept with it, so they can count from search's text: round 50 review, L-503.)
+const pictureCount = doc => doc.querySelectorAll('img').length + [...doc.querySelectorAll('svg')].filter(v => !v.parentElement?.closest('svg')).length;
+const withExtras = (list, doc) => Object.assign(list, doc ? { pictures: pictureCount(doc), lang: docLang(doc) } : {});
 function searchIndex(){
   const b = book;
   // A chapter that couldn't be read is tried again by a later search, a few times; the chapters already read are
@@ -9925,7 +10054,7 @@ function searchIndex(){
       const chapters = await before;
       for (const i of [...b.searchFailed]) {
         if (book !== b) break;
-        try { chapters[i] = entries(i, textBlocks(await chapterDoc(i), SEARCH_SKIP)); b.searchFailed.delete(i); } catch {}
+        try { const doc = await chapterDoc(i); chapters[i] = withExtras(entries(i, textBlocks(doc, SEARCH_SKIP)), doc); b.searchFailed.delete(i); } catch {}
       }
       b.searchBusy = false;
       return chapters;
@@ -9938,9 +10067,9 @@ function searchIndex(){
     for (let i = 0; i < b.spine.length; i++) {
       if (book !== b) return chapters;
       if (i % 4 === 0) searchStatus(`Gathering text… ${Math.round(i / b.spine.length * 100)}%`);
-      let blocks = [];
-      try { blocks = textBlocks(await chapterDoc(i), SEARCH_SKIP); } catch { b.searchFailed.add(i); }
-      chapters.push(entries(i, blocks));
+      let blocks = [], doc = null;
+      try { doc = await chapterDoc(i); blocks = textBlocks(doc, SEARCH_SKIP); } catch { b.searchFailed.add(i); }
+      chapters.push(withExtras(entries(i, blocks), doc));
       if (i % 8 === 7) await new Promise(r => setTimeout(r));   // keep the page responsive
     }
     b.searchBusy = false;
@@ -10584,7 +10713,7 @@ async function editRebuild({ frag = '', fraction: f = 0 } = {}){
   b.src.files = built.files; b.spine = built.spine; b.toc = built.toc;
   b.manifest = new Map(built.spine.map(x => [x.id, x])); b.byPath = new Map(built.spine.map(x => [x.path, x]));
   b.title = built.title; b.language = built.language;
-  b.search = null; b.stats = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;   // (made from the text before)
+  b.search = null; statsReset(b); b.searchFailed = null; b.searchTries = 0; n.chapBook = null;   // (made from the text before)
   renderMeta(); renderToc(); editTitle();
   const i = frag && built.where.has(frag) ? built.where.get(frag) : 0;
   await renderChapter(i, frag ? { frag } : { fraction: f });
@@ -10600,7 +10729,7 @@ async function editRebuildChapter({ frag = '', fraction: f = 0 } = {}){
   const t = wys ? await editMarkupText() : ed.text;
   if (book !== b || !ed.on) return;
   (b.live ??= new Map()).set(ed.epub.path, t);
-  b.search = null; b.stats = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
+  b.search = null; statsReset(b); b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
   editTitle();
   await renderChapter(i, frag ? { frag } : { fraction: f });
   if (book !== b) return;
@@ -11084,7 +11213,7 @@ async function editDiscard(){
     editQuit();
     b.live?.delete(p);
     if (last === b.archive.get(p)) b.over?.delete(p); else (b.over ??= new Map()).set(p, last);
-    b.unsaved?.delete(p); b.search = null; b.stats = null; n.chapBook = null; ed.epub = null;
+    b.unsaved?.delete(p); b.search = null; statsReset(b); n.chapBook = null; ed.epub = null;
     $('#editBtn').focus();
     await renderChapter(i, frag ? { frag } : {});
     return;
@@ -11105,7 +11234,7 @@ async function editDoneChapter(){
   if (text === (b.archive.get(p))) b.over?.delete(p); else (b.over ??= new Map()).set(p, text);
   (b.unsaved ??= new Set())[text !== last ? 'add' : 'delete'](p);
   if (text === last) draftDel(key);
-  b.search = null; b.stats = null; n.chapBook = null; ed.epub = null;
+  b.search = null; statsReset(b); n.chapBook = null; ed.epub = null;
   $('#editBtn').focus();
   await renderChapter(i, frag ? { frag } : {});
   if (book === b && b.unsaved.size) showNotice(`${b.unsaved.size} chapter${b.unsaved.size > 1 ? 's' : ''} changed and not saved yet: Edit, then Save, saves the book.`, 'info', { label: 'OK', run(){} });
@@ -11811,7 +11940,7 @@ async function editRefreshFiles(){
   const b = book, text = ed.text;
   const built = await buildDocument(text, ed.name, ed.kind, { whole: true }).catch(() => null);
   if (!built || book !== b || !ed.on || ed.text !== text) return;
-  b.src.files = built.files; b.search = null; b.stats = null; b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
+  b.src.files = built.files; b.search = null; statsReset(b); b.searchFailed = null; b.searchTries = 0; n.chapBook = null;
 }
 // Reading aloud while the page is edited goes on: the sentences are found again, and it carries on from the one
 // it was at (the sentence being spoken finishes as it was; the ones after are read as they now are).

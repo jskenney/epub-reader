@@ -1939,6 +1939,30 @@ def main():
     # (H-110, L-490) Short documents whose breaks a fence-like line or a tab hid.
     (books / "fence-trick-small.md").write_text("``` `\na" + "\\\n" * 9900 + "\n")
     (books / "tab-breaks-small.md").write_text("b\t  \n" * 3960)
+    # Round 50.
+    # (H-111 to H-114) Effects that got past the check: an escaped property name; an escaped inline animation growing
+    # filtered boxes; SMIL growing filtered shapes; SVG filter lengths in a viewBox's units and in objectBoundingBox units.
+    blur20e = "f\\69lter:" + " ".join(["blur(30px)"] * 20)
+    fx50 = {
+        "escape": f'<style>.d{{{blur20e};position:absolute;left:0;top:0;{big}}}</style><div style="position:relative">' + '<div class="d"></div>' * 50 + '</div>',
+        "anim": f'<style>.d{{{blur20};width:1px;height:1px;position:absolute;left:0;top:0;background:teal}} @keyframes g{{to{{width:900px;height:600px}}}}</style><div style="position:relative">' + '<div class="d" style="\\61nimation:g .1s .5s forwards"></div>' * 50 + '</div>',
+        "smil": f'<svg {SV} width="900" height="600"><defs><filter id="sm">' + '<feGaussianBlur stdDeviation="30"/>' * 20 + '</filter></defs>' + '<rect width="1" height="1" fill="teal" filter="url(#sm)"><animate attributeName="width" to="900" begin="0.5s" dur="0.1s" fill="freeze"/><animate attributeName="height" to="600" begin="0.5s" dur="0.1s" fill="freeze"/></rect>' * 50 + '</svg>',
+        "viewbox": f'<svg {SV} viewBox="0 0 10 10" width="900" height="600" preserveAspectRatio="none"><defs><filter id="vb" x="0" y="0" width="1" height="1">' + '<feGaussianBlur stdDeviation="2"/>' * 20 + '</filter></defs>' + '<rect width="10" height="10" fill="teal" filter="url(#vb)"/>' * 50 + '</svg>',
+        "obb": f'<svg {SV} width="900" height="600"><defs><filter id="ob" primitiveUnits="objectBoundingBox" x="0" y="0" width="1" height="1">' + '<feGaussianBlur stdDeviation="0.2"/>' * 20 + '</filter></defs>' + '<rect width="900" height="600" fill="teal" filter="url(#ob)"/>' * 50 + '</svg>',
+        # (M-253) Drop shadows moved back from later columns onto the first, each within budget on its own.
+        "offset": '<style>.d{break-before:column;width:600px;height:400px;background:teal}</style>' + "".join(f'<div class="d" style="filter:drop-shadow(-{k * 1100}px 0 20px teal) blur(30px) blur(30px)"></div>' for k in range(1, 21)),
+        # (M-254) A condition outside the reader's own list.
+        "mq": f'<style>@media (prefers-reduced-transparency: reduce){{.d{{{blur20}}}}} .d{{position:absolute;left:0;top:0;{big}}}</style><div style="position:relative">' + '<div class="d"></div>' * 50 + '</div>',
+        # (M-255) Everyday soft art: 300 ellipses, each with a small blur, all kept.
+        "soft": f'<svg {SV} width="900" height="600"><defs><filter id="so"><feGaussianBlur stdDeviation="3"/></filter></defs>' + "".join(f'<ellipse cx="{20 + (i % 30) * 29}" cy="{20 + (i // 30) * 55}" rx="14" ry="22" fill="teal" filter="url(#so)"/>' for i in range(300)) + '</svg>',
+        # (L-492) A page waiting on a slow picture.
+        "slowpic": '<p>Text before the picture.</p><img alt="slow" src="slow50.png" width="100" height="100"/>',
+    }
+    for k, v in fx50.items():
+        (books / f"fx50-{k}.html").write_text(f"<!doctype html><html><head><title>Effects {k}</title></head><body><h1>Effects {k}</h1>{v}<p>After the effects.</p></body></html>")
+    (books / "slow50.png").write_bytes(png(10, 10, (200, 0, 0)))
+    # (L-500) Statistics: words hidden by the page's own style aren't counted.
+    (books / "stats-hidden.html").write_text("<!doctype html><html><head><title>Hidden</title></head><body><p>one two three four five</p><p style=\"display: none\">hidden hidden hidden</p><div style=\"DISPLAY:NONE\"><p>gone gone</p></div></body></html>")
     print(f"Built {SITE}")
 
 

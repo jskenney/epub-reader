@@ -1178,7 +1178,7 @@ table below:
 ### Round 50
 
 A review of round 49's fixes and of E-51 at `0cd102c` (two reviewers, each finding reproduced in Chromium). Normal reading
-is unchanged (page turns 33 ms before and after). **Open**, in the table below:
+is unchanged (page turns 33 ms before and after). All **fixed** (`COMMIT50`; see Resolved for how):
 - Effects: a property name written with CSS escapes (`f\69lter`) gets past the skip for pages with no effects, so the page
   isn't counted at all: 21 to 45 s (H-111); an escaped inline `\61nimation` outranks the blanket rule: frozen (H-112). SMIL
   animations of size or transform aren't removed and grow filtered shapes after the count: frozen (H-113). SVG filter
@@ -1202,7 +1202,7 @@ is unchanged (page turns 33 ms before and after). **Open**, in the table below:
 
 ## Summary
 
-Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: fixed by blunt limits, your decision. Round 49, a review of those, found H-100 to H-110, M-250 to M-252, L-488 to L-491, T-73 and D-49: fixed. Round 50, a review of those and of E-51, found H-111 to H-116, M-253 to M-256, L-492 to L-503, T-74 and D-50: open. Open (below): those, round 50's, T-68, T-69,
+Round 34 was a full review at `a955cc8`, after E-46 to E-48. Its High and Medium items are fixed (`e50e041`, `62de5b1`; see Resolved), and rounds 35 and 36 reviewed the fixes. L-431 to L-442 are fixed too (round 37), and the tests and docs items (round 38). E-49 (Refresh) is built. Round 39, a full review after it: its findings are fixed, the last ones by your decisions. E-50 (Reverb-TTS) is built, off by default. Round 40, a full review after it, found two High items (hostile Markdown and SVG that freeze the tab), five Medium (a crashing picture, Reverb's codec and engine licences, custom voices' pace, site voices' versions), eleven Low, four tests and six docs items: all fixed but T-68. Round 41, a review of those fixes, found three High items (bypasses of H-59 and H-60), seven Medium (M-218 to M-224) and seven Low (L-463 to L-469): fixed. Round 42, a review of those, found more ways round the same defences (H-64 to H-67, M-225 to M-228, L-470 to L-474): fixed by a sturdier approach, your decision (see Round 42). Round 43, a review of that, found regressions and ways round (fixed) and five items left open; round 44 fixed H-70, H-71 and M-233, leaving H-73 and L-475; round 45, a review of those fixes, found H-75 to H-77, M-235 to M-238 and L-477: fixed. Round 46, a review of those, found H-78 to H-85, M-239, M-240, L-478 to L-480, T-70 and D-48: fixed. Round 47, a review of those, found H-86 to H-92, M-241 to M-245, L-481 to L-484 and T-71: fixed. Round 48, a review of those, found H-93 to H-99, M-246 to M-249, L-485 to L-487 and T-72: fixed by blunt limits, your decision. Round 49, a review of those, found H-100 to H-110, M-250 to M-252, L-488 to L-491, T-73 and D-49: fixed. Round 50, a review of those and of E-51, found H-111 to H-116, M-253 to M-256, L-492 to L-503, T-74 and D-50: fixed. Open (below): T-68, T-69,
 and the enhancements E-29, E-30, E-36, E-42 to E-45 and E-1 to E-4, E-6 to E-8, E-22 and E-25 (planned in TODO.md). L-110, T-43 and T-47 are left as they are, by your
 decision (see Resolved).
 
@@ -1212,30 +1212,6 @@ Most important first.
 
 | ID | Title | Kind |
 |---|---|---|
-| H-111 | CSS-escaped property names get past the no-effects skip: the page isn't counted (21 to 45 s): round 50. | High |
-| H-112 | An escaped inline `\61nimation` outranks the blanket rule: frozen (round 50). | High |
-| H-113 | SMIL animations of size or transform grow filtered shapes after the count: frozen (round 50). | High |
-| H-114 | SVG filter lengths not converted to screen pixels (viewBox, objectBoundingBox units): 15 to 30 s (round 50). | High |
-| H-115 | Markdown: breaks spread over several HTML blocks bypass the per-block cap: over 100 s (round 50). | High |
-| H-116 | Markdown: costly elements spread over several HTML blocks bypass the cap (MathML: 25 s): round 50. | High |
-| M-253 | Drop-shadow offsets bring many columns' filtered boxes onto one screen: 8.6 s (round 50). | Medium |
-| M-254 | Media queries outside the watched list turn effects on unchecked: 25 s (round 50). | Medium |
-| M-255 | Everyday art loses some blurs and keeps others; the budget is about 50 times cautious (round 50). | Medium |
-| M-256 | Markdown: large ordinary HTML over the caps is shown as its markup, with no note (round 50). | Medium |
-| L-492 | A page waiting on a slow picture is blank without a status until it loads (round 50). | Low |
-| L-493 | Resizing a page full of effects is slower; its check runs twice (round 50). | Low |
-| L-494 | Markdown: `<wbr>` splits grapheme clusters in long words (round 50). | Low |
-| L-495 | Markdown: the CJK line join misses lines ending in CJK punctuation (round 50). | Low |
-| L-496 | Markdown: the short-document count is quadratic on long runs of spaces (round 50). | Low |
-| L-497 | Statistics: "Read so far" goes stale while the panel is open, and after an edit (round 50). | Low |
-| L-498 | Statistics: "100%, about 1 min left" (round 50). | Low |
-| L-499 | Statistics: the live region announces every "Counting… N%" (round 50). | Low |
-| L-500 | Statistics: text hidden by CSS is counted (round 50). | Low |
-| L-501 | Statistics: "Unpacked" leaves out package files, and means nothing for a plain document (round 50). | Low |
-| L-502 | Statistics: plurals, file names for sections, comics repeating details (round 50). | Low |
-| L-503 | Statistics: counting repeats search's work, and goes on over a replaced spine (round 50). | Low |
-| T-74 | No tests for round 50's items (round 50). | Tests |
-| D-50 | The comments say animations are set off everywhere; SMIL and escaped inline ones weren't (round 50). | Docs |
 | T-69 | Round 41's bypasses have tests now (a list in a quote, after a fence-like line; a sprite group used many times; data: with a space and with %; data: and oddly typed huge pictures; GIF frames; many cheap uses); still none for a folder book's huge picture served by its address, or for L-465's HTML block after a list. | Tests |
 | H-73 | Long unbreakable words freeze HTML, EPUB and Markdown pages in the browser's layout (`*a` × 50,000, 100 KB: 11 s; 400 KB: 45 s); plain text, and Markdown shown as plain text, are covered (round 43). Tried: a `<wbr>` every 200 characters (the word 7.7 s, but a 900 KB page of `` $`x `` that took 1.4 s then took over 40 s), fewer breaks (both about 5 to 7 s), zero-width spaces (no help for the slow word). The cost is Chromium's, with the reader's columns and wrapping: open, for a better idea. | High |
 | L-475 | The check's 5 s budget is fixed: a legitimate large document can show as plain text on a slow device, and differently from visit to visit (positions and contents then differ); reading aloud and the audiobook speak the note and the raw markup (round 43). Fix: a budget scaled by a calibration sample; a "show as Markdown anyway" action; the note kept out of what is spoken. | Low |
@@ -1396,6 +1372,30 @@ From all reviews so far, with the commits that fixed them. An item left as it is
 
 | ID | Title | Fixed in |
 |---|---|---|
+| H-111 | CSS-escaped property names get past the no-effects skip: the page isn't counted (21 to 45 s): round 50. Never skipped when its styles hold a backslash. | `COMMIT50` |
+| H-112 | An escaped inline `\61nimation` outranks the blanket rule: frozen (round 50). Animations and transitions removed from every style attribute, as the browser parsed it. | `COMMIT50` |
+| H-113 | SMIL animations of size or transform grow filtered shapes after the count: frozen (round 50). Every SVG animation element removed (set, animate, animateTransform, animateMotion, animateColor, discard). | `COMMIT50` |
+| H-114 | SVG filter lengths not converted to screen pixels (viewBox, objectBoundingBox units): 15 to 30 s (round 50). Filter lengths scaled by the element's screen transform, or its size for objectBoundingBox units; regions and pictures by their viewBox. | `COMMIT50` |
+| H-115 | Markdown: breaks spread over several HTML blocks bypass the per-block cap: over 100 s (round 50). HTML blocks in a row counted together, blank lines between them too. | `COMMIT50` |
+| H-116 | Markdown: costly elements spread over several HTML blocks bypass the cap (MathML: 25 s): round 50. Paragraphs of a thousand inline elements or more join the run. | `COMMIT50` |
+| M-253 | Drop-shadow offsets bring many columns' filtered boxes onto one screen: 8.6 s (round 50). Charged on every screen its box, grown by its offsets and blurs, reaches. | `COMMIT50` |
+| M-254 | Media queries outside the watched list turn effects on unchecked: 25 s (round 50). Every condition in the page's style sheets and media attributes watched. | `COMMIT50` |
+| M-255 | Everyday art loses some blurs and keeps others; the budget is about 50 times cautious (round 50). Blurs under 8 screen pixels count a quarter pass; a picture over budget loses all its effects. | `COMMIT50` |
+| M-256 | Markdown: large ordinary HTML over the caps is shown as its markup, with no note (round 50). Shown as its text, tags, comments and styles removed, references read, after a note. | `COMMIT50` |
+| L-492 | A page waiting on a slow picture is blank without a status until it loads (round 50). Shown at 6 s once its text is in, counted then and again on load. | `COMMIT50` |
+| L-493 | Resizing a page full of effects is slower; its check runs twice (round 50). Checks from resizes, media queries and relayouts coalesced into one before the next frame. | `COMMIT50` |
+| L-494 | Markdown: `<wbr>` splits grapheme clusters in long words (round 50). Long words broken every 100 graphemes, escaped afterwards. | `COMMIT50` |
+| L-495 | Markdown: the CJK line join misses lines ending in CJK punctuation (round 50). CJK punctuation and full-width forms join too. | `COMMIT50` |
+| L-496 | Markdown: the short-document count is quadratic on long runs of spaces (round 50). A run of spaces matched from its start only. | `COMMIT50` |
+| L-497 | Statistics: "Read so far" goes stale while the panel is open, and after an edit (round 50). Updated as pages turn; counted again and shown after an edit. | `COMMIT50` |
+| L-498 | Statistics: "100%, about 1 min left" (round 50). "all read" at the end; "under 1 min". | `COMMIT50` |
+| L-499 | Statistics: the live region announces every "Counting… N%" (round 50). No live region; aria-busy while counting. | `COMMIT50` |
+| L-500 | Statistics: text hidden by CSS is counted (round 50). Text in elements whose style attribute says display: none is skipped (search too). | `COMMIT50` |
+| L-501 | Statistics: "Unpacked" leaves out package files, and means nothing for a plain document (round 50). Every file in the archive summed; not shown for a plain document. | `COMMIT50` |
+| L-502 | Statistics: plurals, file names for sections, comics repeating details (round 50). Plural words; "Section N" in place of a file name; comics show only their sizes. | `COMMIT50` |
+| L-503 | Statistics: counting repeats search's work, and goes on over a replaced spine (round 50). Counted from search's text when gathered; given up when the sections are replaced. | `COMMIT50` |
+| T-74 | No tests for round 50's items (round 50). Tests for each but L-493 and L-503. | `COMMIT50` |
+| D-50 | The comments say animations are set off everywhere; SMIL and escaped inline ones weren't (round 50). The comments say what is set off, and how. | `COMMIT50` |
 | H-100 | The reader's relayout unhides a page before its effect check (resize, fonts, startup): heavy pages paint unchecked (round 49). Hidden by an attribute the layout code leaves alone, removed only once counted. | `b350b71` |
 | H-101 | A filter's area excludes overflowing descendants and outlines: over 60 s (round 49). A filter's area includes its children, its outline and its blur's spread; an SVG filter's, its region. | `b350b71` |
 | H-102 | Effects on `::before`/`::after` aren't counted: over 60 s (round 49). The reader's first layer sets off effects on `::before`/`::after` for every page. | `b350b71` |

@@ -560,10 +560,10 @@ test('Raw-only Markdown is offered WYSIWYG again once its block is fixed in Raw 
 test('the Markdown worker\'s source, made from a template string, compiles with its escapes intact (rounds 45 to 47 lost \\s, \\n and \\b)', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   const a = src.indexOf('new Blob([await r.text(), `') + 'new Blob([await r.text(), '.length, b = src.indexOf("`], { type: 'text/javascript' }", a);
-  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, function mdParaStart(){}, function mdInlineMath(){}, function mdTokenizers(){});
+  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'MD_PLAIN_NOTE', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, 'Shown as plain text.', function mdParaStart(){}, function mdInlineMath(){}, function mdTokenizers(){});
   assert.doesNotThrow(() => new Function(out), 'compiles');
   assert.doesNotMatch(out, /[\x00-\x08\x0b\x0c\x0e-\x1f]/, 'no control characters');
-  for (const s of ['/^<\\/?w?br\\b/i', '[^\\s]{200,}', '\\p{M}', "'</p>'"]) assert.ok(out.includes(s), s);
+  for (const s of ['/^<\\/?w?br\\b/i', '(\\S{200,})', '\\p{M}', "'</p>'", '\\\\p{scx=Han}', '\\\\u3000-\\\\u303f']) assert.ok(out.includes(s), s);
 });
 
 test('effects through custom properties, @scope, a repeated filter, feMorphology, CSS blur and backdrop-filter are capped as the browser computes them; painted in good time (round 48 review, H-95 to H-98)', async () => {
@@ -646,7 +646,7 @@ test('the Markdown worker, run as built, sends past-limit HTML blocks and paragr
   const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const fn = name => { const i = src.indexOf(`function ${name}(`), j = src.indexOf('\n}\n', i) + 3; return new Function(src.slice(i, j) + `; return ${name};`)(); };
   const a = src.indexOf('new Blob([await r.text(), `') + 'new Blob([await r.text(), '.length, b = src.indexOf("`], { type: 'text/javascript' }", a);
-  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, fn('mdParaStart'), fn('mdInlineMath'), fn('mdTokenizers'));
+  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'MD_PLAIN_NOTE', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, 'Shown as plain text.', fn('mdParaStart'), fn('mdInlineMath'), fn('mdTokenizers'));
   const marked = fs.readFileSync(path.join(__dirname, '..', 'libs', 'marked.min.js'), 'utf8');
   const run = md => { const sent = []; const ctx = { postMessage: m => sent.push(m), console }; vm.createContext(ctx); vm.runInContext(marked + '\n' + out, ctx); ctx.onmessage({ data: { md, emoji: null } }); return sent.at(-1); };
   const brs = n => 'a<br>'.repeat(n);
@@ -730,4 +730,106 @@ test('a PTVB1 voices file\'s record names are read by walking its records (E-52)
   assert.deepEqual(ptvbNames(buf.buffer), ['site:a', 'site:b']);
   assert.throws(() => ptvbNames(buf.buffer.slice(0, buf.length - 10)), /cut short/);
   assert.throws(() => ptvbNames(new TextEncoder().encode('NOPE!xxxx').buffer), /not a PTVB1/);
+});
+
+// Round 50.
+const workerRun = () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const fn = name => { const i = src.indexOf(`function ${name}(`), j = src.indexOf('\n}\n', i) + 3; return new Function(src.slice(i, j) + `; return ${name};`)(); };
+  const a = src.indexOf('new Blob([await r.text(), `') + 'new Blob([await r.text(), '.length, b = src.indexOf("`], { type: 'text/javascript' }", a);
+  const note = src.match(/const MD_PLAIN_NOTE = '([^']*)'/)[1];
+  const out = new Function('MD_BLOCK_PIECES', 'MD_BLOCK_BREAKS', 'MD_PLAIN_NOTE', 'mdParaStart', 'mdInlineMath', 'mdTokenizers', 'return ' + src.slice(a, b + 1))(20000, 500, note, fn('mdParaStart'), fn('mdInlineMath'), fn('mdTokenizers'));
+  const marked = fs.readFileSync(path.join(__dirname, '..', 'libs', 'marked.min.js'), 'utf8');
+  return md => { const sent = []; const ctx = { postMessage: m => sent.push(m), console, Intl }; vm.createContext(ctx); vm.runInContext(marked + '\n' + out, ctx); ctx.onmessage({ data: { md, emoji: null } }); return sent.at(-1); };
+};
+test('Markdown: HTML blocks in a row are counted together; a large one is shown as its text with a note, graphemes and CJK lines kept whole; the short-document count is linear (round 50 review, H-115, H-116, M-256, L-494 to L-496)', () => {
+  const run = workerRun();
+  const brs = n => 'a<br>'.repeat(n);
+  for (const [md, plain] of [
+    [Array.from({ length: 10 }, () => `<div>${brs(1999)}</div>`).join('\n\n') + '\n', true],
+    [Array.from({ length: 4 }, () => `<math>${'<mi>x</mi>'.repeat(24000)}</math>`).join('\n\n') + '\n', true],
+    [Array.from({ length: 3 }, () => `<div>${brs(500)}</div>`).join('\n\n') + '\n', false],
+    [`<div>${brs(1000)}</div>\n\nA paragraph between.\n\n<div>${brs(1000)}</div>\n`, false],
+  ]) assert.equal(run(md).plainBlocks, plain, md.slice(0, 30));
+  // (M-256) A large table's text, not its markup, with a note.
+  const table = run(`<table>\n${Array.from({ length: 6000 }, (_, i) => `<tr><td>r${i} &amp; s</td><td>a</td><td>b</td><td>c</td></tr>`).join('\n')}\n</table>\n`);
+  const html = table.tokens.map(t => t.text || '').join('');
+  assert.match(html, /Shown as plain text/);
+  assert.match(html, /r5999 &amp; s/);
+  assert.doesNotMatch(html, /&lt;td/);
+  // (L-494) Long words broken between graphemes: a family emoji never split.
+  const fam = '👨‍👩‍👧‍👦';
+  const word = run((fam + 'ab').repeat(300) + '<br>'.repeat(501) + '\n').tokens.map(t => t.text || '').join('');
+  for (const piece of word.split('<wbr>').slice(0, -1)) assert.ok(!/‍$/.test(piece) && !/^‍/.test(piece), 'no break at a joiner');
+  // (L-495) A line ending in CJK punctuation joins the next without a space.
+  const cjk = run('漢字。\n漢字' + '<br>'.repeat(501) + '\n').tokens.map(t => t.text || '').join('');
+  assert.match(cjk, /漢字。漢字/);
+  // (L-496) The short-document count: a long run of spaces is quick.
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  const mdSmall = new Function('MD_PROBE_MIN', 'MD_BLOCK_BREAKS', src.match(/^const mdSmall = [^\n]*$/m)[0] + '; return mdSmall;')(20000, 500);
+  const t0 = Date.now();
+  assert.equal(mdSmall(' '.repeat(19990) + 'x'), true);
+  assert.ok(Date.now() - t0 < 300, `took ${Date.now() - t0} ms`);
+});
+
+test('escaped property names, escaped inline animations, SMIL, filter lengths in a viewBox\'s or the shape\'s units, and shadows moved onto another column are capped; painted in good time (round 50 review, H-111 to H-114, M-253)', async () => {
+  for (const k of ['escape', 'anim', 'smil', 'viewbox', 'obb', 'offset']) {
+    const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+    await h.openReader(page, `${h.READER}?book=books/fx50-${k}.html`);
+    assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 20000), `${k}: opened`);
+    if (k === 'anim' || k === 'smil') await page.waitForTimeout(1200);
+    const ms = await paintMs(page);
+    assert.ok(ms < 5000, `${k}: painted in ${ms} ms`);
+    if (k === 'smil') assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('animate').length), 0, 'SMIL removed');
+    if (k === 'offset') assert.ok(await h.inFrame(page, doc => doc.querySelectorAll('[data-spine-fx-off]').length) >= 10, 'shadows moved onto one screen charged there');
+    await page.close();
+  }
+});
+
+test('every media query a page names is watched; everyday soft art keeps all its blurs (round 50 review, M-254, M-255)', async () => {
+  let page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await page.addInitScript(() => { const mm = window.matchMedia; window.matchMedia = function (q) { try { (window.top.__mq ??= []).push(q); } catch {} return mm.call(this, q); }; });
+  await h.openReader(page, `${h.READER}?book=books/fx50-mq.html`);
+  assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 20000));
+  assert.ok(await page.evaluate(() => (window.__mq || []).some(q => /prefers-reduced-transparency/.test(q))), 'watched');
+  await page.close();
+  page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await h.openReader(page, `${h.READER}?book=books/fx50-soft.html`);
+  assert.ok(await h.waitFor(async () => /After the effects/.test(await frameText(page)), 20000));
+  assert.equal(await h.inFrame(page, doc => doc.querySelectorAll('[data-spine-fx-off]').length), 0);
+  await page.close();
+});
+
+test('a page waiting on a slow picture is shown after 6 s, counted then (round 50 review, L-492)', async () => {
+  const page = await h.newPage({ viewport: { width: 1000, height: 700 } });
+  await page.route('**/slow50.png', async route => { await new Promise(r => setTimeout(r, 12000)); await route.continue().catch(() => {}); });
+  await h.openReader(page, `${h.READER}?book=books/fx50-slowpic.html`).catch(() => {});
+  assert.ok(await h.waitFor(async () => /Text before the picture/.test(await frameText(page)), 10000));
+  assert.ok(await h.waitFor(() => page.evaluate(() => [...document.querySelectorAll('iframe')].some(f => !f.hasAttribute('data-fx-hold') && /Text before/.test(f.contentDocument?.body?.textContent || ''))), 9000), 'shown before the picture loads');
+  await page.close();
+});
+
+test('statistics: "Read so far" follows the page and says "all read" at the end; plural words; no live region; no "Unpacked" for a plain file; hidden text not counted (round 50 review, L-497 to L-502)', async () => {
+  let page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/stats-words.txt`);
+  assert.ok(await h.waitFor(async () => /alpha beta/.test(await frameText(page)), 10000));
+  await page.keyboard.press('i');
+  await page.waitForFunction(() => /^[\d,]+$/.test(document.querySelector('#statsWords')?.textContent || ''), null, { timeout: 15000 });
+  const got = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#statsList dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent])));
+  assert.equal(got.Unpacked, undefined);
+  assert.match(got.Sections, /words on average\)$/);
+  assert.equal(await page.getAttribute('#statsList', 'aria-live'), null);
+  assert.equal(await page.getAttribute('#statsList', 'aria-busy'), 'false');
+  await page.evaluate(() => { document.querySelector('#ribbon').focus(); });
+  await page.keyboard.press('End');
+  assert.ok(await h.waitFor(() => page.evaluate(() => document.querySelector('#statsLeft')?.textContent === 'all read'), 8000), 'all read at the end, without reopening');
+  await page.close();
+  page = await h.newPage();
+  await h.openReader(page, `${h.READER}?book=books/stats-hidden.html`);
+  assert.ok(await h.waitFor(async () => /one two/.test(await frameText(page)), 10000));
+  await page.keyboard.press('i');
+  await page.waitForFunction(() => /^[\d,]+$/.test(document.querySelector('#statsWords')?.textContent || ''), null, { timeout: 15000 });
+  assert.equal(await page.textContent('#statsWords'), '5');
+  await page.close();
 });
