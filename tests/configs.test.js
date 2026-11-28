@@ -77,7 +77,7 @@ test('the checksum lists name exactly the files the fetch scripts download (T-16
     return r.stdout.split('\n').filter(Boolean).map(l => l.split('\t')[1]);
   };
   for (const [name, runs] of [['libs', [['fetch-libs.sh', []]]], ['kokoro', [['fetch-kokoro.sh', []]]],
-    ['pocket', [['fetch-pocket.sh', ['all']], ['fetch-pocket.sh', ['--int8', 'all']]]]]) {
+    ['pocket', [['fetch-pocket.sh', ['all']], ['fetch-pocket.sh', ['--int8', 'all']], ['fetch-pocket.sh', ['fr']], ['fetch-pocket.sh', ['--int8', 'fr']]]]]) {
     const listed = [...new Set(runs.flatMap(([s, a]) => list(s, a)))].sort();
     const pinned = fs.readFileSync(path.join(REPO, 'checksums', `${name}.sha256`), 'utf8').split('\n').filter(Boolean).map(l => l.slice(66)).sort();
     assert.deepEqual(listed, pinned, name);

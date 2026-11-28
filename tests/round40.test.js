@@ -821,8 +821,10 @@ test('statistics: "Read so far" follows the page and says "all read" at the end;
   assert.match(got.Sections, /words on average\)$/);
   assert.equal(await page.getAttribute('#statsList', 'aria-live'), null);
   assert.equal(await page.getAttribute('#statsList', 'aria-busy'), 'false');
-  await page.evaluate(() => { showPage(1e9); updateProgress(); });   // (the last page)
-  assert.ok(await h.waitFor(() => page.evaluate(() => document.querySelector('#statsLeft')?.textContent === 'all read'), 8000), 'all read at the end, without reopening');
+  const left = () => page.evaluate(() => document.querySelector('#statsLeft')?.textContent);
+  const first = await left();
+  for (let i = 0; i < 60 && await left() !== 'all read'; i++) { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(150); }
+  assert.equal(await left(), 'all read', `at the end, without reopening (from "${first}")`);
   await page.close();
   page = await h.newPage();
   await h.openReader(page, `${h.READER}?book=books/stats-hidden.html`);
